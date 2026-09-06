@@ -1,0 +1,202 @@
+/* Tablero de Gestión Operativa de RRHH — Farmatodo
+   Paleta clara por defecto, con variante oscura según preferencia del sistema. */
+
+:root {
+  color-scheme: light;
+  --azul:        #0b3d70;
+  --azul-claro:  #1c5f9e;
+  --rojo:        #c8102e;
+  --fondo:       #f4f6f9;
+  --panel:       #ffffff;
+  --panel-alt:   #f9fafc;
+  --borde:       #dde3ec;
+  --borde-fuerte:#c3ccdb;
+  --texto:       #16202e;
+  --texto-suave: #5b6879;
+  --verde:       #1a7f4b;
+  --ambar:       #b7791f;
+  --rojo-alerta: #c0392b;
+  --sombra:      0 1px 2px rgba(16, 32, 54, .06), 0 4px 14px rgba(16, 32, 54, .06);
+  --radio:       10px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --azul:        #6fa8dc;
+    --azul-claro:  #8fc0e8;
+    --rojo:        #ff6b7a;
+    --fondo:       #121821;
+    --panel:       #1a2130;
+    --panel-alt:   #202839;
+    --borde:       #2c3646;
+    --borde-fuerte:#3d4a5e;
+    --texto:       #e6ebf2;
+    --texto-suave: #9aa7b8;
+    --verde:       #4cc38a;
+    --ambar:       #e0a94a;
+    --rojo-alerta: #ff7a6b;
+    --sombra:      0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ------------------------------- Header ------------------------------- */
+header.app {
+  background: var(--azul);
+  color: #fff;
+  padding: 14px 22px;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  box-shadow: var(--sombra);
+  position: sticky; top: 0; z-index: 20;
+}
+@media (prefers-color-scheme: dark) { header.app { background: #16202e; } }
+
+header.app .marca { display: flex; align-items: baseline; gap: 10px; }
+header.app .marca strong { font-size: 18px; letter-spacing: .2px; }
+header.app .marca span { font-size: 12px; opacity: .8; text-transform: uppercase; letter-spacing: 1px; }
+header.app .crece { flex: 1; }
+header.app button, header.app select {
+  background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25);
+  padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+}
+header.app button:hover { background: rgba(255,255,255,.22); }
+header.app select { width: auto; max-width: 260px; }
+header.app select option { color: #16202e; }
+
+/* -------------------------------- Nav --------------------------------- */
+nav.tabs {
+  display: flex; gap: 2px; overflow-x: auto; background: var(--panel);
+  border-bottom: 1px solid var(--borde); padding: 0 14px;
+}
+nav.tabs a {
+  padding: 12px 15px; font-size: 14px; color: var(--texto-suave); text-decoration: none;
+  border-bottom: 3px solid transparent; white-space: nowrap;
+}
+nav.tabs a:hover { color: var(--texto); }
+nav.tabs a.activo { color: var(--azul); border-bottom-color: var(--rojo); font-weight: 600; }
+
+main { padding: 22px; max-width: 1280px; margin: 0 auto; }
+
+/* ------------------------------ Bloques -------------------------------- */
+section.tarjeta {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--sombra);
+}
+section.tarjeta > h2 {
+  margin: 0 0 4px; font-size: 16px; color: var(--azul); letter-spacing: .2px;
+}
+section.tarjeta > p.ayuda { margin: 0 0 16px; color: var(--texto-suave); font-size: 13px; }
+
+h1.titulo { font-size: 22px; margin: 0 0 4px; }
+p.subtitulo { color: var(--texto-suave); margin: 0 0 18px; font-size: 14px; }
+
+/* ------------------------------- KPIs ---------------------------------- */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi {
+  background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--azul-claro);
+  border-radius: var(--radio); padding: 14px 16px; box-shadow: var(--sombra);
+}
+.kpi .etiqueta { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--texto-suave); }
+.kpi .valor { font-size: 24px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.kpi .nota { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+.kpi.alerta { border-left-color: var(--rojo-alerta); }
+.kpi.ok { border-left-color: var(--verde); }
+.kpi.aviso { border-left-color: var(--ambar); }
+
+/* ------------------------------ Tablas --------------------------------- */
+.tabla-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--borde); }
+th {
+  background: var(--panel-alt); font-size: 11px; text-transform: uppercase;
+  letter-spacing: .6px; color: var(--texto-suave); font-weight: 600; white-space: nowrap;
+}
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.total td { font-weight: 700; background: var(--panel-alt); border-top: 2px solid var(--borde-fuerte); }
+tbody tr:hover { background: var(--panel-alt); }
+
+/* ----------------------------- Formularios ----------------------------- */
+.grid { display: grid; gap: 14px; }
+.grid.c2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid.c3 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.grid.c4 { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+
+label.campo { display: block; font-size: 12px; color: var(--texto-suave); font-weight: 600; }
+label.campo > span { display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+
+input, select, textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--borde-fuerte); border-radius: 8px;
+  background: var(--panel); color: var(--texto); font: inherit; font-size: 14px; font-weight: 400;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul-claro); outline-offset: -1px; }
+textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
+table input, table select { padding: 6px 8px; font-size: 13px; }
+input.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+button.b {
+  background: var(--azul); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+button.b:hover { background: var(--azul-claro); }
+button.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
+button.b.sec:hover { background: var(--panel-alt); }
+button.b.peligro { background: transparent; color: var(--rojo-alerta); border: 1px solid var(--rojo-alerta); }
+button.b.peligro:hover { background: rgba(192,57,43,.08); }
+button.mini {
+  background: transparent; border: 1px solid var(--borde-fuerte); color: var(--texto-suave);
+  border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
+}
+button.mini:hover { color: var(--rojo-alerta); border-color: var(--rojo-alerta); }
+.acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+
+/* ------------------------------ Etiquetas ------------------------------ */
+.chip {
+  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px;
+  font-weight: 600; border: 1px solid var(--borde-fuerte); color: var(--texto-suave);
+}
+.chip.verde { color: var(--verde); border-color: var(--verde); }
+.chip.ambar { color: var(--ambar); border-color: var(--ambar); }
+.chip.rojo  { color: var(--rojo-alerta); border-color: var(--rojo-alerta); }
+.chip.azul  { color: var(--azul); border-color: var(--azul); }
+
+.aviso-caja {
+  border-left: 3px solid var(--ambar); background: var(--panel-alt);
+  padding: 10px 14px; border-radius: 6px; font-size: 13px; margin: 12px 0;
+}
+.aviso-caja.info { border-left-color: var(--azul-claro); }
+.aviso-caja ul { margin: 6px 0 0; padding-left: 18px; }
+
+pre.reporte {
+  background: var(--panel-alt); border: 1px solid var(--borde); border-radius: 8px;
+  padding: 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.45;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; white-space: pre;
+}
+
+/* ------------------------ Heat map de sucesión ------------------------- */
+.heat { display: grid; grid-template-columns: 150px repeat(3, 1fr); gap: 4px; margin-top: 12px; font-size: 12.5px; }
+.heat .eje { display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; color: var(--texto-suave); font-weight: 600; text-align: right; }
+.heat .cab { text-align: center; color: var(--texto-suave); font-weight: 600; padding: 6px 4px; }
+.heat .celda { min-height: 74px; border-radius: 8px; padding: 8px; border: 1px solid var(--borde); }
+.heat .celda.n1 { background: rgba(26,127,75,.10); }
+.heat .celda.n2 { background: rgba(183,121,31,.12); }
+.heat .celda.n3 { background: rgba(192,57,43,.12); }
+.heat .celda div { font-size: 12px; margin-bottom: 3px; }
+
+.vacio { color: var(--texto-suave); font-style: italic; padding: 14px 0; font-size: 13.5px; }
+
+footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; padding: 26px 20px 40px; }
+
+@media (max-width: 640px) {
+  main { padding: 14px; }
+  header.app { padding: 12px 14px; gap: 10px; }
+  .heat { grid-template-columns: 96px repeat(3, 1fr); }
+}
