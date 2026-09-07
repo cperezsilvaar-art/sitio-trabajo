@@ -214,6 +214,22 @@ pre.reporte {
 .heat .celda.n3 { background: rgba(192,57,43,.12); }
 .heat .celda div { font-size: 12px; margin-bottom: 3px; }
 
+/* --------------------------- Alertas normativas --------------------------- */
+.alerta {
+  border: 1px solid var(--borde); border-left-width: 4px; border-radius: 8px;
+  padding: 12px 15px; margin-bottom: 10px; background: var(--panel-alt);
+}
+.alerta.sev-critica { border-left-color: var(--rojo-alerta); }
+.alerta.sev-alta    { border-left-color: var(--ambar); }
+.alerta.sev-media   { border-left-color: var(--borde-fuerte); }
+.alerta.sev-info    { border-left-color: var(--azul-claro); }
+.alerta-cab { display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap; margin-bottom: 7px; }
+.alerta-cab strong { font-size: 12.5px; color: var(--azul); white-space: nowrap; }
+.alerta-titulo { font-size: 13px; font-weight: 600; }
+.alerta-msg { margin: 0 0 6px; font-size: 13.5px; }
+.alerta-regla { margin: 0; font-size: 12.5px; color: var(--texto-suave); border-left: 2px solid var(--borde); padding-left: 10px; }
+.alerta-origen { margin: 6px 0 0; font-size: 11.5px; color: var(--texto-suave); font-style: italic; }
+
 .vacio { color: var(--texto-suave); font-style: italic; padding: 14px 0; font-size: 13.5px; }
 
 footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; padding: 26px 20px 40px; }

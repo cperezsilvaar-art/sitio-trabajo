@@ -16,6 +16,7 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 3. Ir a **Sucursales**. Vienen diez sucursales provisorias (`sucursal1` … `sucursal10`).
    Reemplazar el campo *Nombre real* por el nombre que corresponda a medida que se
    conozcan las tiendas; el código provisorio queda como identificador interno.
+   Cargar también la **jurisdicción**: define si a esa sucursal le aplica el CCT 414/05.
 4. Desde el **Panel de la red**, botón *Registrar visita* en la sucursal visitada.
 5. Completar las solapas y, al final, **Reporte y Envío**.
 
@@ -33,6 +34,7 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Sanciones** | Registro disciplinario del período |
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
+| **Alertas normativas** | Situaciones relevadas contrastadas contra la Ley 20.744 y el CCT 414/05, con consulta rápida sobre el catálogo de normas |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío al Gerente de Operaciones |
 
 ## Documentación
@@ -41,6 +43,8 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
   rotación y dotación óptima, con su verificación contra las planillas de origen.
 - [`docs/automatizacion-email.md`](docs/automatizacion-email.md) — cómo dejar el envío
   del reporte 100% automático con Google Apps Script, Make o Zapier.
+- [`docs/alertas-normativas.md`](docs/alertas-normativas.md) — cómo funcionan las
+  alertas, el encuadre de categorías y el ámbito del convenio.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 

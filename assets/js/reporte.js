@@ -59,8 +59,10 @@ const Reporte = (() => {
       horasTrabajadas: visita.comercial.horasTrabajadas
     }, par);
     const hallazgosAuto = generarHallazgos(visita, par);
+    const base = { matriz, ausentismo, rotacion, bajas, sucesion, dotacion, productividad, hallazgosAuto, par };
+    base.normativa = evaluarVisita(visita, sucursal, config, base);
 
-    return { matriz, ausentismo, rotacion, bajas, sucesion, dotacion, productividad, hallazgosAuto, par };
+    return base;
   }
 
   /** Tabla de FTE en texto plano, alineada en columnas. */
@@ -193,8 +195,31 @@ const Reporte = (() => {
       L.push('');
     }
 
-    /* 6. Diagnóstico */
-    L.push((visita.sucesion.length ? '6' : '5') + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
+    /* Alertas normativas */
+    let seccion = visita.sucesion.length ? 6 : 5;
+    const acc = c.normativa.alertas.filter(a => a.severidad === 'critica' || a.severidad === 'alta');
+    if (acc.length) {
+      L.push(`${seccion}. ALERTAS NORMATIVAS`);
+      L.push(`   ${c.normativa.conteo.critica} crítica(s) y ${c.normativa.conteo.alta} de prioridad alta, ` +
+             `sobre Ley 20.744 y CCT 414/05.`);
+      L.push('');
+      acc.forEach(a => {
+        L.push(`- [${ETIQUETA_SEVERIDAD[a.severidad].toUpperCase()}] ${a.fuente} — ${a.titulo}`);
+        L.push(bloque(a.mensaje, '     '));
+        if (a.colaborador) L.push(`     Colaborador: ${a.colaborador}`);
+        L.push(`     Detectado en: ${a.origen}`);
+      });
+      const otras = c.normativa.alertas.length - acc.length;
+      if (otras > 0) L.push(`   (${otras} alerta(s) adicionales de menor prioridad quedan registradas en el tablero.)`);
+      L.push('');
+      L.push('   Estas alertas señalan temas que la norma regula; no constituyen asesoramiento legal.');
+      L.push('   Los casos concretos se definen con Legales o Relaciones Laborales.');
+      L.push('');
+      seccion++;
+    }
+
+    /* Diagnóstico */
+    L.push(seccion + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
     L.push('- Hallazgos sobre ausentismo y desviación de horas extras:');
     const hallazgos = String(visita.diagnostico.hallazgos || '').trim();
     if (hallazgos) {
@@ -243,6 +268,7 @@ const Reporte = (() => {
     const f = [];
     if (!sucursal.nombre) f.push('Nombre real de la sucursal (hoy figura como ' + sucursal.codigo + ').');
     if (!sucursal.gerente) f.push('Nombre del Gerente de Tienda.');
+    if (!sucursal.jurisdiccion) f.push('Jurisdicción de la sucursal (define si le aplica el CCT 414/05).');
     if (!String(visita.minutaGerente.puntos || '').trim()) f.push('Puntos tratados en la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaColaborador.nombre || '').trim()) f.push('Colaborador entrevistado.');
     if (!c.matriz.total.heads) f.push('Headcount base por posición.');
@@ -303,7 +329,9 @@ const Reporte = (() => {
           horasExtras: c.matriz.total.horasExtras,
           rotacionMensual: c.rotacion.mensual,
           dotacionOptima: c.dotacion.dotacionOptima,
-          diferenciaDotacion: c.dotacion.diferencia
+          diferenciaDotacion: c.dotacion.diferencia,
+          alertasCriticas: c.normativa.conteo.critica,
+          alertasAltas: c.normativa.conteo.alta
         }
       };
       // El cuerpo es JSON, pero se declara text/plain a propósito: así el
