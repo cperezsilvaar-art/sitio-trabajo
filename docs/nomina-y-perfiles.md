@@ -9,12 +9,48 @@ no el puesto — y de acá sale la dotación por posición de cada sucursal.
 
 **Sucursales → Nómina del área**: pegá la planilla completa, desde la fila de
 encabezados. Es una sola pegada para toda el área: cada persona se reparte a su
-tienda según la columna `TIENDA DONDE ESTÁ`.
+tienda según su columna de tienda.
 
-Reimportar no duplica. La persona se identifica por CUIL —y por nombre si el
-CUIL vino mal tipeado—, se le actualizan los datos y el cargo, y **no se tocan**
-la evaluación de desempeño y potencial, la talent card, las notas ni los talles.
-Si alguien cambió de tienda, se mueve con todo su historial.
+Entiende dos formatos, porque los dos circulan:
+
+- **La nómina completa** (34 columnas): trae el cargo, las fechas, el contacto y
+  la obra social. Es la que llena la posición de cada persona.
+- **El listado corto del área** (`CUIL · FICHA · COLABORADOR · RAZON SOCIAL ·
+  TIENDA · AREA · FECHA INICIO`): trae el **número de ficha de cada tienda**, que
+  la nómina completa no tiene, y la fecha de inicio.
+
+Conviene importar los dos: se complementan. `SIN TIENDA`, como llama el listado
+corto a los flotantes del área, se reconoce como la misma tienda que
+`FLOTANTES ÁREA 3` de la nómina completa.
+
+Reimportar no duplica, y **no se tocan** la evaluación de desempeño y potencial,
+la talent card, las notas ni los talles. Si alguien cambió de tienda, se mueve
+con todo su historial.
+
+### Cómo se reconoce a una persona que ya está cargada
+
+Es la parte delicada, porque **los dos archivos difieren en el CUIL de varias
+personas**: dígitos de más, un 2 donde va un 3. Con el CUIL solo, esas personas
+entrarían dos veces. La búsqueda va en tres pasadas, de la más segura a la menos:
+
+1. **Por CUIL exacto.**
+2. **Por nombre completo**, letra por letra, sin acentos ni comas.
+3. **Por apellido, primer nombre y sucursal**, las tres cosas a la vez. Es la
+   que resuelve los casos donde un archivo agrega un segundo nombre —*PEREZ
+   MARIEL* y *PEREZ MARIEL CATALINA*—, y la única que se informa después de
+   importar, porque conviene mirarla.
+
+Fundir dos personas distintas es peor que dejar una duplicada, así que la
+tercera pasada nunca cruza de sucursal.
+
+Cuando el CUIL que llega no coincide con el guardado, **se mantiene el
+guardado** y el panel lista la discrepancia. No puede saber cuál está bien; lo
+que sí puede es no perderla de vista. Vale la pena corregirlo en el origen:
+con el CUIL mal, esa persona no cruza con el libro de novedades.
+
+Con las fechas de ingreso pasa lo mismo, y ahí sí hay una regla: **gana la más
+vieja**. La antigüedad reconocida no se pierde porque una planilla traiga la
+fecha del último movimiento.
 
 ## Del cargo de la nómina a la posición del panel
 
@@ -55,8 +91,16 @@ camisa, pantalón, campera y calzado—, la posición si el cargo no se reconoci
 las notas. La nómina no trae los talles: no hay ninguna columna con esa
 información.
 
-**Del resto del panel:** la evaluación de desempeño y potencial con su cuadrante
-del 9-box, y el historial de novedades de liquidación mes a mes.
+**La talent card completa**, la misma que se usa en la visita: formación
+(si estudia, qué carrera y en qué avance), desarrollo (dónde quiere crecer, a
+qué posición aspira, qué movilidad acepta), lectura del desempeño (fortalezas y
+qué necesita para el próximo paso), riesgo de salida y notas. Se edita tanto
+desde acá como desde la solapa *Talento y 9-box* de una visita: es el mismo
+lugar de datos.
+
+**Del resto del panel:** el desempeño y el potencial con su cuadrante del 9-box
+y el historial de evaluaciones —cambiarlos desde el perfil también queda
+registrado en ese historial—, y las novedades de liquidación mes a mes.
 
 ## La vista de la sucursal
 
@@ -79,9 +123,15 @@ abajo— y cada persona es una tarjeta que abre su perfil.
   no desaparezca, y avisa que lo hizo.
 - **Faltan Parque Chacabuco y Villa Devoto**, igual que en el libro de
   novedades. Dos archivos seguidos sin ellas.
-- **Dos CUIL con doce dígitos** (MAÑAS NATALIA y GAURIS DANIEL NESTOR). Se
-  importan igual y el panel los marca, pero conviene corregirlos en la nómina:
-  con el CUIL mal, esa persona no se cruza con el libro de novedades.
+- **Seis personas tienen dos CUIL distintos** entre la nómina completa y el
+  listado corto: GAURIS DANIEL NESTOR, MANSILLA DEBORA VERONICA, PEREZ MARIEL
+  CATALINA, MAÑAS NATALIA LORENA, ANEROT ARIEL GERARDO e INSIGNARES CHIRINOS
+  KEVIN ODACIR. En dos de esos casos la nómina trae doce dígitos, así que ahí el
+  correcto es el del listado corto; en los otros cuatro hay que verificarlo.
+- **Dos personas están solo en el listado corto** —DIAZ ROMERO IGNIELYS NICARITH
+  y HERRERO CARLA ANDREA, las dos de Olivos— y **dos solo en la nómina
+  completa**: ABAD GONZALO EZEQUIEL y CORDICH ANABELLA ELIDA, que son los dos
+  que figuran como honorarios. Importando los dos archivos quedan las 141.
 - **Las últimas columnas están casi vacías**: PDI, estado civil, nacionalidad,
   banco y CBU tienen entre uno y cuatro datos sobre 139. El panel no las importa.
 

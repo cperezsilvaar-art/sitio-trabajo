@@ -35,11 +35,23 @@ const COLUMNAS_NOMINA = {
   TELEFONO: 'telefono',
   DOMICILIOACTUALIZADO: 'domicilio',
   LOCALIDADYCP: 'localidad',
-  OBRASOCIALPREPAGA: 'obraSocial'
+  OBRASOCIALPREPAGA: 'obraSocial',
+  /* El listado corto del área usa otros nombres para lo mismo. */
+  COLABORADOR: 'nombreCompleto',
+  TIENDA: 'tienda',
+  FICHA: 'legajo',
+  RAZONSOCIAL: 'razonSocialContrato',
+  FECHAINICIO: 'fechaIngreso',
+  FECHADEINICIO: 'fechaIngreso'
 };
 
+/* "Sin tienda" es como el listado corto llama a los flotantes del área, que en
+   la nómina completa figuran con su nombre. Es la misma gente. */
+const TIENDA_FLOTANTES = 'FLOTANTES ÁREA 3';
+const ALIAS_TIENDA = { SINTIENDA: TIENDA_FLOTANTES, FLOTANTES: TIENDA_FLOTANTES };
+
 /* Campos de texto que se copian tal cual al perfil. */
-const CAMPOS_NOMINA = ['dni', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
+const CAMPOS_NOMINA = ['dni', 'legajo', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
                        'categoriaConvenio', 'cargo', 'nivelCargo', 'fechaNacimiento',
                        'fechaIngreso', 'fechaIngresoFTD', 'email', 'emailCorporativo',
                        'telefono', 'domicilio', 'localidad', 'obraSocial'];
@@ -100,10 +112,11 @@ function interpretarNomina(crudo) {
 
   const iEnc = lineas.findIndex(l => {
     const c = partir(l).map(_normNom);
-    return c.includes('CUIL') && (c.includes('APELLIDO') || c.includes('CARGO'));
+    return c.includes('CUIL') &&
+      (c.includes('APELLIDO') || c.includes('CARGO') || c.includes('COLABORADOR'));
   });
   if (iEnc < 0) {
-    return { filas: [], avisos: ['No se encontró la fila de encabezados (CUIL, APELLIDO, CARGO, …).'] };
+    return { filas: [], avisos: ['No se encontró la fila de encabezados (CUIL, y APELLIDO, CARGO o COLABORADOR).'] };
   }
 
   const enc = partir(lineas[iEnc]).map(_normNom);
@@ -137,10 +150,15 @@ function interpretarNomina(crudo) {
     fila.apellido = t('apellido');
     fila.nombre = t('nombre');
     fila.nombreCompleto = t('nombreCompleto');
-    fila.tienda = t('tienda');
+    const tienda = t('tienda');
+    fila.tienda = ALIAS_TIENDA[_normNom(tienda)] || tienda;
     fila.posicion = posicionDeCargo(fila.cargo);
-    /* El número de personal está a la izquierda del CUIL, con el encabezado roto. */
-    fila.nroPersonal = col.cuil > 0 ? textoNomina(c[col.cuil - 1]) : '';
+    /* En la nómina completa el número de personal está a la izquierda del CUIL,
+       con el encabezado roto. En el listado corto esa columna no existe: ahí lo
+       que va a la izquierda es el encabezado, así que solo se toma si es un
+       número y no hay una columna FICHA que ya ocupe ese lugar. */
+    const izquierda = col.cuil > 0 ? textoNomina(c[col.cuil - 1]) : '';
+    fila.nroPersonal = (col.legajo === undefined && /^\d+$/.test(izquierda)) ? izquierda : '';
 
     if (fila.cargo && !fila.posicion) sinCargo.push(fila.cargo);
     filas.push(fila);

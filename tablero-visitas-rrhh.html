@@ -1721,11 +1721,23 @@ const COLUMNAS_NOMINA = {
   TELEFONO: 'telefono',
   DOMICILIOACTUALIZADO: 'domicilio',
   LOCALIDADYCP: 'localidad',
-  OBRASOCIALPREPAGA: 'obraSocial'
+  OBRASOCIALPREPAGA: 'obraSocial',
+  /* El listado corto del área usa otros nombres para lo mismo. */
+  COLABORADOR: 'nombreCompleto',
+  TIENDA: 'tienda',
+  FICHA: 'legajo',
+  RAZONSOCIAL: 'razonSocialContrato',
+  FECHAINICIO: 'fechaIngreso',
+  FECHADEINICIO: 'fechaIngreso'
 };
 
+/* "Sin tienda" es como el listado corto llama a los flotantes del área, que en
+   la nómina completa figuran con su nombre. Es la misma gente. */
+const TIENDA_FLOTANTES = 'FLOTANTES ÁREA 3';
+const ALIAS_TIENDA = { SINTIENDA: TIENDA_FLOTANTES, FLOTANTES: TIENDA_FLOTANTES };
+
 /* Campos de texto que se copian tal cual al perfil. */
-const CAMPOS_NOMINA = ['dni', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
+const CAMPOS_NOMINA = ['dni', 'legajo', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
                        'categoriaConvenio', 'cargo', 'nivelCargo', 'fechaNacimiento',
                        'fechaIngreso', 'fechaIngresoFTD', 'email', 'emailCorporativo',
                        'telefono', 'domicilio', 'localidad', 'obraSocial'];
@@ -1786,10 +1798,11 @@ function interpretarNomina(crudo) {
 
   const iEnc = lineas.findIndex(l => {
     const c = partir(l).map(_normNom);
-    return c.includes('CUIL') && (c.includes('APELLIDO') || c.includes('CARGO'));
+    return c.includes('CUIL') &&
+      (c.includes('APELLIDO') || c.includes('CARGO') || c.includes('COLABORADOR'));
   });
   if (iEnc < 0) {
-    return { filas: [], avisos: ['No se encontró la fila de encabezados (CUIL, APELLIDO, CARGO, …).'] };
+    return { filas: [], avisos: ['No se encontró la fila de encabezados (CUIL, y APELLIDO, CARGO o COLABORADOR).'] };
   }
 
   const enc = partir(lineas[iEnc]).map(_normNom);
@@ -1823,10 +1836,15 @@ function interpretarNomina(crudo) {
     fila.apellido = t('apellido');
     fila.nombre = t('nombre');
     fila.nombreCompleto = t('nombreCompleto');
-    fila.tienda = t('tienda');
+    const tienda = t('tienda');
+    fila.tienda = ALIAS_TIENDA[_normNom(tienda)] || tienda;
     fila.posicion = posicionDeCargo(fila.cargo);
-    /* El número de personal está a la izquierda del CUIL, con el encabezado roto. */
-    fila.nroPersonal = col.cuil > 0 ? textoNomina(c[col.cuil - 1]) : '';
+    /* En la nómina completa el número de personal está a la izquierda del CUIL,
+       con el encabezado roto. En el listado corto esa columna no existe: ahí lo
+       que va a la izquierda es el encabezado, así que solo se toma si es un
+       número y no hay una columna FICHA que ya ocupe ese lugar. */
+    const izquierda = col.cuil > 0 ? textoNomina(c[col.cuil - 1]) : '';
+    fila.nroPersonal = (col.legajo === undefined && /^\d+$/.test(izquierda)) ? izquierda : '';
 
     if (fila.cargo && !fila.posicion) sinCargo.push(fila.cargo);
     filas.push(fila);
@@ -2553,6 +2571,7 @@ const Store = (() => {
       let nuevos = 0, actualizados = 0, movidos = 0;
       const sucursalesNuevas = [];
       const sinTienda = [];
+      const discrepancias = [];
 
       (filas || []).forEach(f => {
         let s = buscarSucursal(f.tienda);
@@ -2571,18 +2590,45 @@ const Store = (() => {
           sucursalesNuevas.push(s.nombre);
         }
 
-        /* La persona puede estar cargada en otra sucursal si cambió de tienda.
-           Si el CUIL de la nómina vino mal tipeado no sirve para identificarla,
-           así que se la busca por nombre. */
+        /* Encontrar a la persona que ya está cargada es lo delicado: los dos
+           archivos que llegan de Nómina difieren en el CUIL de varias personas
+           —dígitos de más, un 2 por un 3—, así que el CUIL no alcanza. Se busca
+           en tres pasadas, de la más segura a la menos, y la última se informa
+           para que el coordinador la revise.
+
+           Fundir dos personas distintas es peor que dejar una duplicada, así
+           que la tercera pasada exige coincidencia de apellido, primer nombre
+           y sucursal. */
         const nombre = nombreDeNomina(f);
-        const porNombre = t => clave(t).replace(/[^A-Z]/g, '');
-        let c = null, anterior = null;
-        e.sucursales.forEach(x => {
-          const hallado = (x.colaboradores || []).find(y =>
-            (!f.cuilDudoso && y.cuil && y.cuil === f.cuil) ||
-            (y.nombre && porNombre(y.nombre) === porNombre(nombre)));
-          if (hallado) { c = hallado; anterior = x; }
-        });
+        const letras = t => clave(t).replace(/[^A-Z]/g, '');
+        const partes = t => clave(t).replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+        const pf = partes(nombre);
+
+        let c = null, anterior = null, porNombre = false;
+        const buscar = criterio => {
+          e.sucursales.forEach(x => {
+            if (c) return;
+            const hallado = (x.colaboradores || []).find(y => criterio(y, x));
+            if (hallado) { c = hallado; anterior = x; }
+          });
+        };
+
+        buscar(y => y.cuil && y.cuil === f.cuil);
+        if (!c) buscar(y => y.nombre && letras(y.nombre) === letras(nombre));
+        if (!c && pf.length >= 2) {
+          buscar((y, x) => {
+            if (x.id !== s.id || !y.nombre) return false;
+            const py = partes(y.nombre);
+            return py.length >= 2 && py[0] === pf[0] && py[1] === pf[1];
+          });
+          if (c) porNombre = true;
+        }
+        /* Que dos archivos traigan CUIL distintos para la misma persona es un
+           dato para corregir en el origen, así que se informan todos: los que
+           se resolvieron por nombre exacto y los que hubo que unificar. */
+        if (c && f.cuil && c.cuil && c.cuil !== f.cuil) {
+          discrepancias.push({ nombre, guardado: c.cuil, entrante: f.cuil, porNombre });
+        }
 
         if (c && anterior && anterior.id !== s.id) {
           anterior.colaboradores = anterior.colaboradores.filter(y => y.id !== c.id);
@@ -2598,9 +2644,23 @@ const Store = (() => {
         }
 
         c.nombre = nombre || c.nombre;
+        /* Si el CUIL guardado tiene una cantidad de dígitos rara y el que llega
+           tiene once, gana el que llega. */
+        if (f.cuil && !f.cuilDudoso && c.cuil !== f.cuil &&
+            (!c.cuil || c.cuil.length !== 11)) c.cuil = f.cuil;
         c.nroPersonal = f.nroPersonal || c.nroPersonal;
         if (f.posicion) c.posicion = f.posicion;
-        CAMPOS_NOMINA.forEach(k => { if (f[k]) c[k] = f[k]; });
+
+        /* Las fechas de ingreso también difieren entre archivos. Gana la más
+           vieja: la antigüedad reconocida no se pierde porque una planilla
+           traiga la fecha del último movimiento. */
+        const masVieja = (a, b) => (a && b) ? (a < b ? a : b) : (a || b);
+        CAMPOS_NOMINA.forEach(k => {
+          if (!f[k]) return;
+          c[k] = (k === 'fechaIngreso' || k === 'fechaIngresoFTD')
+            ? masVieja(c[k], f[k])
+            : f[k];
+        });
         /* Estar en la nómina es estar en el plantel. El honorario y el que está
            con licencia sin goce siguen siendo gente de la tienda: lo que los
            distingue es el estatus, que se muestra, no que desaparezcan. */
@@ -2608,7 +2668,7 @@ const Store = (() => {
       });
 
       guardar();
-      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda,
+      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda, discrepancias,
                total: (filas || []).length };
     },
 
@@ -4022,20 +4082,31 @@ const App = (() => {
           ${TALLES.map(t => campo(t.nombre, ruta('talles.' + t.id), { placeholder: 'S, M, L, 42…' })).join('')}
         </div>
 
-        <h4>Puesto y desarrollo</h4>
+        <h4>Puesto</h4>
         <div class="grid c3">
-          ${campo('Posición en el panel', ruta('posicion'), { tipo: 'select', calc: true,
-            opciones: [{ valor: '', texto: '— sin asignar —' }].concat(POSICIONES.map(p => ({ valor: p.nombre, texto: p.nombre }))) })}
-          ${dato('Desempeño', c.desempeno ? (ESCALA_DESEMPENO.find(x => x.valor === c.desempeno) || {}).nombre : '')}
-          ${dato('Potencial', c.potencial ? (ESCALA_POTENCIAL.find(x => x.valor === c.potencial) || {}).nombre : '')}
+          <label class="campo"><span>Posición en el panel</span>
+            <select data-colab-campo="${c.id}|posicion">
+              <option value="">— sin asignar —</option>
+              ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${c.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Desempeño</span>
+            <select data-colab-eval="${c.id}|desempeno">
+              <option value="">— sin evaluar —</option>
+              ${ESCALA_DESEMPENO.map(x => `<option value="${x.valor}"${Number(c.desempeno) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Potencial</span>
+            <select data-colab-eval="${c.id}|potencial">
+              <option value="">— sin evaluar —</option>
+              ${ESCALA_POTENCIAL.map(x => `<option value="${x.valor}"${Number(c.potencial) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+            </select></label>
         </div>
-        <div class="grid c2" style="margin-top:12px">
-          ${campo('Notas', ruta('notas'), { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta persona' })}
-        </div>
-        <p class="ayuda">
-          La evaluación de desempeño y potencial, la talent card y el 9-box se cargan
-          durante la visita, en la solapa <em>Talento y 9-box</em>.
+        <p class="ayuda" style="margin-top:8px">
+          La evaluación se hace junto con el Gerente de Tienda durante la visita, en la solapa
+          <em>Talento y 9-box</em>, donde además se puede mover a la persona de cuadrante arrastrándola.
+          Lo que cargues acá queda igual y se refleja en el 9-box.
         </p>
+
+        ${talentCard(c, s, { sinCabecera: true })}
 
         ${periodos.length ? `<h4>Novedades de liquidación</h4>
         <div class="tabla-scroll"><table>
@@ -5019,7 +5090,7 @@ const App = (() => {
   }
 
   /* ---------------------------- Talent card --------------------------- */
-  function talentCard(c, s) {
+  function talentCard(c, s, opciones) {
     const q = cuadranteDe(c.potencial, c.desempeno);
     const ant = antiguedadAnios(c.fechaIngreso);
     const campoC = (etiqueta, campo, opciones) => {
@@ -5033,15 +5104,18 @@ const App = (() => {
       return `<label class="campo"><span>${esc(etiqueta)}</span>${control}</label>`;
     };
 
-    return `<div class="talent-card">
+    /* Dentro del perfil el encabezado ya está arriba: no se repite. */
+    const cab = (opciones || {}).sinCabecera ? '' : `
       <div class="tc-cab">
         <div>
           <strong>${esc(c.nombre || 'Sin nombre')}</strong>
           <span>${esc(c.posicion || 'sin posición')}${ant === null ? '' : ` · ${fmtNum(ant, 1)} años en la empresa`}</span>
         </div>
         ${q ? `<span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[q.tono]}">${esc(q.nombre)}</span>` : ''}
-      </div>
+      </div>`;
 
+    return `<div class="talent-card"${(opciones || {}).sinCabecera ? ' style="padding:0"' : ''}>
+      ${cab}
       <h4>Formación</h4>
       <div class="grid c3">
         ${campoC('¿Estudia?', 'estudia', { tipo: 'select', opciones: NIVELES_ESTUDIO })}
@@ -5390,10 +5464,23 @@ const App = (() => {
 
     /* Campos de la talent card: colaborador identificado por id, no por índice,
        para que reordenar la tabla no pise datos de otra persona. */
+    /* La talent card se edita desde la visita y también desde la pantalla de la
+       sucursal, donde no hay visita en curso: se busca por id en todo el padrón. */
     function colaboradorDe(ref) {
       const [id] = String(ref).split('|');
       const suc = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : null;
-      return suc ? (suc.colaboradores.find(c => c.id === id) || null) : null;
+      const propio = suc ? suc.colaboradores.find(c => c.id === id) : null;
+      if (propio) return propio;
+      let hallado = null;
+      Store.get().sucursales.forEach(x =>
+        (x.colaboradores || []).forEach(c => { if (c.id === id) hallado = c; }));
+      return hallado;
+    }
+
+    /** Sucursal a la que pertenece un colaborador. */
+    function sucursalDeColaborador(id) {
+      return Store.get().sucursales.find(x =>
+        (x.colaboradores || []).some(c => c.id === id)) || null;
     }
 
     cont.addEventListener('input', ev => {
@@ -5417,13 +5504,17 @@ const App = (() => {
         const [id, cual] = evalu.dataset.colabEval.split('|');
         const c = colaboradorDe(id);
         if (!c) return;
-        const s = Store.sucursal(visitaEnCurso.sucursalId);
+        const s = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : sucursalDeColaborador(id);
         registrarEvaluacion(c,
           cual === 'desempeno' ? evalu.value : c.desempeno,
           cual === 'potencial' ? evalu.value : c.potencial,
-          { fecha: visitaEnCurso.fecha,
-            evaluadoCon: visitaEnCurso.minutaGerente.participante || s.gerente || '',
-            motivo: 'Ajuste en la visita' });
+          visitaEnCurso
+            ? { fecha: visitaEnCurso.fecha,
+                evaluadoCon: visitaEnCurso.minutaGerente.participante || (s ? s.gerente : '') || '',
+                motivo: 'Ajuste en la visita' }
+            : { fecha: hoyISO(),
+                evaluadoCon: (s ? s.gerente : '') || '',
+                motivo: 'Ajuste desde el perfil' });
         Store.save(); refrescar();
       }
     });
@@ -5603,6 +5694,10 @@ const App = (() => {
             ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
               <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
             ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${r.discrepancias.length ? `<br><strong>${r.discrepancias.length} persona${r.discrepancias.length === 1 ? ' llega' : 's llegan'} con un CUIL
+              distinto del que ya estaba guardado.</strong> Se mantiene el guardado; conviene ver cuál es el correcto
+              y corregirlo en el archivo de origen, porque con el CUIL mal esa persona no cruza con el resto de las planillas.
+              <ul>${r.discrepancias.map(x => `<li>${esc(x.nombre)}: <code>${esc(x.guardado)}</code> vs <code>${esc(x.entrante)}</code>${x.porNombre ? ' — se reconoció por el nombre' : ''}</li>`).join('')}</ul>` : ''}
             ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
           </div>`;
         }

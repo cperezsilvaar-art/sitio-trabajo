@@ -421,20 +421,31 @@ const App = (() => {
           ${TALLES.map(t => campo(t.nombre, ruta('talles.' + t.id), { placeholder: 'S, M, L, 42…' })).join('')}
         </div>
 
-        <h4>Puesto y desarrollo</h4>
+        <h4>Puesto</h4>
         <div class="grid c3">
-          ${campo('Posición en el panel', ruta('posicion'), { tipo: 'select', calc: true,
-            opciones: [{ valor: '', texto: '— sin asignar —' }].concat(POSICIONES.map(p => ({ valor: p.nombre, texto: p.nombre }))) })}
-          ${dato('Desempeño', c.desempeno ? (ESCALA_DESEMPENO.find(x => x.valor === c.desempeno) || {}).nombre : '')}
-          ${dato('Potencial', c.potencial ? (ESCALA_POTENCIAL.find(x => x.valor === c.potencial) || {}).nombre : '')}
+          <label class="campo"><span>Posición en el panel</span>
+            <select data-colab-campo="${c.id}|posicion">
+              <option value="">— sin asignar —</option>
+              ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${c.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Desempeño</span>
+            <select data-colab-eval="${c.id}|desempeno">
+              <option value="">— sin evaluar —</option>
+              ${ESCALA_DESEMPENO.map(x => `<option value="${x.valor}"${Number(c.desempeno) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Potencial</span>
+            <select data-colab-eval="${c.id}|potencial">
+              <option value="">— sin evaluar —</option>
+              ${ESCALA_POTENCIAL.map(x => `<option value="${x.valor}"${Number(c.potencial) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+            </select></label>
         </div>
-        <div class="grid c2" style="margin-top:12px">
-          ${campo('Notas', ruta('notas'), { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta persona' })}
-        </div>
-        <p class="ayuda">
-          La evaluación de desempeño y potencial, la talent card y el 9-box se cargan
-          durante la visita, en la solapa <em>Talento y 9-box</em>.
+        <p class="ayuda" style="margin-top:8px">
+          La evaluación se hace junto con el Gerente de Tienda durante la visita, en la solapa
+          <em>Talento y 9-box</em>, donde además se puede mover a la persona de cuadrante arrastrándola.
+          Lo que cargues acá queda igual y se refleja en el 9-box.
         </p>
+
+        ${talentCard(c, s, { sinCabecera: true })}
 
         ${periodos.length ? `<h4>Novedades de liquidación</h4>
         <div class="tabla-scroll"><table>
@@ -1418,7 +1429,7 @@ const App = (() => {
   }
 
   /* ---------------------------- Talent card --------------------------- */
-  function talentCard(c, s) {
+  function talentCard(c, s, opciones) {
     const q = cuadranteDe(c.potencial, c.desempeno);
     const ant = antiguedadAnios(c.fechaIngreso);
     const campoC = (etiqueta, campo, opciones) => {
@@ -1432,15 +1443,18 @@ const App = (() => {
       return `<label class="campo"><span>${esc(etiqueta)}</span>${control}</label>`;
     };
 
-    return `<div class="talent-card">
+    /* Dentro del perfil el encabezado ya está arriba: no se repite. */
+    const cab = (opciones || {}).sinCabecera ? '' : `
       <div class="tc-cab">
         <div>
           <strong>${esc(c.nombre || 'Sin nombre')}</strong>
           <span>${esc(c.posicion || 'sin posición')}${ant === null ? '' : ` · ${fmtNum(ant, 1)} años en la empresa`}</span>
         </div>
         ${q ? `<span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[q.tono]}">${esc(q.nombre)}</span>` : ''}
-      </div>
+      </div>`;
 
+    return `<div class="talent-card"${(opciones || {}).sinCabecera ? ' style="padding:0"' : ''}>
+      ${cab}
       <h4>Formación</h4>
       <div class="grid c3">
         ${campoC('¿Estudia?', 'estudia', { tipo: 'select', opciones: NIVELES_ESTUDIO })}
@@ -1789,10 +1803,23 @@ const App = (() => {
 
     /* Campos de la talent card: colaborador identificado por id, no por índice,
        para que reordenar la tabla no pise datos de otra persona. */
+    /* La talent card se edita desde la visita y también desde la pantalla de la
+       sucursal, donde no hay visita en curso: se busca por id en todo el padrón. */
     function colaboradorDe(ref) {
       const [id] = String(ref).split('|');
       const suc = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : null;
-      return suc ? (suc.colaboradores.find(c => c.id === id) || null) : null;
+      const propio = suc ? suc.colaboradores.find(c => c.id === id) : null;
+      if (propio) return propio;
+      let hallado = null;
+      Store.get().sucursales.forEach(x =>
+        (x.colaboradores || []).forEach(c => { if (c.id === id) hallado = c; }));
+      return hallado;
+    }
+
+    /** Sucursal a la que pertenece un colaborador. */
+    function sucursalDeColaborador(id) {
+      return Store.get().sucursales.find(x =>
+        (x.colaboradores || []).some(c => c.id === id)) || null;
     }
 
     cont.addEventListener('input', ev => {
@@ -1816,13 +1843,17 @@ const App = (() => {
         const [id, cual] = evalu.dataset.colabEval.split('|');
         const c = colaboradorDe(id);
         if (!c) return;
-        const s = Store.sucursal(visitaEnCurso.sucursalId);
+        const s = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : sucursalDeColaborador(id);
         registrarEvaluacion(c,
           cual === 'desempeno' ? evalu.value : c.desempeno,
           cual === 'potencial' ? evalu.value : c.potencial,
-          { fecha: visitaEnCurso.fecha,
-            evaluadoCon: visitaEnCurso.minutaGerente.participante || s.gerente || '',
-            motivo: 'Ajuste en la visita' });
+          visitaEnCurso
+            ? { fecha: visitaEnCurso.fecha,
+                evaluadoCon: visitaEnCurso.minutaGerente.participante || (s ? s.gerente : '') || '',
+                motivo: 'Ajuste en la visita' }
+            : { fecha: hoyISO(),
+                evaluadoCon: (s ? s.gerente : '') || '',
+                motivo: 'Ajuste desde el perfil' });
         Store.save(); refrescar();
       }
     });
@@ -2002,6 +2033,10 @@ const App = (() => {
             ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
               <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
             ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${r.discrepancias.length ? `<br><strong>${r.discrepancias.length} persona${r.discrepancias.length === 1 ? ' llega' : 's llegan'} con un CUIL
+              distinto del que ya estaba guardado.</strong> Se mantiene el guardado; conviene ver cuál es el correcto
+              y corregirlo en el archivo de origen, porque con el CUIL mal esa persona no cruza con el resto de las planillas.
+              <ul>${r.discrepancias.map(x => `<li>${esc(x.nombre)}: <code>${esc(x.guardado)}</code> vs <code>${esc(x.entrante)}</code>${x.porNombre ? ' — se reconoció por el nombre' : ''}</li>`).join('')}</ul>` : ''}
             ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
           </div>`;
         }

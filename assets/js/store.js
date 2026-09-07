@@ -425,6 +425,7 @@ const Store = (() => {
       let nuevos = 0, actualizados = 0, movidos = 0;
       const sucursalesNuevas = [];
       const sinTienda = [];
+      const discrepancias = [];
 
       (filas || []).forEach(f => {
         let s = buscarSucursal(f.tienda);
@@ -443,18 +444,45 @@ const Store = (() => {
           sucursalesNuevas.push(s.nombre);
         }
 
-        /* La persona puede estar cargada en otra sucursal si cambió de tienda.
-           Si el CUIL de la nómina vino mal tipeado no sirve para identificarla,
-           así que se la busca por nombre. */
+        /* Encontrar a la persona que ya está cargada es lo delicado: los dos
+           archivos que llegan de Nómina difieren en el CUIL de varias personas
+           —dígitos de más, un 2 por un 3—, así que el CUIL no alcanza. Se busca
+           en tres pasadas, de la más segura a la menos, y la última se informa
+           para que el coordinador la revise.
+
+           Fundir dos personas distintas es peor que dejar una duplicada, así
+           que la tercera pasada exige coincidencia de apellido, primer nombre
+           y sucursal. */
         const nombre = nombreDeNomina(f);
-        const porNombre = t => clave(t).replace(/[^A-Z]/g, '');
-        let c = null, anterior = null;
-        e.sucursales.forEach(x => {
-          const hallado = (x.colaboradores || []).find(y =>
-            (!f.cuilDudoso && y.cuil && y.cuil === f.cuil) ||
-            (y.nombre && porNombre(y.nombre) === porNombre(nombre)));
-          if (hallado) { c = hallado; anterior = x; }
-        });
+        const letras = t => clave(t).replace(/[^A-Z]/g, '');
+        const partes = t => clave(t).replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+        const pf = partes(nombre);
+
+        let c = null, anterior = null, porNombre = false;
+        const buscar = criterio => {
+          e.sucursales.forEach(x => {
+            if (c) return;
+            const hallado = (x.colaboradores || []).find(y => criterio(y, x));
+            if (hallado) { c = hallado; anterior = x; }
+          });
+        };
+
+        buscar(y => y.cuil && y.cuil === f.cuil);
+        if (!c) buscar(y => y.nombre && letras(y.nombre) === letras(nombre));
+        if (!c && pf.length >= 2) {
+          buscar((y, x) => {
+            if (x.id !== s.id || !y.nombre) return false;
+            const py = partes(y.nombre);
+            return py.length >= 2 && py[0] === pf[0] && py[1] === pf[1];
+          });
+          if (c) porNombre = true;
+        }
+        /* Que dos archivos traigan CUIL distintos para la misma persona es un
+           dato para corregir en el origen, así que se informan todos: los que
+           se resolvieron por nombre exacto y los que hubo que unificar. */
+        if (c && f.cuil && c.cuil && c.cuil !== f.cuil) {
+          discrepancias.push({ nombre, guardado: c.cuil, entrante: f.cuil, porNombre });
+        }
 
         if (c && anterior && anterior.id !== s.id) {
           anterior.colaboradores = anterior.colaboradores.filter(y => y.id !== c.id);
@@ -470,9 +498,23 @@ const Store = (() => {
         }
 
         c.nombre = nombre || c.nombre;
+        /* Si el CUIL guardado tiene una cantidad de dígitos rara y el que llega
+           tiene once, gana el que llega. */
+        if (f.cuil && !f.cuilDudoso && c.cuil !== f.cuil &&
+            (!c.cuil || c.cuil.length !== 11)) c.cuil = f.cuil;
         c.nroPersonal = f.nroPersonal || c.nroPersonal;
         if (f.posicion) c.posicion = f.posicion;
-        CAMPOS_NOMINA.forEach(k => { if (f[k]) c[k] = f[k]; });
+
+        /* Las fechas de ingreso también difieren entre archivos. Gana la más
+           vieja: la antigüedad reconocida no se pierde porque una planilla
+           traiga la fecha del último movimiento. */
+        const masVieja = (a, b) => (a && b) ? (a < b ? a : b) : (a || b);
+        CAMPOS_NOMINA.forEach(k => {
+          if (!f[k]) return;
+          c[k] = (k === 'fechaIngreso' || k === 'fechaIngresoFTD')
+            ? masVieja(c[k], f[k])
+            : f[k];
+        });
         /* Estar en la nómina es estar en el plantel. El honorario y el que está
            con licencia sin goce siguen siendo gente de la tienda: lo que los
            distingue es el estatus, que se muestra, no que desaparezcan. */
@@ -480,7 +522,7 @@ const Store = (() => {
       });
 
       guardar();
-      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda,
+      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda, discrepancias,
                total: (filas || []).length };
     },
 

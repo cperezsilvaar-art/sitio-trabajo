@@ -47,9 +47,14 @@ cada persona a su tienda con su cargo, sus fechas y su contacto. Desde ahí, el
 nombre de cada sucursal abre **su propia pantalla**: indicadores del mes,
 referentes, **organigrama** y visitas registradas.
 
-Cada tarjeta del organigrama abre el **perfil** de esa persona, con todo lo que
-trae la nómina más lo que solo sabe RRHH: los **talles de la ropa de trabajo**,
-las notas y la posición cuando el cargo no se reconoce.
+Cada tarjeta del organigrama abre el **perfil** de esa persona: lo que trae la
+nómina, los **talles de la ropa de trabajo**, y la **talent card** completa
+—formación, desarrollo, fortalezas, riesgo de salida y el cuadrante del 9-box con
+su historial—, la misma que se usa durante la visita.
+
+El importador entiende tanto la nómina completa como el listado corto del área.
+Los dos se complementan y conviene cargar los dos: el listado corto trae el
+número de ficha de cada tienda, que la nómina no tiene.
 
 Detalle en [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md).
 
