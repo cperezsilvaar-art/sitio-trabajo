@@ -54,6 +54,22 @@ En el repositorio: **Settings → Pages → Source: Deploy from a branch**, rama
 `main`, carpeta `/ (root)`. El sitio queda disponible en
 `https://<usuario>.github.io/sitio-trabajo/`.
 
+## Versión de archivo único
+
+`build-pagina-unica.py` arma una copia del sitio en un solo `.html`, con el CSS y
+el JavaScript embebidos, para publicarla o pasarla por correo:
+
+```
+python3 build-pagina-unica.py tablero.html
+```
+
+El orden de los archivos se lee de `index.html`, así que sumar un script al HTML
+alcanza para que entre en la versión única. Antes había una lista escrita a mano
+en el generador y se publicó una versión sin `normativa.js`, que no arrancaba.
+
+Después de generarla, conviene abrirla y confirmar que el panel dibuja: si falta
+un módulo, la página queda en blanco sin error visible.
+
 ## Estructura
 
 ```
