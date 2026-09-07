@@ -216,6 +216,32 @@ pre.reporte {
 
 .vacio { color: var(--texto-suave); font-style: italic; padding: 14px 0; font-size: 13.5px; }
 
+/* ------------------- Confirmación y avisos propios --------------------- *
+   El visor de la página publicada bloquea confirm() y alert() del navegador,
+   así que el tablero dibuja los suyos. */
+.velo {
+  position: fixed; inset: 0; background: rgba(16, 32, 54, .45);
+  display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+}
+.dialogo {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  box-shadow: 0 12px 40px rgba(16, 32, 54, .25); padding: 22px 24px;
+  max-width: 440px; width: 100%;
+}
+.dialogo h3 { margin: 0 0 8px; font-size: 16px; color: var(--azul); }
+.dialogo p { margin: 0 0 18px; font-size: 14px; line-height: 1.5; }
+.dialogo .acciones { margin: 0; justify-content: flex-end; }
+
+.avisos { position: fixed; right: 18px; bottom: 18px; z-index: 110; display: flex; flex-direction: column; gap: 8px; }
+.aviso-flotante {
+  background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--verde);
+  border-radius: 8px; padding: 11px 16px; box-shadow: var(--sombra); font-size: 13.5px;
+  max-width: 380px; animation: entra .18s ease-out;
+}
+.aviso-flotante.error { border-left-color: var(--rojo-alerta); }
+@keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .aviso-flotante { animation: none; } }
+
 footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; padding: 26px 20px 40px; }
 
 @media (max-width: 640px) {

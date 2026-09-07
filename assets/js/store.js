@@ -74,7 +74,8 @@ const Store = (() => {
     return {
       version: 1,
       config: {
-        coordinador: '',
+        coordinador: 'Christian Pérez',
+        area: 'Área 3',
         gerenteOperaciones: { nombre: '', email: '' },
         copias: '',
         webhook: '',
@@ -118,6 +119,8 @@ const Store = (() => {
     if (!e || typeof e !== 'object') return base;
     e.version = 1;
     e.config = Object.assign({}, base.config, e.config || {});
+    if (!String(e.config.coordinador || '').trim()) e.config.coordinador = base.config.coordinador;
+    if (!String(e.config.area || '').trim()) e.config.area = base.config.area;
     e.config.gerenteOperaciones = Object.assign({}, base.config.gerenteOperaciones, e.config.gerenteOperaciones || {});
     e.config.parametros = Object.assign({}, PARAMETROS_DEFECTO, e.config.parametros || {});
     e.sucursales = Array.isArray(e.sucursales) ? e.sucursales : base.sucursales;
@@ -243,7 +246,7 @@ const Store = (() => {
        verdad; “Borrar todo” lo deja limpio de nuevo. */
     cargarEjemplo() {
       const e = estadoInicial();
-      e.config.coordinador = 'Coordinador de RRHH';
+      e.config.coordinador = estadoInicial().config.coordinador;
       e.config.gerenteOperaciones = { nombre: 'Gerencia de Operaciones', email: '' };
 
       const demo = [

@@ -11,8 +11,8 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 ## Cómo empezar
 
 1. Abrir `index.html`.
-2. Ir a **Configuración** y cargar el nombre del coordinador, el nombre y el email
-   del Gerente de Operaciones, y las copias si corresponde.
+2. Ir a **Configuración**. El coordinador y el área vienen cargados; falta el
+   nombre y el email del Gerente de Operaciones, y las copias si corresponde.
 3. Ir a **Sucursales**. Vienen diez sucursales provisorias (`sucursal1` … `sucursal10`).
    Reemplazar el campo *Nombre real* por el nombre que corresponda a medida que se
    conozcan las tiendas; el código provisorio queda como identificador interno.

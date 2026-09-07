@@ -95,6 +95,8 @@ const Reporte = (() => {
 
     L.push(barra);
     L.push('REPORTE DE VISITA A SUCURSAL - FARMATODO');
+    // Si el área ya se llama "Área 3", no repetir la palabra en la etiqueta
+    if (config.area) L.push('Área: ' + String(config.area).replace(/^\s*[áa]rea\s+/i, ''));
     L.push('Sucursal: ' + Store.etiquetaSucursal(sucursal));
     L.push('Fecha de Visita: ' + fmtFecha(visita.fecha));
     L.push('Período analizado: ' + oPendiente(visita.periodo));
@@ -262,8 +264,9 @@ const Reporte = (() => {
 
   /* ---------------------- Envío al Gerente de Operaciones ---------------------- */
 
-  function asunto(visita, sucursal) {
-    return `Visita RRHH · ${Store.etiquetaSucursal(sucursal)} · ${fmtFecha(visita.fecha)}`;
+  function asunto(visita, sucursal, config) {
+    const area = config && config.area ? config.area + ' · ' : '';
+    return `Visita RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${fmtFecha(visita.fecha)}`;
   }
 
   /**
@@ -277,7 +280,7 @@ const Reporte = (() => {
   async function enviar(visita, sucursal, config, opciones) {
     opciones = opciones || {};
     const cuerpo = texto(visita, sucursal, config);
-    const asu = asunto(visita, sucursal);
+    const asu = asunto(visita, sucursal, config);
     const destino = (config.gerenteOperaciones && config.gerenteOperaciones.email || '').trim();
 
     if (!destino) {
@@ -292,6 +295,7 @@ const Reporte = (() => {
         cc: (config.copias || '').split(',').map(s => s.trim()).filter(Boolean),
         asunto: asu,
         cuerpo,
+        area: config.area || '',
         sucursal: { codigo: sucursal.codigo, nombre: sucursal.nombre, tipo: sucursal.tipo },
         visita: { id: visita.id, fecha: visita.fecha, periodo: visita.periodo, coordinador: visita.coordinador },
         metricas: {

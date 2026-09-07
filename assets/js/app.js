@@ -45,6 +45,49 @@ const App = (() => {
     return `<span class="chip ${clase}">${s.icono} ${esc(s.texto)}</span>`;
   }
 
+  /* --------------------- confirmación y avisos ---------------------- *
+     El visor de la página publicada bloquea confirm() y alert(): devuelven
+     false o no muestran nada. El tablero dibuja los suyos para que las
+     acciones destructivas se puedan completar en cualquier entorno. */
+  function avisar(mensaje, tipo) {
+    let cont = document.querySelector('.avisos');
+    if (!cont) {
+      cont = document.createElement('div');
+      cont.className = 'avisos';
+      document.body.appendChild(cont);
+    }
+    const el = document.createElement('div');
+    el.className = 'aviso-flotante' + (tipo === 'error' ? ' error' : '');
+    el.textContent = mensaje;
+    cont.appendChild(el);
+    setTimeout(() => el.remove(), tipo === 'error' ? 7000 : 4000);
+  }
+
+  function confirmar(titulo, mensaje, textoConfirmar) {
+    return new Promise(resolve => {
+      const velo = document.createElement('div');
+      velo.className = 'velo';
+      velo.innerHTML = `<div class="dialogo" role="dialog" aria-modal="true">
+        <h3>${esc(titulo)}</h3>
+        <p>${esc(mensaje)}</p>
+        <div class="acciones">
+          <button class="b sec" data-r="0">Cancelar</button>
+          <button class="b peligro" data-r="1">${esc(textoConfirmar || 'Borrar')}</button>
+        </div>
+      </div>`;
+      const cerrar = valor => { velo.remove(); document.removeEventListener('keydown', tecla); resolve(valor); };
+      const tecla = ev => { if (ev.key === 'Escape') cerrar(false); };
+      velo.addEventListener('click', ev => {
+        const btn = ev.target.closest('[data-r]');
+        if (btn) return cerrar(btn.dataset.r === '1');
+        if (ev.target === velo) cerrar(false);
+      });
+      document.addEventListener('keydown', tecla);
+      document.body.appendChild(velo);
+      velo.querySelector('[data-r="1"]').focus();
+    });
+  }
+
   /* ------------------------ componentes de campo -------------------- */
   function campo(etiqueta, path, opciones) {
     const o = opciones || {};
@@ -98,8 +141,8 @@ const App = (() => {
     const enviadas = filas.filter(f => f.v && f.v.envio.enviado).length;
 
     const html = `
-      <h1 class="titulo">Panel de la red</h1>
-      <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal.</p>
+      <h1 class="titulo">${esc(e.config.area || 'Panel de la red')}</h1>
+      <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
 
       <div class="kpis">
         ${kpi('Sucursales a cargo', e.sucursales.length, `${visitadas} con visita registrada`)}
@@ -183,7 +226,7 @@ const App = (() => {
     const e = Store.get();
     contexto = e;
     return `
-      <h1 class="titulo">Sucursales a cargo</h1>
+      <h1 class="titulo">Sucursales de ${esc(e.config.area || 'mi área')}</h1>
       <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.</p>
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
@@ -220,7 +263,8 @@ const App = (() => {
         <h2>Coordinación y destinatarios</h2>
         <p class="ayuda">El reporte de cada visita se envía al Gerente de Operaciones apenas se cierra la visita.</p>
         <div class="grid c2">
-          ${campo('Coordinador de RRHH', 'coordinador', { placeholder: 'Tu nombre' })}
+          ${campo('Coordinador de RRHH', 'coordinador', { calc: true, placeholder: 'Tu nombre' })}
+          ${campo('Área a cargo', 'area', { calc: true, placeholder: 'ej. Área 3' })}
           ${campo('Gerente de Operaciones', 'gerenteOperaciones.nombre')}
           ${campo('Email del Gerente de Operaciones', 'gerenteOperaciones.email', { tipo: 'email', placeholder: 'nombre@empresa.com' })}
           ${campo('Copias (separadas por coma)', 'copias', { placeholder: 'rrhh@empresa.com, gerencia@empresa.com' })}
@@ -300,7 +344,7 @@ const App = (() => {
 
     return `
       <h1 class="titulo">${esc(Store.etiquetaSucursal(s))}</h1>
-      <p class="subtitulo">Visita del ${fmtFecha(v.fecha)} · período ${esc(v.periodo || '—')} ·
+      <p class="subtitulo">${e.config.area ? esc(e.config.area) + ' · ' : ''}Visita del ${fmtFecha(v.fecha)} · período ${esc(v.periodo || '—')} ·
         ${v.envio.enviado ? '<span class="chip verde">reporte enviado</span>' : '<span class="chip ambar">reporte pendiente de envío</span>'}</p>
 
       <div class="kpis">
@@ -898,11 +942,14 @@ const App = (() => {
       if (a === 'agregar-sucursal') { Store.agregarSucursal(); refrescar(); }
 
       if (a === 'borrar-sucursal') {
-        const s = Store.sucursal(btn.dataset.id);
-        const n = Store.visitasDe(s.id).length;
-        if (confirm(`¿Eliminar ${Store.etiquetaSucursal(s)}?` + (n ? ` Se borrarán también sus ${n} visita/s.` : ''))) {
-          Store.eliminarSucursal(s.id); refrescar();
-        }
+        const suc = Store.sucursal(btn.dataset.id);
+        const n = Store.visitasDe(suc.id).length;
+        const ok = await confirmar(
+          `Eliminar ${Store.etiquetaSucursal(suc)}`,
+          n ? `Se borrarán también sus ${n} visita${n === 1 ? '' : 's'} y todo lo cargado en ellas.`
+            : 'La sucursal se quita del tablero.',
+          'Eliminar sucursal');
+        if (ok) { Store.eliminarSucursal(suc.id); refrescar(); avisar('Sucursal eliminada.'); }
       }
 
       /* --- visitas --- */
@@ -913,13 +960,24 @@ const App = (() => {
 
       if (a === 'nueva-visita-selector') {
         const sel = $('#selector-sucursal');
-        if (!sel.value) return alert('Elegí primero una sucursal.');
+        if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
         location.hash = `#/visita/${v.id}/minutas`;
       }
 
       if (a === 'borrar-visita') {
-        if (confirm('¿Eliminar esta visita y todos sus datos?')) { Store.eliminarVisita(btn.dataset.id); refrescar(); }
+        const vi = Store.visita(btn.dataset.id);
+        const su = vi ? Store.sucursal(vi.sucursalId) : null;
+        const ok = await confirmar(
+          'Eliminar visita',
+          vi ? `Visita a ${Store.etiquetaSucursal(su)} del ${fmtFecha(vi.fecha)}. Se borran las minutas, la matriz de FTE y todo lo cargado.`
+             : 'Se borran todos los datos de la visita.',
+          'Eliminar visita');
+        if (ok) {
+          Store.eliminarVisita(btn.dataset.id);
+          if ((location.hash || '').includes(btn.dataset.id)) location.hash = '#/red'; else refrescar();
+          avisar('Visita eliminada.');
+        }
       }
 
       /* --- filas de tablas --- */
@@ -967,7 +1025,7 @@ const App = (() => {
           } catch (err) {
             const pre = $('#vista-reporte');
             if (pre) { const r = document.createRange(); r.selectNode(pre); getSelection().removeAllRanges(); getSelection().addRange(r); }
-            alert('No se pudo copiar automáticamente. El reporte quedó seleccionado: copialo con Ctrl+C.');
+            avisar('No se pudo copiar solo. El reporte quedó seleccionado: copialo con Ctrl+C.', 'error');
           }
         }
 
@@ -982,9 +1040,9 @@ const App = (() => {
           try {
             const r = await Reporte.enviar(v, s, e.config);
             refrescar();
-            if (r.via === 'webhook') alert(`Reporte enviado a ${r.destino}.`);
+            avisar(r.via === 'webhook' ? `Reporte enviado a ${r.destino}.` : `Se abrió tu cliente de correo con el reporte para ${r.destino}.`);
           } catch (err) {
-            alert('No se pudo enviar: ' + err.message);
+            avisar('No se pudo enviar: ' + err.message, 'error');
             btn.disabled = false; btn.textContent = original;
           }
         }
@@ -994,16 +1052,18 @@ const App = (() => {
 
       /* --- respaldos --- */
       if (a === 'ejemplo') {
-        if (confirm('Se reemplaza todo el contenido actual por dos sucursales de ejemplo. ¿Continuar?')) {
-          Store.cargarEjemplo(); location.hash = '#/red'; render();
-        }
+        const ok = await confirmar('Cargar datos de ejemplo',
+          'Se reemplaza todo el contenido actual por dos sucursales con una visita completa. Si ya cargaste información real, exportá antes un respaldo.',
+          'Cargar ejemplo');
+        if (ok) { Store.cargarEjemplo(); location.hash = '#/red'; render(); avisar('Datos de ejemplo cargados.'); }
       }
       if (a === 'exportar') Store.exportar();
       if (a === 'importar') $('#archivo-import').click();
       if (a === 'reiniciar') {
-        if (confirm('Se borrarán todas las sucursales y visitas de este navegador. ¿Continuar?')) {
-          Store.reiniciar(); location.hash = '#/red'; render();
-        }
+        const ok = await confirmar('Borrar todo',
+          'Se eliminan todas las sucursales y visitas guardadas en este navegador. No se puede deshacer.',
+          'Borrar todo');
+        if (ok) { Store.reiniciar(); location.hash = '#/red'; render(); avisar('Tablero vacío.'); }
       }
     });
 
@@ -1013,19 +1073,23 @@ const App = (() => {
         if (!f) return;
         const lector = new FileReader();
         lector.onload = () => {
-          try { Store.importar(lector.result); location.hash = '#/red'; render(); alert('Respaldo importado.'); }
-          catch (err) { alert('El archivo no tiene un formato válido: ' + err.message); }
+          try { Store.importar(lector.result); location.hash = '#/red'; render(); avisar('Respaldo importado.'); }
+          catch (err) { avisar('El archivo no tiene un formato válido: ' + err.message, 'error'); }
         };
         lector.readAsText(f);
       }
       if (ev.target.id === 'selector-sucursal' && ev.target.value) {
         const v = Store.ultimaVisita(ev.target.value);
-        if (v) location.hash = `#/visita/${v.id}/minutas`;
-        else if (confirm('Esa sucursal no tiene visitas registradas. ¿Registrar una ahora?')) {
-          const nueva = Store.crearVisita(ev.target.value);
-          location.hash = `#/visita/${nueva.id}/minutas`;
-        }
+        const idSuc = ev.target.value;
         ev.target.value = '';
+        if (v) { location.hash = `#/visita/${v.id}/minutas`; return; }
+        confirmar('Sin visitas registradas',
+          `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
+          'Registrar visita').then(ok => {
+            if (!ok) return;
+            const nueva = Store.crearVisita(idSuc);
+            location.hash = `#/visita/${nueva.id}/minutas`;
+          });
       }
     });
 
