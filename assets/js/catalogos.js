@@ -281,11 +281,11 @@ function semaforoDotacion(diferencia) {
 /* ------------------------------------------------------------------ *
  * 7. Recorrida del HRBP                                                *
  *                                                                      *
- * El check de la visita semanal. Está ordenado como transcurre la       *
+ * El check de la visita semanal. Está ordenado como transcurre la      *
  * visita, no por tema: primero lo que se ve antes de que nadie sepa     *
- * que llegaste, después la gente, después el gerente, y al final el     *
- * cierre. Ese orden importa: si arrancás por la oficina del gerente,    *
- * el resto de la visita ya es la versión que él te quiere mostrar.      *
+ * que llegaste, después la gente, y al final el gerente. Ese orden      *
+ * importa: si arrancás por la oficina del gerente, el resto de la       *
+ * visita ya es la versión que él te quiere mostrar.                     *
  *                                                                      *
  * `clave: true` marca lo que no debería quedar sin hacer nunca.         *
  * ------------------------------------------------------------------ */
@@ -348,28 +348,6 @@ const RECORRIDA_HRBP = [
       { id: 'sanciones', texto: 'Sanciones aplicadas: notificadas, firmadas y archivadas' },
       { id: 'necesidades', texto: 'Qué necesita de RRHH que hoy no está teniendo',
         ayuda: 'Preguntarlo explícitamente. Es la parte de "business partner" que suele quedar afuera.' }
-    ]
-  },
-  {
-    id: 'administrativo',
-    nombre: 'Cumplimiento y legajos',
-    ayuda: 'Lo aburrido que solo aparece cuando ya es un problema.',
-    items: [
-      { id: 'legajos', texto: 'Legajos completos: documentación, altas y firmas al día' },
-      { id: 'certificados', texto: 'Certificados médicos presentados y cargados' },
-      { id: 'capacitaciones', texto: 'Capacitaciones obligatorias con registro de asistencia' },
-      { id: 'art', texto: 'Exámenes periódicos y trámites de ART sin pendientes' }
-    ]
-  },
-  {
-    id: 'cierre',
-    nombre: 'Cierre de la visita',
-    ayuda: 'Nunca irse sin devolución: sin esto la visita es una auditoría, no un acompañamiento.',
-    items: [
-      { id: 'devolucion', clave: true, texto: 'Le di devolución al gerente antes de irme, con lo bueno y lo que hay que corregir' },
-      { id: 'compromisos', clave: true, texto: 'Acordamos compromisos concretos, con responsable y fecha',
-        ayuda: 'Dos o tres. Diez compromisos es ninguno.' },
-      { id: 'proxima', texto: 'Quedó acordado cuándo es la próxima visita' }
     ]
   }
 ];

@@ -4,10 +4,10 @@ El check de la visita a sucursal. Está ordenado **como transcurre la visita**, 
 por tema, y ese orden es la mitad del contenido: si arrancás por la oficina del
 gerente, el resto de la visita ya es la versión que él te quiere mostrar.
 
-Son 28 puntos en seis bloques. Once están marcados como **clave**: no deberían
-quedar sin hacer nunca, y el panel los sigue aparte.
+Son 21 puntos en cuatro bloques. Nueve están marcados como **clave**: no
+deberían quedar sin hacer nunca, y el panel los sigue aparte.
 
-## Los seis bloques
+## Los cuatro bloques
 
 **1 · Antes de entrar.** Repasar los compromisos de la visita anterior y mirar
 los números del mes. Diez minutos de preparación cambian la calidad de todo lo
@@ -34,12 +34,16 @@ las horas extras del mes siguiente—, y preguntarle explícitamente qué necesi
 de RRHH que hoy no está teniendo. Esa última pregunta es la parte de *business
 partner* que suele quedar afuera.
 
-**5 · Cumplimiento y legajos.** Lo aburrido que solo aparece cuando ya es un
-problema: legajos, certificados, capacitaciones obligatorias, ART.
+## Lo que la lista no cubre a propósito
 
-**6 · Cierre.** Nunca irse sin devolución al gerente: sin eso la visita es una
-auditoría, no un acompañamiento. Y acordar dos o tres compromisos con
-responsable y fecha —diez compromisos es ninguno—.
+El cierre de la visita —la devolución al gerente y los compromisos acordados— no
+está acá: vive en **Minutas**, donde se escriben los acuerdos, y en el **Plan de
+acción** de la solapa *Reporte y Envío*, que es lo que después se sigue visita a
+visita. Tenerlo en los dos lugares obligaba a cargar lo mismo dos veces.
+
+El control de legajos, certificados, capacitaciones y ART tampoco: es trabajo de
+auditoría administrativa, con otra frecuencia y otro interlocutor que la visita
+semanal a la tienda.
 
 ## Cómo se registra
 

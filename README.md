@@ -30,7 +30,7 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 
 | Solapa | Contenido |
 |---|---|
-| **Recorrida** | El check de la visita: 28 puntos en seis bloques, en el orden en que transcurre |
+| **Recorrida** | El check de la visita: 21 puntos en cuatro bloques, en el orden en que transcurre |
 | **Minutas** | Reunión con el Gerente de Tienda (puntos y acuerdos) y con un colaborador (feedback y clima) |
 | **FTE y Costo** | Matriz por posición: headcount, altas, bajas, ausencias, horas extras, sueldos, cargas, costo por FTE |
 | **Ausentismo** | Días por concepto, separados en controlable (evitable) y no controlable (inevitable) |
