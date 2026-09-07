@@ -193,7 +193,7 @@ const App = (() => {
             const f = filas.find(x => x.s.id === id);
             const s = f.s, v = f.v, c = f.c;
             return `<tr>
-              <td><strong>${esc(Store.etiquetaSucursal(s))}</strong>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
+              <td><a href="#/sucursal/${s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(s))}</a>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
               <td class="tipo">${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
               <td class="num">${c ? (c.matriz.total.heads || '—') : '—'}</td>
@@ -241,6 +241,254 @@ const App = (() => {
         }).join('')}</tbody>
       </table></div>
     </section>`;
+  }
+
+  /* ====================== VISTA: UNA SUCURSAL ====================== *
+     Todo lo que hay de una tienda en una sola pantalla: la ficha, el estado
+     del mes, el organigrama y el plantel. Es la vista de "entro a la sucursal
+     y veo de qué se trata" antes de ir a visitarla. */
+  let perfilAbierto = null;
+
+  function vistaSucursal(id) {
+    const e = Store.get();
+    contexto = e;
+    const s = Store.sucursal(id);
+    if (!s) return `<h1 class="titulo">Sucursal</h1>
+      <section class="tarjeta"><p class="vacio">Esa sucursal ya no existe.</p></section>`;
+
+    const plantel = (s.colaboradores || []).filter(c => c.activo !== false);
+    const visitas = Store.visitasDe(s.id);
+    const ultima = visitas[0] || null;
+    const periodo = (ultima && ultima.periodo) || hoyISO().slice(0, 7);
+    const calc = ultima ? Reporte.calcular(ultima, s, e.config) : null;
+    const nov = Store.dotacionDelPadron(s.id, periodo);
+    const t9 = distribucion9Box(s.colaboradores);
+
+    const porPosicion = {};
+    plantel.forEach(c => {
+      const k = c.posicion || 'Sin posición';
+      (porPosicion[k] || (porPosicion[k] = [])).push(c);
+    });
+
+    return `
+      <h1 class="titulo">${esc(s.nombre || s.codigo)}</h1>
+      <p class="subtitulo">
+        ${esc(s.marca || MARCA_AREA)}${s.localidad ? ' · ' + esc(s.localidad) : ''}
+        ${s.direccion ? ' · ' + esc(s.direccion) : ''}
+        ${s.rvd ? ` · <span class="chip azul">RVD ${esc(s.rvd)}</span>` : ''}
+      </p>
+
+      <div class="kpis">
+        ${(() => {
+          const sinPos = plantel.filter(c => !c.posicion).length;
+          return kpi('Dotación', plantel.length || '—',
+            !plantel.length ? 'sin plantel cargado'
+              : sinPos ? `${sinPos} sin posición asignada`
+              : `${Object.keys(porPosicion).length} posiciones`,
+            sinPos ? 'aviso' : '');
+        })()}
+        ${kpi('FTE Real', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
+              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'sin visitas registradas')}
+        ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
+              calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : '',
+              calc && calc.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
+        ${kpi('Horas extras', nov && nov.personas
+                ? fmtNum(Object.keys(nov.porPosicion).reduce((a, k) => a + nov.porPosicion[k].horasExtras, 0), 1) + ' h'
+                : (calc && calc.matriz.total.horasExtras ? fmtNum(calc.matriz.total.horasExtras, 0) + ' h' : '—'),
+              nov && nov.personas ? `novedades de ${esc(periodo)}` : 'según la matriz de FTE')}
+        ${kpi('Evaluados', t9.evaluados.length ? `${t9.evaluados.length} / ${t9.activos.length}` : '—',
+              t9.sinEvaluar.length ? `${t9.sinEvaluar.length} sin evaluar` : 'plantel completo',
+              t9.sinEvaluar.length ? 'aviso' : 'ok')}
+      </div>
+
+      <div class="acciones" style="margin-bottom:18px">
+        <button class="b" data-accion="nueva-visita" data-id="${s.id}">Registrar una visita</button>
+        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/minutas" style="text-decoration:none">Abrir la última visita</a>` : ''}
+        <a class="b sec" href="#/informe" style="text-decoration:none">Informe mensual</a>
+        <a class="b sec" href="#/sucursales" style="text-decoration:none">Editar la ficha</a>
+      </div>
+
+      <section class="tarjeta">
+        <h2>Referentes y datos de la tienda</h2>
+        <div class="grid c3">
+          ${dato('Gerente de Tienda', s.gerente)}
+          ${dato('Director Técnico', s.directorTecnico)}
+          ${dato('Gerente de Operaciones', s.gerenteOperaciones)}
+          ${dato('Horario', s.horario)}
+          ${dato('Razón social', s.razonSocial)}
+          ${dato('CUIT', s.cuit)}
+          ${dato('ART', s.art)}
+          ${dato('Referente de RRHH', s.referenteRRHH)}
+          ${dato('Email del gerente', s.emailGerente)}
+        </div>
+        ${s.notas ? `<div class="aviso-caja info" style="margin-top:14px">${esc(s.notas)}</div>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <h2>Organigrama</h2>
+        <p class="ayuda">
+          El plantel activo ordenado por posición. Las tarjetas se abren para ver el perfil completo.
+        </p>
+        ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
+      </section>
+
+      ${perfilAbierto ? perfilColaborador(s, plantel.find(c => c.id === perfilAbierto)) : ''}
+
+      <section class="tarjeta">
+        <h2>Visitas registradas</h2>
+        ${visitas.length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Período</th><th class="num">FTE</th><th class="num">Ausentismo</th><th>Reporte</th><th></th></tr></thead>
+          <tbody>${visitas.map(v => {
+            const c = Reporte.calcular(v, s, e.config);
+            return `<tr>
+              <td><strong>${fmtFecha(v.fecha)}</strong></td>
+              <td>${esc(v.periodo || '—')}</td>
+              <td class="num">${c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
+              <td class="num">${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</td>
+              <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
+              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Sin visitas registradas todavía.</p>'}
+      </section>`;
+  }
+
+  /**
+   * Perfil de una persona. Lo que llega de la nómina se muestra como dato;
+   * lo que solo puede saber RRHH —los talles de la ropa de trabajo, las notas—
+   * es editable.
+   */
+  function perfilColaborador(s, c) {
+    if (!c) return '';
+    const i = s.colaboradores.indexOf(c);
+    const ruta = campo => `sucursales.${Store.get().sucursales.indexOf(s)}.colaboradores.${i}.${campo}`;
+    const anios = antiguedadAnios(c.fechaIngreso);
+    const edad = antiguedadAnios(c.fechaNacimiento);
+    const q = c.desempeno && c.potencial ? NINE_BOX[`${c.potencial}${c.desempeno}`] : null;
+
+    /* Los períodos con novedades cargadas, del más reciente al más viejo. */
+    const periodos = Object.keys(c.novedades || {}).sort().reverse();
+
+    return `
+      <section class="tarjeta" id="perfil-colaborador">
+        <div class="tc-cab">
+          <div>
+            <strong style="font-size:17px">${esc(c.nombre || 'Sin nombre')}</strong>
+            <span>${esc(c.cargo || c.posicion || 'sin cargo')}${c.nivelCargo && c.nivelCargo !== c.cargo ? ` · ${esc(c.nivelCargo)}` : ''}
+              ${c.categoriaConvenio ? ` · convenio ${esc(c.categoriaConvenio)}` : ''}</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${q ? `<span class="chip azul">${esc(q.nombre)}</span>` : ''}
+            ${c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO' ? `<span class="chip ambar">${esc(c.estatus)}</span>` : ''}
+            <button class="mini" data-accion="cerrar-perfil">Cerrar</button>
+          </div>
+        </div>
+
+        <h4>Identificación</h4>
+        <div class="grid c4">
+          ${dato('N° de personal', c.nroPersonal)}
+          ${dato('Legajo de tienda', c.legajo)}
+          ${dato('CUIL', c.cuil)}
+          ${dato('DNI', c.dni)}
+          ${dato('Sexo', c.sexo)}
+          ${dato('Fecha de nacimiento', c.fechaNacimiento ? `${fmtFecha(c.fechaNacimiento)}${edad !== null ? ` · ${Math.floor(edad)} años` : ''}` : '')}
+          ${dato('Obra social', c.obraSocial)}
+          ${dato('Estatus', c.estatus)}
+        </div>
+
+        <h4>Vínculo</h4>
+        <div class="grid c4">
+          ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : '')}
+          ${dato('Ingreso a Farmatodo', c.fechaIngresoFTD ? fmtFecha(c.fechaIngresoFTD) : '')}
+          ${dato('Razón social', c.razonSocialContrato)}
+          ${dato('Unidad de negocio', c.unidadNegocio)}
+        </div>
+
+        <h4>Contacto</h4>
+        <div class="grid c3">
+          ${dato('Teléfono', c.telefono)}
+          ${dato('Mail corporativo', c.emailCorporativo)}
+          ${dato('Mail personal', c.email)}
+          ${dato('Domicilio', c.domicilio)}
+          ${dato('Localidad', c.localidad)}
+        </div>
+
+        <h4>Ropa de trabajo</h4>
+        <p class="ayuda" style="margin:-2px 0 10px">
+          La nómina no trae los talles: se cargan acá y quedan guardados.
+        </p>
+        <div class="grid c4">
+          ${TALLES.map(t => campo(t.nombre, ruta('talles.' + t.id), { placeholder: 'S, M, L, 42…' })).join('')}
+        </div>
+
+        <h4>Puesto y desarrollo</h4>
+        <div class="grid c3">
+          ${campo('Posición en el panel', ruta('posicion'), { tipo: 'select', calc: true,
+            opciones: [{ valor: '', texto: '— sin asignar —' }].concat(POSICIONES.map(p => ({ valor: p.nombre, texto: p.nombre }))) })}
+          ${dato('Desempeño', c.desempeno ? (ESCALA_DESEMPENO.find(x => x.valor === c.desempeno) || {}).nombre : '')}
+          ${dato('Potencial', c.potencial ? (ESCALA_POTENCIAL.find(x => x.valor === c.potencial) || {}).nombre : '')}
+        </div>
+        <div class="grid c2" style="margin-top:12px">
+          ${campo('Notas', ruta('notas'), { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta persona' })}
+        </div>
+        <p class="ayuda">
+          La evaluación de desempeño y potencial, la talent card y el 9-box se cargan
+          durante la visita, en la solapa <em>Talento y 9-box</em>.
+        </p>
+
+        ${periodos.length ? `<h4>Novedades de liquidación</h4>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Período</th><th class="num">Hs. extras</th><th class="num">Nocturnas</th>
+            <th class="num">Enfermedad</th><th class="num">Vacaciones</th><th class="num">Sin aviso</th><th>Observaciones</th></tr></thead>
+          <tbody>${periodos.map(pp => {
+            const n = c.novedades[pp];
+            return `<tr>
+              <td><strong>${esc(pp)}</strong></td>
+              <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
+              <td class="num">${fmtNum(+n.nocturnas || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.enfermedad || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.vacaciones || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.noJustificada || 0, 0)}</td>
+              <td>${esc(n.obs || '')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : ''}
+      </section>`;
+  }
+
+  const dato = (etiqueta, valor) => `<div class="campo-lectura">
+    <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
+
+  /** Organigrama simple: el gerente arriba, y debajo cada posición en su nivel. */
+  function organigrama(s, porPosicion) {
+    const niveles = [1, 2, 3];
+    const posicionesDe = n => POSICIONES.filter(p => p.nivel === n && porPosicion[p.nombre]);
+    const sueltos = Object.keys(porPosicion).filter(k => !POSICIONES.some(p => p.nombre === k));
+
+    const especial = c => c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
+    const tarjeta = c => `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}"
+        data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
+      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
+      <span>${esc(c.cargo || c.posicion || '—')}</span>
+      ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
+                    : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
+    </button>`;
+
+    const grupo = (nombre, gente) => `<div class="org-grupo">
+      <h4>${esc(nombre)} <span class="chip">${gente.length}</span></h4>
+      <div class="org-fila">${gente.map(tarjeta).join('')}</div>
+    </div>`;
+
+    return `<div class="organigrama">
+      ${niveles.map(n => {
+        const pos = posicionesDe(n);
+        if (!pos.length) return '';
+        return `<div class="org-nivel${n === 1 ? ' cima' : ''}">
+          ${pos.map(p => grupo(p.nombre, porPosicion[p.nombre])).join('')}
+        </div>`;
+      }).join('')}
+      ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k])}</div>`).join('')}
+    </div>`;
   }
 
   /* ===================== VISTA: INFORME MENSUAL ==================== *
@@ -472,7 +720,8 @@ const App = (() => {
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
             <td class="num" style="white-space:nowrap">
-              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Ficha'}</button>
+              <a class="mini" href="#/sucursal/${s.id}" style="color:var(--azul);border-color:var(--azul);text-decoration:none;display:inline-block">Ver</a>
+              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Editar'}</button>
               <button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">✕</button>
             </td>
           </tr>
@@ -483,6 +732,32 @@ const App = (() => {
           <button class="b" data-accion="agregar-sucursal">+ Agregar sucursal</button>
           <button class="b sec" data-accion="cargar-padron">Cargar padrón del Área 3</button>
         </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Nómina del área</h2>
+        <p class="ayuda">
+          El padrón de personas, con todas las sucursales juntas. Pegá la planilla completa
+          —desde la fila de encabezados— y cada persona se reparte a su tienda con su cargo,
+          sus fechas y sus datos de contacto. Es lo que llena la dotación por posición.
+        </p>
+        <textarea id="pegar-nomina" style="min-height:110px"
+          placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-nomina">Importar la nómina</button>
+        </div>
+        <div id="resultado-nomina"></div>
+
+        ${(() => {
+          const con = e.sucursales.filter(x => (x.colaboradores || []).length);
+          if (!con.length) return '';
+          const total = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false).length, 0);
+          const sinPos = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false && !c.posicion).length, 0);
+          return `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${total} persona${total === 1 ? '' : 's'}</strong> en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
+            ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
+          </div>`;
+        })()}
       </section>
 
       ${e.sucursales.some(s => s.notas) ? `<section class="tarjeta">
@@ -1469,7 +1744,12 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'informe')        { vistaActual = vistaInforme;    html = vistaInforme(); }
+    if (ruta[0] === 'sucursal' && ruta[1]) {
+      const id = ruta[1];
+      vistaActual = () => vistaSucursal(id);
+      html = vistaSucursal(id);
+    }
+    else if (ruta[0] === 'informe')   { vistaActual = vistaInforme;    html = vistaInforme(); }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -1679,6 +1959,53 @@ const App = (() => {
         const arr = getPath(contexto, btn.dataset.arr);
         arr.splice(+btn.dataset.idx, 1);
         Store.save(); refrescar();
+      }
+
+      /* --- sucursal y perfil --- */
+      if (a === 'ver-perfil') {
+        perfilAbierto = perfilAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+        if (perfilAbierto) {
+          setTimeout(() => {
+            const el = document.getElementById('perfil-colaborador');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 60);
+        }
+      }
+      if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- nómina del área --- */
+      if (a === 'importar-nomina') {
+        const crudo = ($('#pegar-nomina') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero la nómina.', 'error');
+
+        const leido = interpretarNomina(crudo);
+        if (!leido.filas.length) return avisar(leido.avisos[0] || 'No se pudo leer la nómina.', 'error');
+
+        const res = resumirNomina(leido.filas);
+        const tiendas = Object.keys(res.porTienda).length;
+        const ok = await confirmar(
+          `Importar ${res.personas} persona${res.personas === 1 ? '' : 's'}`,
+          `Se reparten en ${tiendas} tienda${tiendas === 1 ? '' : 's'} según su columna TIENDA. ` +
+          'A quien ya esté cargado se le actualizan los datos y la posición; las evaluaciones, ' +
+          'la talent card y los talles no se tocan.',
+          'Importar nómina');
+        if (!ok) return;
+
+        const r = Store.importarNomina(leido.filas);
+        refrescar();
+        const caja = $('#resultado-nomina');
+        if (caja) {
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.total} persona${r.total === 1 ? '' : 's'}</strong>:
+            ${r.nuevos} nueva${r.nuevos === 1 ? '' : 's'}, ${r.actualizados} actualizada${r.actualizados === 1 ? '' : 's'}${r.movidos ? `, ${r.movidos} que cambiaron de tienda` : ''}.
+            ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
+              <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
+            ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          </div>`;
+        }
+        avisar(`Nómina importada: ${r.total} persona${r.total === 1 ? '' : 's'}.`);
       }
 
       /* --- novedades de liquidación --- */

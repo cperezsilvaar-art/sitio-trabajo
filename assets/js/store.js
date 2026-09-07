@@ -166,9 +166,12 @@ const Store = (() => {
         if (!Array.isArray(c.historial)) c.historial = [];
         if (c.activo === undefined) c.activo = true;
         if (!c.novedades || typeof c.novedades !== 'object') c.novedades = {};
-        if (c.legajo === undefined) c.legajo = '';
-        if (c.cuil === undefined) c.cuil = '';
-        if (c.sector === undefined) c.sector = '';
+        if (!c.talles || typeof c.talles !== 'object') c.talles = {};
+        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
+         'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
+         'razonSocialContrato', 'fechaNacimiento', 'fechaIngresoFTD', 'email',
+         'emailCorporativo', 'telefono', 'domicilio', 'localidad', 'obraSocial']
+          .forEach(k => { if (c[k] === undefined) c[k] = ''; });
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
@@ -178,6 +181,20 @@ const Store = (() => {
       if (!Array.isArray(i.historial)) i.historial = [];
     });
     e.visitas.forEach(v => {
+      /* Si se agregaron posiciones al catálogo, la matriz suma esas filas sin
+         perder lo cargado en las que ya estaban. */
+      v.posiciones = Array.isArray(v.posiciones) ? v.posiciones : [];
+      v.posiciones = POSICIONES.map(p =>
+        v.posiciones.find(f => f.rol === p.nombre) || {
+          rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+          horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
+        })
+        /* Las filas de un catálogo viejo que ya no existe se conservan al final
+           si tienen algo cargado, para no borrar trabajo en silencio. */
+        .concat(v.posiciones.filter(f =>
+          !POSICIONES.some(p => p.nombre === f.rol) &&
+          Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
+
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
       v.minutaColaborador = Object.assign({ nombre: '', posicion: '', feedback: '' }, v.minutaColaborador || {});
       v.ausentismo = Object.assign({ detalle: {} }, v.ausentismo || {});
@@ -366,6 +383,15 @@ const Store = (() => {
       const c = Object.assign({
         id: uid(), nombre: '', posicion: '', fechaIngreso: '', activo: true,
         legajo: '', cuil: '', sector: '',
+        /* Datos que llegan de la nómina */
+        dni: '', nroPersonal: '', sexo: '', estatus: '',
+        cargo: '', nivelCargo: '', categoriaConvenio: '',
+        unidadNegocio: '', razonSocialContrato: '',
+        fechaNacimiento: '', fechaIngresoFTD: '',
+        email: '', emailCorporativo: '', telefono: '',
+        domicilio: '', localidad: '', obraSocial: '',
+        /* Ropa de trabajo: la nómina no la trae, se carga a mano */
+        talles: {},
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
@@ -376,6 +402,86 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* ---------------------- padrón de personas -------------------- *
+       La nómina llega entera, con todas las sucursales juntas, así que el
+       importador reparte por la columna TIENDA. A quien no cae en ninguna
+       sucursal conocida se le arma una: los flotantes del área son personas
+       reales que hay que poder ver. */
+    importarNomina(filas) {
+      const e = this.get();
+      const clave = t => String(t || '').trim().toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const buscarSucursal = nombre => {
+        const k = clave(nombre);
+        if (!k) return null;
+        return e.sucursales.find(s =>
+          clave(s.codigo) === k || clave(s.nombre) === k ||
+          clave(s.codigo).replace(/\s/g, '') === k.replace(/\s/g, '')) || null;
+      };
+
+      let nuevos = 0, actualizados = 0, movidos = 0;
+      const sucursalesNuevas = [];
+      const sinTienda = [];
+
+      (filas || []).forEach(f => {
+        let s = buscarSucursal(f.tienda);
+        if (!s) {
+          if (!f.tienda) { sinTienda.push(nombreDeNomina(f)); return; }
+          /* Tiendas que no están en el padrón del área: flotantes, o una
+             sucursal de otra área donde hay gente asignada. Se crean como
+             estructura para que la persona no desaparezca. */
+          s = sucursalNueva({
+            codigo: f.tienda.toUpperCase(),
+            nombre: f.tienda.replace(/\b\w/g, c => c.toUpperCase()),
+            tipo: 'staff',
+            notas: 'Creada al importar la nómina: no figura en el padrón del Área 3.'
+          });
+          e.sucursales.push(s);
+          sucursalesNuevas.push(s.nombre);
+        }
+
+        /* La persona puede estar cargada en otra sucursal si cambió de tienda.
+           Si el CUIL de la nómina vino mal tipeado no sirve para identificarla,
+           así que se la busca por nombre. */
+        const nombre = nombreDeNomina(f);
+        const porNombre = t => clave(t).replace(/[^A-Z]/g, '');
+        let c = null, anterior = null;
+        e.sucursales.forEach(x => {
+          const hallado = (x.colaboradores || []).find(y =>
+            (!f.cuilDudoso && y.cuil && y.cuil === f.cuil) ||
+            (y.nombre && porNombre(y.nombre) === porNombre(nombre)));
+          if (hallado) { c = hallado; anterior = x; }
+        });
+
+        if (c && anterior && anterior.id !== s.id) {
+          anterior.colaboradores = anterior.colaboradores.filter(y => y.id !== c.id);
+          s.colaboradores.push(c);
+          movidos++;
+        }
+
+        if (!c) {
+          c = this.agregarColaborador(s.id, { cuil: f.cuil });
+          nuevos++;
+        } else {
+          actualizados++;
+        }
+
+        c.nombre = nombre || c.nombre;
+        c.nroPersonal = f.nroPersonal || c.nroPersonal;
+        if (f.posicion) c.posicion = f.posicion;
+        CAMPOS_NOMINA.forEach(k => { if (f[k]) c[k] = f[k]; });
+        /* Estar en la nómina es estar en el plantel. El honorario y el que está
+           con licencia sin goce siguen siendo gente de la tienda: lo que los
+           distingue es el estatus, que se muestra, no que desaparezcan. */
+        c.activo = true;
+      });
+
+      guardar();
+      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda,
+               total: (filas || []).length };
     },
 
     /* ------------------ novedades de liquidación ------------------ *

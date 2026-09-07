@@ -15,12 +15,52 @@
  * 1. Posiciones estándar de sucursal (Farmatodo)                       *
  * ------------------------------------------------------------------ */
 const POSICIONES = [
-  { id: 'gerente',      nombre: 'Gerente de Tienda',  orden: 1 },
-  { id: 'senior',       nombre: 'Senior',             orden: 2 },
-  { id: 'apv',          nombre: 'APV',                orden: 3 },
-  { id: 'farmaceutico', nombre: 'Farmacéutico',       orden: 4 },
-  { id: 'dt',           nombre: 'DT',                 orden: 5 },
-  { id: 'dermo',        nombre: 'Asesora de Dermo',   orden: 6 }
+  { id: 'gerente',      nombre: 'Gerente de Tienda',  orden: 1, nivel: 1 },
+  { id: 'senior',       nombre: 'Senior',             orden: 2, nivel: 2 },
+  { id: 'farmaceutico', nombre: 'Farmacéutico',       orden: 3, nivel: 2 },
+  { id: 'dt',           nombre: 'DT',                 orden: 4, nivel: 2 },
+  { id: 'apv',          nombre: 'APV',                orden: 5, nivel: 3 },
+  { id: 'dermo',        nombre: 'Asesora de Dermo',   orden: 6, nivel: 3 },
+  { id: 'belleza',      nombre: 'Asesora de Belleza', orden: 7, nivel: 3 },
+  { id: 'otros',        nombre: 'Otros',              orden: 8, nivel: 3 }
+];
+
+/* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
+   2 las posiciones que responden a él y 3 el piso de venta. */
+
+/**
+ * Cargo de la nómina → posición del panel.
+ *
+ * La nómina abre el cargo mucho más que el tablero de FTE: distingue la jornada
+ * parcial, el bloqueo de matrícula y el convenio. Para la dotación todo eso es
+ * la misma posición, así que se agrupa; el cargo original queda guardado en el
+ * perfil de cada persona, que es donde importa el detalle.
+ */
+const MAPA_CARGOS = {
+  'GERENTEDETIENDA':                'Gerente de Tienda',
+  'ASISTENTEDEPISODEVENTASENIOR':   'Senior',
+  'ASISTENTEDEPISODEVENTAS':        'APV',
+  'FARMACEUTICOAUXILIAR':           'Farmacéutico',
+  'FARMACEUTICOAUXILIARTP':         'Farmacéutico',
+  'FARMAAUXJORNADAPARCIAL':         'Farmacéutico',
+  'FARMAUXBLOQUEO':                 'Farmacéutico',
+  'DIRECTORTECNICO':                'DT',
+  'DIRECTORTECNICOCONBLOQUEO':      'DT',
+  'DIRECTORTECNICOTP':              'DT',
+  'ASESORADERMO':                   'Asesora de Dermo',
+  'ASESORADEBELLEZA':               'Asesora de Belleza',
+  'CHOFER':                         'Otros',
+  'LIMPIEZA':                       'Otros'
+};
+
+/* Talles que se registran para la ropa de trabajo. La nómina no los trae:
+   se cargan a mano en el perfil de cada persona. */
+const TALLES = [
+  { id: 'remera',   nombre: 'Remera / chomba' },
+  { id: 'camisa',   nombre: 'Camisa' },
+  { id: 'pantalon', nombre: 'Pantalón' },
+  { id: 'campera',  nombre: 'Campera' },
+  { id: 'calzado',  nombre: 'Calzado' }
 ];
 
 /* ------------------------------------------------------------------ *

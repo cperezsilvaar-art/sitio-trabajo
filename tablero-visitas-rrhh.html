@@ -315,6 +315,41 @@ pre.reporte {
 .alerta.tono-borde-amarillo { border-left-color: var(--ambar); }
 .alerta.tono-borde-rojo     { border-left-color: var(--rojo-alerta); }
 
+/* ------------------------ Organigrama de sucursal ----------------------- *
+   No es un árbol con líneas: con doce sucursales de diez a treinta personas,
+   las líneas estorban más de lo que explican. Son bandas por nivel, de arriba
+   hacia abajo, y cada persona es una tarjeta que abre su perfil. */
+.organigrama { display: flex; flex-direction: column; gap: 16px; margin-top: 6px; }
+.org-nivel {
+  display: flex; flex-wrap: wrap; gap: 18px;
+  padding-bottom: 16px; border-bottom: 1px dashed var(--borde);
+}
+.org-nivel:last-child { border-bottom: 0; padding-bottom: 0; }
+.org-nivel.cima .org-persona { border-color: var(--azul); background: var(--panel-alt); }
+.org-grupo { flex: 1 1 240px; min-width: 0; }
+.org-grupo h4 {
+  margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--texto-suave); display: flex; align-items: center; gap: 8px;
+}
+.org-fila { display: flex; flex-wrap: wrap; gap: 8px; }
+.org-persona {
+  display: block; text-align: left; cursor: pointer; font: inherit;
+  background: var(--panel); border: 1px solid var(--borde-fuerte); border-radius: 8px;
+  padding: 8px 12px; min-width: 172px; box-shadow: 0 1px 2px rgba(16,32,54,.06);
+}
+.org-persona:hover { border-color: var(--azul-claro); }
+.org-persona.abierta { border-color: var(--azul); outline: 2px solid var(--azul-claro); outline-offset: -2px; }
+.org-persona strong { display: block; font-size: 13.5px; line-height: 1.3; color: var(--texto); }
+.org-persona span { display: block; font-size: 11.5px; color: var(--texto-suave); margin-top: 2px; }
+
+/* Dato de solo lectura, con la misma silueta que un campo editable. */
+.campo-lectura { font-size: 12px; }
+.campo-lectura > span {
+  display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--texto-suave); font-weight: 600;
+}
+.campo-lectura > strong { font-size: 14px; font-weight: 500; color: var(--texto); word-break: break-word; }
+
 /* ------------------------------ Talent card ---------------------------- */
 tr.ficha-fila > td { background: var(--panel-alt); padding: 0; }
 tr.inactivo { opacity: .55; }
@@ -481,12 +516,52 @@ footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; pad
  * 1. Posiciones estándar de sucursal (Farmatodo)                       *
  * ------------------------------------------------------------------ */
 const POSICIONES = [
-  { id: 'gerente',      nombre: 'Gerente de Tienda',  orden: 1 },
-  { id: 'senior',       nombre: 'Senior',             orden: 2 },
-  { id: 'apv',          nombre: 'APV',                orden: 3 },
-  { id: 'farmaceutico', nombre: 'Farmacéutico',       orden: 4 },
-  { id: 'dt',           nombre: 'DT',                 orden: 5 },
-  { id: 'dermo',        nombre: 'Asesora de Dermo',   orden: 6 }
+  { id: 'gerente',      nombre: 'Gerente de Tienda',  orden: 1, nivel: 1 },
+  { id: 'senior',       nombre: 'Senior',             orden: 2, nivel: 2 },
+  { id: 'farmaceutico', nombre: 'Farmacéutico',       orden: 3, nivel: 2 },
+  { id: 'dt',           nombre: 'DT',                 orden: 4, nivel: 2 },
+  { id: 'apv',          nombre: 'APV',                orden: 5, nivel: 3 },
+  { id: 'dermo',        nombre: 'Asesora de Dermo',   orden: 6, nivel: 3 },
+  { id: 'belleza',      nombre: 'Asesora de Belleza', orden: 7, nivel: 3 },
+  { id: 'otros',        nombre: 'Otros',              orden: 8, nivel: 3 }
+];
+
+/* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
+   2 las posiciones que responden a él y 3 el piso de venta. */
+
+/**
+ * Cargo de la nómina → posición del panel.
+ *
+ * La nómina abre el cargo mucho más que el tablero de FTE: distingue la jornada
+ * parcial, el bloqueo de matrícula y el convenio. Para la dotación todo eso es
+ * la misma posición, así que se agrupa; el cargo original queda guardado en el
+ * perfil de cada persona, que es donde importa el detalle.
+ */
+const MAPA_CARGOS = {
+  'GERENTEDETIENDA':                'Gerente de Tienda',
+  'ASISTENTEDEPISODEVENTASENIOR':   'Senior',
+  'ASISTENTEDEPISODEVENTAS':        'APV',
+  'FARMACEUTICOAUXILIAR':           'Farmacéutico',
+  'FARMACEUTICOAUXILIARTP':         'Farmacéutico',
+  'FARMAAUXJORNADAPARCIAL':         'Farmacéutico',
+  'FARMAUXBLOQUEO':                 'Farmacéutico',
+  'DIRECTORTECNICO':                'DT',
+  'DIRECTORTECNICOCONBLOQUEO':      'DT',
+  'DIRECTORTECNICOTP':              'DT',
+  'ASESORADERMO':                   'Asesora de Dermo',
+  'ASESORADEBELLEZA':               'Asesora de Belleza',
+  'CHOFER':                         'Otros',
+  'LIMPIEZA':                       'Otros'
+};
+
+/* Talles que se registran para la ropa de trabajo. La nómina no los trae:
+   se cargan a mano en el perfil de cada persona. */
+const TALLES = [
+  { id: 'remera',   nombre: 'Remera / chomba' },
+  { id: 'camisa',   nombre: 'Camisa' },
+  { id: 'pantalon', nombre: 'Pantalón' },
+  { id: 'campera',  nombre: 'Campera' },
+  { id: 'calzado',  nombre: 'Calzado' }
 ];
 
 /* ------------------------------------------------------------------ *
@@ -1610,6 +1685,180 @@ function nombreDePlanilla(fila) {
 }
 
 /*
+ * nomina.js — Lectura del padrón de colaboradores del área.
+ *
+ * Es el listado maestro: una fila por persona, con su cargo, su tienda, sus
+ * fechas y sus datos de contacto. Es lo que le faltaba al panel para saber
+ * quién es quién: el libro de novedades trae los movimientos del mes pero no
+ * el puesto, y la dotación por posición sale justamente de acá.
+ *
+ * Lo que la nómina no trae son los talles de la ropa de trabajo. Esos campos
+ * quedan vacíos en el perfil, para completarlos a mano.
+ */
+
+/* Encabezados de la nómina. La comparación es sin acentos, sin espacios y en
+   mayúsculas, así que aguanta las variantes de tipeo entre versiones. */
+const COLUMNAS_NOMINA = {
+  CUIL: 'cuil',
+  DNI: 'dni',
+  APELLIDO: 'apellido',
+  NOMBRE: 'nombre',
+  NOMBREYAPELLIDO: 'nombreCompleto',
+  SEXO: 'sexo',
+  ESTATUS: 'estatus',
+  UNIDADDENEGOCIO: 'unidadNegocio',
+  AREA: 'area',
+  RAZONSOCIALCONTRATADOA: 'razonSocialContrato',
+  TIENDADONDEESTA: 'tienda',
+  CATEGORIACONVENIO: 'categoriaConvenio',
+  CARGO: 'cargo',
+  NIVELDECARGO: 'nivelCargo',
+  FECHADENACIMIENTO: 'fechaNacimiento',
+  FECHADEINGRESO: 'fechaIngreso',
+  FECHADEINGRESOAFTD: 'fechaIngresoFTD',
+  MAILCOORPORATIVOOPERSONAL: 'email',
+  MAILCORPORATIVO: 'emailCorporativo',
+  TELEFONO: 'telefono',
+  DOMICILIOACTUALIZADO: 'domicilio',
+  LOCALIDADYCP: 'localidad',
+  OBRASOCIALPREPAGA: 'obraSocial'
+};
+
+/* Campos de texto que se copian tal cual al perfil. */
+const CAMPOS_NOMINA = ['dni', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
+                       'categoriaConvenio', 'cargo', 'nivelCargo', 'fechaNacimiento',
+                       'fechaIngreso', 'fechaIngresoFTD', 'email', 'emailCorporativo',
+                       'telefono', 'domicilio', 'localidad', 'obraSocial'];
+
+/* La planilla usa estos marcadores de Excel para "sin dato". */
+const VACIOS_EXCEL = ['#N/A', '#REF!', '#VALUE!', '#¡REF!', '#N/D', 'NULL'];
+
+const _normNom = t => String(t == null ? '' : t)
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+function textoNomina(v) {
+  const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+  return VACIOS_EXCEL.indexOf(t.toUpperCase()) >= 0 ? '' : t;
+}
+
+/** Fecha a ISO. Acepta 1978-04-26, 26/04/1978 y el "1978-04-26 00:00:00" de Excel. */
+function fechaNomina(v) {
+  const t = textoNomina(v);
+  if (!t) return '';
+  let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (m) {
+    const a = m[3].length === 2 ? (Number(m[3]) > 40 ? '19' + m[3] : '20' + m[3]) : m[3];
+    return `${a}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+/** Posición del panel que le corresponde a un cargo de la nómina. */
+function posicionDeCargo(cargo) {
+  return MAPA_CARGOS[_normNom(cargo)] || '';
+}
+
+/** Apellido y nombre presentables, desde el "TODO EN MAYÚSCULAS" de la planilla. */
+function nombreDeNomina(fila) {
+  const limpiar = t => String(t || '').replace(/\s+/g, ' ').trim();
+  const ap = limpiar(fila.apellido), no = limpiar(fila.nombre);
+  if (ap || no) return [ap, no].filter(Boolean).join(', ');
+  return limpiar(fila.nombreCompleto);
+}
+
+/**
+ * Interpreta la nómina pegada desde Excel.
+ *
+ * La primera columna del archivo real viene con el encabezado roto (`#REF!`)
+ * pero contiene el número de personal, así que se lee por posición: es la
+ * columna anterior al CUIL.
+ */
+function interpretarNomina(crudo) {
+  const texto = String(crudo || '').replace(/\r/g, '');
+  const lineas = texto.split('\n').filter(l => l.trim());
+  if (lineas.length < 2) return { filas: [], avisos: ['No hay filas para leer.'] };
+
+  const sep = lineas[0].includes('\t') ? '\t' : (lineas[0].includes(';') ? ';' : ',');
+  const partir = l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+
+  const iEnc = lineas.findIndex(l => {
+    const c = partir(l).map(_normNom);
+    return c.includes('CUIL') && (c.includes('APELLIDO') || c.includes('CARGO'));
+  });
+  if (iEnc < 0) {
+    return { filas: [], avisos: ['No se encontró la fila de encabezados (CUIL, APELLIDO, CARGO, …).'] };
+  }
+
+  const enc = partir(lineas[iEnc]).map(_normNom);
+  const col = {};
+  enc.forEach((e, i) => {
+    const campo = COLUMNAS_NOMINA[e];
+    if (campo && col[campo] === undefined) col[campo] = i;
+  });
+  if (col.cuil === undefined) return { filas: [], avisos: ['La nómina no trae la columna CUIL.'] };
+
+  const filas = [];
+  const avisos = [];
+  const sinCargo = [];
+  const cuilDudoso = [];
+  let sinCuil = 0;
+
+  lineas.slice(iEnc + 1).forEach(l => {
+    const c = partir(l);
+    const cuil = soloDigitos(c[col.cuil]);
+    /* Un CUIL mal tipeado no puede costarle a alguien quedar afuera del padrón:
+       se acepta con margen, se avisa, y esa persona se identifica por nombre. */
+    if (cuil.length < 10 || cuil.length > 13) { if (c.some(x => x)) sinCuil++; return; }
+
+    const t = k => col[k] === undefined ? '' : textoNomina(c[col[k]]);
+    const fila = { cuil };
+    CAMPOS_NOMINA.forEach(k => { fila[k] = t(k); });
+    ['fechaNacimiento', 'fechaIngreso', 'fechaIngresoFTD'].forEach(k => { fila[k] = fechaNomina(fila[k]); });
+
+    fila.cuilDudoso = cuil.length !== 11;
+    if (fila.cuilDudoso) cuilDudoso.push(`${textoNomina(c[col.apellido])} (${cuil})`);
+    fila.apellido = t('apellido');
+    fila.nombre = t('nombre');
+    fila.nombreCompleto = t('nombreCompleto');
+    fila.tienda = t('tienda');
+    fila.posicion = posicionDeCargo(fila.cargo);
+    /* El número de personal está a la izquierda del CUIL, con el encabezado roto. */
+    fila.nroPersonal = col.cuil > 0 ? textoNomina(c[col.cuil - 1]) : '';
+
+    if (fila.cargo && !fila.posicion) sinCargo.push(fila.cargo);
+    filas.push(fila);
+  });
+
+  if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
+  if (cuilDudoso.length) {
+    avisos.push('CUIL con una cantidad de dígitos rara, se importaron igual pero conviene corregirlos en la nómina: ' +
+                cuilDudoso.join(', ') + '.');
+  }
+  if (sinCargo.length) {
+    const únicos = sinCargo.filter((x, i) => sinCargo.indexOf(x) === i);
+    avisos.push('Cargos que no se reconocen y quedan sin posición asignada: ' + únicos.join(', ') + '.');
+  }
+  if (!filas.length) avisos.push('No se reconoció ninguna persona.');
+
+  return { filas, avisos };
+}
+
+/** Resumen de una nómina leída: por tienda y por posición. */
+function resumirNomina(filas) {
+  const porTienda = {}, porPosicion = {};
+  (filas || []).forEach(f => {
+    const t = f.tienda || 'Sin tienda';
+    porTienda[t] = (porTienda[t] || 0) + 1;
+    const p = f.posicion || 'Sin posición';
+    porPosicion[p] = (porPosicion[p] || 0) + 1;
+  });
+  return { personas: (filas || []).length, porTienda, porPosicion };
+}
+
+/*
  * acceso.js — Portada y clave de acceso.
  *
  * La clave no es una cortina: deriva una llave con PBKDF2 y cifra el contenido
@@ -2045,9 +2294,12 @@ const Store = (() => {
         if (!Array.isArray(c.historial)) c.historial = [];
         if (c.activo === undefined) c.activo = true;
         if (!c.novedades || typeof c.novedades !== 'object') c.novedades = {};
-        if (c.legajo === undefined) c.legajo = '';
-        if (c.cuil === undefined) c.cuil = '';
-        if (c.sector === undefined) c.sector = '';
+        if (!c.talles || typeof c.talles !== 'object') c.talles = {};
+        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
+         'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
+         'razonSocialContrato', 'fechaNacimiento', 'fechaIngresoFTD', 'email',
+         'emailCorporativo', 'telefono', 'domicilio', 'localidad', 'obraSocial']
+          .forEach(k => { if (c[k] === undefined) c[k] = ''; });
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
@@ -2057,6 +2309,20 @@ const Store = (() => {
       if (!Array.isArray(i.historial)) i.historial = [];
     });
     e.visitas.forEach(v => {
+      /* Si se agregaron posiciones al catálogo, la matriz suma esas filas sin
+         perder lo cargado en las que ya estaban. */
+      v.posiciones = Array.isArray(v.posiciones) ? v.posiciones : [];
+      v.posiciones = POSICIONES.map(p =>
+        v.posiciones.find(f => f.rol === p.nombre) || {
+          rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+          horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
+        })
+        /* Las filas de un catálogo viejo que ya no existe se conservan al final
+           si tienen algo cargado, para no borrar trabajo en silencio. */
+        .concat(v.posiciones.filter(f =>
+          !POSICIONES.some(p => p.nombre === f.rol) &&
+          Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
+
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
       v.minutaColaborador = Object.assign({ nombre: '', posicion: '', feedback: '' }, v.minutaColaborador || {});
       v.ausentismo = Object.assign({ detalle: {} }, v.ausentismo || {});
@@ -2245,6 +2511,15 @@ const Store = (() => {
       const c = Object.assign({
         id: uid(), nombre: '', posicion: '', fechaIngreso: '', activo: true,
         legajo: '', cuil: '', sector: '',
+        /* Datos que llegan de la nómina */
+        dni: '', nroPersonal: '', sexo: '', estatus: '',
+        cargo: '', nivelCargo: '', categoriaConvenio: '',
+        unidadNegocio: '', razonSocialContrato: '',
+        fechaNacimiento: '', fechaIngresoFTD: '',
+        email: '', emailCorporativo: '', telefono: '',
+        domicilio: '', localidad: '', obraSocial: '',
+        /* Ropa de trabajo: la nómina no la trae, se carga a mano */
+        talles: {},
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
@@ -2255,6 +2530,86 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* ---------------------- padrón de personas -------------------- *
+       La nómina llega entera, con todas las sucursales juntas, así que el
+       importador reparte por la columna TIENDA. A quien no cae en ninguna
+       sucursal conocida se le arma una: los flotantes del área son personas
+       reales que hay que poder ver. */
+    importarNomina(filas) {
+      const e = this.get();
+      const clave = t => String(t || '').trim().toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+      const buscarSucursal = nombre => {
+        const k = clave(nombre);
+        if (!k) return null;
+        return e.sucursales.find(s =>
+          clave(s.codigo) === k || clave(s.nombre) === k ||
+          clave(s.codigo).replace(/\s/g, '') === k.replace(/\s/g, '')) || null;
+      };
+
+      let nuevos = 0, actualizados = 0, movidos = 0;
+      const sucursalesNuevas = [];
+      const sinTienda = [];
+
+      (filas || []).forEach(f => {
+        let s = buscarSucursal(f.tienda);
+        if (!s) {
+          if (!f.tienda) { sinTienda.push(nombreDeNomina(f)); return; }
+          /* Tiendas que no están en el padrón del área: flotantes, o una
+             sucursal de otra área donde hay gente asignada. Se crean como
+             estructura para que la persona no desaparezca. */
+          s = sucursalNueva({
+            codigo: f.tienda.toUpperCase(),
+            nombre: f.tienda.replace(/\b\w/g, c => c.toUpperCase()),
+            tipo: 'staff',
+            notas: 'Creada al importar la nómina: no figura en el padrón del Área 3.'
+          });
+          e.sucursales.push(s);
+          sucursalesNuevas.push(s.nombre);
+        }
+
+        /* La persona puede estar cargada en otra sucursal si cambió de tienda.
+           Si el CUIL de la nómina vino mal tipeado no sirve para identificarla,
+           así que se la busca por nombre. */
+        const nombre = nombreDeNomina(f);
+        const porNombre = t => clave(t).replace(/[^A-Z]/g, '');
+        let c = null, anterior = null;
+        e.sucursales.forEach(x => {
+          const hallado = (x.colaboradores || []).find(y =>
+            (!f.cuilDudoso && y.cuil && y.cuil === f.cuil) ||
+            (y.nombre && porNombre(y.nombre) === porNombre(nombre)));
+          if (hallado) { c = hallado; anterior = x; }
+        });
+
+        if (c && anterior && anterior.id !== s.id) {
+          anterior.colaboradores = anterior.colaboradores.filter(y => y.id !== c.id);
+          s.colaboradores.push(c);
+          movidos++;
+        }
+
+        if (!c) {
+          c = this.agregarColaborador(s.id, { cuil: f.cuil });
+          nuevos++;
+        } else {
+          actualizados++;
+        }
+
+        c.nombre = nombre || c.nombre;
+        c.nroPersonal = f.nroPersonal || c.nroPersonal;
+        if (f.posicion) c.posicion = f.posicion;
+        CAMPOS_NOMINA.forEach(k => { if (f[k]) c[k] = f[k]; });
+        /* Estar en la nómina es estar en el plantel. El honorario y el que está
+           con licencia sin goce siguen siendo gente de la tienda: lo que los
+           distingue es el estatus, que se muestra, no que desaparezcan. */
+        c.activo = true;
+      });
+
+      guardar();
+      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda,
+               total: (filas || []).length };
     },
 
     /* ------------------ novedades de liquidación ------------------ *
@@ -3439,7 +3794,7 @@ const App = (() => {
             const f = filas.find(x => x.s.id === id);
             const s = f.s, v = f.v, c = f.c;
             return `<tr>
-              <td><strong>${esc(Store.etiquetaSucursal(s))}</strong>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
+              <td><a href="#/sucursal/${s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(s))}</a>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
               <td class="tipo">${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
               <td class="num">${c ? (c.matriz.total.heads || '—') : '—'}</td>
@@ -3487,6 +3842,254 @@ const App = (() => {
         }).join('')}</tbody>
       </table></div>
     </section>`;
+  }
+
+  /* ====================== VISTA: UNA SUCURSAL ====================== *
+     Todo lo que hay de una tienda en una sola pantalla: la ficha, el estado
+     del mes, el organigrama y el plantel. Es la vista de "entro a la sucursal
+     y veo de qué se trata" antes de ir a visitarla. */
+  let perfilAbierto = null;
+
+  function vistaSucursal(id) {
+    const e = Store.get();
+    contexto = e;
+    const s = Store.sucursal(id);
+    if (!s) return `<h1 class="titulo">Sucursal</h1>
+      <section class="tarjeta"><p class="vacio">Esa sucursal ya no existe.</p></section>`;
+
+    const plantel = (s.colaboradores || []).filter(c => c.activo !== false);
+    const visitas = Store.visitasDe(s.id);
+    const ultima = visitas[0] || null;
+    const periodo = (ultima && ultima.periodo) || hoyISO().slice(0, 7);
+    const calc = ultima ? Reporte.calcular(ultima, s, e.config) : null;
+    const nov = Store.dotacionDelPadron(s.id, periodo);
+    const t9 = distribucion9Box(s.colaboradores);
+
+    const porPosicion = {};
+    plantel.forEach(c => {
+      const k = c.posicion || 'Sin posición';
+      (porPosicion[k] || (porPosicion[k] = [])).push(c);
+    });
+
+    return `
+      <h1 class="titulo">${esc(s.nombre || s.codigo)}</h1>
+      <p class="subtitulo">
+        ${esc(s.marca || MARCA_AREA)}${s.localidad ? ' · ' + esc(s.localidad) : ''}
+        ${s.direccion ? ' · ' + esc(s.direccion) : ''}
+        ${s.rvd ? ` · <span class="chip azul">RVD ${esc(s.rvd)}</span>` : ''}
+      </p>
+
+      <div class="kpis">
+        ${(() => {
+          const sinPos = plantel.filter(c => !c.posicion).length;
+          return kpi('Dotación', plantel.length || '—',
+            !plantel.length ? 'sin plantel cargado'
+              : sinPos ? `${sinPos} sin posición asignada`
+              : `${Object.keys(porPosicion).length} posiciones`,
+            sinPos ? 'aviso' : '');
+        })()}
+        ${kpi('FTE Real', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
+              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'sin visitas registradas')}
+        ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
+              calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : '',
+              calc && calc.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
+        ${kpi('Horas extras', nov && nov.personas
+                ? fmtNum(Object.keys(nov.porPosicion).reduce((a, k) => a + nov.porPosicion[k].horasExtras, 0), 1) + ' h'
+                : (calc && calc.matriz.total.horasExtras ? fmtNum(calc.matriz.total.horasExtras, 0) + ' h' : '—'),
+              nov && nov.personas ? `novedades de ${esc(periodo)}` : 'según la matriz de FTE')}
+        ${kpi('Evaluados', t9.evaluados.length ? `${t9.evaluados.length} / ${t9.activos.length}` : '—',
+              t9.sinEvaluar.length ? `${t9.sinEvaluar.length} sin evaluar` : 'plantel completo',
+              t9.sinEvaluar.length ? 'aviso' : 'ok')}
+      </div>
+
+      <div class="acciones" style="margin-bottom:18px">
+        <button class="b" data-accion="nueva-visita" data-id="${s.id}">Registrar una visita</button>
+        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/minutas" style="text-decoration:none">Abrir la última visita</a>` : ''}
+        <a class="b sec" href="#/informe" style="text-decoration:none">Informe mensual</a>
+        <a class="b sec" href="#/sucursales" style="text-decoration:none">Editar la ficha</a>
+      </div>
+
+      <section class="tarjeta">
+        <h2>Referentes y datos de la tienda</h2>
+        <div class="grid c3">
+          ${dato('Gerente de Tienda', s.gerente)}
+          ${dato('Director Técnico', s.directorTecnico)}
+          ${dato('Gerente de Operaciones', s.gerenteOperaciones)}
+          ${dato('Horario', s.horario)}
+          ${dato('Razón social', s.razonSocial)}
+          ${dato('CUIT', s.cuit)}
+          ${dato('ART', s.art)}
+          ${dato('Referente de RRHH', s.referenteRRHH)}
+          ${dato('Email del gerente', s.emailGerente)}
+        </div>
+        ${s.notas ? `<div class="aviso-caja info" style="margin-top:14px">${esc(s.notas)}</div>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <h2>Organigrama</h2>
+        <p class="ayuda">
+          El plantel activo ordenado por posición. Las tarjetas se abren para ver el perfil completo.
+        </p>
+        ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
+      </section>
+
+      ${perfilAbierto ? perfilColaborador(s, plantel.find(c => c.id === perfilAbierto)) : ''}
+
+      <section class="tarjeta">
+        <h2>Visitas registradas</h2>
+        ${visitas.length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Período</th><th class="num">FTE</th><th class="num">Ausentismo</th><th>Reporte</th><th></th></tr></thead>
+          <tbody>${visitas.map(v => {
+            const c = Reporte.calcular(v, s, e.config);
+            return `<tr>
+              <td><strong>${fmtFecha(v.fecha)}</strong></td>
+              <td>${esc(v.periodo || '—')}</td>
+              <td class="num">${c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
+              <td class="num">${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</td>
+              <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
+              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Sin visitas registradas todavía.</p>'}
+      </section>`;
+  }
+
+  /**
+   * Perfil de una persona. Lo que llega de la nómina se muestra como dato;
+   * lo que solo puede saber RRHH —los talles de la ropa de trabajo, las notas—
+   * es editable.
+   */
+  function perfilColaborador(s, c) {
+    if (!c) return '';
+    const i = s.colaboradores.indexOf(c);
+    const ruta = campo => `sucursales.${Store.get().sucursales.indexOf(s)}.colaboradores.${i}.${campo}`;
+    const anios = antiguedadAnios(c.fechaIngreso);
+    const edad = antiguedadAnios(c.fechaNacimiento);
+    const q = c.desempeno && c.potencial ? NINE_BOX[`${c.potencial}${c.desempeno}`] : null;
+
+    /* Los períodos con novedades cargadas, del más reciente al más viejo. */
+    const periodos = Object.keys(c.novedades || {}).sort().reverse();
+
+    return `
+      <section class="tarjeta" id="perfil-colaborador">
+        <div class="tc-cab">
+          <div>
+            <strong style="font-size:17px">${esc(c.nombre || 'Sin nombre')}</strong>
+            <span>${esc(c.cargo || c.posicion || 'sin cargo')}${c.nivelCargo && c.nivelCargo !== c.cargo ? ` · ${esc(c.nivelCargo)}` : ''}
+              ${c.categoriaConvenio ? ` · convenio ${esc(c.categoriaConvenio)}` : ''}</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            ${q ? `<span class="chip azul">${esc(q.nombre)}</span>` : ''}
+            ${c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO' ? `<span class="chip ambar">${esc(c.estatus)}</span>` : ''}
+            <button class="mini" data-accion="cerrar-perfil">Cerrar</button>
+          </div>
+        </div>
+
+        <h4>Identificación</h4>
+        <div class="grid c4">
+          ${dato('N° de personal', c.nroPersonal)}
+          ${dato('Legajo de tienda', c.legajo)}
+          ${dato('CUIL', c.cuil)}
+          ${dato('DNI', c.dni)}
+          ${dato('Sexo', c.sexo)}
+          ${dato('Fecha de nacimiento', c.fechaNacimiento ? `${fmtFecha(c.fechaNacimiento)}${edad !== null ? ` · ${Math.floor(edad)} años` : ''}` : '')}
+          ${dato('Obra social', c.obraSocial)}
+          ${dato('Estatus', c.estatus)}
+        </div>
+
+        <h4>Vínculo</h4>
+        <div class="grid c4">
+          ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : '')}
+          ${dato('Ingreso a Farmatodo', c.fechaIngresoFTD ? fmtFecha(c.fechaIngresoFTD) : '')}
+          ${dato('Razón social', c.razonSocialContrato)}
+          ${dato('Unidad de negocio', c.unidadNegocio)}
+        </div>
+
+        <h4>Contacto</h4>
+        <div class="grid c3">
+          ${dato('Teléfono', c.telefono)}
+          ${dato('Mail corporativo', c.emailCorporativo)}
+          ${dato('Mail personal', c.email)}
+          ${dato('Domicilio', c.domicilio)}
+          ${dato('Localidad', c.localidad)}
+        </div>
+
+        <h4>Ropa de trabajo</h4>
+        <p class="ayuda" style="margin:-2px 0 10px">
+          La nómina no trae los talles: se cargan acá y quedan guardados.
+        </p>
+        <div class="grid c4">
+          ${TALLES.map(t => campo(t.nombre, ruta('talles.' + t.id), { placeholder: 'S, M, L, 42…' })).join('')}
+        </div>
+
+        <h4>Puesto y desarrollo</h4>
+        <div class="grid c3">
+          ${campo('Posición en el panel', ruta('posicion'), { tipo: 'select', calc: true,
+            opciones: [{ valor: '', texto: '— sin asignar —' }].concat(POSICIONES.map(p => ({ valor: p.nombre, texto: p.nombre }))) })}
+          ${dato('Desempeño', c.desempeno ? (ESCALA_DESEMPENO.find(x => x.valor === c.desempeno) || {}).nombre : '')}
+          ${dato('Potencial', c.potencial ? (ESCALA_POTENCIAL.find(x => x.valor === c.potencial) || {}).nombre : '')}
+        </div>
+        <div class="grid c2" style="margin-top:12px">
+          ${campo('Notas', ruta('notas'), { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta persona' })}
+        </div>
+        <p class="ayuda">
+          La evaluación de desempeño y potencial, la talent card y el 9-box se cargan
+          durante la visita, en la solapa <em>Talento y 9-box</em>.
+        </p>
+
+        ${periodos.length ? `<h4>Novedades de liquidación</h4>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Período</th><th class="num">Hs. extras</th><th class="num">Nocturnas</th>
+            <th class="num">Enfermedad</th><th class="num">Vacaciones</th><th class="num">Sin aviso</th><th>Observaciones</th></tr></thead>
+          <tbody>${periodos.map(pp => {
+            const n = c.novedades[pp];
+            return `<tr>
+              <td><strong>${esc(pp)}</strong></td>
+              <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
+              <td class="num">${fmtNum(+n.nocturnas || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.enfermedad || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.vacaciones || 0, 0)}</td>
+              <td class="num">${fmtNum(+n.noJustificada || 0, 0)}</td>
+              <td>${esc(n.obs || '')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : ''}
+      </section>`;
+  }
+
+  const dato = (etiqueta, valor) => `<div class="campo-lectura">
+    <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
+
+  /** Organigrama simple: el gerente arriba, y debajo cada posición en su nivel. */
+  function organigrama(s, porPosicion) {
+    const niveles = [1, 2, 3];
+    const posicionesDe = n => POSICIONES.filter(p => p.nivel === n && porPosicion[p.nombre]);
+    const sueltos = Object.keys(porPosicion).filter(k => !POSICIONES.some(p => p.nombre === k));
+
+    const especial = c => c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
+    const tarjeta = c => `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}"
+        data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
+      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
+      <span>${esc(c.cargo || c.posicion || '—')}</span>
+      ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
+                    : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
+    </button>`;
+
+    const grupo = (nombre, gente) => `<div class="org-grupo">
+      <h4>${esc(nombre)} <span class="chip">${gente.length}</span></h4>
+      <div class="org-fila">${gente.map(tarjeta).join('')}</div>
+    </div>`;
+
+    return `<div class="organigrama">
+      ${niveles.map(n => {
+        const pos = posicionesDe(n);
+        if (!pos.length) return '';
+        return `<div class="org-nivel${n === 1 ? ' cima' : ''}">
+          ${pos.map(p => grupo(p.nombre, porPosicion[p.nombre])).join('')}
+        </div>`;
+      }).join('')}
+      ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k])}</div>`).join('')}
+    </div>`;
   }
 
   /* ===================== VISTA: INFORME MENSUAL ==================== *
@@ -3718,7 +4321,8 @@ const App = (() => {
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
             <td class="num" style="white-space:nowrap">
-              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Ficha'}</button>
+              <a class="mini" href="#/sucursal/${s.id}" style="color:var(--azul);border-color:var(--azul);text-decoration:none;display:inline-block">Ver</a>
+              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Editar'}</button>
               <button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">✕</button>
             </td>
           </tr>
@@ -3729,6 +4333,32 @@ const App = (() => {
           <button class="b" data-accion="agregar-sucursal">+ Agregar sucursal</button>
           <button class="b sec" data-accion="cargar-padron">Cargar padrón del Área 3</button>
         </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Nómina del área</h2>
+        <p class="ayuda">
+          El padrón de personas, con todas las sucursales juntas. Pegá la planilla completa
+          —desde la fila de encabezados— y cada persona se reparte a su tienda con su cargo,
+          sus fechas y sus datos de contacto. Es lo que llena la dotación por posición.
+        </p>
+        <textarea id="pegar-nomina" style="min-height:110px"
+          placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-nomina">Importar la nómina</button>
+        </div>
+        <div id="resultado-nomina"></div>
+
+        ${(() => {
+          const con = e.sucursales.filter(x => (x.colaboradores || []).length);
+          if (!con.length) return '';
+          const total = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false).length, 0);
+          const sinPos = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false && !c.posicion).length, 0);
+          return `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${total} persona${total === 1 ? '' : 's'}</strong> en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
+            ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
+          </div>`;
+        })()}
       </section>
 
       ${e.sucursales.some(s => s.notas) ? `<section class="tarjeta">
@@ -4715,7 +5345,12 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'informe')        { vistaActual = vistaInforme;    html = vistaInforme(); }
+    if (ruta[0] === 'sucursal' && ruta[1]) {
+      const id = ruta[1];
+      vistaActual = () => vistaSucursal(id);
+      html = vistaSucursal(id);
+    }
+    else if (ruta[0] === 'informe')   { vistaActual = vistaInforme;    html = vistaInforme(); }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -4925,6 +5560,53 @@ const App = (() => {
         const arr = getPath(contexto, btn.dataset.arr);
         arr.splice(+btn.dataset.idx, 1);
         Store.save(); refrescar();
+      }
+
+      /* --- sucursal y perfil --- */
+      if (a === 'ver-perfil') {
+        perfilAbierto = perfilAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+        if (perfilAbierto) {
+          setTimeout(() => {
+            const el = document.getElementById('perfil-colaborador');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 60);
+        }
+      }
+      if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- nómina del área --- */
+      if (a === 'importar-nomina') {
+        const crudo = ($('#pegar-nomina') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero la nómina.', 'error');
+
+        const leido = interpretarNomina(crudo);
+        if (!leido.filas.length) return avisar(leido.avisos[0] || 'No se pudo leer la nómina.', 'error');
+
+        const res = resumirNomina(leido.filas);
+        const tiendas = Object.keys(res.porTienda).length;
+        const ok = await confirmar(
+          `Importar ${res.personas} persona${res.personas === 1 ? '' : 's'}`,
+          `Se reparten en ${tiendas} tienda${tiendas === 1 ? '' : 's'} según su columna TIENDA. ` +
+          'A quien ya esté cargado se le actualizan los datos y la posición; las evaluaciones, ' +
+          'la talent card y los talles no se tocan.',
+          'Importar nómina');
+        if (!ok) return;
+
+        const r = Store.importarNomina(leido.filas);
+        refrescar();
+        const caja = $('#resultado-nomina');
+        if (caja) {
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.total} persona${r.total === 1 ? '' : 's'}</strong>:
+            ${r.nuevos} nueva${r.nuevos === 1 ? '' : 's'}, ${r.actualizados} actualizada${r.actualizados === 1 ? '' : 's'}${r.movidos ? `, ${r.movidos} que cambiaron de tienda` : ''}.
+            ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
+              <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
+            ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          </div>`;
+        }
+        avisar(`Nómina importada: ${r.total} persona${r.total === 1 ? '' : 's'}.`);
       }
 
       /* --- novedades de liquidación --- */

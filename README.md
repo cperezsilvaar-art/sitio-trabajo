@@ -40,6 +40,19 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío del reporte de la visita |
 
+## La nómina y el perfil de cada persona
+
+El padrón del área se pega una vez en *Sucursales → Nómina del área* y reparte a
+cada persona a su tienda con su cargo, sus fechas y su contacto. Desde ahí, el
+nombre de cada sucursal abre **su propia pantalla**: indicadores del mes,
+referentes, **organigrama** y visitas registradas.
+
+Cada tarjeta del organigrama abre el **perfil** de esa persona, con todo lo que
+trae la nómina más lo que solo sabe RRHH: los **talles de la ropa de trabajo**,
+las notas y la posición cuando el cargo no se reconoce.
+
+Detalle en [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md).
+
 ## Las novedades de liquidación
 
 La planilla que arma Nómina todos los meses —una hoja por sucursal, una fila por
@@ -83,6 +96,8 @@ cada uno deja su propio registro de envío.
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
+- [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md) — el padrón de
+  personas, el mapeo de cargos a posiciones y qué contiene cada perfil.
 - [`docs/novedades-liquidacion.md`](docs/novedades-liquidacion.md) — cómo se
   importa el libro mensual de novedades y qué columna alimenta cada indicador.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
