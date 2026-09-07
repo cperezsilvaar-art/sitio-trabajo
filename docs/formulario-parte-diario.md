@@ -1,17 +1,17 @@
 # El formulario del parte diario
 
-Es la mitad que vive afuera del panel: un link que se pega en el grupo de
-WhatsApp de las sucursales, se abre desde el celular, **no pide iniciar sesión**
-y tarda menos de un minuto en completarse. Lo que se carga ahí vuelve al panel
-por la pestaña *Parte diario*.
+Es la mitad que vive afuera del panel: **un link de internet** que se pega en el
+grupo de WhatsApp de las sucursales. Se abre desde el celular, **no pide iniciar
+sesión**, y se completa en menos de un minuto. Lo que se carga ahí vuelve al
+panel por la pestaña *Parte diario*.
 
 Pide dos cosas en la misma pantalla:
 
 1. **Las ausencias de hoy**: quién faltó, de qué turno, por qué y si avisó.
 2. **Las horas extras de ayer**: quién las hizo, cuántas y por qué motivo. Se
-   piden con un día de atraso a propósito, porque recién con la jornada
-   cerrada el gerente sabe cuántas fueron. Así el acumulado del mes se arma
-   día a día en lugar de aparecer en la liquidación.
+   piden con un día de atraso a propósito, porque recién con la jornada cerrada
+   el gerente sabe cuántas fueron. Así el acumulado del mes se arma día a día en
+   lugar de aparecer recién en la liquidación.
 
 ## Cómo funciona el circuito
 
@@ -30,51 +30,68 @@ Grupo de WhatsApp ──► link del formulario ──► planilla de Google
                     Visita → Ausentismo del mes            Visita → FTE y Costo
 ```
 
-Nadie del panel necesita cuenta de Google: la planilla es tuya y el formulario
-se publica como aplicación web abierta.
+La planilla es tuya y el formulario se publica como aplicación web abierta:
+**nadie de las sucursales necesita cuenta de Google**.
 
-## Por qué no un Google Forms común
-
-Un Google Form estándar no sabe repetir el bloque "colaborador + motivo +
-avisó" cuando hay dos ausencias el mismo día, ni el de "colaborador + horas +
-motivo" cuando hubo tres personas con horas extras; y guarda el turno como
-texto libre. El script de abajo arma un formulario propio con las listas ya
-cerradas —los turnos, los motivos de ausencia, los avisos y los cuatro motivos
-de hora extra son exactamente los del panel— y escribe en la planilla con los
-identificadores que el panel espera. Eso evita tener que traducir nada a mano.
-
-## Paso a paso
+## Publicarlo: seis pasos, una sola vez
 
 1. Entrá a [sheets.new](https://sheets.new) y creá una planilla. Llamala, por
    ejemplo, **Parte diario Área 3**.
 2. Menú **Extensiones → Apps Script**.
-3. Borrá lo que haya y pegá el archivo `Codigo.gs` de más abajo.
-4. Agregá un archivo HTML: **+ → HTML**, nombralo `form` (sin `.html`), y pegá
-   el segundo bloque.
-5. **Implementar → Nueva implementación → Aplicación web**.
-   - *Ejecutar como*: **Yo**.
-   - *Quién tiene acceso*: **Cualquier persona**.
-6. Copiá la URL que termina en `/exec`. Esa es la que va al grupo de WhatsApp.
-7. En el panel, **Configuración → Link del formulario del parte diario**: pegá
-   esa misma URL. Ahí queda armado el mensaje diario que copiás al grupo.
-8. Opcional: en **Endpoint para traer los partes**, pegá la misma URL con
-   `?datos=json` al final. Con eso aparece el botón *Traer del endpoint* y te
-   ahorrás el copiar y pegar.
+3. Borrá todo lo que haya en el editor y pegá el contenido de
+   [`parte-diario.gs`](parte-diario.gs) — es un solo archivo, va completo.
+   Guardá con el ícono del disquete.
+4. **Implementar → Nueva implementación**. En el engranaje elegí **Aplicación
+   web**, y abajo:
+   - *Ejecutar como*: **Yo**
+   - *Quién tiene acceso*: **Cualquier persona** ← esto es lo que evita el login
+5. Google va a pedirte autorizar el script. Va a advertir que "no está
+   verificado": es esperable, el script es tuyo y recién lo creaste. Entrá en
+   *Configuración avanzada → Ir al proyecto (no seguro)* y aceptá.
+6. Copiá la URL que termina en **`/exec`**. **Ese es el link que mandás al
+   grupo.**
+
+Después, en el panel: **Configuración → Link del formulario del parte diario**,
+pegá esa misma URL. Con eso la pestaña *Parte diario* arma sola el mensaje
+diario, ya con el link adentro, listo para copiar al grupo.
 
 > Cada vez que edites el script tenés que volver a **Implementar → Administrar
-> implementaciones → editar (lápiz) → Versión: nueva**. Si no, el link sigue
-> sirviendo la versión vieja.
+> implementaciones → editar (el lápiz) → Versión: Nueva versión**. Si no, el
+> link sigue sirviendo la versión anterior.
 
-## `Codigo.gs`
+## Un link por sucursal, si preferís
+
+Agregándole `?sucursal=` al final, el formulario abre con la tienda ya elegida:
+
+```
+https://script.google.com/macros/s/AKfy.../exec?sucursal=Botánico
+```
+
+Sirve para mandarle a cada gerente el suyo y que no se equivoquen de sucursal.
+El nombre tiene que coincidir con el de la lista.
+
+## El código
+
+Está completo en [`parte-diario.gs`](parte-diario.gs). Un solo archivo: la
+página que ven las sucursales, el guardado en la planilla y el endpoint que
+devuelve el JSON. Se pega tal cual, sin tocar nada — salvo la lista de
+sucursales si el área cambia.
 
 ```javascript
 /**
- * Parte diario de asistencia — Área 3.
- * Sirve el formulario, guarda en la planilla y devuelve el JSON que importa
- * el Panel de Control de RRHH.
+ * Parte diario de asistencia — Área 3 · Farmatodo
+ *
+ * Un solo archivo. Al publicarlo como aplicación web queda un link de internet
+ * que las sucursales abren desde el celular sin iniciar sesión: cargan las
+ * ausencias del día y las horas extras del día anterior, y todo se guarda en
+ * esta misma planilla.
+ *
+ * El mismo link con ?datos=json al final devuelve lo cargado, que es lo que
+ * importa el Panel de Control de RRHH.
  */
 
 var HOJA = 'partes';
+var ZONA = 'America/Argentina/Buenos_Aires';
 
 var SUCURSALES = [
   'Botánico', 'Devoto', 'La Nobleza', 'Mark', 'Olivos', 'Olleros',
@@ -83,9 +100,9 @@ var SUCURSALES = [
 ];
 
 var TURNOS = [
-  { id: 'manana',     nombre: 'Mañana (08 a 16)' },
-  { id: 'intermedio', nombre: 'Intermedio (10 a 18/19)' },
-  { id: 'noche',      nombre: 'Noche (16 al cierre)' }
+  { id: 'manana',     nombre: 'Mañana 08-16' },
+  { id: 'intermedio', nombre: 'Intermedio 10-19' },
+  { id: 'noche',      nombre: 'Noche 16-cierre' }
 ];
 
 var MOTIVOS = [
@@ -117,11 +134,45 @@ var MOTIVOS_HORAS = [
 ];
 
 /* Una sola hoja para todo. `tipo` distingue la ausencia de la hora extra, y
-   `fechaTrabajo` es el día al que se imputa: para las horas es el anterior. */
+   `fechaTrabajo` es el día al que se imputa: para las horas, el anterior. */
 var COLUMNAS = ['recibido', 'tipo', 'fecha', 'fechaTrabajo', 'sucursal',
                 'reportadoPor', 'sinNovedad', 'colaborador', 'posicion',
                 'turno', 'motivo', 'aviso', 'quienAviso', 'horaAviso',
                 'horas', 'autorizadoPor', 'notas'];
+
+/* ------------------------------ la página ------------------------------ */
+
+/** GET: el formulario, o el JSON para el panel si viene ?datos=json */
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+
+  if (p.datos === 'json') {
+    return ContentService
+      .createTextOutput(JSON.stringify(partesJson(p.desde, p.hasta)))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var hoy = new Date();
+  var ayer = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
+
+  /* Los datos se inyectan reemplazando marcadores que ya son JavaScript
+     válido, así la página se puede abrir y probar tal cual está escrita. */
+  var html = PAGINA
+    .replace('/*SUCURSALES*/null',    JSON.stringify(SUCURSALES))
+    .replace('/*TURNOS*/null',        JSON.stringify(TURNOS))
+    .replace('/*MOTIVOS*/null',       JSON.stringify(MOTIVOS))
+    .replace('/*AVISOS*/null',        JSON.stringify(AVISOS))
+    .replace('/*MOTIVOS_HORAS*/null', JSON.stringify(MOTIVOS_HORAS))
+    .replace('/*HOY*/""',             JSON.stringify(fechaTexto(hoy)))
+    .replace('/*AYER*/""',            JSON.stringify(fechaTexto(ayer)))
+    .replace('/*SUCURSAL*/""',        JSON.stringify(String(p.sucursal || '')));
+
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('Parte diario de asistencia')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/* ------------------------------- guardar ------------------------------- */
 
 function hoja() {
   var libro = SpreadsheetApp.getActiveSpreadsheet();
@@ -132,29 +183,6 @@ function hoja() {
     h.setFrozenRows(1);
   }
   return h;
-}
-
-/** GET: el formulario, o el JSON para el panel si viene ?datos=json */
-function doGet(e) {
-  var p = (e && e.parameter) || {};
-  if (p.datos === 'json') {
-    return ContentService
-      .createTextOutput(JSON.stringify(partesJson(p.desde, p.hasta)))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-  var t = HtmlService.createTemplateFromFile('form');
-  t.sucursales = SUCURSALES;
-  t.turnos = TURNOS;
-  t.motivos = MOTIVOS;
-  t.avisos = AVISOS;
-  t.motivosHoras = MOTIVOS_HORAS;
-  var hoy = new Date();
-  var ayer = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
-  t.hoy  = Utilities.formatDate(hoy,  'America/Argentina/Buenos_Aires', 'yyyy-MM-dd');
-  t.ayer = Utilities.formatDate(ayer, 'America/Argentina/Buenos_Aires', 'yyyy-MM-dd');
-  return t.evaluate()
-    .setTitle('Parte diario de asistencia')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
 /** Lo llama el formulario desde el navegador. */
@@ -168,7 +196,7 @@ function guardarParte(datos) {
   var ausencias = datos.ausencias || [];
   var horas = datos.horasExtras || [];
 
-  /* Una fila por evento. El orden de las columnas es el de COLUMNAS. */
+  /* Una fila por evento, en el orden que declara COLUMNAS. */
   function fila(tipo, fechaTrabajo, extra) {
     var f = {
       recibido: recibido, tipo: tipo, fecha: fecha, fechaTrabajo: fechaTrabajo,
@@ -205,15 +233,16 @@ function guardarParte(datos) {
 
   h.getRange(h.getLastRow() + 1, 1, filas.length, COLUMNAS.length).setValues(filas);
 
-  var partes = [];
-  partes.push((datos.sinNovedad || !ausencias.length)
+  var dicho = [(datos.sinNovedad || !ausencias.length)
     ? 'equipo completo'
-    : ausencias.length + ' ausencia(s)');
-  if (horas.length) partes.push(horas.length + ' persona(s) con horas extras');
-  return 'Parte cargado: ' + partes.join(' y ') + '.';
+    : ausencias.length + ' ausencia(s)'];
+  if (horas.length) dicho.push(horas.length + ' persona(s) con horas extras');
+  return 'Parte cargado: ' + dicho.join(' y ') + '.';
 }
 
-/** Arma el JSON agrupando por sucursal y día, como lo espera el panel. */
+/* -------------------------------- leer --------------------------------- */
+
+/** Agrupa por sucursal y día, como lo espera el panel. */
 function partesJson(desde, hasta) {
   var filas = hoja().getDataRange().getValues();
   if (filas.length < 2) return { partes: [] };
@@ -282,112 +311,115 @@ function partesJson(desde, hasta) {
 }
 
 function fechaTexto(v) {
-  if (v instanceof Date) {
-    return Utilities.formatDate(v, 'America/Argentina/Buenos_Aires', 'yyyy-MM-dd');
-  }
+  if (v instanceof Date) return Utilities.formatDate(v, ZONA, 'yyyy-MM-dd');
   return String(v || '').slice(0, 10);
 }
 
 function horaTexto(v) {
-  if (v instanceof Date) {
-    return Utilities.formatDate(v, 'America/Argentina/Buenos_Aires', 'HH:mm');
-  }
+  if (v instanceof Date) return Utilities.formatDate(v, ZONA, 'HH:mm');
   return String(v || '');
 }
-```
 
-## `form.html`
+/* ======================================================================= *
+ * La página que ven las sucursales. Es texto: doGet le inyecta los datos  *
+ * reemplazando los marcadores y la devuelve.                              *
+ * ======================================================================= */
 
-```html
+var PAGINA = `
 <!DOCTYPE html>
 <html lang="es">
 <head><base target="_top"><meta charset="utf-8">
+<title>Parte diario de asistencia</title>
 <style>
-  :root { --azul:#0033A0; --rojo:#E4002B; --borde:#d6dbe4; }
+  :root { --azul:#0b3b72; --rojo:#c8102e; --borde:#d6dbe4; --suave:#5a6473; }
   * { box-sizing:border-box }
-  body { margin:0; padding:18px 16px 48px; background:#f4f6fa; color:#16202e;
+  body { margin:0; padding:18px 16px 56px; background:#f4f6fa; color:#16202e;
          font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif }
+  .cont { max-width:560px; margin:0 auto }
   h1 { font-size:19px; margin:0 0 2px; color:var(--azul) }
-  p.sub { margin:0 0 18px; font-size:13px; color:#5a6473 }
-  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em;
-       color:var(--azul); margin:22px 0 8px }
-  p.nota { margin:8px 0 0; font-size:12px; color:#5a6473 }
+  p.sub { margin:0 0 18px; font-size:13px; color:var(--suave) }
+  h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+       color:var(--azul); margin:24px 0 8px }
   .caja { background:#fff; border:1px solid var(--borde); border-radius:12px;
-          padding:16px; margin-bottom:14px }
-  label { display:block; font-size:12px; font-weight:600; color:#5a6473;
-          text-transform:uppercase; letter-spacing:.03em; margin:12px 0 4px }
-  input, select, textarea { width:100%; padding:11px 12px; font-size:16px;
+          padding:16px; margin-bottom:12px }
+  label { display:block; font-size:12px; font-weight:600; color:var(--suave);
+          text-transform:uppercase; letter-spacing:.03em; margin:14px 0 4px }
+  label:first-child, .caja > label:first-of-type { margin-top:0 }
+  input, select { width:100%; padding:11px 12px; font-size:16px;
           border:1px solid var(--borde); border-radius:8px; background:#fff;
           color:inherit; font-family:inherit }
+  input:focus, select:focus { outline:2px solid var(--azul); outline-offset:-1px }
   button { width:100%; padding:14px; font-size:16px; font-weight:600;
-           border:0; border-radius:8px; background:var(--azul); color:#fff }
+           border:0; border-radius:8px; background:var(--azul); color:#fff; cursor:pointer }
   button.sec { background:#fff; color:var(--azul); border:1px solid var(--azul);
                font-weight:500; padding:11px }
   button[disabled] { opacity:.55 }
-  .ausencia { border-top:1px solid var(--borde); padding-top:6px; margin-top:14px;
-              position:relative }
-  .quitar { position:absolute; top:10px; right:0; width:auto; padding:4px 10px;
-            background:transparent; color:var(--rojo); font-size:13px }
-  .fila { display:flex; gap:10px } .fila > * { flex:1 }
-  .switch { display:flex; align-items:center; gap:10px; margin-top:14px;
-            font-size:15px; font-weight:500; color:#16202e }
+  .item { border-top:1px solid var(--borde); padding-top:8px; margin-top:16px; position:relative }
+  .item:first-child { border-top:0; padding-top:0; margin-top:0 }
+  .quitar { position:absolute; top:8px; right:0; width:auto; padding:4px 10px;
+            background:transparent; color:var(--rojo); font-size:13px; font-weight:500 }
+  .fila { display:flex; gap:10px } .fila > * { flex:1; min-width:0 }
+  .switch { display:flex; align-items:center; gap:10px; margin-top:16px;
+            font-size:15px; font-weight:500; color:#16202e; cursor:pointer;
+            text-transform:none; letter-spacing:0 }
   .switch input { width:20px; height:20px; flex:0 0 auto }
+  p.nota { margin:8px 0 0; font-size:12px; color:var(--suave) }
   #estado { margin-top:14px; padding:12px; border-radius:8px; font-size:14px; display:none }
-  .ok { background:#e6f4ea; color:#12633a } .mal { background:#fdeaed; color:#a3132a }
+  .ok  { background:#e6f4ea; color:#12633a; display:block !important }
+  .mal { background:#fdeaed; color:#a3132a; display:block !important }
 </style>
 </head>
 <body>
+<div class="cont">
   <h1>Parte diario de asistencia</h1>
-  <p class="sub">Completalo aunque no tengas novedades. Se envía una vez por día y por sucursal.</p>
+  <p class="sub">Completalo aunque no tengas novedades. Una vez por día y por sucursal.</p>
 
-  <form id="f">
+  <form id="f" novalidate>
     <div class="caja">
       <div class="fila">
-        <div><label>Sucursal</label>
-          <select name="sucursal" required>
-            <option value="">Elegir…</option>
-            <? for (var i = 0; i < sucursales.length; i++) { ?>
-              <option><?= sucursales[i] ?></option>
-            <? } ?>
-          </select></div>
-        <div><label>Día</label>
-          <input type="date" name="fecha" value="<?= hoy ?>" required></div>
+        <div><label>Sucursal</label><select id="sucursal"></select></div>
+        <div><label>Día</label><input type="date" id="fecha"></div>
       </div>
       <label>Quién reporta</label>
-      <input name="reportadoPor" placeholder="Nombre del gerente o encargado" required>
-
-      <div class="switch">
-        <input type="checkbox" id="sn"> <span>Sin novedad, el equipo está completo</span>
-      </div>
+      <input id="reportadoPor" placeholder="Tu nombre">
+      <label class="switch"><input type="checkbox" id="sn">
+        <span>Sin novedad, el equipo está completo</span></label>
     </div>
 
-    <h2>Ausencias de hoy</h2>
-    <div id="lista"></div>
-    <div id="masBox" class="caja" style="padding:10px">
-      <button type="button" class="sec" id="mas">+ Agregar una ausencia</button>
+    <div id="bloqueAus">
+      <h2>Ausencias de hoy</h2>
+      <div class="caja"><div id="lista"></div>
+        <button type="button" class="sec" id="mas" style="margin-top:14px">+ Agregar una ausencia</button>
+      </div>
     </div>
 
     <h2>Horas extras de ayer</h2>
-    <div class="caja" style="padding:12px 16px">
-      <label style="margin-top:0">Día trabajado</label>
-      <input type="date" name="fechaHoras" value="<?= ayer ?>">
-      <p class="nota">Se piden con un día de atraso, con la jornada ya cerrada.
-        Si no hubo horas extras, dejalo vacío.</p>
-    </div>
-    <div id="listaH"></div>
-    <div class="caja" style="padding:10px">
-      <button type="button" class="sec" id="masH">+ Agregar una hora extra</button>
+    <div class="caja">
+      <label>Día trabajado</label>
+      <input type="date" id="fechaHoras">
+      <p class="nota">Se piden con un día de atraso, con el turno ya cerrado.
+         Si no hubo horas extras, dejá esta parte vacía.</p>
+      <div id="listaH" style="margin-top:16px"></div>
+      <button type="button" class="sec" id="masH" style="margin-top:14px">+ Agregar una hora extra</button>
     </div>
 
     <button type="submit" id="enviar">Enviar el parte</button>
     <div id="estado"></div>
+    <button type="button" class="sec" id="otro" hidden style="margin-top:12px">Cargar otro parte</button>
   </form>
+</div>
 
 <script>
-  var TURNOS  = <?= JSON.stringify(turnos) ?>;
-  var MOTIVOS = <?= JSON.stringify(motivos) ?>;
-  var AVISOS  = <?= JSON.stringify(avisos) ?>;
-  var MOTIVOS_HORAS = <?= JSON.stringify(motivosHoras) ?>;
+  var SUCURSALES    = /*SUCURSALES*/null;
+  var TURNOS        = /*TURNOS*/null;
+  var MOTIVOS       = /*MOTIVOS*/null;
+  var AVISOS        = /*AVISOS*/null;
+  var MOTIVOS_HORAS = /*MOTIVOS_HORAS*/null;
+  var HOY           = /*HOY*/"";
+  var AYER          = /*AYER*/"";
+  var SUCURSAL      = /*SUCURSAL*/"";
+
+  var $ = function (id) { return document.getElementById(id); };
 
   function opciones(lista) {
     return lista.map(function (x) {
@@ -395,15 +427,21 @@ function horaTexto(v) {
     }).join('');
   }
 
-  var lista = document.getElementById('lista');
-  var n = 0;
+  /* Arranque: sucursales, fechas y la sucursal preseleccionada si el link la trae. */
+  $('sucursal').innerHTML = '<option value="">Elegir…</option>' +
+    SUCURSALES.map(function (s) { return '<option>' + s + '</option>'; }).join('');
+  if (SUCURSAL) $('sucursal').value = SUCURSAL;
+  $('fecha').value = HOY;
+  $('fechaHoras').value = AYER;
 
-  function agregar() {
+  var lista = $('lista'), listaH = $('listaH');
+
+  function agregarAusencia() {
     var d = document.createElement('div');
-    d.className = 'caja ausencia';
+    d.className = 'item';
     d.innerHTML =
       '<button type="button" class="quitar">Quitar</button>' +
-      '<label>Colaborador</label><input class="colaborador" placeholder="Apellido y nombre" required>' +
+      '<label>Colaborador</label><input class="colaborador" placeholder="Apellido y nombre">' +
       '<div class="fila">' +
         '<div><label>Turno</label><select class="turno">' + opciones(TURNOS) + '</select></div>' +
         '<div><label>¿Avisó?</label><select class="aviso">' + opciones(AVISOS) + '</select></div>' +
@@ -415,16 +453,11 @@ function horaTexto(v) {
       '</div>';
     d.querySelector('.quitar').onclick = function () { d.remove(); };
     lista.appendChild(d);
-    n++;
   }
-
-  document.getElementById('mas').onclick = agregar;
-
-  var listaH = document.getElementById('listaH');
 
   function agregarHora() {
     var d = document.createElement('div');
-    d.className = 'caja ausencia';
+    d.className = 'item';
     d.innerHTML =
       '<button type="button" class="quitar">Quitar</button>' +
       '<label>Colaborador</label><input class="colaborador" placeholder="Apellido y nombre">' +
@@ -437,39 +470,46 @@ function horaTexto(v) {
     listaH.appendChild(d);
   }
 
-  document.getElementById('masH').onclick = agregarHora;
+  $('mas').onclick = agregarAusencia;
+  $('masH').onclick = agregarHora;
 
-  document.getElementById('sn').onchange = function () {
-    var sinNovedad = this.checked;
-    lista.style.display = sinNovedad ? 'none' : '';
-    document.getElementById('masBox').style.display = sinNovedad ? 'none' : '';
-    lista.querySelectorAll('input, select').forEach(function (el) { el.disabled = sinNovedad; });
+  $('otro').onclick = function () { location.reload(); };
+
+  $('sn').onchange = function () {
+    $('bloqueAus').style.display = this.checked ? 'none' : '';
   };
 
   function mostrar(texto, clase) {
-    var e = document.getElementById('estado');
+    var e = $('estado');
     e.textContent = texto;
     e.className = clase;
-    e.style.display = 'block';
   }
 
-  document.getElementById('f').onsubmit = function (ev) {
+  function juntar(caja, campos) {
+    return [].map.call(caja.querySelectorAll('.item'), function (d) {
+      var o = {};
+      campos.forEach(function (c) {
+        var el = d.querySelector('.' + c);
+        o[c] = el ? el.value : '';
+      });
+      return o;
+    });
+  }
+
+  $('f').onsubmit = function (ev) {
     ev.preventDefault();
-    var f = ev.target;
-    var sinNovedad = document.getElementById('sn').checked;
+    var sinNovedad = $('sn').checked;
 
-    var ausencias = [].map.call(lista.querySelectorAll('.ausencia'), function (d) {
-      var v = function (c) { return d.querySelector('.' + c).value; };
-      return { colaborador: v('colaborador'), posicion: '', turno: v('turno'),
-               motivo: v('motivo'), aviso: v('aviso'),
-               quienAviso: v('quienAviso'), horaAviso: v('horaAviso') };
-    }).filter(function (a) { return a.colaborador.trim(); });
+    if (!$('sucursal').value) return mostrar('Elegí la sucursal.', 'mal');
+    if (!$('fecha').value) return mostrar('Falta el día del parte.', 'mal');
+    if (!$('reportadoPor').value.trim()) return mostrar('Poné tu nombre en "Quién reporta".', 'mal');
 
-    var horasExtras = [].map.call(listaH.querySelectorAll('.ausencia'), function (d) {
-      var v = function (c) { return d.querySelector('.' + c).value; };
-      return { colaborador: v('colaborador'), posicion: '', horas: v('horas'),
-               motivo: v('motivo'), autorizadoPor: v('autorizadoPor') };
-    }).filter(function (h) { return h.colaborador.trim() && Number(h.horas) > 0; });
+    var ausencias = sinNovedad ? [] :
+      juntar(lista, ['colaborador', 'turno', 'aviso', 'motivo', 'quienAviso', 'horaAviso'])
+        .filter(function (a) { return a.colaborador.trim(); });
+
+    var horasExtras = juntar(listaH, ['colaborador', 'horas', 'autorizadoPor', 'motivo'])
+      .filter(function (h) { return h.colaborador.trim() && Number(h.horas) > 0; });
 
     if (!sinNovedad && !ausencias.length) {
       return mostrar('Agregá al menos una ausencia, o marcá "sin novedad".', 'mal');
@@ -478,7 +518,7 @@ function horaTexto(v) {
       return mostrar('En las horas extras falta el nombre o la cantidad de horas.', 'mal');
     }
 
-    var boton = document.getElementById('enviar');
+    var boton = $('enviar');
     boton.disabled = true;
     boton.textContent = 'Enviando…';
 
@@ -486,7 +526,12 @@ function horaTexto(v) {
       .withSuccessHandler(function (msg) {
         mostrar(msg + ' Gracias.', 'ok');
         boton.textContent = 'Enviado ✓';
-        f.querySelectorAll('input, select, button').forEach(function (el) { el.disabled = true; });
+        [].forEach.call(document.querySelectorAll('input, select, button'), function (el) {
+          el.disabled = true;
+        });
+        var otro = $('otro');
+        otro.hidden = false;
+        otro.disabled = false;
       })
       .withFailureHandler(function (err) {
         mostrar('No se pudo enviar: ' + err.message, 'mal');
@@ -494,33 +539,34 @@ function horaTexto(v) {
         boton.textContent = 'Enviar el parte';
       })
       .guardarParte({
-        fecha: f.fecha.value,
-        fechaHoras: f.fechaHoras.value,
-        sucursal: f.sucursal.value,
-        reportadoPor: f.reportadoPor.value,
+        fecha: $('fecha').value,
+        fechaHoras: $('fechaHoras').value,
+        sucursal: $('sucursal').value,
+        reportadoPor: $('reportadoPor').value,
         sinNovedad: sinNovedad,
-        ausencias: sinNovedad ? [] : ausencias,
+        ausencias: ausencias,
         horasExtras: horasExtras
       });
   };
 </script>
 </body>
 </html>
+`;
 ```
 
 ## Traer los partes al panel
 
 Hay dos caminos y los dos terminan igual:
 
-**Pegar.** En la planilla, *Archivo → Descargar → CSV*, o seleccionar y copiar
-las filas. En el panel, *Parte diario → Traer los partes del formulario*, pegar
-y **Importar lo pegado**. El panel entiende CSV con encabezados y también el
-JSON del script.
+**Pegar.** En la planilla, seleccionar y copiar las filas, o *Archivo →
+Descargar → CSV*. En el panel, *Parte diario → Traer los partes del formulario*,
+pegar y **Importar lo pegado**. El panel entiende el CSV con encabezados y
+también el JSON del script.
 
-**Endpoint.** Si cargaste la URL con `?datos=json` en Configuración, aparece el
-botón *Traer del endpoint* y hace lo mismo sin copiar nada. Si el navegador lo
-bloquea por seguridad (pasa al abrir el panel como archivo local), el camino de
-pegar sigue estando.
+**Endpoint.** Cargá en *Configuración → Endpoint para traer los partes* la misma
+URL con **`?datos=json`** al final. Aparece el botón *Traer del endpoint* y hace
+lo mismo sin copiar nada. Si el navegador lo bloquea por seguridad —puede pasar
+al abrir el panel como archivo local—, el camino de pegar sigue estando.
 
 En los dos casos la importación es **idempotente**: volver a importar el mismo
 día no duplica nada, porque las ausencias se comparan por colaborador y turno y
@@ -529,9 +575,9 @@ reconoce no se descartan en silencio: se listan para que se corrija el nombre.
 
 ### Si preferís armar el CSV a mano
 
-El panel lee cualquier planilla con encabezados, separada por coma, punto y
-coma o tabulación. Reconoce estas columnas —el orden no importa, y las que
-falten se dan por vacías:
+El panel lee cualquier planilla con encabezados, separada por coma, punto y coma
+o tabulación. Reconoce estas columnas —el orden no importa, y las que falten se
+dan por vacías:
 
 | Columna | Para qué |
 |---|---|
@@ -549,8 +595,7 @@ falten se dan por vacías:
 | `AutorizadoPor` | Quién autorizó la hora extra. |
 
 Los nombres se comparan sin acentos ni mayúsculas, y los valores de turno,
-motivo y aviso se aceptan tanto por su nombre visible como por su
-identificador.
+motivo y aviso se aceptan tanto por su nombre visible como por su identificador.
 
 ## Qué alimenta
 
@@ -561,9 +606,8 @@ identificador.
   que aparece como control cruzado junto a la carga manual.
 - **Ausencias sin aviso**: el corte que separa lo gestionable de la licencia, y
   el que se sigue en la reunión con el gerente.
-- **Horas extras acumuladas del mes**, por sucursal y para toda el área, con la
-  apertura por motivo, el equivalente en FTE y la proyección de cierre al ritmo
-  de los días ya cargados.
+- **Horas extras acumuladas** del mes, por sucursal y para toda el área, con la
+  apertura por motivo, el equivalente en FTE y la proyección de cierre.
 - La misma acumulación aparece como **control cruzado en la solapa *FTE y
   Costo*** de la visita: si lo que se cargó día a día no coincide con las horas
   de la matriz, el panel lo dice y muestra la diferencia. Y queda en el reporte
@@ -578,9 +622,9 @@ decidir sobre él. Las cuatro son las causas reales del área, y cada una lleva 
 una conversación distinta —dotación, ausentismo, calendario comercial o
 planificación—, que es lo que hace útil el corte.
 
-Un caso que conviene mirar: las horas cargadas como *cubrir una ausencia* son
-la traducción en pesos del ausentismo de esa misma sucursal. Cuando ese motivo
-es el que manda, el problema no son las horas.
+Un caso que conviene mirar: las horas cargadas como *cubrir una ausencia* son la
+traducción en pesos del ausentismo de esa misma sucursal. Cuando ese motivo es
+el que manda, el problema no son las horas.
 
 ## Los turnos
 
@@ -588,5 +632,17 @@ El formulario ofrece los tres turnos del área: **mañana 08 a 16**, **intermedi
 10 a 18/19** y **noche 16 al cierre**. El horario exacto del turno noche y la
 dotación de cada uno son propios de cada sucursal y se editan en el panel
 (*Sucursales → ficha → Turnos*): el panel los deriva del horario de atención
-como punto de partida, y las tiendas que solo abren de 10 a 18 —Parque
-Chacabuco y Villa Devoto— quedan con un único turno activo.
+como punto de partida, y las tiendas que solo abren de 10 a 18 —Parque Chacabuco
+y Villa Devoto— quedan con un único turno activo.
+
+## Quién puede cargar
+
+El link es abierto: cualquiera que lo tenga puede mandar un parte, sin
+contraseña. Es la contracara de que no pida login, que es lo que lo hace usable
+desde el celular en dos minutos. Por eso conviene que circule en el grupo de
+trabajo y no más allá.
+
+Lo que **no** pasa: nadie puede leer lo ya cargado ni entrar a la planilla desde
+ese link. El formulario solo escribe. Y el JSON del endpoint queda a la vista de
+quien conozca la URL con `?datos=json`, así que esa variante conviene guardarla
+solo en el panel.

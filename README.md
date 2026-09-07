@@ -57,8 +57,10 @@ cuántas horas fueron. Eso alimenta, sin cargar nada dos veces:
 - las **horas extras acumuladas** del mes, por sucursal y consolidadas, con la
   apertura por motivo y su equivalente en FTE.
 
-El formulario externo y el script que lo publica están en
-[`docs/formulario-parte-diario.md`](docs/formulario-parte-diario.md).
+El formulario es un link de internet que se publica con Google Apps Script en
+seis pasos: el paso a paso está en
+[`docs/formulario-parte-diario.md`](docs/formulario-parte-diario.md) y el código
+completo, en un solo archivo, en [`docs/parte-diario.gs`](docs/parte-diario.gs).
 
 ## Documentación
 
@@ -71,7 +73,9 @@ El formulario externo y el script que lo publica están en
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
 - [`docs/formulario-parte-diario.md`](docs/formulario-parte-diario.md) — el link
-  que se manda por WhatsApp: formulario, planilla y cómo vuelven los datos al panel.
+  que se manda por WhatsApp: cómo publicarlo, y cómo vuelven los datos al panel.
+  El script está aparte, listo para copiar, en
+  [`docs/parte-diario.gs`](docs/parte-diario.gs).
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 
