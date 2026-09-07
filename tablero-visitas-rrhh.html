@@ -489,6 +489,7 @@ footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; pad
   <nav class="tabs principal">
     <a href="#/red">Panel de la red</a>
     <a href="#/visitas">Visitas</a>
+    <a href="#/reclamos">Reclamos</a>
     <a href="#/sucursales">Sucursales</a>
     <a href="#/estadistica">Estadística mensual</a>
     <a href="#/config">Configuración</a>
@@ -2002,6 +2003,151 @@ function resumirNomina(filas) {
 }
 
 /*
+ * reclamos.js — Registro de reclamos y consultas de los colaboradores.
+ *
+ * Lo que la gente le plantea al coordinador cuando va a la tienda: una hora
+ * extra que no se pagó, un adicional nocturno que falta, una categoría que no
+ * corresponde. Se dice de palabra, en el pasillo, y se pierde.
+ *
+ * Un reclamo NO es parte de la visita: se abre en una visita pero vive hasta
+ * que se resuelve, y casi nunca se resuelve el mismo día. Por eso se guarda
+ * aparte, con su propio estado y su propio reloj.
+ *
+ * El reloj importa: un reclamo salarial sin respuesta no se apaga solo, se
+ * convierte en un telegrama. Lo que rompe la confianza no suele ser el "no":
+ * es el silencio.
+ */
+
+/* Los reclamos que aparecen de verdad en una farmacia. La lista es cerrada
+   para poder contarlos: si todo cae en "otro", no se puede ver el patrón. */
+const TIPOS_RECLAMO = [
+  { id: 'horasExtras',   nombre: 'Horas extras no liquidadas',        grupo: 'Liquidación' },
+  { id: 'nocturno',      nombre: 'Adicional nocturno',                grupo: 'Liquidación' },
+  { id: 'feriado',       nombre: 'Feriado trabajado',                 grupo: 'Liquidación' },
+  { id: 'presentismo',   nombre: 'Presentismo descontado',            grupo: 'Liquidación' },
+  { id: 'francos',       nombre: 'Francos no compensados',            grupo: 'Liquidación' },
+  { id: 'vacaciones',    nombre: 'Vacaciones o plus vacacional',      grupo: 'Liquidación' },
+  { id: 'sac',           nombre: 'SAC / aguinaldo',                   grupo: 'Liquidación' },
+  { id: 'descuento',     nombre: 'Descuento indebido (faltante de caja u otro)', grupo: 'Liquidación' },
+  { id: 'categoria',     nombre: 'Categoría de convenio',             grupo: 'Encuadre' },
+  { id: 'antiguedad',    nombre: 'Antigüedad mal computada',          grupo: 'Encuadre' },
+  { id: 'aumento',       nombre: 'Aumento de convenio no aplicado',   grupo: 'Encuadre' },
+  { id: 'asignaciones',  nombre: 'Asignaciones familiares',           grupo: 'Encuadre' },
+  { id: 'obraSocial',    nombre: 'Obra social o ART',                 grupo: 'Beneficios' },
+  { id: 'uniforme',      nombre: 'Uniforme o elementos de trabajo',   grupo: 'Beneficios' },
+  { id: 'otro',          nombre: 'Otro',                              grupo: 'Otros' }
+];
+
+const TIPOS_RECLAMO_POR_ID = TIPOS_RECLAMO.reduce((m, x) => { m[x.id] = x; return m; }, {});
+
+/* El estado dice en qué punto del circuito está, y `cerrado` si ya terminó.
+   "Procede" todavía está abierto: se cierra cuando el ajuste está pagado. */
+const ESTADOS_RECLAMO = [
+  { id: 'abierto',    nombre: 'Recibido',                   cerrado: false },
+  { id: 'analisis',   nombre: 'En análisis',                cerrado: false },
+  { id: 'nomina',     nombre: 'Escalado a Nómina',          cerrado: false },
+  { id: 'faltaInfo',  nombre: 'Falta información',          cerrado: false },
+  { id: 'procede',    nombre: 'Procede: se ajusta',         cerrado: false },
+  { id: 'ajustado',   nombre: 'Ajustado y pagado',          cerrado: true },
+  { id: 'sinLugar',   nombre: 'No procede, ya se explicó',  cerrado: true }
+];
+
+const ESTADOS_RECLAMO_POR_ID = ESTADOS_RECLAMO.reduce((m, x) => { m[x.id] = x; return m; }, {});
+
+const A_CARGO_RECLAMO = [
+  { id: 'rrhh',        nombre: 'RRHH' },
+  { id: 'nomina',      nombre: 'Nómina / Liquidaciones' },
+  { id: 'tienda',      nombre: 'Gerente de Tienda' },
+  { id: 'operaciones', nombre: 'Operaciones' }
+];
+
+/** Días que lleva abierto un reclamo. */
+function diasDeReclamo(r, hasta) {
+  if (!r || !r.fecha) return null;
+  const fin = (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado && r.fechaCierre
+    ? r.fechaCierre : (hasta || new Date().toISOString().slice(0, 10));
+  const d = Math.round((new Date(fin) - new Date(r.fecha)) / 86400000);
+  return isNaN(d) ? null : Math.max(0, d);
+}
+
+/**
+ * Semáforo por antigüedad del reclamo.
+ *
+ * Los cortes son de gestión, no legales: a los siete días el colaborador
+ * espera una respuesta, a los quince ya está preguntando a otros, y al mes
+ * dejó de preguntar, que es la señal peor.
+ */
+function semaforoReclamo(r) {
+  const est = ESTADOS_RECLAMO_POR_ID[r.estado] || {};
+  if (est.cerrado) return { clave: 'cerrado', tono: '', texto: est.nombre };
+  const d = diasDeReclamo(r);
+  if (d === null) return { clave: 'sd', tono: 'ambar', texto: 'sin fecha' };
+  if (d <= 7)  return { clave: 'nuevo',   tono: 'verde', texto: `hace ${d} día${d === 1 ? '' : 's'}` };
+  if (d <= 15) return { clave: 'demora',  tono: 'ambar', texto: `hace ${d} días` };
+  return { clave: 'critico', tono: 'rojo', texto: `hace ${d} días` };
+}
+
+/** Consolidado de una lista de reclamos. */
+function resumirReclamos(lista) {
+  const todos = lista || [];
+  const abiertos = todos.filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+  const cerrados = todos.filter(r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+
+  const porTipo = {};
+  todos.forEach(r => { porTipo[r.tipo] = (porTipo[r.tipo] || 0) + 1; });
+
+  const porEstado = {};
+  todos.forEach(r => { porEstado[r.estado] = (porEstado[r.estado] || 0) + 1; });
+
+  const criticos = abiertos.filter(r => semaforoReclamo(r).clave === 'critico');
+  const sinRespuesta = abiertos.filter(r => !String(r.respuesta || '').trim());
+  const monto = abiertos.reduce((a, r) => a + (parseFloat(String(r.monto).replace(',', '.')) || 0), 0);
+
+  /* El tipo que más se repite es el dato que sirve: tres reclamos por el mismo
+     concepto en la misma tienda no son tres reclamos, son un error de proceso. */
+  const top = Object.keys(porTipo)
+    .map(t => ({ tipo: t, n: porTipo[t], nombre: (TIPOS_RECLAMO_POR_ID[t] || {}).nombre || t }))
+    .sort((a, b) => b.n - a.n)[0] || null;
+
+  const cerradosConFecha = cerrados.filter(r => r.fecha && r.fechaCierre);
+  const demoraPromedio = cerradosConFecha.length
+    ? cerradosConFecha.reduce((a, r) => a + diasDeReclamo(r), 0) / cerradosConFecha.length
+    : null;
+
+  return {
+    total: todos.length,
+    abiertos, cerrados,
+    criticos, sinRespuesta,
+    porTipo, porEstado, top,
+    montoAbierto: monto,
+    demoraPromedio,
+    resueltosAFavor: cerrados.filter(r => r.estado === 'ajustado').length
+  };
+}
+
+/** Patrones que conviene mirar: mismo tipo repetido en la misma sucursal. */
+function patronesDeReclamos(lista, sucursales) {
+  const porSuc = {};
+  (lista || []).forEach(r => {
+    const k = r.sucursalId + '|' + r.tipo;
+    (porSuc[k] || (porSuc[k] = [])).push(r);
+  });
+  return Object.keys(porSuc)
+    .filter(k => porSuc[k].length >= 2)
+    .map(k => {
+      const [sucursalId, tipo] = k.split('|');
+      const suc = (sucursales || []).find(s => s.id === sucursalId);
+      return {
+        sucursal: suc ? (suc.nombre || suc.codigo) : 'Sin sucursal',
+        tipo: (TIPOS_RECLAMO_POR_ID[tipo] || {}).nombre || tipo,
+        casos: porSuc[k].length,
+        personas: porSuc[k].map(r => r.colaborador).filter((x, i, a) => x && a.indexOf(x) === i)
+      };
+    })
+    .sort((a, b) => b.casos - a.casos);
+}
+
+/*
  * acceso.js — Portada y clave de acceso.
  *
  * La clave no es una cortina: deriva una llave con PBKDF2 y cifra el contenido
@@ -2362,7 +2508,8 @@ const Store = (() => {
       },
       sucursales,
       visitas: [],
-      informes: []                        // envíos del informe mensual por sucursal
+      informes: [],                       // envíos de la estadística mensual
+      reclamos: []                        // lo que plantea la gente en las visitas
     };
   }
 
@@ -2447,6 +2594,12 @@ const Store = (() => {
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
+    e.reclamos = Array.isArray(e.reclamos) ? e.reclamos : [];
+    e.reclamos.forEach(r => {
+      if (!r.id) r.id = uid();
+      if (!Array.isArray(r.historial)) r.historial = [];
+      if (!r.estado) r.estado = 'abierto';
+    });
     e.informes = Array.isArray(e.informes) ? e.informes : [];
     e.informes.forEach(i => {
       if (!i.id) i.id = uid();
@@ -2677,6 +2830,66 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* -------------------------- reclamos -------------------------- *
+       Se abren en una visita pero no le pertenecen: viven hasta que se
+       resuelven. Por eso están en la raíz del estado y no adentro de la
+       visita donde se plantearon. */
+    agregarReclamo(datos) {
+      const e = this.get();
+      const r = Object.assign({
+        id: uid(),
+        sucursalId: '', colaborador: '', colaboradorId: '',
+        tipo: TIPOS_RECLAMO[0].id,
+        periodoAfectado: '',
+        detalle: '',
+        monto: '',
+        estado: 'abierto',
+        fecha: new Date().toISOString().slice(0, 10),
+        origenVisitaId: '',
+        aCargo: 'rrhh',
+        compromisoFecha: '',
+        respuesta: '',
+        fechaRespuesta: '',
+        fechaCierre: '',
+        historial: []
+      }, datos || {});
+      e.reclamos.push(r);
+      guardar();
+      return r;
+    },
+
+    reclamo(id) { return this.get().reclamos.find(r => r.id === id) || null; },
+
+    eliminarReclamo(id) {
+      const e = this.get();
+      e.reclamos = e.reclamos.filter(r => r.id !== id);
+      guardar();
+    },
+
+    /** Reclamos de una sucursal, los más nuevos primero. */
+    reclamosDe(sucursalId, soloAbiertos) {
+      return this.get().reclamos
+        .filter(r => r.sucursalId === sucursalId)
+        .filter(r => !soloAbiertos || !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado)
+        .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    },
+
+    /**
+     * Cambia el estado dejando rastro. Cerrar un reclamo sella la fecha, que es
+     * lo que después permite saber cuánto se tardó en responder.
+     */
+    cambiarEstadoReclamo(id, estado, nota) {
+      const r = this.reclamo(id);
+      if (!r || r.estado === estado) return r;
+      const hoy = new Date().toISOString().slice(0, 10);
+      r.historial.push({ fecha: hoy, desde: r.estado, hasta: estado, nota: nota || '' });
+      r.estado = estado;
+      const cerrado = (ESTADOS_RECLAMO_POR_ID[estado] || {}).cerrado;
+      r.fechaCierre = cerrado ? (r.fechaCierre || hoy) : '';
+      guardar();
+      return r;
     },
 
     /* ---------------------- padrón de personas -------------------- *
@@ -3242,7 +3455,40 @@ const Reporte = (() => {
       L.push('');
     }
 
-    /* 2. Minutas */
+    /* 2. Reclamos */
+    if (typeof Store !== 'undefined' && typeof resumirReclamos === 'function') {
+      const abiertos = Store.reclamosDe(sucursal.id, true);
+      const nuevos = Store.reclamosDe(sucursal.id).filter(x => x.origenVisitaId === visita.id);
+      if (abiertos.length || nuevos.length) {
+        L.push(++n + '. RECLAMOS DE LOS COLABORADORES');
+        if (nuevos.length) {
+          L.push(`- Planteados en esta visita: ${nuevos.length}`);
+          nuevos.forEach(x => {
+            L.push(`  * ${oPendiente(x.colaborador)} — ${(TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo}` +
+                   `${x.periodoAfectado ? ` · período ${x.periodoAfectado}` : ''}` +
+                   `${num(x.monto) ? ` · ${fmtMoneda(num(x.monto), (config.parametros || {}).moneda)}` : ''}`);
+            if (String(x.detalle || '').trim()) L.push(`    ${String(x.detalle).trim()}`);
+          });
+        }
+        const previos = abiertos.filter(x => x.origenVisitaId !== visita.id);
+        if (previos.length) {
+          L.push(`- Abiertos de visitas anteriores: ${previos.length}`);
+          previos.forEach(x => {
+            const d = diasDeReclamo(x);
+            L.push(`  * ${oPendiente(x.colaborador)} — ${(TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo}` +
+                   ` · ${(ESTADOS_RECLAMO_POR_ID[x.estado] || {}).nombre || x.estado}` +
+                   `${d === null ? '' : ` · hace ${d} día${d === 1 ? '' : 's'}`}`);
+          });
+          const criticos = previos.filter(x => semaforoReclamo(x).clave === 'critico');
+          if (criticos.length) {
+            L.push(`  * ${criticos.length} lleva${criticos.length === 1 ? '' : 'n'} más de 15 días sin cerrarse.`);
+          }
+        }
+        L.push('');
+      }
+    }
+
+    /* 3. Minutas */
     L.push(++n + '. MINUTA DE REUNIONES');
     L.push('- Reunión Gerente de Tienda:');
     L.push('  * Participante: ' + oPendiente(visita.minutaGerente.participante || sucursal.gerente));
@@ -3628,6 +3874,14 @@ const Reporte = (() => {
     const rec = evaluarRecorrida(visita.recorrida);
     if (rec.clavesPendientes.length) {
       f.push(`Puntos clave de la recorrida sin cubrir: ${rec.clavesPendientes.map(x => x.texto).join('; ')}.`);
+    }
+    if (typeof Store !== 'undefined') {
+      const sinRespuesta = Store.reclamosDe(sucursal.id, true)
+        .filter(x => !String(x.respuesta || '').trim());
+      if (sinRespuesta.length) {
+        f.push(`Respuesta a ${sinRespuesta.length} reclamo/s todavía sin contestar: ` +
+               sinRespuesta.map(x => x.colaborador || 'sin nombre').join(', ') + '.');
+      }
     }
     if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
     if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
@@ -4168,6 +4422,192 @@ const App = (() => {
       </section>`;
   }
 
+  /* ======================== VISTA: RECLAMOS ======================== *
+     Lo que la gente plantea en las visitas y hay que responder. Un reclamo
+     salarial sin respuesta no se apaga solo. */
+  let reclamoFiltro = 'abiertos';
+  let reclamoAbierto = null;
+
+  function vistaReclamos() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const cerrado = r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado;
+    const todos = e.reclamos.slice().sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const res = resumirReclamos(todos);
+    const patrones = patronesDeReclamos(todos, e.sucursales);
+
+    const lista = reclamoFiltro === 'abiertos' ? todos.filter(r => !cerrado(r))
+                : reclamoFiltro === 'cerrados' ? todos.filter(cerrado)
+                : todos;
+
+    return `
+      <h1 class="titulo">Reclamos de los colaboradores</h1>
+      <p class="subtitulo">
+        Lo que te plantean cuando vas a la tienda: diferencias de liquidación, categoría,
+        adicionales. Se registra en el momento y se sigue hasta que tiene respuesta.
+      </p>
+
+      <div class="kpis">
+        ${kpi('Abiertos', res.abiertos.length,
+              res.total ? `${res.cerrados.length} cerrados en total` : 'sin reclamos registrados',
+              res.abiertos.length ? 'aviso' : 'ok')}
+        ${kpi('Con más de 15 días', res.criticos.length,
+              res.criticos.length ? 'sin respuesta hace demasiado' : 'ninguno se pasó',
+              res.criticos.length ? 'alerta' : 'ok')}
+        ${kpi('Sin respuesta escrita', res.sinRespuesta.length,
+              res.sinRespuesta.length ? 'todavía no se les contestó' : 'todos con respuesta',
+              res.sinRespuesta.length ? 'aviso' : 'ok')}
+        ${kpi('Demora promedio', res.demoraPromedio === null ? '—' : fmtNum(res.demoraPromedio, 0) + ' días',
+              res.demoraPromedio === null ? 'sin reclamos cerrados' : `${res.resueltosAFavor} terminaron en ajuste`)}
+      </div>
+
+      ${res.criticos.length ? `<div class="aviso-caja">
+        <strong>${res.criticos.length} reclamo${res.criticos.length === 1 ? '' : 's'} lleva${res.criticos.length === 1 ? '' : 'n'} más de 15 días sin cerrar.</strong>
+        Lo que rompe la confianza no suele ser el "no": es el silencio.
+        <ul>${res.criticos.slice(0, 6).map(r => {
+          const su = Store.sucursal(r.sucursalId);
+          return `<li>${esc(r.colaborador || 'sin nombre')} · ${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}
+            · ${su ? esc(su.nombre || su.codigo) : '—'} · ${esc(semaforoReclamo(r).texto)}</li>`;
+        }).join('')}</ul>
+      </div>` : ''}
+
+      ${patrones.length ? `<div class="aviso-caja info">
+        <strong>Se repite el mismo reclamo en la misma sucursal.</strong>
+        Dos personas con el mismo concepto no son dos reclamos: son un error de proceso.
+        <ul>${patrones.slice(0, 5).map(x => `<li><strong>${esc(x.sucursal)}</strong> · ${esc(x.tipo)}:
+          ${x.casos} casos${x.personas.length ? ` (${esc(x.personas.slice(0, 4).join(', '))})` : ''}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <section class="tarjeta">
+        <h2>Registrar un reclamo</h2>
+        <p class="ayuda">
+          Cargalo en el momento, aunque sea con dos datos. Lo que no se anota en la tienda se pierde.
+        </p>
+        <div class="grid c3">
+          <label class="campo"><span>Sucursal</span>
+            <select id="reclamo-sucursal">
+              ${e.sucursales.map(x => `<option value="${x.id}">${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Colaborador</span>
+            <input id="reclamo-colaborador" placeholder="Apellido y nombre" list="plantel-area"></label>
+          <label class="campo"><span>Tipo</span>
+            <select id="reclamo-tipo">
+              ${TIPOS_RECLAMO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+        </div>
+        <datalist id="plantel-area">
+          ${e.sucursales.reduce((a, x) => a.concat(x.colaboradores || []), [])
+            .map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
+        </datalist>
+        <div class="acciones">
+          <button class="b" data-accion="agregar-reclamo">+ Registrar</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>${lista.length} reclamo${lista.length === 1 ? '' : 's'}</h2>
+        <div class="acciones" style="margin:0 0 14px">
+          ${[['abiertos', 'Abiertos'], ['cerrados', 'Cerrados'], ['todos', 'Todos']].map(([k, t]) =>
+            `<button class="b ${reclamoFiltro === k ? '' : 'sec'}" data-accion="filtro-reclamos" data-f="${k}">${t}</button>`).join('')}
+        </div>
+        ${lista.length ? `<div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Colaborador</th><th>Sucursal</th><th>Tipo</th><th>Planteado</th>
+            <th>Estado</th><th>A cargo</th><th class="num">Monto</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(r => {
+              const su = Store.sucursal(r.sucursalId);
+              const sem = semaforoReclamo(r);
+              const abierto = reclamoAbierto === r.id;
+              return `<tr>
+                <td><strong>${esc(r.colaborador || 'Sin nombre')}</strong></td>
+                <td>${su ? esc(su.nombre || su.codigo) : '—'}</td>
+                <td>${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}</td>
+                <td>${r.fecha ? fmtFecha(r.fecha) : '—'}<br>
+                  <span class="chip ${sem.tono}">${esc(sem.texto)}</span></td>
+                <td>${esc((ESTADOS_RECLAMO_POR_ID[r.estado] || {}).nombre || r.estado)}
+                  ${!cerrado(r) && !String(r.respuesta || '').trim() ? '<br><span class="chip ambar">sin respuesta</span>' : ''}</td>
+                <td>${esc((A_CARGO_RECLAMO.find(x => x.id === r.aCargo) || {}).nombre || '—')}</td>
+                <td class="num">${r.monto ? dinero(r.monto) : '—'}</td>
+                <td class="num" style="white-space:nowrap">
+                  <button class="mini" data-accion="abrir-reclamo" data-id="${r.id}"
+                          style="color:var(--azul);border-color:var(--azul)">${abierto ? 'Cerrar' : 'Ver'}</button>
+                  <button class="mini" data-accion="borrar-reclamo" data-id="${r.id}">✕</button>
+                </td>
+              </tr>
+              ${abierto ? fichaReclamo(r) : ''}`;
+            }).join('')}
+          </tbody>
+        </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
+      </section>`;
+  }
+
+  /** Ficha de un reclamo: todo lo que hay que registrar para poder responderlo. */
+  function fichaReclamo(r) {
+    const e = Store.get();
+    const i = e.reclamos.indexOf(r);
+    const ruta = c => `reclamos.${i}.${c}`;
+    const sem = semaforoReclamo(r);
+    const su = Store.sucursal(r.sucursalId);
+
+    return `<tr class="ficha-fila"><td colspan="8"><div class="talent-card">
+      <div class="tc-cab">
+        <div><strong>${esc(r.colaborador || 'Sin nombre')}</strong>
+          <span>${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}
+            ${su ? ` · ${esc(su.nombre || su.codigo)}` : ''}</span></div>
+        <span class="chip ${sem.tono}">${esc(sem.texto)}</span>
+      </div>
+
+      <div class="grid c3">
+        ${campo('Colaborador', ruta('colaborador'), { calc: true })}
+        ${campo('Sucursal', ruta('sucursalId'), { tipo: 'select', calc: true,
+          opciones: e.sucursales.map(x => ({ valor: x.id, texto: Store.etiquetaSucursal(x) })) })}
+        ${campo('Tipo de reclamo', ruta('tipo'), { tipo: 'select', calc: true,
+          opciones: TIPOS_RECLAMO.map(t => ({ valor: t.id, texto: t.nombre })) })}
+        ${campo('Cuándo lo planteó', ruta('fecha'), { tipo: 'date', calc: true })}
+        ${campo('Período reclamado', ruta('periodoAfectado'), { tipo: 'month', placeholder: 'Mes de la liquidación' })}
+        ${campo('Monto estimado', ruta('monto'), { tipo: 'number', calc: true })}
+      </div>
+
+      <h4>Qué dijo</h4>
+      ${campo('', ruta('detalle'), { tipo: 'textarea', alto: 70,
+        placeholder: 'Con sus palabras: qué reclama y por qué. Cuanto más textual, más fácil verificarlo después.' })}
+
+      <h4>Seguimiento</h4>
+      <div class="grid c3">
+        <label class="campo"><span>Estado</span>
+          <select data-reclamo-estado="${r.id}">
+            ${ESTADOS_RECLAMO.map(x => `<option value="${x.id}"${r.estado === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${campo('A cargo de', ruta('aCargo'), { tipo: 'select', calc: true,
+          opciones: A_CARGO_RECLAMO.map(x => ({ valor: x.id, texto: x.nombre })) })}
+        ${campo('Comprometí respuesta para', ruta('compromisoFecha'), { tipo: 'date', calc: true })}
+      </div>
+
+      <h4>Respuesta que se le dio</h4>
+      ${campo('', ruta('respuesta'), { tipo: 'textarea', alto: 70, calc: true,
+        placeholder: 'Qué se le contestó y cuándo. Aunque la respuesta sea que no procede: eso también hay que decirlo.' })}
+      <div class="grid c2" style="margin-top:12px">
+        ${campo('Fecha de la respuesta', ruta('fechaRespuesta'), { tipo: 'date', calc: true })}
+        ${campo('Fecha de cierre', ruta('fechaCierre'), { tipo: 'date', calc: true })}
+      </div>
+
+      ${r.historial.length ? `<h4>Historial</h4>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>De</th><th>A</th><th>Nota</th></tr></thead>
+          <tbody>${r.historial.slice().reverse().map(h => `<tr>
+            <td>${fmtFecha(h.fecha)}</td>
+            <td>${esc((ESTADOS_RECLAMO_POR_ID[h.desde] || {}).nombre || h.desde)}</td>
+            <td>${esc((ESTADOS_RECLAMO_POR_ID[h.hasta] || {}).nombre || h.hasta)}</td>
+            <td>${esc(h.nota || '')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : ''}
+    </div></td></tr>`;
+  }
+
   /* ====================== VISTA: UNA SUCURSAL ====================== *
      Todo lo que hay de una tienda en una sola pantalla: la ficha, el estado
      del mes, el organigrama y el plantel. Es la vista de "entro a la sucursal
@@ -4221,6 +4661,13 @@ const App = (() => {
                 ? fmtNum(Object.keys(nov.porPosicion).reduce((a, k) => a + nov.porPosicion[k].horasExtras, 0), 1) + ' h'
                 : (calc && calc.matriz.total.horasExtras ? fmtNum(calc.matriz.total.horasExtras, 0) + ' h' : '—'),
               nov && nov.personas ? `novedades de ${esc(periodo)}` : 'según la matriz de FTE')}
+        ${(() => {
+          const ab = Store.reclamosDe(s.id, true);
+          const cr = ab.filter(x => semaforoReclamo(x).clave === 'critico').length;
+          return kpi('Reclamos abiertos', ab.length,
+            cr ? `${cr} con más de 15 días` : (ab.length ? 'en seguimiento' : 'ninguno pendiente'),
+            cr ? 'alerta' : ab.length ? 'aviso' : 'ok');
+        })()}
         ${kpi('Evaluados', t9.evaluados.length ? `${t9.evaluados.length} / ${t9.activos.length}` : '—',
               t9.sinEvaluar.length ? `${t9.sinEvaluar.length} sin evaluar` : 'plantel completo',
               t9.sinEvaluar.length ? 'aviso' : 'ok')}
@@ -4947,7 +5394,64 @@ const App = (() => {
           <thead><tr><th>Punto</th><th>Estado</th><th>Observación</th></tr></thead>
           <tbody>${b.items.map(i => item(b, i)).join('')}</tbody>
         </table></div>
-      </section>`).join('')}`;
+      </section>`).join('')}
+
+      ${bloqueReclamos(v, s)}`;
+  }
+
+  /**
+   * Reclamos, dentro de la recorrida.
+   *
+   * Es donde tiene que estar: el reclamo se plantea en el pasillo, con el
+   * colaborador enfrente, y si no se anota ahí se pierde. Arriba se repasan
+   * los que quedaron abiertos de visitas anteriores, que es lo primero que la
+   * gente va a preguntar.
+   */
+  function bloqueReclamos(v, s) {
+    const abiertos = Store.reclamosDe(s.id, true);
+    const deEstaVisita = Store.reclamosDe(s.id).filter(r => r.origenVisitaId === v.id);
+
+    return `
+      <section class="tarjeta">
+        <h2>Reclamos de la gente
+          ${abiertos.length ? `<span class="chip ambar">${abiertos.length} abierto${abiertos.length === 1 ? '' : 's'}</span>` : ''}</h2>
+        <p class="ayuda">
+          Diferencias de liquidación, categoría, adicionales. Anotalo acá en el momento,
+          aunque sea con el nombre y el tipo: después se completa desde <em>Reclamos</em>.
+        </p>
+
+        ${abiertos.length ? `<div class="aviso-caja">
+          <strong>Abiertos de esta sucursal.</strong> Es lo primero que te van a preguntar.
+          <ul>${abiertos.map(x => {
+            const sem = semaforoReclamo(x);
+            return `<li>${esc(x.colaborador || 'sin nombre')} — ${esc((TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo)}
+              · ${esc((ESTADOS_RECLAMO_POR_ID[x.estado] || {}).nombre || x.estado)}
+              · <span class="chip ${sem.tono}">${esc(sem.texto)}</span></li>`;
+          }).join('')}</ul>
+        </div>` : ''}
+
+        <div class="grid c3">
+          <label class="campo"><span>Quién reclama</span>
+            <input id="reclamo-visita-colab" placeholder="Apellido y nombre" list="plantel-${s.id}-rec"></label>
+          <label class="campo"><span>Por qué</span>
+            <select id="reclamo-visita-tipo">
+              ${TIPOS_RECLAMO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+          <div style="display:flex;align-items:flex-end">
+            <button class="b" data-accion="reclamo-en-visita" data-id="${v.id}" data-suc="${s.id}">+ Anotar reclamo</button>
+          </div>
+        </div>
+        <datalist id="plantel-${s.id}-rec">
+          ${(s.colaboradores || []).map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
+        </datalist>
+
+        ${deEstaVisita.length ? `<h4>Levantados en esta visita</h4>
+          <ul style="font-size:13.5px;line-height:1.7;margin:0;padding-left:20px">
+            ${deEstaVisita.map(x => `<li>${esc(x.colaborador || 'sin nombre')} — ${esc((TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo)}
+              ${x.monto ? ` · ${dinero(x.monto)}` : ''}</li>`).join('')}
+          </ul>
+          <p class="ayuda" style="margin-top:8px">Completalos en <a href="#/reclamos">Reclamos</a>.</p>` : ''}
+      </section>`;
   }
 
   /* --------------------------- 1. Minutas --------------------------- */
@@ -5795,6 +6299,7 @@ const App = (() => {
     let html = '';
 
     if (ruta[0] === 'visitas')       { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'sucursal' && ruta[1]) {
       const id = ruta[1];
       vistaActual = () => vistaSucursal(id);
@@ -6040,6 +6545,44 @@ const App = (() => {
         Store.save(); refrescar();
       }
 
+      /* --- reclamos --- */
+      if (a === 'agregar-reclamo' || a === 'reclamo-en-visita') {
+        const desdeVisita = a === 'reclamo-en-visita';
+        const sucursalId = desdeVisita ? btn.dataset.suc : ($('#reclamo-sucursal') || {}).value;
+        if (!sucursalId) return avisar('Elegí la sucursal.', 'error');
+        const nombre = desdeVisita
+          ? (($('#reclamo-visita-colab') || {}).value || '')
+          : (($('#reclamo-colaborador') || {}).value || '');
+        const tipo = desdeVisita
+          ? (($('#reclamo-visita-tipo') || {}).value || TIPOS_RECLAMO[0].id)
+          : (($('#reclamo-tipo') || {}).value || TIPOS_RECLAMO[0].id);
+        if (!String(nombre).trim()) return avisar('Poné al menos el nombre de quien reclama.', 'error');
+
+        const r = Store.agregarReclamo({
+          sucursalId, colaborador: String(nombre).trim(), tipo,
+          origenVisitaId: desdeVisita ? btn.dataset.id : '',
+          fecha: desdeVisita ? (Store.visita(btn.dataset.id) || {}).fecha || hoyISO() : hoyISO()
+        });
+        reclamoAbierto = r.id;
+        refrescar();
+        avisar('Reclamo registrado. Completá el detalle para poder seguirlo.');
+      }
+
+      if (a === 'abrir-reclamo') {
+        reclamoAbierto = reclamoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'filtro-reclamos') { reclamoFiltro = btn.dataset.f; refrescar(); }
+
+      if (a === 'borrar-reclamo') {
+        const r = Store.reclamo(btn.dataset.id);
+        const ok = await confirmar('Borrar el reclamo',
+          `Se borra lo registrado de ${r ? (r.colaborador || 'esa persona') : 'esa persona'} y su historial.`,
+          'Borrar reclamo');
+        if (ok) { Store.eliminarReclamo(btn.dataset.id); reclamoAbierto = null; refrescar(); avisar('Reclamo borrado.'); }
+      }
+
       /* --- sucursal y perfil --- */
       if (a === 'ver-perfil') {
         perfilAbierto = perfilAbierto === btn.dataset.id ? null : btn.dataset.id;
@@ -6268,6 +6811,12 @@ const App = (() => {
           catch (err) { avisar('El archivo no tiene un formato válido: ' + err.message, 'error'); }
         };
         lector.readAsText(f);
+      }
+      const rec = ev.target.closest('[data-reclamo-estado]');
+      if (rec) {
+        Store.cambiarEstadoReclamo(rec.dataset.reclamoEstado, rec.value);
+        refrescar();
+        return;
       }
       if (ev.target.id === 'estad-sucursal') {
         estadSuc = ev.target.value;

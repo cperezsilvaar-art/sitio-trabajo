@@ -26,6 +26,19 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
 equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 
+## Reclamos
+
+Lo que la gente le plantea al coordinador cuando va a la tienda —diferencias de
+liquidación, categoría, adicionales— tiene su propia pestaña, porque un reclamo
+se abre en una visita pero vive hasta que se resuelve.
+
+Se anota en el momento desde la recorrida, con el nombre y el tipo; el detalle se
+completa después. El panel marca los que llevan más de quince días, los que
+siguen sin respuesta escrita, y avisa cuando **dos personas de la misma sucursal
+reclaman lo mismo**: eso no son dos reclamos, es un error de proceso.
+
+Detalle en [`docs/reclamos.md`](docs/reclamos.md).
+
 ## Los dos ritmos
 
 El trabajo está partido en dos, porque son dos cosas distintas:
@@ -117,6 +130,8 @@ cada uno deja su propio registro de envío.
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
+- [`docs/reclamos.md`](docs/reclamos.md) — el circuito del reclamo, los estados
+  y por qué el reloj importa.
 - [`docs/recorrida-hrbp.md`](docs/recorrida-hrbp.md) — los 28 puntos de la
   recorrida, por qué están y en qué orden.
 - [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md) — el padrón de

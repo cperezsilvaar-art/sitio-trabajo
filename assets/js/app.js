@@ -353,6 +353,192 @@ const App = (() => {
       </section>`;
   }
 
+  /* ======================== VISTA: RECLAMOS ======================== *
+     Lo que la gente plantea en las visitas y hay que responder. Un reclamo
+     salarial sin respuesta no se apaga solo. */
+  let reclamoFiltro = 'abiertos';
+  let reclamoAbierto = null;
+
+  function vistaReclamos() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const cerrado = r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado;
+    const todos = e.reclamos.slice().sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const res = resumirReclamos(todos);
+    const patrones = patronesDeReclamos(todos, e.sucursales);
+
+    const lista = reclamoFiltro === 'abiertos' ? todos.filter(r => !cerrado(r))
+                : reclamoFiltro === 'cerrados' ? todos.filter(cerrado)
+                : todos;
+
+    return `
+      <h1 class="titulo">Reclamos de los colaboradores</h1>
+      <p class="subtitulo">
+        Lo que te plantean cuando vas a la tienda: diferencias de liquidación, categoría,
+        adicionales. Se registra en el momento y se sigue hasta que tiene respuesta.
+      </p>
+
+      <div class="kpis">
+        ${kpi('Abiertos', res.abiertos.length,
+              res.total ? `${res.cerrados.length} cerrados en total` : 'sin reclamos registrados',
+              res.abiertos.length ? 'aviso' : 'ok')}
+        ${kpi('Con más de 15 días', res.criticos.length,
+              res.criticos.length ? 'sin respuesta hace demasiado' : 'ninguno se pasó',
+              res.criticos.length ? 'alerta' : 'ok')}
+        ${kpi('Sin respuesta escrita', res.sinRespuesta.length,
+              res.sinRespuesta.length ? 'todavía no se les contestó' : 'todos con respuesta',
+              res.sinRespuesta.length ? 'aviso' : 'ok')}
+        ${kpi('Demora promedio', res.demoraPromedio === null ? '—' : fmtNum(res.demoraPromedio, 0) + ' días',
+              res.demoraPromedio === null ? 'sin reclamos cerrados' : `${res.resueltosAFavor} terminaron en ajuste`)}
+      </div>
+
+      ${res.criticos.length ? `<div class="aviso-caja">
+        <strong>${res.criticos.length} reclamo${res.criticos.length === 1 ? '' : 's'} lleva${res.criticos.length === 1 ? '' : 'n'} más de 15 días sin cerrar.</strong>
+        Lo que rompe la confianza no suele ser el "no": es el silencio.
+        <ul>${res.criticos.slice(0, 6).map(r => {
+          const su = Store.sucursal(r.sucursalId);
+          return `<li>${esc(r.colaborador || 'sin nombre')} · ${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}
+            · ${su ? esc(su.nombre || su.codigo) : '—'} · ${esc(semaforoReclamo(r).texto)}</li>`;
+        }).join('')}</ul>
+      </div>` : ''}
+
+      ${patrones.length ? `<div class="aviso-caja info">
+        <strong>Se repite el mismo reclamo en la misma sucursal.</strong>
+        Dos personas con el mismo concepto no son dos reclamos: son un error de proceso.
+        <ul>${patrones.slice(0, 5).map(x => `<li><strong>${esc(x.sucursal)}</strong> · ${esc(x.tipo)}:
+          ${x.casos} casos${x.personas.length ? ` (${esc(x.personas.slice(0, 4).join(', '))})` : ''}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <section class="tarjeta">
+        <h2>Registrar un reclamo</h2>
+        <p class="ayuda">
+          Cargalo en el momento, aunque sea con dos datos. Lo que no se anota en la tienda se pierde.
+        </p>
+        <div class="grid c3">
+          <label class="campo"><span>Sucursal</span>
+            <select id="reclamo-sucursal">
+              ${e.sucursales.map(x => `<option value="${x.id}">${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Colaborador</span>
+            <input id="reclamo-colaborador" placeholder="Apellido y nombre" list="plantel-area"></label>
+          <label class="campo"><span>Tipo</span>
+            <select id="reclamo-tipo">
+              ${TIPOS_RECLAMO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+        </div>
+        <datalist id="plantel-area">
+          ${e.sucursales.reduce((a, x) => a.concat(x.colaboradores || []), [])
+            .map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
+        </datalist>
+        <div class="acciones">
+          <button class="b" data-accion="agregar-reclamo">+ Registrar</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>${lista.length} reclamo${lista.length === 1 ? '' : 's'}</h2>
+        <div class="acciones" style="margin:0 0 14px">
+          ${[['abiertos', 'Abiertos'], ['cerrados', 'Cerrados'], ['todos', 'Todos']].map(([k, t]) =>
+            `<button class="b ${reclamoFiltro === k ? '' : 'sec'}" data-accion="filtro-reclamos" data-f="${k}">${t}</button>`).join('')}
+        </div>
+        ${lista.length ? `<div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Colaborador</th><th>Sucursal</th><th>Tipo</th><th>Planteado</th>
+            <th>Estado</th><th>A cargo</th><th class="num">Monto</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(r => {
+              const su = Store.sucursal(r.sucursalId);
+              const sem = semaforoReclamo(r);
+              const abierto = reclamoAbierto === r.id;
+              return `<tr>
+                <td><strong>${esc(r.colaborador || 'Sin nombre')}</strong></td>
+                <td>${su ? esc(su.nombre || su.codigo) : '—'}</td>
+                <td>${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}</td>
+                <td>${r.fecha ? fmtFecha(r.fecha) : '—'}<br>
+                  <span class="chip ${sem.tono}">${esc(sem.texto)}</span></td>
+                <td>${esc((ESTADOS_RECLAMO_POR_ID[r.estado] || {}).nombre || r.estado)}
+                  ${!cerrado(r) && !String(r.respuesta || '').trim() ? '<br><span class="chip ambar">sin respuesta</span>' : ''}</td>
+                <td>${esc((A_CARGO_RECLAMO.find(x => x.id === r.aCargo) || {}).nombre || '—')}</td>
+                <td class="num">${r.monto ? dinero(r.monto) : '—'}</td>
+                <td class="num" style="white-space:nowrap">
+                  <button class="mini" data-accion="abrir-reclamo" data-id="${r.id}"
+                          style="color:var(--azul);border-color:var(--azul)">${abierto ? 'Cerrar' : 'Ver'}</button>
+                  <button class="mini" data-accion="borrar-reclamo" data-id="${r.id}">✕</button>
+                </td>
+              </tr>
+              ${abierto ? fichaReclamo(r) : ''}`;
+            }).join('')}
+          </tbody>
+        </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
+      </section>`;
+  }
+
+  /** Ficha de un reclamo: todo lo que hay que registrar para poder responderlo. */
+  function fichaReclamo(r) {
+    const e = Store.get();
+    const i = e.reclamos.indexOf(r);
+    const ruta = c => `reclamos.${i}.${c}`;
+    const sem = semaforoReclamo(r);
+    const su = Store.sucursal(r.sucursalId);
+
+    return `<tr class="ficha-fila"><td colspan="8"><div class="talent-card">
+      <div class="tc-cab">
+        <div><strong>${esc(r.colaborador || 'Sin nombre')}</strong>
+          <span>${esc((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)}
+            ${su ? ` · ${esc(su.nombre || su.codigo)}` : ''}</span></div>
+        <span class="chip ${sem.tono}">${esc(sem.texto)}</span>
+      </div>
+
+      <div class="grid c3">
+        ${campo('Colaborador', ruta('colaborador'), { calc: true })}
+        ${campo('Sucursal', ruta('sucursalId'), { tipo: 'select', calc: true,
+          opciones: e.sucursales.map(x => ({ valor: x.id, texto: Store.etiquetaSucursal(x) })) })}
+        ${campo('Tipo de reclamo', ruta('tipo'), { tipo: 'select', calc: true,
+          opciones: TIPOS_RECLAMO.map(t => ({ valor: t.id, texto: t.nombre })) })}
+        ${campo('Cuándo lo planteó', ruta('fecha'), { tipo: 'date', calc: true })}
+        ${campo('Período reclamado', ruta('periodoAfectado'), { tipo: 'month', placeholder: 'Mes de la liquidación' })}
+        ${campo('Monto estimado', ruta('monto'), { tipo: 'number', calc: true })}
+      </div>
+
+      <h4>Qué dijo</h4>
+      ${campo('', ruta('detalle'), { tipo: 'textarea', alto: 70,
+        placeholder: 'Con sus palabras: qué reclama y por qué. Cuanto más textual, más fácil verificarlo después.' })}
+
+      <h4>Seguimiento</h4>
+      <div class="grid c3">
+        <label class="campo"><span>Estado</span>
+          <select data-reclamo-estado="${r.id}">
+            ${ESTADOS_RECLAMO.map(x => `<option value="${x.id}"${r.estado === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${campo('A cargo de', ruta('aCargo'), { tipo: 'select', calc: true,
+          opciones: A_CARGO_RECLAMO.map(x => ({ valor: x.id, texto: x.nombre })) })}
+        ${campo('Comprometí respuesta para', ruta('compromisoFecha'), { tipo: 'date', calc: true })}
+      </div>
+
+      <h4>Respuesta que se le dio</h4>
+      ${campo('', ruta('respuesta'), { tipo: 'textarea', alto: 70, calc: true,
+        placeholder: 'Qué se le contestó y cuándo. Aunque la respuesta sea que no procede: eso también hay que decirlo.' })}
+      <div class="grid c2" style="margin-top:12px">
+        ${campo('Fecha de la respuesta', ruta('fechaRespuesta'), { tipo: 'date', calc: true })}
+        ${campo('Fecha de cierre', ruta('fechaCierre'), { tipo: 'date', calc: true })}
+      </div>
+
+      ${r.historial.length ? `<h4>Historial</h4>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>De</th><th>A</th><th>Nota</th></tr></thead>
+          <tbody>${r.historial.slice().reverse().map(h => `<tr>
+            <td>${fmtFecha(h.fecha)}</td>
+            <td>${esc((ESTADOS_RECLAMO_POR_ID[h.desde] || {}).nombre || h.desde)}</td>
+            <td>${esc((ESTADOS_RECLAMO_POR_ID[h.hasta] || {}).nombre || h.hasta)}</td>
+            <td>${esc(h.nota || '')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : ''}
+    </div></td></tr>`;
+  }
+
   /* ====================== VISTA: UNA SUCURSAL ====================== *
      Todo lo que hay de una tienda en una sola pantalla: la ficha, el estado
      del mes, el organigrama y el plantel. Es la vista de "entro a la sucursal
@@ -406,6 +592,13 @@ const App = (() => {
                 ? fmtNum(Object.keys(nov.porPosicion).reduce((a, k) => a + nov.porPosicion[k].horasExtras, 0), 1) + ' h'
                 : (calc && calc.matriz.total.horasExtras ? fmtNum(calc.matriz.total.horasExtras, 0) + ' h' : '—'),
               nov && nov.personas ? `novedades de ${esc(periodo)}` : 'según la matriz de FTE')}
+        ${(() => {
+          const ab = Store.reclamosDe(s.id, true);
+          const cr = ab.filter(x => semaforoReclamo(x).clave === 'critico').length;
+          return kpi('Reclamos abiertos', ab.length,
+            cr ? `${cr} con más de 15 días` : (ab.length ? 'en seguimiento' : 'ninguno pendiente'),
+            cr ? 'alerta' : ab.length ? 'aviso' : 'ok');
+        })()}
         ${kpi('Evaluados', t9.evaluados.length ? `${t9.evaluados.length} / ${t9.activos.length}` : '—',
               t9.sinEvaluar.length ? `${t9.sinEvaluar.length} sin evaluar` : 'plantel completo',
               t9.sinEvaluar.length ? 'aviso' : 'ok')}
@@ -1132,7 +1325,64 @@ const App = (() => {
           <thead><tr><th>Punto</th><th>Estado</th><th>Observación</th></tr></thead>
           <tbody>${b.items.map(i => item(b, i)).join('')}</tbody>
         </table></div>
-      </section>`).join('')}`;
+      </section>`).join('')}
+
+      ${bloqueReclamos(v, s)}`;
+  }
+
+  /**
+   * Reclamos, dentro de la recorrida.
+   *
+   * Es donde tiene que estar: el reclamo se plantea en el pasillo, con el
+   * colaborador enfrente, y si no se anota ahí se pierde. Arriba se repasan
+   * los que quedaron abiertos de visitas anteriores, que es lo primero que la
+   * gente va a preguntar.
+   */
+  function bloqueReclamos(v, s) {
+    const abiertos = Store.reclamosDe(s.id, true);
+    const deEstaVisita = Store.reclamosDe(s.id).filter(r => r.origenVisitaId === v.id);
+
+    return `
+      <section class="tarjeta">
+        <h2>Reclamos de la gente
+          ${abiertos.length ? `<span class="chip ambar">${abiertos.length} abierto${abiertos.length === 1 ? '' : 's'}</span>` : ''}</h2>
+        <p class="ayuda">
+          Diferencias de liquidación, categoría, adicionales. Anotalo acá en el momento,
+          aunque sea con el nombre y el tipo: después se completa desde <em>Reclamos</em>.
+        </p>
+
+        ${abiertos.length ? `<div class="aviso-caja">
+          <strong>Abiertos de esta sucursal.</strong> Es lo primero que te van a preguntar.
+          <ul>${abiertos.map(x => {
+            const sem = semaforoReclamo(x);
+            return `<li>${esc(x.colaborador || 'sin nombre')} — ${esc((TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo)}
+              · ${esc((ESTADOS_RECLAMO_POR_ID[x.estado] || {}).nombre || x.estado)}
+              · <span class="chip ${sem.tono}">${esc(sem.texto)}</span></li>`;
+          }).join('')}</ul>
+        </div>` : ''}
+
+        <div class="grid c3">
+          <label class="campo"><span>Quién reclama</span>
+            <input id="reclamo-visita-colab" placeholder="Apellido y nombre" list="plantel-${s.id}-rec"></label>
+          <label class="campo"><span>Por qué</span>
+            <select id="reclamo-visita-tipo">
+              ${TIPOS_RECLAMO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+          <div style="display:flex;align-items:flex-end">
+            <button class="b" data-accion="reclamo-en-visita" data-id="${v.id}" data-suc="${s.id}">+ Anotar reclamo</button>
+          </div>
+        </div>
+        <datalist id="plantel-${s.id}-rec">
+          ${(s.colaboradores || []).map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
+        </datalist>
+
+        ${deEstaVisita.length ? `<h4>Levantados en esta visita</h4>
+          <ul style="font-size:13.5px;line-height:1.7;margin:0;padding-left:20px">
+            ${deEstaVisita.map(x => `<li>${esc(x.colaborador || 'sin nombre')} — ${esc((TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo)}
+              ${x.monto ? ` · ${dinero(x.monto)}` : ''}</li>`).join('')}
+          </ul>
+          <p class="ayuda" style="margin-top:8px">Completalos en <a href="#/reclamos">Reclamos</a>.</p>` : ''}
+      </section>`;
   }
 
   /* --------------------------- 1. Minutas --------------------------- */
@@ -1980,6 +2230,7 @@ const App = (() => {
     let html = '';
 
     if (ruta[0] === 'visitas')       { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'sucursal' && ruta[1]) {
       const id = ruta[1];
       vistaActual = () => vistaSucursal(id);
@@ -2225,6 +2476,44 @@ const App = (() => {
         Store.save(); refrescar();
       }
 
+      /* --- reclamos --- */
+      if (a === 'agregar-reclamo' || a === 'reclamo-en-visita') {
+        const desdeVisita = a === 'reclamo-en-visita';
+        const sucursalId = desdeVisita ? btn.dataset.suc : ($('#reclamo-sucursal') || {}).value;
+        if (!sucursalId) return avisar('Elegí la sucursal.', 'error');
+        const nombre = desdeVisita
+          ? (($('#reclamo-visita-colab') || {}).value || '')
+          : (($('#reclamo-colaborador') || {}).value || '');
+        const tipo = desdeVisita
+          ? (($('#reclamo-visita-tipo') || {}).value || TIPOS_RECLAMO[0].id)
+          : (($('#reclamo-tipo') || {}).value || TIPOS_RECLAMO[0].id);
+        if (!String(nombre).trim()) return avisar('Poné al menos el nombre de quien reclama.', 'error');
+
+        const r = Store.agregarReclamo({
+          sucursalId, colaborador: String(nombre).trim(), tipo,
+          origenVisitaId: desdeVisita ? btn.dataset.id : '',
+          fecha: desdeVisita ? (Store.visita(btn.dataset.id) || {}).fecha || hoyISO() : hoyISO()
+        });
+        reclamoAbierto = r.id;
+        refrescar();
+        avisar('Reclamo registrado. Completá el detalle para poder seguirlo.');
+      }
+
+      if (a === 'abrir-reclamo') {
+        reclamoAbierto = reclamoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'filtro-reclamos') { reclamoFiltro = btn.dataset.f; refrescar(); }
+
+      if (a === 'borrar-reclamo') {
+        const r = Store.reclamo(btn.dataset.id);
+        const ok = await confirmar('Borrar el reclamo',
+          `Se borra lo registrado de ${r ? (r.colaborador || 'esa persona') : 'esa persona'} y su historial.`,
+          'Borrar reclamo');
+        if (ok) { Store.eliminarReclamo(btn.dataset.id); reclamoAbierto = null; refrescar(); avisar('Reclamo borrado.'); }
+      }
+
       /* --- sucursal y perfil --- */
       if (a === 'ver-perfil') {
         perfilAbierto = perfilAbierto === btn.dataset.id ? null : btn.dataset.id;
@@ -2453,6 +2742,12 @@ const App = (() => {
           catch (err) { avisar('El archivo no tiene un formato válido: ' + err.message, 'error'); }
         };
         lector.readAsText(f);
+      }
+      const rec = ev.target.closest('[data-reclamo-estado]');
+      if (rec) {
+        Store.cambiarEstadoReclamo(rec.dataset.reclamoEstado, rec.value);
+        refrescar();
+        return;
       }
       if (ev.target.id === 'estad-sucursal') {
         estadSuc = ev.target.value;

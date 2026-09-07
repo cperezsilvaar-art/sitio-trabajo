@@ -91,7 +91,8 @@ const Store = (() => {
       },
       sucursales,
       visitas: [],
-      informes: []                        // envíos del informe mensual por sucursal
+      informes: [],                       // envíos de la estadística mensual
+      reclamos: []                        // lo que plantea la gente en las visitas
     };
   }
 
@@ -176,6 +177,12 @@ const Store = (() => {
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
+    e.reclamos = Array.isArray(e.reclamos) ? e.reclamos : [];
+    e.reclamos.forEach(r => {
+      if (!r.id) r.id = uid();
+      if (!Array.isArray(r.historial)) r.historial = [];
+      if (!r.estado) r.estado = 'abierto';
+    });
     e.informes = Array.isArray(e.informes) ? e.informes : [];
     e.informes.forEach(i => {
       if (!i.id) i.id = uid();
@@ -406,6 +413,66 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* -------------------------- reclamos -------------------------- *
+       Se abren en una visita pero no le pertenecen: viven hasta que se
+       resuelven. Por eso están en la raíz del estado y no adentro de la
+       visita donde se plantearon. */
+    agregarReclamo(datos) {
+      const e = this.get();
+      const r = Object.assign({
+        id: uid(),
+        sucursalId: '', colaborador: '', colaboradorId: '',
+        tipo: TIPOS_RECLAMO[0].id,
+        periodoAfectado: '',
+        detalle: '',
+        monto: '',
+        estado: 'abierto',
+        fecha: new Date().toISOString().slice(0, 10),
+        origenVisitaId: '',
+        aCargo: 'rrhh',
+        compromisoFecha: '',
+        respuesta: '',
+        fechaRespuesta: '',
+        fechaCierre: '',
+        historial: []
+      }, datos || {});
+      e.reclamos.push(r);
+      guardar();
+      return r;
+    },
+
+    reclamo(id) { return this.get().reclamos.find(r => r.id === id) || null; },
+
+    eliminarReclamo(id) {
+      const e = this.get();
+      e.reclamos = e.reclamos.filter(r => r.id !== id);
+      guardar();
+    },
+
+    /** Reclamos de una sucursal, los más nuevos primero. */
+    reclamosDe(sucursalId, soloAbiertos) {
+      return this.get().reclamos
+        .filter(r => r.sucursalId === sucursalId)
+        .filter(r => !soloAbiertos || !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado)
+        .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    },
+
+    /**
+     * Cambia el estado dejando rastro. Cerrar un reclamo sella la fecha, que es
+     * lo que después permite saber cuánto se tardó en responder.
+     */
+    cambiarEstadoReclamo(id, estado, nota) {
+      const r = this.reclamo(id);
+      if (!r || r.estado === estado) return r;
+      const hoy = new Date().toISOString().slice(0, 10);
+      r.historial.push({ fecha: hoy, desde: r.estado, hasta: estado, nota: nota || '' });
+      r.estado = estado;
+      const cerrado = (ESTADOS_RECLAMO_POR_ID[estado] || {}).cerrado;
+      r.fechaCierre = cerrado ? (r.fechaCierre || hoy) : '';
+      guardar();
+      return r;
     },
 
     /* ---------------------- padrón de personas -------------------- *

@@ -179,7 +179,40 @@ const Reporte = (() => {
       L.push('');
     }
 
-    /* 2. Minutas */
+    /* 2. Reclamos */
+    if (typeof Store !== 'undefined' && typeof resumirReclamos === 'function') {
+      const abiertos = Store.reclamosDe(sucursal.id, true);
+      const nuevos = Store.reclamosDe(sucursal.id).filter(x => x.origenVisitaId === visita.id);
+      if (abiertos.length || nuevos.length) {
+        L.push(++n + '. RECLAMOS DE LOS COLABORADORES');
+        if (nuevos.length) {
+          L.push(`- Planteados en esta visita: ${nuevos.length}`);
+          nuevos.forEach(x => {
+            L.push(`  * ${oPendiente(x.colaborador)} — ${(TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo}` +
+                   `${x.periodoAfectado ? ` · período ${x.periodoAfectado}` : ''}` +
+                   `${num(x.monto) ? ` · ${fmtMoneda(num(x.monto), (config.parametros || {}).moneda)}` : ''}`);
+            if (String(x.detalle || '').trim()) L.push(`    ${String(x.detalle).trim()}`);
+          });
+        }
+        const previos = abiertos.filter(x => x.origenVisitaId !== visita.id);
+        if (previos.length) {
+          L.push(`- Abiertos de visitas anteriores: ${previos.length}`);
+          previos.forEach(x => {
+            const d = diasDeReclamo(x);
+            L.push(`  * ${oPendiente(x.colaborador)} — ${(TIPOS_RECLAMO_POR_ID[x.tipo] || {}).nombre || x.tipo}` +
+                   ` · ${(ESTADOS_RECLAMO_POR_ID[x.estado] || {}).nombre || x.estado}` +
+                   `${d === null ? '' : ` · hace ${d} día${d === 1 ? '' : 's'}`}`);
+          });
+          const criticos = previos.filter(x => semaforoReclamo(x).clave === 'critico');
+          if (criticos.length) {
+            L.push(`  * ${criticos.length} lleva${criticos.length === 1 ? '' : 'n'} más de 15 días sin cerrarse.`);
+          }
+        }
+        L.push('');
+      }
+    }
+
+    /* 3. Minutas */
     L.push(++n + '. MINUTA DE REUNIONES');
     L.push('- Reunión Gerente de Tienda:');
     L.push('  * Participante: ' + oPendiente(visita.minutaGerente.participante || sucursal.gerente));
@@ -565,6 +598,14 @@ const Reporte = (() => {
     const rec = evaluarRecorrida(visita.recorrida);
     if (rec.clavesPendientes.length) {
       f.push(`Puntos clave de la recorrida sin cubrir: ${rec.clavesPendientes.map(x => x.texto).join('; ')}.`);
+    }
+    if (typeof Store !== 'undefined') {
+      const sinRespuesta = Store.reclamosDe(sucursal.id, true)
+        .filter(x => !String(x.respuesta || '').trim());
+      if (sinRespuesta.length) {
+        f.push(`Respuesta a ${sinRespuesta.length} reclamo/s todavía sin contestar: ` +
+               sinRespuesta.map(x => x.colaborador || 'sin nombre').join(', ') + '.');
+      }
     }
     if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
     if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
