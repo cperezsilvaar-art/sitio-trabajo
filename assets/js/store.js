@@ -64,7 +64,8 @@ const Store = (() => {
   function sucursalNueva(datos) {
     return Object.assign({
       id: uid(),
-      codigo: '', rvd: '', nombre: '', tipo: 'venta', marca: '',
+      codigo: '', rvd: '', nombre: '', tipo: 'venta',
+      marca: MARCA_AREA, operador: '', supervisor: '',
       razonSocial: '', cuit: '', direccion: '', localidad: '', horario: '', art: '',
       gerenteOperaciones: '',
       gerente: '', emailGerente: '',      // el gerente recibe copia del reporte
@@ -134,7 +135,28 @@ const Store = (() => {
     if (!Array.isArray(e.config.gerentesOperaciones) || !e.config.gerentesOperaciones.length) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
     }
+    /* Corrección de dos campos que se cargaron mal la primera vez: el área
+       tiene un solo Gerente de Operaciones, y todas las tiendas operan bajo la
+       marca Farmatodo. Lo que se había puesto en esos campos era el supervisor
+       de zona y el grupo operador. */
+    if (e.config.gerentesOperaciones.every(g => SUPERVISORES_AREA3.includes(g.nombre) && !String(g.email || '').trim())) {
+      e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
+    }
+    if (!String((e.config.gerenteOperaciones || {}).email || '').trim()) {
+      e.config.gerenteOperaciones = Object.assign({}, GERENTES_OPERACIONES_AREA3[0]);
+    }
+
     e.sucursales = e.sucursales.map(s => sucursalNueva(s));
+    e.sucursales.forEach(s => {
+      if (SUPERVISORES_AREA3.includes(s.gerenteOperaciones)) {
+        if (!s.supervisor) s.supervisor = s.gerenteOperaciones;
+        s.gerenteOperaciones = GERENTES_OPERACIONES_AREA3[0].nombre;
+      }
+      if (s.marca && s.marca !== MARCA_AREA) {
+        if (!s.operador) s.operador = s.marca;
+        s.marca = MARCA_AREA;
+      }
+    });
     e.sucursales.forEach(s => {
       if (!s.id) s.id = uid();
       if (!Array.isArray(s.colaboradores)) s.colaboradores = [];

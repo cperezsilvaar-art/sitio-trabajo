@@ -249,10 +249,11 @@ const App = (() => {
     contexto = e;
     const gops = e.config.gerentesOperaciones || [];
 
-    const ficha = (s, i) => `<tr class="ficha-fila"><td colspan="8"><div class="talent-card">
+    const ficha = (s, i) => `<tr class="ficha-fila"><td colspan="7"><div class="talent-card">
       <div class="tc-cab">
         <div><strong>${esc(s.nombre || s.codigo)}</strong>
-          <span>${esc(s.razonSocial || 'sin razón social')}${s.cuit ? ` · CUIT ${esc(s.cuit)}` : ''}</span></div>
+          <span>${esc(s.marca || MARCA_AREA)}${s.operador && s.operador !== s.marca ? ` · operada por ${esc(s.operador)}` : ''}
+            · ${esc(s.razonSocial || 'sin razón social')}${s.cuit ? ` · CUIT ${esc(s.cuit)}` : ''}</span></div>
         ${s.rvd ? `<span class="chip azul">RVD ${esc(s.rvd)}</span>` : ''}
       </div>
 
@@ -260,8 +261,8 @@ const App = (() => {
       <div class="grid c3">
         ${campo('Código interno', `sucursales.${i}.codigo`)}
         ${campo('Código en el RVD', `sucursales.${i}.rvd`, { placeholder: 'ej. 008' })}
-        ${campo('Marca', `sucursales.${i}.marca`, { tipo: 'select', calc: true,
-          opciones: [{ valor: '', texto: '—' }].concat(MARCAS.map(m => ({ valor: m, texto: m }))) })}
+        ${campo('Grupo operador', `sucursales.${i}.operador`, { tipo: 'select', calc: true,
+          opciones: [{ valor: '', texto: '—' }].concat(OPERADORES.map(m => ({ valor: m, texto: m }))) })}
         ${campo('Razón social', `sucursales.${i}.razonSocial`)}
         ${campo('CUIT', `sucursales.${i}.cuit`)}
         ${campo('ART', `sucursales.${i}.art`, { tipo: 'select',
@@ -277,6 +278,9 @@ const App = (() => {
 
       <h4>Referentes</h4>
       <div class="grid c3">
+        ${campo('Gerente de Operaciones', `sucursales.${i}.gerenteOperaciones`, { tipo: 'select', calc: true,
+          opciones: [{ valor: '', texto: '—' }].concat(gops.map(g => ({ valor: g.nombre, texto: g.nombre }))) })}
+        ${campo('Supervisor de zona', `sucursales.${i}.supervisor`)}
         ${campo('Director Técnico', `sucursales.${i}.directorTecnico`)}
         ${campo('Contacto administrativo', `sucursales.${i}.contactoAdmin`)}
         ${campo('Email del contacto', `sucursales.${i}.emailContactoAdmin`, { tipo: 'email' })}
@@ -290,33 +294,26 @@ const App = (() => {
     return `
       <h1 class="titulo">Sucursales de ${esc(e.config.area || 'mi área')}</h1>
       <p class="subtitulo">
-        El email del gerente recibe copia automática del reporte de su sucursal, y el reporte se manda al
-        Gerente de Operaciones que tenga asignado la tienda.
+        Las doce operan bajo la marca Farmatodo y reportan al mismo Gerente de Operaciones.
+        El email del gerente de cada tienda recibe copia automática del reporte de su sucursal.
       </p>
 
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Sucursal</th><th>Marca</th><th>Localidad</th><th>Tipo</th>
-            <th>Gerente de Operaciones</th><th>Gerente de Tienda</th><th>Email del gerente</th><th></th>
+            <th>Sucursal</th><th>Localidad</th><th>Tipo</th><th>Supervisor de zona</th>
+            <th>Gerente de Tienda</th><th>Email del gerente</th><th></th>
           </tr></thead>
           <tbody>
           ${e.sucursales.map((s, i) => `<tr>
             <td><input data-path="sucursales.${i}.nombre" data-calc="1" value="${esc(s.nombre)}" placeholder="${esc(s.codigo || 'Nombre')}">
               ${s.rvd ? `<div style="font-size:11px;color:var(--texto-suave);margin-top:3px">RVD ${esc(s.rvd)}</div>` : ''}</td>
-            <td><select data-path="sucursales.${i}.marca" data-calc="1">
-              <option value="">—</option>
-              ${MARCAS.map(m => `<option value="${esc(m)}"${s.marca === m ? ' selected' : ''}>${esc(m)}</option>`).join('')}
-            </select></td>
             <td><input data-path="sucursales.${i}.localidad" value="${esc(s.localidad)}" style="max-width:130px"></td>
             <td><select data-path="sucursales.${i}.tipo" data-calc="1">
               <option value="venta"${s.tipo === 'venta' ? ' selected' : ''}>🏪 Venta</option>
               <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff</option>
             </select></td>
-            <td><select data-path="sucursales.${i}.gerenteOperaciones" data-calc="1">
-              <option value="">—</option>
-              ${gops.map(g => `<option value="${esc(g.nombre)}"${s.gerenteOperaciones === g.nombre ? ' selected' : ''}>${esc(g.nombre)}</option>`).join('')}
-            </select></td>
+            <td><input data-path="sucursales.${i}.supervisor" value="${esc(s.supervisor)}" style="max-width:150px"></td>
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
             <td class="num" style="white-space:nowrap">
@@ -364,7 +361,7 @@ const App = (() => {
           ${campo('Endpoint de envío automático (opcional)', 'webhook', { placeholder: 'https://hook.make.com/... o URL de Google Apps Script' })}
         </div>
         <h3 style="font-size:14px;margin:22px 0 8px">Gerentes de Operaciones del área</h3>
-        <p class="ayuda">Cada sucursal se asigna a uno de ellos, y su reporte se manda a ese. El de arriba queda como respaldo si a una sucursal no se le asignó ninguno.</p>
+        <p class="ayuda">Toda el Área 3 reporta al mismo. Si en algún momento el área se divide, se agregan acá y se asigna cada sucursal al suyo desde su ficha.</p>
         <div class="tabla-scroll"><table>
           <thead><tr><th>Nombre</th><th>Email</th><th class="num">Sucursales</th><th></th></tr></thead>
           <tbody>
