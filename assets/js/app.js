@@ -86,6 +86,7 @@ const App = (() => {
     const conDatos = filas.filter(f => f.c);
     const sum = k => conDatos.reduce((a, f) => a + num(getPath(f.c, k)), 0);
     const headcount = sum('matriz.total.heads');
+    const fteVinculo = sum('matriz.total.fteVinculo');
     const fte = sum('matriz.total.fteReal');
     const costo = sum('matriz.total.costoTotal');
     const diasAus = sum('ausentismo.totalDias');
@@ -103,7 +104,7 @@ const App = (() => {
       <div class="kpis">
         ${kpi('Sucursales a cargo', e.sucursales.length, `${visitadas} con visita registrada`)}
         ${kpi('Headcount', headcount || '—', 'personas en nómina')}
-        ${kpi('FTE Real', fte ? fmtNum(fte) : '—', headcount ? `brecha ${fmtNum(fte - headcount)} FTE` : '', fte && fte < headcount - 0.5 ? 'aviso' : '')}
+        ${kpi('FTE Real', fte ? fmtNum(fte) : '—', fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : '', fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
         ${kpi('Costo laboral', costo ? dinero(costo) : '—', fte ? `${dinero(costo / fte)} por FTE` : '')}
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', he ? fmtNum(he, 0) + ' hs' : '—', he ? `${fmtNum(he / e.config.parametros.horasMes)} FTE equivalentes` : '')}
@@ -303,7 +304,8 @@ const App = (() => {
         ${v.envio.enviado ? '<span class="chip verde">reporte enviado</span>' : '<span class="chip ambar">reporte pendiente de envío</span>'}</p>
 
       <div class="kpis">
-        ${kpi('FTE Real', c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—', `HC ${c.matriz.total.heads || '—'}`)}
+        ${kpi('FTE Real', c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—',
+              c.matriz.total.diasTrabajados ? `dotación equiv. ${fmtNum(c.matriz.total.fteVinculo)}` : 'sin dotación cargada')}
         ${kpi('Costo / FTE', c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—', c.matriz.total.costoTotal ? `total ${dinero(c.matriz.total.costoTotal)}` : '')}
         ${kpi('Ausentismo', c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal), `${c.ausentismo.totalDias} días`,
               c.ausentismo.pctTotal !== null && c.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
@@ -371,15 +373,15 @@ const App = (() => {
       const k = c.matriz.filas[i];
       return `<tr>
         <td><strong>${esc(f.rol)}</strong></td>
-        <td class="num">${inp(i, 'heads', 70, 'Personas con vínculo todo el mes')}</td>
-        <td class="num">${inp(i, 'diasAltas', 70, 'Días trabajados por las altas del mes')}</td>
-        <td class="num">${inp(i, 'diasBajas', 70, 'Días trabajados por las bajas del mes')}</td>
+        <td class="num">${inp(i, 'heads', 70, 'Personas que estuvieron los ' + p.diasMes + ' días. No incluir acá a quienes ingresaron o egresaron durante el mes.')}</td>
+        <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}</td>
+        <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}</td>
         <td class="num">${inp(i, 'diasAusentes', 70, 'Días de ausencia y vacaciones')}</td>
         <td class="num">${inp(i, 'horasExtras', 80)}</td>
         <td class="num">${fmtNum(k.diasTrabajados, 0)}</td>
-        <td class="num">${fmtNum(k.fteExtras)}</td>
+        <td class="num">${fmtNum(k.fteVinculo)}</td>
         <td class="num"><strong>${fmtNum(k.fteReal)}</strong></td>
-        <td class="num">${k.heads ? fmtNum(k.brechaFte) : '—'}</td>
+        <td class="num">${k.diasTrabajados ? fmtNum(k.brechaFte) : '—'}</td>
       </tr>`;
     };
 
@@ -402,15 +404,31 @@ const App = (() => {
       <section class="tarjeta">
         <h2>2.a Dotación y FTE Real</h2>
         <p class="ayuda">
-          FTE Real = (días de vínculo ÷ ${p.diasMes}) − (días ausentes ÷ ${p.diasMes}) + (horas extras ÷ ${p.horasMes}).
-          Los días de vínculo son ${p.diasMes} por cada persona que estuvo el mes completo, más los días efectivos de las altas y las bajas.
-          En “Días ausentes” va el total de ausencias y vacaciones de la posición: es el número que descuenta FTE.
+          FTE Real = (días de vínculo ÷ ${p.diasMes}) − (días de ausencia ÷ ${p.diasMes}) + (horas extras ÷ ${p.horasMes}).
         </p>
+        <div class="aviso-caja info">
+          <strong>Cómo se cargan los ingresos y los egresos.</strong>
+          Quien ingresó o egresó durante el mes <strong>no va en “Mes completo”</strong>: va solo con los días que
+          efectivamente trabajó. Esos días <em>se suman</em>, porque son trabajo prestado; lo que baja el FTE es que
+          sean menos de ${p.diasMes}, no la baja en sí.
+          <br><br>
+          Ejemplo: 5 APV todo el mes y una sexta persona que renunció el día 25 →
+          <strong>Mes completo 5</strong> y <strong>Egresos 25</strong>. Da ${p.diasMes * 5 + 25} días de vínculo,
+          es decir ${fmtNum((p.diasMes * 5 + 25) / p.diasMes)} personas equivalentes, no 6.
+          Si además cargaras 6 en “Mes completo”, esa persona se contaría dos veces.
+          <br><br>
+          La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
+        </div>
+        ${avisoAltasBajas(v, c, p)}
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Posición</th><th class="num">HC Base</th><th class="num">Días altas</th><th class="num">Días bajas</th>
-            <th class="num">Días ausent.</th><th class="num">Hs. extras</th>
-            <th class="num">Días trab.</th><th class="num">FTE por HE</th><th class="num">FTE Real</th><th class="num">Brecha</th>
+            <th>Posición</th><th class="num">Mes completo<br><small style="font-weight:400;text-transform:none">personas</small></th>
+            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
+            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
+            <th class="num">Ausencias<br><small style="font-weight:400;text-transform:none">días</small></th>
+            <th class="num">Hs. extras</th>
+            <th class="num">Días de vínculo</th><th class="num">Personas equiv.</th><th class="num">FTE Real</th>
+            <th class="num" title="FTE Real menos personas equivalentes: lo que se pierde por ausencias, neto de lo que se recupera con horas extras.">Brecha de cobertura</th>
           </tr></thead>
           <tbody>${v.posiciones.map(filaDotacion).join('')}</tbody>
           <tfoot><tr class="total">
@@ -421,9 +439,9 @@ const App = (() => {
             <td class="num">${fmtNum(t.diasAusentes, 0)}</td>
             <td class="num">${fmtNum(t.horasExtras, 0)}</td>
             <td class="num">${fmtNum(t.diasTrabajados, 0)}</td>
-            <td class="num">${fmtNum(t.horasExtras / p.horasMes)}</td>
+            <td class="num">${fmtNum(t.diasTrabajados / p.diasMes)}</td>
             <td class="num">${fmtNum(t.fteReal)}</td>
-            <td class="num">${t.heads ? fmtNum(t.brechaFte) : '—'}</td>
+            <td class="num">${t.diasTrabajados ? fmtNum(t.brechaFte) : '—'}</td>
           </tr></tfoot>
         </table></div>
 
@@ -432,7 +450,7 @@ const App = (() => {
           − ausencias ${fmtNum(t.diasAusentes / p.diasMes)}
           + horas extras ${fmtNum(t.horasExtras / p.horasMes)}
           = <strong>${fmtNum(t.fteReal)} FTE</strong>
-          ${t.heads ? ` sobre un headcount de ${t.heads} personas (brecha ${fmtNum(t.brechaFte)} FTE).` : '.'}
+          ${t.diasTrabajados ? ` sobre una dotación equivalente de ${fmtNum(t.diasTrabajados / p.diasMes)} personas (brecha de cobertura ${fmtNum(t.brechaFte)} FTE).` : '.'}
         </div>
       </section>
 
@@ -462,6 +480,30 @@ const App = (() => {
           </tr></tfoot>
         </table></div>
       </section>`;
+  }
+
+  /* Detecta las dos formas de cargar mal ingresos y egresos: un valor de un mes
+     completo o más (esa persona va en “Mes completo”), y días de ausencia que
+     superan los días de vínculo de la posición. */
+  function avisoAltasBajas(v, c, p) {
+    const problemas = [];
+    c.matriz.filas.forEach(f => {
+      if (f.diasAltas >= p.diasMes) {
+        problemas.push(`<strong>${esc(f.rol)}</strong>: ${fmtNum(f.diasAltas, 0)} días de ingreso equivalen a un mes completo o más. ` +
+          `Si la persona trabajó los ${p.diasMes} días, contala en “Mes completo”.`);
+      }
+      if (f.diasBajas >= p.diasMes) {
+        problemas.push(`<strong>${esc(f.rol)}</strong>: ${fmtNum(f.diasBajas, 0)} días de egreso equivalen a un mes completo o más. ` +
+          `Si la persona trabajó los ${p.diasMes} días antes de irse, contala en “Mes completo”.`);
+      }
+      if (f.diasAusentes > f.diasTrabajados && f.diasTrabajados > 0) {
+        problemas.push(`<strong>${esc(f.rol)}</strong>: hay más días de ausencia (${fmtNum(f.diasAusentes, 0)}) que días de vínculo ` +
+          `(${fmtNum(f.diasTrabajados, 0)}). El FTE queda negativo.`);
+      }
+    });
+    if (!problemas.length) return '';
+    return `<div class="aviso-caja"><strong>Revisá esta carga.</strong><ul>` +
+      problemas.map(x => `<li>${x}</li>`).join('') + `</ul></div>`;
   }
 
   /* -------------------------- 3. Ausentismo ------------------------- */

@@ -12,6 +12,32 @@ presencia efectiva:
 - Un alta o una baja aportan **los días efectivos** de ese mes.
 - El ausentismo se descuenta **aparte**.
 
+### Cómo se cargan los ingresos y los egresos
+
+Quien ingresó o egresó durante el mes **no se cuenta en la dotación de mes
+completo**: entra solo con los días que efectivamente trabajó.
+
+Esos días **se suman**, no se restan. Una persona que renunció el día 25 trabajó
+25 días, y ese trabajo se prestó. Lo que baja el FTE es que hayan sido 25 y no
+30, no la baja en sí misma.
+
+Ejemplo — 5 APV todo el mes más una sexta persona que renunció el día 25:
+
+| Campo | Valor |
+|---|---|
+| Mes completo | 5 personas |
+| Egresos | 25 días |
+| Días de vínculo | 5 × 30 + 25 = 175 |
+| Personas equivalentes | 175 ÷ 30 = 5,83 |
+
+El error a evitar es cargar 6 en “mes completo” **y** 25 en egresos: esa persona
+quedaría contada dos veces (55 días para un solo puesto). El tablero avisa
+cuando un valor de ingresos o egresos llega a 30 días o más, porque eso siempre
+significa que la persona corresponde a la columna de mes completo.
+
+La columna **Personas equiv.** existe para ese control: tiene que parecerse a la
+dotación observada en la tienda.
+
 Esta distinción es lo que evita el doble descuento: si en “días trabajados” se
 cargaran días ya netos de ausencias, el ausentismo se restaría dos veces. Es la
 misma convención de la hoja `DOT` del tablero de estadísticas, donde el FTU sale

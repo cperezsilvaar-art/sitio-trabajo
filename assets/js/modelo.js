@@ -73,7 +73,10 @@ function calcularPosicion(fila, par) {
     fteVinculo, fteAusencias, fteExtras, fteReal,
     sueldoBruto, costoHE, bonos, cargas, costoTotal, costoPorFte,
     ratioExtras, ratioAusentismo,
-    brechaFte: fteReal - heads          // negativo = cobertura por debajo del headcount
+    // Brecha de cobertura: FTE Real contra la dotación equivalente que surge de
+    // los días de vínculo. Negativa = se perdió cobertura por ausencias más de
+    // lo que se recuperó con horas extras.
+    brechaFte: fteReal - fteVinculo
   };
 }
 
@@ -98,7 +101,8 @@ function calcularMatriz(posiciones, par) {
     costoTotal: acc('costoTotal')
   };
   total.costoPorFte = total.fteReal > 0 ? total.costoTotal / total.fteReal : null;
-  total.brechaFte = total.fteReal - total.heads;
+  total.fteVinculo = total.diasTrabajados / (par && par.diasMes ? par.diasMes : PARAMETROS_DEFECTO.diasMes);
+  total.brechaFte = total.fteReal - total.fteVinculo;
 
   const p = Object.assign({}, PARAMETROS_DEFECTO, par || {});
   const horasTeoricas = total.heads * p.horasMes;
@@ -349,7 +353,8 @@ function generarHallazgos(v, par) {
       `es decir ${_n(m.total.horasExtras / p.horasMes)} FTE comprados por sobretiempo.`);
   }
   if (m.total.brechaFte < -0.5) {
-    out.push(`La tienda opera con ${_n(Math.abs(m.total.brechaFte))} FTE por debajo de su headcount nominal (${m.total.heads} personas / ${_n(m.total.fteReal)} FTE reales).`);
+    out.push(`La tienda opera con ${_n(Math.abs(m.total.brechaFte))} FTE por debajo de su dotación equivalente ` +
+      `(${_n(m.total.fteVinculo)} personas contratadas / ${_n(m.total.fteReal)} FTE efectivos).`);
   }
 
   m.filas.forEach(f => {

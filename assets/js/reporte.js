@@ -66,15 +66,15 @@ const Reporte = (() => {
   /** Tabla de FTE en texto plano, alineada en columnas. */
   function tablaFteTexto(matriz, moneda) {
     const cols = [
-      ['Posición', 20], ['HC Base', 8], ['Días Aus.', 10], ['Hs. Extras', 11],
-      ['Días Trab.', 11], ['FTE Real', 9], ['Costo Total', 16], ['Costo / FTE', 16]
+      ['Posición', 20], ['Mes compl.', 11], ['Días Aus.', 10], ['Hs. Extras', 11],
+      ['Días Vínc.', 11], ['FTE Real', 9], ['Costo Total', 16], ['Costo / FTE', 16]
     ];
     const linea = c => c.map(([t, w]) => String(t).padEnd(w)).join(' ');
     const sep = '-'.repeat(cols.reduce((s, c) => s + c[1] + 1, 0));
 
     const fila = f => linea([
       [f.rol, 20],
-      [f.heads || 0, 8],
+      [f.heads || 0, 11],
       [fmtNum(f.diasAusentes, 0), 10],
       [fmtNum(f.horasExtras, 0), 11],
       [fmtNum(f.diasTrabajados, 0), 11],
@@ -120,10 +120,13 @@ const Reporte = (() => {
 
     /* 2. Matriz FTE */
     L.push('2. MATRIZ DE FTE REAL Y COSTO LABORAL');
+    L.push('   "Mes compl." son las personas que cubrieron los ' + c.par.diasMes + ' días. Quien ingresó o egresó');
+    L.push('   durante el mes no figura ahí: sus días efectivos están sumados en "Días Vínc.".');
     L.push(tablaFteTexto(c.matriz, moneda));
     L.push('');
-    L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre un headcount de ${c.matriz.total.heads} personas ` +
-           `(brecha ${fmtNum(c.matriz.total.brechaFte)} FTE).`);
+    L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre una dotación equivalente de ` +
+           `${fmtNum(c.matriz.total.fteVinculo)} personas (${c.matriz.total.heads} de mes completo más los días de ingresos y egresos).`);
+    L.push(`   Brecha de cobertura: ${fmtNum(c.matriz.total.brechaFte)} FTE por ausencias, neto de horas extras.`);
     L.push(`   Costo laboral total: ${fmtMoneda(c.matriz.total.costoTotal || null, moneda)} · ` +
            `Costo promedio por FTE: ${c.matriz.total.costoPorFte === null ? PENDIENTE : fmtMoneda(c.matriz.total.costoPorFte, moneda)}`);
     L.push(`   Cargas sociales aplicadas con factor ${fmtNum(c.par.factorCargas)} sobre los brutos.`);
