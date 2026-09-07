@@ -165,6 +165,10 @@ const Store = (() => {
         if (!c.id) c.id = uid();
         if (!Array.isArray(c.historial)) c.historial = [];
         if (c.activo === undefined) c.activo = true;
+        if (!c.novedades || typeof c.novedades !== 'object') c.novedades = {};
+        if (c.legajo === undefined) c.legajo = '';
+        if (c.cuil === undefined) c.cuil = '';
+        if (c.sector === undefined) c.sector = '';
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
@@ -343,12 +347,15 @@ const Store = (() => {
       return i;
     },
 
-    /** Períodos con visitas cargadas, del más reciente al más viejo. */
+    /** Períodos con algo cargado —visitas o novedades—, del más reciente al más viejo. */
     periodosDe(sucursalId) {
       const set = {};
       this.get().visitas.forEach(v => {
         if (v.sucursalId === sucursalId && v.periodo) set[v.periodo] = true;
       });
+      const s = this.sucursal(sucursalId);
+      (s ? s.colaboradores || [] : []).forEach(c =>
+        Object.keys(c.novedades || {}).forEach(p => { set[p] = true; }));
       return Object.keys(set).sort().reverse();
     },
 
@@ -358,6 +365,8 @@ const Store = (() => {
       if (!s) return null;
       const c = Object.assign({
         id: uid(), nombre: '', posicion: '', fechaIngreso: '', activo: true,
+        legajo: '', cuil: '', sector: '',
+        novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
         interesDesarrollo: '', aspiracion: '', movilidad: '',
@@ -367,6 +376,107 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* ------------------ novedades de liquidación ------------------ *
+       Una tanda por sucursal y por mes. La persona se identifica por CUIL;
+       si no lo trae, por nombre normalizado. Nunca duplica: si ya está,
+       actualiza sus novedades del período y respeta lo cargado a mano
+       (posición, evaluación, talent card). */
+    importarNovedades(sucursalId, periodo, filas) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return null;
+      const clave = t => String(t || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
+
+      let nuevos = 0, actualizados = 0;
+      const sinPosicion = [];
+
+      (filas || []).forEach(f => {
+        const nombre = nombreDePlanilla(f);
+        let c = f.cuil ? s.colaboradores.find(x => x.cuil === f.cuil) : null;
+        if (!c) c = s.colaboradores.find(x => clave(x.nombre) === clave(nombre));
+
+        if (!c) {
+          c = this.agregarColaborador(sucursalId, { nombre, cuil: f.cuil });
+          nuevos++;
+        } else {
+          actualizados++;
+          if (!c.nombre) c.nombre = nombre;
+          if (!c.cuil && f.cuil) c.cuil = f.cuil;
+        }
+        if (f.legajo) c.legajo = f.legajo;
+        if (f.sector) c.sector = f.sector;
+        c.activo = true;
+
+        const nov = {};
+        CAMPOS_NOVEDAD.forEach(k => { nov[k] = numeroNovedad(f[k]); });
+        if (String(f.obs || '').trim()) nov.obs = String(f.obs).trim();
+        c.novedades[periodo] = nov;
+
+        if (!c.posicion) sinPosicion.push(c.nombre);
+      });
+
+      /* Quien estaba en el plantel y no vino en la planilla del mes queda
+         marcado para revisar: puede ser una baja, o una hoja incompleta. */
+      const vistos = (filas || []).map(f => f.cuil).filter(Boolean);
+      const ausentesDelPadron = s.colaboradores
+        .filter(c => c.activo !== false && c.cuil && vistos.indexOf(c.cuil) < 0)
+        .map(c => c.nombre);
+
+      guardar();
+      return { nuevos, actualizados, sinPosicion, ausentesDelPadron,
+               total: (filas || []).length };
+    },
+
+    /**
+     * Dotación del mes agrupada por posición, a partir del plantel y de las
+     * novedades importadas. Es lo que llena la matriz de FTE sin recargar nada.
+     */
+    dotacionDelPadron(sucursalId, periodo) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return null;
+      const porPosicion = {};
+      const sinPosicion = [];
+      let personas = 0;
+      const detalle = {};
+
+      (s.colaboradores || []).forEach(c => {
+        const nov = (c.novedades || {})[periodo];
+        if (!nov) return;
+        personas++;
+
+        const porCod = ausenciasPorCodigo(nov);
+        Object.keys(porCod).forEach(cod => { detalle[cod] = (detalle[cod] || 0) + porCod[cod]; });
+
+        if (!c.posicion) { sinPosicion.push(c.nombre); return; }
+        const p = porPosicion[c.posicion] || (porPosicion[c.posicion] =
+          { heads: 0, diasAusentes: 0, horasExtras: 0 });
+        p.heads++;
+        p.horasExtras += numeroNovedad(nov.he50) + numeroNovedad(nov.he100);
+        p.diasAusentes += MAPA_AUSENCIAS.reduce((a, m) => a + numeroNovedad(nov[m.campo]), 0);
+      });
+
+      return { porPosicion, sinPosicion, personas, detalle, periodo };
+    },
+
+    /** Vuelca esa dotación en la matriz de FTE y en el ausentismo de la visita. */
+    aplicarPadronAVisita(visitaId) {
+      const v = this.visita(visitaId);
+      if (!v) return null;
+      const d = this.dotacionDelPadron(v.sucursalId, v.periodo);
+      if (!d || !d.personas) return null;
+
+      v.posiciones.forEach(fila => {
+        const p = d.porPosicion[fila.rol];
+        fila.heads = p ? p.heads : '';
+        fila.diasAusentes = p && p.diasAusentes ? p.diasAusentes : '';
+        fila.horasExtras = p && p.horasExtras ? p.horasExtras : '';
+      });
+      v.ausentismo.detalle = Object.assign({}, v.ausentismo.detalle, d.detalle);
+
+      guardar();
+      return d;
     },
 
     colaborador(sucursalId, colabId) {

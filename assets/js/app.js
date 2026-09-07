@@ -286,10 +286,11 @@ const App = (() => {
               ${e.sucursales.map(x => `<option value="${x.id}"${x.id === s.id ? ' selected' : ''}>${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
             </select></label>
           <label class="campo"><span>Período</span>
-            <select id="informe-periodo">
-              ${(periodos.length ? periodos : [informePeriodo]).map(x =>
-                `<option value="${esc(x)}"${x === informePeriodo ? ' selected' : ''}>${esc(x)}</option>`).join('')}
-            </select></label>
+            <input type="month" id="informe-periodo" value="${esc(informePeriodo)}"
+                   list="periodos-cargados">
+            <datalist id="periodos-cargados">
+              ${periodos.map(x => `<option value="${esc(x)}"></option>`).join('')}
+            </datalist></label>
           <div style="display:flex;align-items:flex-end">
             <p class="ayuda" style="margin:0">
               ${d.visitas.length
@@ -343,6 +344,48 @@ const App = (() => {
           <button class="b sec" data-accion="descargar-informe">Descargar .txt</button>
           <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
         </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Novedades de liquidación</h2>
+        <p class="ayuda">
+          Pegá acá la hoja de <strong>${esc(s.nombre || s.codigo)}</strong> del libro de novedades
+          del mes: abrila en Excel, seleccioná desde la fila de encabezados hasta la última persona,
+          copiá y pegá. Carga el plantel, las horas extras y los días de ausencia por concepto.
+        </p>
+        <textarea id="pegar-novedades" style="min-height:110px"
+          placeholder="MES  TIENDA  LEGAJO  CUIL  APELLIDO  NOMBRE  HORAS NOCTURNAS  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-novedades">Importar en ${esc(informePeriodo)}</button>
+        </div>
+        <div id="resultado-novedades"></div>
+
+        ${(() => {
+          const d = Store.dotacionDelPadron(s.id, informePeriodo);
+          if (!d || !d.personas) return '';
+          const roles = Object.keys(d.porPosicion);
+          return `<div class="tabla-scroll" style="margin-top:16px"><table>
+            <thead><tr><th>Posición</th><th class="num">Personas</th>
+              <th class="num">Hs. extras</th><th class="num">Días de ausencia</th></tr></thead>
+            <tbody>
+              ${roles.length ? roles.map(r => `<tr>
+                <td><strong>${esc(r)}</strong></td>
+                <td class="num">${d.porPosicion[r].heads}</td>
+                <td class="num">${fmtNum(d.porPosicion[r].horasExtras, 1)}</td>
+                <td class="num">${fmtNum(d.porPosicion[r].diasAusentes, 0)}</td>
+              </tr>`).join('')
+              : '<tr><td colspan="4" class="vacio">Todavía nadie tiene posición asignada.</td></tr>'}
+              ${d.sinPosicion.length ? `<tr><td><em>Sin posición</em></td>
+                <td class="num">${d.sinPosicion.length}</td><td class="num">—</td><td class="num">—</td></tr>` : ''}
+            </tbody>
+          </table></div>
+          ${d.sinPosicion.length ? `<div class="aviso-caja">
+            <strong>${d.sinPosicion.length} persona${d.sinPosicion.length === 1 ? '' : 's'} sin posición asignada.</strong>
+            La planilla de liquidación no trae el puesto: asignalo una vez en la solapa
+            <em>Talento y 9-box</em> de una visita y queda para todos los meses.
+            <br>${esc(d.sinPosicion.slice(0, 12).join(' · '))}${d.sinPosicion.length > 12 ? ' …' : ''}
+          </div>` : ''}`;
+        })()}
       </section>
 
       <section class="tarjeta">
@@ -684,6 +727,19 @@ const App = (() => {
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
         ${avisoAltasBajas(v, c, p)}
+        ${(() => {
+          const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
+          if (!d || !d.personas) return '';
+          const conRol = Object.keys(d.porPosicion).length;
+          return `<div class="aviso-caja info">
+            <strong>Hay novedades de liquidación cargadas para ${esc(v.periodo)}:</strong>
+            ${d.personas} persona${d.personas === 1 ? '' : 's'}${conRol ? ` en ${conRol} posicion${conRol === 1 ? '' : 'es'}` : ''}.
+            ${d.sinPosicion.length ? `${d.sinPosicion.length} sin posición asignada, que quedarían afuera de la matriz.` : ''}
+            <div class="acciones" style="margin-top:10px">
+              <button class="b sec" data-accion="traer-padron" data-id="${v.id}">Traer la dotación del padrón</button>
+            </div>
+          </div>`;
+        })()}
         <div class="tabla-scroll"><table>
           <thead><tr>
             <th>Posición</th><th class="num">Mes completo<br><small style="font-weight:400;text-transform:none">personas</small></th>
@@ -1625,6 +1681,45 @@ const App = (() => {
         Store.save(); refrescar();
       }
 
+      /* --- novedades de liquidación --- */
+      if (a === 'importar-novedades') {
+        const crudo = ($('#pegar-novedades') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero la hoja del libro de novedades.', 'error');
+
+        const leido = interpretarNovedades(crudo);
+        if (!leido.filas.length) {
+          return avisar(leido.avisos[0] || 'No se pudo leer la planilla.', 'error');
+        }
+
+        const suc = Store.sucursal(informeSuc);
+        const resumen = resumirNovedades(leido.filas);
+        const ok = await confirmar(
+          `Importar ${resumen.personas} persona${resumen.personas === 1 ? '' : 's'}`,
+          `Se cargan en ${Store.etiquetaSucursal(suc)}, período ${informePeriodo}: ` +
+          `${fmtNum(resumen.horasExtras, 1)} horas extras y ${fmtNum(resumen.diasAusencia, 0)} días de ausencia. ` +
+          (leido.tienda ? `La planilla dice tienda “${leido.tienda}”. ` : '') +
+          'Si ya habías importado este mes, se reemplazan sus novedades.',
+          'Importar');
+        if (!ok) return;
+
+        const r = Store.importarNovedades(suc.id, informePeriodo, leido.filas);
+        refrescar();
+
+        const caja = $('#resultado-novedades');
+        if (caja) {
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.total} persona${r.total === 1 ? '' : 's'} importada${r.total === 1 ? '' : 's'}</strong>
+            — ${r.nuevos} nueva${r.nuevos === 1 ? '' : 's'} en el plantel,
+            ${r.actualizados} que ya estaban.
+            ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+            ${r.ausentesDelPadron.length ? `<br><strong>No vinieron en esta hoja</strong> y siguen activos en el plantel:
+              ${esc(r.ausentesDelPadron.slice(0, 10).join(' · '))}${r.ausentesDelPadron.length > 10 ? ' …' : ''}.
+              Revisá si son bajas.` : ''}
+          </div>`;
+        }
+        avisar(`${r.total} persona${r.total === 1 ? '' : 's'} cargada${r.total === 1 ? '' : 's'} en ${informePeriodo}.`);
+      }
+
       /* --- informe mensual --- */
       if (a === 'enviar-informe' || a === 'copiar-informe' || a === 'descargar-informe') {
         const suc = Store.sucursal(informeSuc);
@@ -1663,6 +1758,24 @@ const App = (() => {
             avisar(err.message, 'error');
           }
         }
+      }
+
+      if (a === 'traer-padron') {
+        const v = Store.visita(btn.dataset.id);
+        const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
+        const ok = await confirmar(
+          'Traer la dotación del padrón',
+          `Se pisan las columnas de mes completo, ausencias y horas extras de la matriz con lo que ` +
+          `figura en las novedades de ${esc(v.periodo)} (${d.personas} persona${d.personas === 1 ? '' : 's'}), ` +
+          'y se completa el ausentismo por concepto. Los sueldos y las altas y bajas no se tocan.',
+          'Traer del padrón');
+        if (!ok) return;
+        const r = Store.aplicarPadronAVisita(v.id);
+        refrescar();
+        avisar(r
+          ? `Matriz cargada con ${r.personas} persona${r.personas === 1 ? '' : 's'}.` +
+            (r.sinPosicion.length ? ` ${r.sinPosicion.length} quedaron afuera por no tener posición.` : '')
+          : 'No hay novedades cargadas para ese período.', r ? '' : 'error');
       }
 
       /* --- reporte --- */
@@ -1741,7 +1854,7 @@ const App = (() => {
         return;
       }
       if (ev.target.id === 'informe-periodo') {
-        informePeriodo = ev.target.value;
+        informePeriodo = ev.target.value || hoyISO().slice(0, 7);
         refrescar();
         return;
       }

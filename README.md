@@ -20,7 +20,8 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 3. Ir a **Sucursales**. Vienen las doce sucursales del Área 3 con su ficha.
 4. Desde el **Panel de la red**, botón *Registrar visita* en la sucursal visitada.
 5. Completar las solapas y, al final, **Reporte y Envío**.
-6. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, y enviarlo.
+6. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, importar ahí
+   la hoja del libro de novedades de liquidación, y enviar el informe.
 
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
 equipo o archivarlos, usar **Exportar respaldo** en Configuración.
@@ -38,6 +39,20 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío del reporte de la visita |
+
+## Las novedades de liquidación
+
+La planilla que arma Nómina todos los meses —una hoja por sucursal, una fila por
+persona— se pega directo en *Informe mensual* y carga de una sola vez el plantel,
+las horas extras y los días de ausencia abiertos por concepto.
+
+Lo que esa planilla **no** trae es la posición de cada persona: se asigna una vez
+en *Talento y 9-box* y los meses siguientes la conservan. Con las posiciones
+puestas, la solapa *FTE y Costo* de la visita ofrece **Traer la dotación del
+padrón** y la matriz queda cargada sin tipear nada.
+
+El detalle del formato, el mapeo de cada columna y las rarezas del archivo están
+en [`docs/novedades-liquidacion.md`](docs/novedades-liquidacion.md).
 
 ## Los dos documentos
 
@@ -68,6 +83,8 @@ cada uno deja su propio registro de envío.
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
+- [`docs/novedades-liquidacion.md`](docs/novedades-liquidacion.md) — cómo se
+  importa el libro mensual de novedades y qué columna alimenta cada indicador.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 
