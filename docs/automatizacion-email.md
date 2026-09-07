@@ -72,8 +72,7 @@ presiona el botón y el mail sale solo.
     "costoLaboralTotal": 18500000,
     "costoPorFte": 1622807,
     "ausentismoPct": 0.048,
-    "horasExtrasMatriz": 96,
-    "horasExtrasParte": 88.5,
+    "horasExtras": 96,
     "rotacionMensual": 0.0242,
     "dotacionOptima": 13,
     "diferenciaDotacion": 1

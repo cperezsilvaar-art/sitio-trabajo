@@ -132,16 +132,26 @@ function calcularAusentismo(detalle, diasDisponibles, diasMatriz) {
   const grupos = AUSENTISMO_GRUPOS.map(g => {
     const conceptos = g.conceptos.map(c => {
       const dias = num(detalle[c.cod]);
-      return { cod: c.cod, nombre: c.nombre, dias, pct: base > 0 ? dias / base : null };
+      return { cod: c.cod, nombre: c.nombre, inactivo: !!c.inactivo, dias,
+               pct: base > 0 ? dias / base : null };
     });
     const dias = conceptos.reduce((s, c) => s + c.dias, 0);
     return { id: g.id, nombre: g.nombre, ayuda: g.ayuda, conceptos, dias, pct: base > 0 ? dias / base : null };
   });
 
   const detallados = grupos.reduce((s, g) => s + g.dias, 0);
+
+  /* Gestionable es exactamente lo controlable: lo que la tienda y RRHH pueden
+     bajar. Las licencias legales y la enfermedad comprobada no entran, por más
+     que pesen en la cobertura. */
   const gestionable = grupos
-    .filter(g => g.id === 'inactivo' || g.id === 'controlable')
+    .filter(g => g.id === 'controlable')
     .reduce((s, g) => s + g.dias, 0);
+
+  /* Días que el colaborador no percibe de la empresa. Es un dato de costo,
+     independiente de si la ausencia se podía evitar. */
+  const inactivos = grupos.reduce((s, g) =>
+    s + g.conceptos.filter(c => c.inactivo).reduce((a, c) => a + c.dias, 0), 0);
 
   const sinApertura = detallados === 0 && num(diasMatriz) > 0;
   const totalDias = sinApertura ? num(diasMatriz) : detallados;
@@ -155,7 +165,9 @@ function calcularAusentismo(detalle, diasDisponibles, diasMatriz) {
     totalDias,
     pctTotal: base > 0 ? totalDias / base : null,
     diasGestionables: gestionable,
-    pctGestionable: base > 0 ? gestionable / base : null
+    pctGestionable: base > 0 ? gestionable / base : null,
+    diasInactivos: inactivos,
+    pctInactivo: base > 0 ? inactivos / base : null
   };
 }
 

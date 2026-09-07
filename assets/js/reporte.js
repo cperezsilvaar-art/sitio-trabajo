@@ -6,8 +6,8 @@
  *
  *   textoMensual()  Los números del mes de la sucursal: dotación y FTE, costo
  *                   laboral, ausentismo, horas extras, rotación y dotación vs.
- *                   venta. Consolida todas las visitas del período y el parte
- *                   diario. Se manda al cerrar el mes.
+ *                   venta. Consolida todas las visitas del período y se manda
+ *                   al cerrar el mes.
  *
  * Los campos sin cargar se marcan como [PENDIENTE] en lugar de omitirse, para
  * que el Gerente de Operaciones vea qué información falta relevar.
@@ -232,11 +232,10 @@ const Reporte = (() => {
 
   /**
    * Reúne el mes de una sucursal. Los números salen de la visita del período
-   * que tenga la matriz cargada —si hubo más de una, la última—, y el parte
-   * diario aporta el presentismo y las horas extras cargadas día a día.
+   * que tenga la matriz cargada; si hubo más de una, de la última.
    *
-   * Si el mes todavía no tiene visita, el informe igual se arma con lo que hay
-   * y marca el resto como pendiente: el parte diario ya dice bastante.
+   * Si el mes todavía no tiene visita, el informe se arma igual y marca todo
+   * como pendiente, que deja a la vista qué falta relevar.
    */
   function datosMensuales(sucursalId, periodo, config) {
     const e = Store.get();
@@ -256,8 +255,7 @@ const Reporte = (() => {
     return {
       sucursal, periodo, visitas, base, sanciones,
       sinVisita: !visitas.length,
-      calculo: calcular(base, sucursal, config),
-      parte: acumuladoMes(e.partes, sucursalId, periodo)
+      calculo: calcular(base, sucursal, config)
     };
   }
 
@@ -297,8 +295,7 @@ const Reporte = (() => {
 
     if (d.sinVisita) {
       L.push('AVISO: el período todavía no tiene una visita cargada. Los indicadores');
-      L.push('de dotación, costo y rotación figuran como pendientes; lo que sí hay es');
-      L.push('lo que reportaron las sucursales en el parte diario.');
+      L.push('figuran como pendientes hasta que se releve la sucursal.');
       L.push('');
     } else if (d.visitas.length > 1) {
       L.push(`El mes tuvo ${d.visitas.length} visitas. Los indicadores toman la matriz cargada`);
@@ -329,35 +326,16 @@ const Reporte = (() => {
     /* 3. Ausentismo */
     L.push(++n + '. AUSENTISMO');
     seccionAusentismo(c, L);
-    if (d.parte.diasAusencia) {
-      L.push(`- Según el parte diario: ${d.parte.diasAusencia} día/s de ausencia sobre ` +
-             `${d.parte.diasConParte} jornada/s reportada/s, ${d.parte.gestionables} gestionables y ` +
-             `${d.parte.sinAviso} sin aviso.`);
-    }
     L.push('');
 
     /* 4. Horas extras */
     L.push(++n + '. HORAS EXTRAS');
-    L.push(`- En la matriz de FTE: ${fmtNum(c.matriz.total.horasExtras, 0)} hs, equivalentes a ` +
+    L.push(`- ${fmtNum(c.matriz.total.horasExtras, 0)} hs en el período, equivalentes a ` +
            `${fmtNum(c.matriz.total.horasExtras / c.par.horasMes)} FTE ` +
            `(${fmtPct(c.matriz.total.ratioExtras)} de las horas teóricas).`);
-    if (d.parte.horas) {
-      const det = MOTIVOS_HORAS
-        .map(m => ({ m, h: d.parte.horasPorMotivo[m.id] || 0 })).filter(x => x.h)
-        .sort((x, y) => y.h - x.h)
-        .map(x => `${x.m.nombre.toLowerCase()} ${fmtNum(x.h, 1)} hs`).join(' · ');
-      L.push(`- Cargadas día a día en el parte: ${fmtNum(d.parte.horas, 1)} hs sobre ` +
-             `${d.parte.diasConHoras} jornada/s (${det}).`);
-      const dif = d.parte.horas - c.matriz.total.horasExtras;
-      if (c.matriz.total.horasExtras && Math.abs(dif) >= 0.5) {
-        L.push(`- Diferencia entre ambas fuentes: ${fmtNum(Math.abs(dif), 1)} hs ` +
-               `${dif > 0 ? 'de más en el parte diario' : 'de más en la matriz'}. Conviene revisar cuál está completa.`);
-      }
-      const cubrir = d.parte.horasPorMotivo.ausencia || 0;
-      if (cubrir) {
-        L.push(`- ${fmtNum(cubrir, 1)} hs (${fmtPct(cubrir / d.parte.horas, 0)}) se hicieron para cubrir ausencias: ` +
-               'es el ausentismo de la tienda traducido a costo.');
-      }
+    if (c.matriz.total.ratioExtras !== null && c.matriz.total.ratioExtras > c.par.umbralHorasExtras) {
+      L.push(`- Por encima del umbral del ${fmtPct(c.par.umbralHorasExtras, 0)}: conviene revisar si` +
+             ' cubren ausencias, francos o una dotación corta.');
     }
     L.push('');
 
@@ -483,7 +461,12 @@ const Reporte = (() => {
       L.push('  * Sin apertura por concepto: el dato surge de la columna “Días ausentes” de la matriz de FTE.');
     } else {
       c.ausentismo.grupos.forEach(g => L.push(`  * ${g.nombre}: ${g.dias} días (${fmtPct(g.pct)})`));
-      L.push(`  * Días gestionables por la tienda: ${c.ausentismo.diasGestionables} (${fmtPct(c.ausentismo.pctGestionable)})`);
+      L.push(`  * Evitables, sobre los que la tienda puede trabajar: ${c.ausentismo.diasGestionables} ` +
+             `días (${fmtPct(c.ausentismo.pctGestionable)}).`);
+      if (c.ausentismo.diasInactivos) {
+        L.push(`  * Sin goce de haberes de la empresa: ${c.ausentismo.diasInactivos} días ` +
+               `(${fmtPct(c.ausentismo.pctInactivo)}); los paga un tercero o no se pagan.`);
+      }
     }
     L.push(`- Impacto en el FTE: ${fmtNum(c.ausentismo.totalDias / c.par.diasMes)} FTE perdidos por ausencia.`);
   }
@@ -583,7 +566,6 @@ const Reporte = (() => {
     }
     if (!num(v.comercial.venta) && s.tipo === 'venta') f.push('Venta neta del período (necesaria para el análisis de dotación óptima).');
     if (!num(v.rotacion.dotacionAnterior)) f.push('Dotación del mes anterior (para el cálculo de rotación).');
-    if (!d.parte.diasConParte) f.push('Partes diarios del período: sin ellos no hay presentismo ni horas cargadas día a día.');
     return f;
   }
 
@@ -722,8 +704,7 @@ const Reporte = (() => {
           costoLaboralTotal: redondear(c.matriz.total.costoTotal, 2),
           costoPorFte: c.matriz.total.costoPorFte === null ? null : redondear(c.matriz.total.costoPorFte, 2),
           ausentismoPct: c.ausentismo.pctTotal,
-          horasExtrasMatriz: c.matriz.total.horasExtras,
-          horasExtrasParte: redondear(d.parte.horas, 1),
+          horasExtras: c.matriz.total.horasExtras,
           rotacionMensual: c.rotacion.mensual,
           dotacionOptima: c.dotacion.dotacionOptima,
           diferenciaDotacion: c.dotacion.diferencia

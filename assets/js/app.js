@@ -105,7 +105,8 @@ const App = (() => {
     } else {
       control = `<input type="${o.tipo || 'text'}" ${attrs} value="${v}">`;
     }
-    return `<label class="campo"><span>${esc(etiqueta)}</span>${control}</label>`;
+    return `<label class="campo"${o.titulo ? ` title="${esc(o.titulo)}"` : ''}>` +
+           `<span>${esc(etiqueta)}</span>${control}</label>`;
   }
 
   const hoyISO = () => new Date().toISOString().slice(0, 10);
@@ -172,12 +173,7 @@ const App = (() => {
                      { eficiente: 'ok', atencion: 'aviso', alerta: 'alerta', sd: '' }[banda.zona]);
         })()}
         ${kpi('Venta neta', ventaRed ? dinero(ventaRed) : '—', costo ? `costo laboral ${dinero(costo)}` : '')}
-        ${(() => {
-          const d = consolidarDia(e.partes, e.sucursales, hoyISO());
-          return kpi('Presentismo de hoy', d.presentismo === null ? '—' : fmtPct(d.presentismo, 1),
-                     d.reportaron ? `${d.reportaron} de ${e.sucursales.length} sucursales reportaron` : 'todavía no reportó ninguna',
-                     d.presentismo === null ? '' : (d.presentismo >= 0.95 ? 'ok' : d.presentismo >= 0.9 ? 'aviso' : 'alerta'));
-        })()}
+        
         ${kpi('Reportes enviados', `${enviadas} / ${visitadas}`, 'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
@@ -247,385 +243,9 @@ const App = (() => {
     </section>`;
   }
 
-  /**
-   * Interpreta lo que llega del formulario externo: JSON con la forma que
-   * exporta el script, o un CSV con encabezados. Devuelve filas listas para
-   * Store.importarPartes.
-   */
-  function interpretarPartes(crudo) {
-    const txt = String(crudo).trim();
-
-    if (txt.startsWith('{') || txt.startsWith('[')) {
-      const datos = JSON.parse(txt);
-      const lista = Array.isArray(datos) ? datos : (datos.partes || datos.filas || []);
-      return lista.map(x => ({
-        sucursal: x.sucursal || x.tienda || '',
-        fecha: (x.fecha || '').slice(0, 10),
-        fechaHoras: (x.fechaHoras || x.fecha_horas || '').slice(0, 10),
-        reportadoPor: x.reportadoPor || x.reporta || '',
-        sinNovedad: !!(x.sinNovedad || x.sin_novedad),
-        ausencias: x.ausencias || (x.colaborador && !x.horas ? [{
-          colaborador: x.colaborador, posicion: x.posicion, turno: x.turno,
-          motivo: x.motivo, aviso: x.aviso, quienAviso: x.quienAviso, horaAviso: x.horaAviso
-        }] : []),
-        horasExtras: x.horasExtras || x.horas_extras || (x.horas && x.colaborador ? [{
-          colaborador: x.colaborador, posicion: x.posicion, horas: x.horas,
-          motivo: x.motivo, autorizadoPor: x.autorizadoPor
-        }] : [])
-      })).filter(x => x.sucursal && x.fecha);
-    }
-
-    // CSV: una fila por ausencia, o una fila sin colaborador para "sin novedad"
-    const lineas = txt.split(/\r?\n/).filter(l => l.trim());
-    if (lineas.length < 2) return [];
-    const sep = lineas[0].includes(';') ? ';' : (lineas[0].includes('\t') ? '\t' : ',');
-    const col = lineas[0].split(sep).map(h => normalizarClave(h));
-    const idx = n => col.indexOf(n);
-
-    const porClave = {};
-    lineas.slice(1).forEach(l => {
-      const c = l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
-      const sucursal = c[idx('sucursal')] || c[idx('tienda')] || '';
-      const fecha = (c[idx('fecha')] || '').slice(0, 10);
-      if (!sucursal || !fecha) return;
-      const k = sucursal + '|' + fecha;
-      if (!porClave[k]) porClave[k] = {
-        sucursal, fecha,
-        reportadoPor: c[idx('reporta')] || c[idx('reportadopor')] || '',
-        ausencias: [], horasExtras: []
-      };
-      const colaborador = c[idx('colaborador')] || '';
-
-      /* Una fila con horas cargadas es una hora extra, no una ausencia: se
-         imputa al día trabajado, que puede ser el anterior al del reporte. */
-      const horas = (c[idx('horas')] || c[idx('horasextras')] || '').replace(',', '.');
-      if (colaborador && parseFloat(horas) > 0) {
-        porClave[k].horasExtras.push({
-          colaborador,
-          posicion: c[idx('posicion')] || '',
-          horas: parseFloat(horas),
-          motivo: clavePorNombre(c[idx('motivohoras')] || c[idx('motivo')], MOTIVOS_HORAS, 'afluencia'),
-          autorizadoPor: c[idx('autorizadopor')] || c[idx('autoriza')] || '',
-          fecha: (c[idx('fechahoras')] || c[idx('diatrabajado')] || '').slice(0, 10)
-        });
-        return;
-      }
-
-      if (!colaborador) { porClave[k].sinNovedad = true; return; }
-      porClave[k].ausencias.push({
-        colaborador,
-        posicion: c[idx('posicion')] || '',
-        turno: clavePorNombre(c[idx('turno')], TURNOS, 'manana'),
-        motivo: clavePorNombre(c[idx('motivo')], MOTIVOS_AUSENCIA, 'otro'),
-        aviso: clavePorNombre(c[idx('aviso')], AVISOS, 'no'),
-        quienAviso: c[idx('quienaviso')] || '',
-        horaAviso: c[idx('hora')] || c[idx('horaaviso')] || ''
-      });
-    });
-    return Object.values(porClave);
-  }
-
-  const normalizarClave = t => String(t || '').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z]/g, '');
-
-  /* Acepta tanto el id como el nombre visible del turno, motivo o aviso. */
-  function clavePorNombre(valor, lista, porDefecto) {
-    const v = normalizarClave(valor);
-    if (!v) return porDefecto;
-    const hallado = lista.find(x => normalizarClave(x.id) === v || normalizarClave(x.nombre).startsWith(v));
-    return hallado ? hallado.id : porDefecto;
-  }
-
-  /* ========================= VISTA: PARTE DIARIO ==================== */
-  let fechaParte = null;      // día que se está mirando
-  let parteAbierto = null;    // sucursal con el parte desplegado
-
-  function vistaParte() {
-    const e = Store.get();
-    contexto = e;
-    if (!fechaParte) fechaParte = hoyISO();
-    const d = consolidarDia(e.partes, e.sucursales, fechaParte);
-    const ayer = diaAnterior(fechaParte);
-    const dAyer = consolidarDia(e.partes, e.sucursales, ayer);
-    d.filas.forEach(f => {
-      const fa = dAyer.filas.find(x => x.sucursal.id === f.sucursal.id);
-      f.horasAyer = fa ? fa.calc.horas : 0;
-    });
-    const periodo = fechaParte.slice(0, 7);
-    const hs = acumuladoHorasArea(e.partes, e.sucursales, periodo);
-
-    const fila = f => {
-      const s = f.sucursal, c = f.calc;
-      const abierto = parteAbierto === s.id;
-      const estado = !f.reportado
-        ? '<span class="chip ambar">sin reportar</span>'
-        : (f.parte.sinNovedad && !c.ausentes
-            ? '<span class="chip verde">sin novedad</span>'
-            : `<span class="chip ${c.ausentes ? 'rojo' : 'verde'}">${c.ausentes} ausente${c.ausentes === 1 ? '' : 's'}</span>`);
-
-      return `<tr>
-        <td><strong>${esc(s.nombre || s.codigo)}</strong>
-          ${s.localidad ? `<div style="font-size:11px;color:var(--texto-suave)">${esc(s.localidad)}</div>` : ''}</td>
-        <td>${estado}</td>
-        ${TURNOS.map(t => {
-          const ct = c.porTurno.find(x => x.id === t.id);
-          if (!ct.activo) return '<td class="num" style="color:var(--texto-suave)">—</td>';
-          return `<td class="num">${ct.dotacion ? `${ct.presentes}/${ct.dotacion}` : '<span style="color:var(--texto-suave)">sin dotación</span>'}</td>`;
-        }).join('')}
-        <td class="num">${c.presentismo === null ? '—' : fmtPct(c.presentismo, 1)}</td>
-        <td class="num">${c.sinAviso || '—'}</td>
-        <td class="num">${f.horasAyer ? fmtNum(f.horasAyer, 1) : '—'}</td>
-        <td>${f.reportado ? esc(f.parte.reportadoPor || '—') : '—'}</td>
-        <td class="num" style="white-space:nowrap">
-          <button class="mini" data-accion="abrir-parte" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${abierto ? 'Cerrar' : 'Cargar'}</button>
-          ${f.reportado ? `<button class="mini" data-accion="borrar-parte" data-id="${f.parte.id}">✕</button>` : ''}
-        </td>
-      </tr>
-      ${abierto ? detalleParte(s, f.parte) : ''}`;
-    };
-
-    return `
-      <h1 class="titulo">Parte diario de asistencia</h1>
-      <p class="subtitulo">
-        Lo que reportan las sucursales cada mañana: las ausencias de hoy y las horas extras de ayer.
-        Alimenta el presentismo del día, el ausentismo del mes y el acumulado de horas extras del área.
-      </p>
-
-      <section class="tarjeta">
-        <div class="grid c4">
-          <label class="campo"><span>Día</span>
-            <input type="date" id="fecha-parte" value="${esc(fechaParte)}"></label>
-          <div style="display:flex;align-items:flex-end;gap:8px">
-            <button class="b sec" data-accion="dia-anterior">← Día anterior</button>
-            <button class="b sec" data-accion="dia-hoy">Hoy</button>
-          </div>
-        </div>
-
-        <div class="kpis" style="margin-top:18px">
-          ${kpi('Presentismo del día', d.presentismo === null ? '—' : fmtPct(d.presentismo, 1),
-                d.dotacion ? `${d.presentes} de ${d.dotacion} puestos cubiertos` : 'falta cargar la dotación por turno',
-                d.presentismo === null ? '' : (d.presentismo >= 0.95 ? 'ok' : d.presentismo >= 0.9 ? 'aviso' : 'alerta'))}
-          ${kpi('Ausentes', d.ausentes, d.ausentes ? `${d.gestionables} gestionables` : 'ninguno reportado', d.ausentes ? 'aviso' : 'ok')}
-          ${kpi('Sin aviso', d.sinAviso, d.sinAviso ? 'requieren seguimiento' : 'todos avisaron', d.sinAviso ? 'alerta' : 'ok')}
-          ${kpi('Horas extras del ' + fmtFecha(ayer), dAyer.horas ? fmtNum(dAyer.horas, 1) + ' h' : '—',
-                dAyer.horas ? `${fmtNum(hs.total, 1)} h acumuladas en el mes` : 'ninguna reportada',
-                dAyer.horas ? 'aviso' : 'ok')}
-          ${kpi('Sucursales que reportaron', `${d.reportaron} / ${e.sucursales.length}`,
-                d.faltanReportar.length ? d.faltanReportar.map(x => x.nombre || x.codigo).join(', ').slice(0, 58) : 'todas al día',
-                d.faltanReportar.length ? 'aviso' : 'ok')}
-        </div>
-
-        <div class="tabla-scroll" style="margin-top:6px"><table>
-          <thead><tr>
-            <th>Sucursal</th><th>Estado</th>
-            ${TURNOS.map(t => `<th class="num">${esc(t.nombre)}</th>`).join('')}
-            <th class="num">Presentismo</th><th class="num">Sin aviso</th>
-            <th class="num">Hs. extras<br><span style="font-weight:400;font-size:10px">del día anterior</span></th>
-            <th>Reportó</th><th></th>
-          </tr></thead>
-          <tbody>${d.filas.map(fila).join('')}</tbody>
-        </table></div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Horas extras acumuladas — ${esc(periodo)}</h2>
-        <p class="ayuda">
-          Lo que va del mes, sucursal por sucursal. Es el sentido de pedirlas todos
-          los días: llegar a fin de mes sabiendo el número, no enterarse con la liquidación.
-        </p>
-
-        <div class="kpis">
-          ${kpi('Horas del mes', fmtNum(hs.total, 1) + ' h',
-                hs.personas ? `${hs.personas} colaborador${hs.personas === 1 ? '' : 'es'} con horas` : 'sin horas cargadas', 'ok')}
-          ${kpi('Proyección de cierre', hs.proyectable ? fmtNum(hs.proyeccion, 1) + ' h' : '—',
-                hs.proyectable
-                  ? `al ritmo de los ${hs.diasCubiertos} días cargados, sobre ${hs.diasDelMes}`
-                  : `con ${hs.diasCubiertos} día${hs.diasCubiertos === 1 ? '' : 's'} cargado${hs.diasCubiertos === 1 ? '' : 's'} todavía no se proyecta`,
-                'aviso')}
-          ${kpi('Equivalente en FTE', hs.total ? fmtNum(hs.total / (e.config.parametros.horasMes || 200), 2) : '—',
-                `sobre ${e.config.parametros.horasMes || 200} horas mensuales`, 'ok')}
-          ${kpi('Principal motivo', (() => {
-              const top = MOTIVOS_HORAS.map(m => ({ m, h: hs.porMotivo[m.id] || 0 })).sort((a, b) => b.h - a.h)[0];
-              return top && top.h ? top.m.nombre : '—';
-            })(),
-            (() => {
-              const top = MOTIVOS_HORAS.map(m => ({ m, h: hs.porMotivo[m.id] || 0 })).sort((a, b) => b.h - a.h)[0];
-              return top && top.h ? `${fmtNum(top.h, 1)} h · ${fmtPct(top.h / hs.total, 0)} del total` : 'sin horas cargadas';
-            })(), 'ok')}
-        </div>
-
-        <div class="tabla-scroll"><table>
-          <thead><tr>
-            <th>Sucursal</th>
-            ${MOTIVOS_HORAS.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
-            <th class="num">Total</th><th class="num">Personas</th><th class="num">Días con horas</th>
-          </tr></thead>
-          <tbody>
-            ${hs.filas.filter(f => f.horas).length
-              ? hs.filas.filter(f => f.horas).sort((a, b) => b.horas - a.horas).map(f => `<tr>
-                  <td><strong>${esc(f.sucursal.nombre || f.sucursal.codigo)}</strong></td>
-                  ${MOTIVOS_HORAS.map(m => `<td class="num">${f.porMotivo[m.id] ? fmtNum(f.porMotivo[m.id], 1) : '—'}</td>`).join('')}
-                  <td class="num"><strong>${fmtNum(f.horas, 1)}</strong></td>
-                  <td class="num">${f.personas}</td>
-                  <td class="num">${f.diasConHoras}</td>
-                </tr>`).join('')
-              : `<tr><td colspan="${MOTIVOS_HORAS.length + 4}" class="vacio">Todavía no se cargaron horas extras en ${esc(periodo)}.</td></tr>`}
-          </tbody>
-          ${hs.total ? `<tfoot><tr>
-            <td><strong>Área ${esc(String(e.config.area || '').replace(/^área /i, ''))}</strong></td>
-            ${MOTIVOS_HORAS.map(m => `<td class="num">${hs.porMotivo[m.id] ? fmtNum(hs.porMotivo[m.id], 1) : '—'}</td>`).join('')}
-            <td class="num"><strong>${fmtNum(hs.total, 1)}</strong></td>
-            <td class="num">${hs.personas}</td><td class="num"></td>
-          </tr></tfoot>` : ''}
-        </table></div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Pedido diario por WhatsApp</h2>
-        <p class="ayuda">
-          El mensaje que mandás al grupo, con el link del formulario que completan las sucursales.
-          El link se carga una sola vez en Configuración.
-        </p>
-        <pre class="reporte" id="mensaje-wsp">${esc(mensajeWhatsApp(e.config, fechaParte))}</pre>
-        <div class="acciones">
-          <button class="b" data-accion="copiar-wsp">Copiar el mensaje</button>
-          ${e.config.linkParteDiario
-            ? `<a class="b sec" href="https://wa.me/?text=${encodeURIComponent(mensajeWhatsApp(e.config, fechaParte))}" target="_blank" rel="noopener" style="text-decoration:none">Abrir WhatsApp</a>`
-            : '<span class="chip ambar">falta el link del formulario</span>'}
-        </div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Traer los partes del formulario</h2>
-        <p class="ayuda">
-          Pegá lo que devuelve el formulario, o traelo del endpoint si lo configuraste.
-          Las sucursales que no se reconozcan se listan en lugar de descartarse.
-        </p>
-        <textarea id="pegar-partes" style="min-height:90px" placeholder='Pegá acá el JSON o el CSV que exporta la planilla del formulario'></textarea>
-        <div class="acciones">
-          <button class="b" data-accion="importar-partes">Importar lo pegado</button>
-          ${e.config.endpointPartes ? '<button class="b sec" data-accion="traer-partes">Traer del endpoint</button>' : ''}
-        </div>
-        <div id="resultado-import"></div>
-      </section>`;
-  }
-
-  function detalleParte(s, parte) {
-    const p = parte || { ausencias: [], sinNovedad: false, reportadoPor: '' };
-    const idx = Store.get().partes.indexOf(p);
-    const ruta = c => `partes.${idx}.${c}`;
-
-    return `<tr class="ficha-fila"><td colspan="${TURNOS.length + 6}"><div class="talent-card">
-      <div class="tc-cab">
-        <div><strong>${esc(s.nombre || s.codigo)}</strong>
-          <span>${TURNOS.map(t => {
-            const cfg = (s.turnos || {})[t.id] || {};
-            return cfg.activo === false ? '' :
-              `${t.nombre} ${cfg.desde || t.desde}–${cfg.hasta || t.hasta}${cfg.dotacion ? ` (${cfg.dotacion})` : ''}`;
-          }).filter(Boolean).join(' · ')}</span></div>
-      </div>
-
-      ${idx < 0 ? '' : `
-      <div class="grid c3">
-        <label class="campo"><span>Quién reporta</span>
-          <input data-path="${ruta('reportadoPor')}" value="${esc(p.reportadoPor)}" placeholder="Gerente o encargado"></label>
-        <label class="campo"><span>Novedades</span>
-          <select data-path="${ruta('sinNovedad')}" data-calc="1">
-            <option value=""${!p.sinNovedad ? ' selected' : ''}>Hay ausencias</option>
-            <option value="si"${p.sinNovedad ? ' selected' : ''}>Sin novedad, equipo completo</option>
-          </select></label>
-      </div>
-
-      ${p.sinNovedad ? '' : `
-      <h4>Ausencias del día</h4>
-      <div class="tabla-scroll"><table>
-        <thead><tr><th>Colaborador</th><th>Posición</th><th>Turno</th><th>Motivo</th><th>¿Avisó?</th><th>Quién avisó</th><th>Hora</th><th></th></tr></thead>
-        <tbody>
-        ${p.ausencias.length ? p.ausencias.map((a, j) => `<tr>
-          <td><input data-path="${ruta('ausencias.' + j + '.colaborador')}" data-calc="1" value="${esc(a.colaborador)}"
-                     list="plantel-${s.id}" placeholder="Apellido y nombre"></td>
-          <td><select data-path="${ruta('ausencias.' + j + '.posicion')}">
-            <option value="">—</option>
-            ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${a.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
-          </select></td>
-          <td><select data-path="${ruta('ausencias.' + j + '.turno')}" data-calc="1">
-            ${TURNOS.map(t => `<option value="${t.id}"${a.turno === t.id ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')}
-          </select></td>
-          <td><select data-path="${ruta('ausencias.' + j + '.motivo')}" data-calc="1">
-            ${MOTIVOS_AUSENCIA.map(m => `<option value="${m.id}"${a.motivo === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
-          </select></td>
-          <td><select data-path="${ruta('ausencias.' + j + '.aviso')}" data-calc="1">
-            ${AVISOS.map(x => `<option value="${x.id}"${a.aviso === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
-          </select></td>
-          <td><input data-path="${ruta('ausencias.' + j + '.quienAviso')}" value="${esc(a.quienAviso)}" placeholder="El colaborador, un familiar"></td>
-          <td><input type="time" data-path="${ruta('ausencias.' + j + '.horaAviso')}" value="${esc(a.horaAviso)}"></td>
-          <td class="num"><button class="mini" data-accion="borrar-item" data-arr="${ruta('ausencias')}" data-idx="${j}">✕</button></td>
-        </tr>`).join('') : '<tr><td colspan="8" class="vacio">Sin ausencias cargadas.</td></tr>'}
-        </tbody>
-      </table></div>
-      <div class="acciones"><button class="b sec" data-accion="agregar-ausencia" data-id="${s.id}">+ Agregar ausencia</button></div>`}
-
-      ${bloqueHoras(s)}
-
-      <datalist id="plantel-${s.id}">
-        ${(s.colaboradores || []).map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
-      </datalist>
-      `}
-    </div></td></tr>`;
-  }
-
-  /**
-   * Horas extras del día anterior. Se piden al día siguiente —el martes las
-   * del lunes— pero se guardan en el parte del día en que se trabajaron, que
-   * es lo que hace que el acumulado del mes cierre.
-   */
-  function bloqueHoras(s) {
-    const dia = diaAnterior(fechaParte || hoyISO());
-    const parte = Store.parteDe(s.id, dia);
-    const idx = parte ? Store.get().partes.indexOf(parte) : -1;
-    const lista = (parte && parte.horasExtras) || [];
-    const total = lista.reduce((a, h) => a + (parseFloat(String(h.horas).replace(',', '.')) || 0), 0);
-    const ruta = c => `partes.${idx}.${c}`;
-
-    return `
-      <h4 style="margin-top:22px">Horas extras del ${fmtFecha(dia)}
-        ${total ? `<span class="chip azul">${fmtNum(total, 1)} h</span>` : ''}</h4>
-      <p class="ayuda" style="margin-top:-4px">
-        Se cargan al día siguiente, con el turno ya cerrado. Quedan imputadas al
-        ${fmtFecha(dia)} y alimentan el acumulado del mes de la sucursal.
-      </p>
-
-      ${idx < 0 || !lista.length
-        ? '<p class="vacio" style="padding:10px 0">Sin horas extras cargadas para ese día.</p>'
-        : `<div class="tabla-scroll"><table>
-        <thead><tr><th>Colaborador</th><th>Posición</th><th class="num">Horas</th><th>Motivo</th><th>Autorizó</th><th></th></tr></thead>
-        <tbody>
-        ${lista.map((h, j) => `<tr>
-          <td><input data-path="${ruta('horasExtras.' + j + '.colaborador')}" data-calc="1" value="${esc(h.colaborador)}"
-                     list="plantel-${s.id}" placeholder="Apellido y nombre"></td>
-          <td><select data-path="${ruta('horasExtras.' + j + '.posicion')}">
-            <option value="">—</option>
-            ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${h.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
-          </select></td>
-          <td class="num" style="width:90px"><input type="number" step="0.5" min="0" class="num"
-                     data-path="${ruta('horasExtras.' + j + '.horas')}" data-calc="1" value="${esc(h.horas)}"></td>
-          <td><select data-path="${ruta('horasExtras.' + j + '.motivo')}" data-calc="1">
-            ${MOTIVOS_HORAS.map(m => `<option value="${m.id}"${h.motivo === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
-          </select></td>
-          <td><input data-path="${ruta('horasExtras.' + j + '.autorizadoPor')}" value="${esc(h.autorizadoPor)}" placeholder="Quién la autorizó"></td>
-          <td class="num"><button class="mini" data-accion="borrar-item" data-arr="${ruta('horasExtras')}" data-idx="${j}">✕</button></td>
-        </tr>`).join('')}
-        </tbody></table></div>`}
-
-      <div class="acciones">
-        <button class="b sec" data-accion="agregar-hora" data-id="${s.id}" data-fecha="${esc(dia)}">+ Agregar hora extra del ${fmtFecha(dia)}</button>
-      </div>`;
-  }
-
   /* ===================== VISTA: INFORME MENSUAL ==================== *
      El informe del mes es de la sucursal, no de una visita: consolida todas
-     las visitas del período y el parte diario. Por eso vive acá y no adentro
-     de una visita. */
+     las visitas del período. Por eso vive acá y no adentro de una visita. */
   let informeSuc = null;
   let informePeriodo = null;
 
@@ -687,15 +307,16 @@ const App = (() => {
           ${kpi('Ausentismo', c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal),
                 `${c.ausentismo.totalDias} días`,
                 c.ausentismo.pctTotal !== null && c.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
-          ${kpi('Horas extras', d.parte.horas ? fmtNum(d.parte.horas, 1) + ' h' : (c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) + ' h' : '—'),
-                d.parte.horas ? 'cargadas día a día en el parte' : 'según la matriz de FTE', d.parte.horas ? 'aviso' : '')}
+          ${kpi('Horas extras', c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) + ' h' : '—',
+                c.matriz.total.ratioExtras === null ? 'sin horas teóricas para comparar' : fmtPct(c.matriz.total.ratioExtras) + ' de las teóricas',
+                c.matriz.total.ratioExtras !== null && c.matriz.total.ratioExtras > e.config.parametros.umbralHorasExtras ? 'alerta' : 'ok')}
           ${kpi('Rotación anualizada', c.rotacion.proyeccionAnual === null ? '—' : fmtPct(c.rotacion.proyeccionAnual, 1),
                 `${c.rotacion.bajas} bajas en el mes`)}
         </div>
 
         ${d.sinVisita ? `<div class="aviso-caja">
-          <strong>El período no tiene ninguna visita cargada.</strong> El informe se arma igual con
-          lo que reportaron las sucursales en el parte diario, y el resto queda como pendiente.
+          <strong>El período no tiene ninguna visita cargada.</strong> El informe se arma igual,
+          con los indicadores marcados como pendientes.
           ${e.sucursales.length ? `<br><button class="b sec" data-accion="nueva-visita" data-id="${s.id}" style="margin-top:10px">Registrar una visita</button>` : ''}
         </div>` : ''}
 
@@ -764,28 +385,6 @@ const App = (() => {
         ${campo('Localidad o partido', `sucursales.${i}.localidad`)}
       </div>
       <div style="margin-top:12px">${campo('Horario de atención', `sucursales.${i}.horario`, { tipo: 'textarea', alto: 60 })}</div>
-
-      <h4>Turnos y dotación esperada</h4>
-      <p class="ayuda" style="margin:0 0 10px">
-        La dotación de cada turno es contra lo que se mide el presentismo diario. Los horarios salen del
-        horario de atención; ajustalos si no coinciden.
-      </p>
-      <div class="tabla-scroll"><table>
-        <thead><tr><th>Turno</th><th>Activo</th><th>Desde</th><th>Hasta</th><th class="num">Dotación</th></tr></thead>
-        <tbody>${TURNOS.map(t => {
-          const cfg = (s.turnos || {})[t.id] || {};
-          return `<tr>
-            <td><strong>${esc(t.nombre)}</strong></td>
-            <td><select data-path="sucursales.${i}.turnos.${t.id}.activo" data-calc="1">
-              <option value="si"${cfg.activo !== false ? ' selected' : ''}>Sí</option>
-              <option value=""${cfg.activo === false ? ' selected' : ''}>No aplica</option>
-            </select></td>
-            <td><input type="time" data-path="sucursales.${i}.turnos.${t.id}.desde" value="${esc(cfg.desde || t.desde)}"></td>
-            <td><input type="time" data-path="sucursales.${i}.turnos.${t.id}.hasta" value="${esc(cfg.hasta || t.hasta)}"></td>
-            <td class="num"><input class="num" type="number" data-path="sucursales.${i}.turnos.${t.id}.dotacion" data-calc="1" value="${esc(cfg.dotacion)}" style="width:70px"></td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table></div>
 
       <h4>Referentes</h4>
       <div class="grid c3">
@@ -870,11 +469,6 @@ const App = (() => {
           ${campo('Su email', 'gerenteOperaciones.email', { tipo: 'email', placeholder: 'nombre@empresa.com' })}
           ${campo('Copias (separadas por coma)', 'copias', { placeholder: 'rrhh@empresa.com, gerencia@empresa.com' })}
         </div>
-        <div class="grid c2" style="margin-top:14px">
-          ${campo('Link del formulario del parte diario', 'linkParteDiario', { calc: true, placeholder: 'El que compartís por WhatsApp' })}
-          ${campo('Endpoint para traer los partes (opcional)', 'endpointPartes', { calc: true, placeholder: 'URL que devuelve el JSON de los partes' })}
-        </div>
-
         <div class="grid" style="margin-top:14px">
           ${campo('Endpoint de envío automático (opcional)', 'webhook', { placeholder: 'https://hook.make.com/... o URL de Google Apps Script' })}
         </div>
@@ -1090,26 +684,6 @@ const App = (() => {
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
         ${avisoAltasBajas(v, c, p)}
-        ${(() => {
-          const ac = acumuladoMes(Store.get().partes, v.sucursalId, v.periodo);
-          if (!ac.horas) return '';
-          const cargadas = c.matriz.total.horasExtras;
-          const dif = ac.horas - cargadas;
-          const motivos = MOTIVOS_HORAS
-            .map(m => ({ m, h: ac.horasPorMotivo[m.id] || 0 })).filter(x => x.h)
-            .sort((a, b) => b.h - a.h)
-            .map(x => `${x.m.nombre.toLowerCase()} ${fmtNum(x.h, 1)} h`).join(', ');
-          return `<div class="aviso-caja info">
-            <strong>Según el parte diario</strong>, en ${esc(v.periodo)} esta sucursal acumula
-            <strong>${fmtNum(ac.horas, 1)} horas extras</strong> sobre ${ac.diasConHoras} día${ac.diasConHoras === 1 ? '' : 's'}:
-            ${esc(motivos)}.
-            ${cargadas
-              ? (Math.abs(dif) < 0.5
-                  ? 'Coincide con lo cargado en la matriz.'
-                  : `En la matriz hay ${fmtNum(cargadas, 1)} h, ${dif > 0 ? `faltan ${fmtNum(dif, 1)}` : `hay ${fmtNum(-dif, 1)} de más`}.`)
-              : 'Todavía no cargaste horas extras en la matriz de abajo.'}
-          </div>`;
-        })()}
         <div class="tabla-scroll"><table>
           <thead><tr>
             <th>Posición</th><th class="num">Mes completo<br><small style="font-weight:400;text-transform:none">personas</small></th>
@@ -1204,26 +778,17 @@ const App = (() => {
         <h2>3. Ausentismo por concepto</h2>
         <p class="ayuda">
           Días de ausencia del período, con la apertura del tablero de estadísticas.
+          El corte es si la ausencia se podía evitar o no: lo <strong>controlable</strong> es sobre lo que
+          la tienda y RRHH pueden trabajar; lo <strong>no controlable</strong> se planifica, no se gestiona.
           La base de cálculo son los ${fmtNum(base, 0)} días de vínculo que surgen de la matriz de FTE.
           Cargar acá el detalle no modifica el FTE: para eso está la columna “Días ausentes” de la matriz.
         </p>
         ${!base ? '<div class="aviso-caja">Cargá primero el headcount en la solapa <strong>FTE y Costo</strong> para poder calcular porcentajes.</div>' : ''}
         ${avisoDesvioAusentismo(c)}
-        ${(() => {
-          const ac = acumuladoMes(Store.get().partes, v.sucursalId, v.periodo);
-          if (!ac.diasAusencia) return '';
-          return `<div class="aviso-caja info">
-            <strong>Según el parte diario</strong>, en ${esc(v.periodo)} esta sucursal acumula
-            <strong>${ac.diasAusencia}</strong> día${ac.diasAusencia === 1 ? '' : 's'} de ausencia
-            sobre ${ac.diasConParte} día${ac.diasConParte === 1 ? '' : 's'} reportado${ac.diasConParte === 1 ? '' : 's'},
-            de los cuales ${ac.gestionables} son gestionables y ${ac.sinAviso} fueron sin aviso.
-            Sirve para contrastar contra lo que cargues acá.
-          </div>`;
-        })()}
         ${c.ausentismo.sinApertura ? `<div class="aviso-caja info">
           Todavía no hay apertura por concepto. Mientras tanto, el ausentismo del período se toma de los
           <strong>${fmtNum(c.ausentismo.diasMatriz, 0)}</strong> días cargados en la matriz de FTE.
-          Al desagregarlos acá abajo vas a poder separar lo gestionable de lo que no lo es.
+          Al desagregarlos acá abajo vas a poder separar lo evitable de lo que no lo es.
         </div>` : ''}
 
         ${c.ausentismo.grupos.map(g => `
@@ -1231,12 +796,22 @@ const App = (() => {
             <span class="chip">${g.dias} días · ${fmtPct(g.pct)}</span></h3>
           <p class="ayuda" style="margin:0 0 10px">${esc(g.ayuda)}</p>
           <div class="grid c4">
-            ${g.conceptos.map(x => campo(`${x.nombre} (${x.cod})`, `ausentismo.detalle.${x.cod}`, { tipo: 'number', calc: true })).join('')}
+            ${g.conceptos.map(x => campo(
+                `${x.nombre} (${x.cod})${x.inactivo ? ' ·' : ''}`,
+                `ausentismo.detalle.${x.cod}`,
+                { tipo: 'number', calc: true,
+                  titulo: x.inactivo ? 'Días que el colaborador no percibe haberes de la empresa' : '' })).join('')}
           </div>`).join('')}
+        <p class="ayuda" style="margin-top:6px">
+          Los conceptos marcados con · son días que el colaborador no percibe de la empresa:
+          los paga un tercero (ART, ANSES) o no se pagan. Es un dato de costo, aparte de si la
+          ausencia se podía evitar.
+        </p>
 
         <div class="kpis" style="margin-top:20px">
           ${kpi('Ausentismo total', fmtPct(c.ausentismo.pctTotal), `${c.ausentismo.totalDias} días`)}
-          ${kpi('Días gestionables', c.ausentismo.diasGestionables, fmtPct(c.ausentismo.pctGestionable) + ' de la base', 'aviso')}
+          ${kpi('Días evitables', c.ausentismo.diasGestionables, fmtPct(c.ausentismo.pctGestionable) + ' de la base · sobre esto se puede trabajar', 'aviso')}
+          ${kpi('Sin goce de haberes', c.ausentismo.diasInactivos, c.ausentismo.diasInactivos ? 'los paga un tercero o no se pagan' : 'ninguno')}
           ${kpi('Impacto en FTE', fmtNum(c.ausentismo.totalDias / Store.get().config.parametros.diasMes), 'FTE perdidos por ausencia')}
         </div>
       </section>`;
@@ -1838,8 +1413,7 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'parte')          { vistaActual = vistaParte;      html = vistaParte(); }
-    else if (ruta[0] === 'informe')   { vistaActual = vistaInforme;    html = vistaInforme(); }
+    if (ruta[0] === 'informe')        { vistaActual = vistaInforme;    html = vistaInforme(); }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -2051,99 +1625,6 @@ const App = (() => {
         Store.save(); refrescar();
       }
 
-      /* --- parte diario --- */
-      if (a === 'dia-anterior' || a === 'dia-hoy') {
-        if (a === 'dia-hoy') fechaParte = hoyISO();
-        else {
-          const d = new Date((fechaParte || hoyISO()) + 'T12:00:00');
-          d.setDate(d.getDate() - 1);
-          fechaParte = d.toISOString().slice(0, 10);
-        }
-        parteAbierto = null;
-        refrescar();
-      }
-
-      if (a === 'abrir-parte') {
-        if (parteAbierto === btn.dataset.id) parteAbierto = null;
-        else {
-          parteAbierto = btn.dataset.id;
-          Store.asegurarParte(btn.dataset.id, fechaParte || hoyISO());
-        }
-        refrescar();
-      }
-
-      if (a === 'borrar-parte') {
-        const ok = await confirmar('Borrar el parte del día',
-          'Se pierden las ausencias cargadas para esa sucursal en esa fecha.', 'Borrar parte');
-        if (ok) { Store.eliminarParte(btn.dataset.id); parteAbierto = null; refrescar(); avisar('Parte borrado.'); }
-      }
-
-      if (a === 'agregar-ausencia') {
-        const p = Store.asegurarParte(btn.dataset.id, fechaParte || hoyISO());
-        const s = Store.sucursal(btn.dataset.id);
-        p.sinNovedad = false;
-        p.ausencias.push({
-          colaborador: '', posicion: '', turno: turnoSugerido(s),
-          motivo: MOTIVOS_AUSENCIA[0].id, aviso: 'previo', quienAviso: '', horaAviso: ''
-        });
-        Store.save(); refrescar();
-      }
-
-      if (a === 'agregar-hora') {
-        const p = Store.asegurarParte(btn.dataset.id, btn.dataset.fecha);
-        p.horasExtras = p.horasExtras || [];
-        p.horasExtras.push({ colaborador: '', posicion: '', horas: '',
-                             motivo: MOTIVOS_HORAS[0].id, autorizadoPor: '' });
-        Store.save(); refrescar();
-      }
-
-      if (a === 'copiar-wsp') {
-        const texto = mensajeWhatsApp(e.config, fechaParte || hoyISO());
-        try {
-          await navigator.clipboard.writeText(texto);
-          btn.textContent = '\u2713 Copiado';
-          setTimeout(() => { btn.textContent = 'Copiar el mensaje'; }, 1800);
-        } catch (err) {
-          const pre = $('#mensaje-wsp');
-          if (pre) { const r = document.createRange(); r.selectNode(pre); getSelection().removeAllRanges(); getSelection().addRange(r); }
-          avisar('No se pudo copiar solo. El mensaje quedo seleccionado: copialo con Ctrl+C.', 'error');
-        }
-      }
-
-      if (a === 'importar-partes' || a === 'traer-partes') {
-        let crudo = '';
-        if (a === 'traer-partes') {
-          try {
-            const resp = await fetch(e.config.endpointPartes);
-            crudo = await resp.text();
-          } catch (err) {
-            return avisar('No se pudo traer del endpoint: ' + err.message, 'error');
-          }
-        } else {
-          crudo = ($('#pegar-partes') || {}).value || '';
-          if (!crudo.trim()) return avisar('Pega primero lo que devuelve el formulario.', 'error');
-        }
-
-        let filas;
-        try { filas = interpretarPartes(crudo); }
-        catch (err) { return avisar('No se pudo leer el contenido: ' + err.message, 'error'); }
-        if (!filas.length) return avisar('No se encontro ninguna fila para importar.', 'error');
-
-        const r = Store.importarPartes(filas);
-        refrescar();
-        const caja = $('#resultado-import');
-        if (caja) {
-          caja.innerHTML = `<p class="ayuda" style="margin-top:10px">
-            ${r.nuevos} parte${r.nuevos === 1 ? '' : 's'} nuevo${r.nuevos === 1 ? '' : 's'},
-            ${r.actualizados} actualizado${r.actualizados === 1 ? '' : 's'}.</p>` +
-            (r.sinReconocer.length
-              ? `<p class="ayuda" style="color:var(--rojo)">Quedaron afuera ${r.sinReconocer.length} fila(s) con sucursal o fecha no reconocida:
-                 ${esc(r.sinReconocer.map(x => x.sucursal || '(sin sucursal)').join(', ').slice(0, 200))}.
-                 Revisa que el nombre coincida con el codigo o el nombre de la sucursal.</p>`
-              : '');
-        }
-      }
-
       /* --- informe mensual --- */
       if (a === 'enviar-informe' || a === 'copiar-informe' || a === 'descargar-informe') {
         const suc = Store.sucursal(informeSuc);
@@ -2261,12 +1742,6 @@ const App = (() => {
       }
       if (ev.target.id === 'informe-periodo') {
         informePeriodo = ev.target.value;
-        refrescar();
-        return;
-      }
-      if (ev.target.id === 'fecha-parte') {
-        fechaParte = ev.target.value || hoyISO();
-        parteAbierto = null;
         refrescar();
         return;
       }

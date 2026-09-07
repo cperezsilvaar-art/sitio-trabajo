@@ -13,7 +13,7 @@ formulario, no como información de las sucursales a cargo.
 | `DOT` | Modelo de dotación en *heads* y *FTU's*: dotación estable, prorrateo de ingresos y egresos, horas extras y ausencias. Es la validación de la fórmula de FTE |
 | `ORG` | Idea de estructura de tienda por niveles de mando |
 | `ESTADISTICA (1)` | Planilla de sanciones: tipo, motivo, puesto, sector |
-| `ESTADISTICA (2)` | Conceptos de ausentismo con su código, agrupados en inactivo / activo controlable / activo incontrolable |
+| `ESTADISTICA (2)` | Conceptos de ausentismo con su código. El panel los reagrupa en controlable / no controlable, según si la ausencia se podía evitar |
 | `ESTADISTICA (3)` | Registro de altas y bajas con motivo |
 | `ESTADISTICA (4)` y `(5)` | Fórmulas de rotación: dotación promedio, rotación mensual, proyección anual, acumulado |
 | `ESTADISTICA (6)` | Bajas por posición |

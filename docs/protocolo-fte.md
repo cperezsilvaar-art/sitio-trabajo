@@ -97,18 +97,30 @@ Cuando el FTE Real de una posición es cero, el costo por FTE queda en
 % ausentismo = días de ausencia ÷ días de vínculo del período
 ```
 
-Los conceptos se agrupan en tres bloques, con los códigos de la planilla original:
+El corte que decide qué se puede hacer es si la ausencia **se podía evitar o
+no**, con los códigos de la planilla original:
 
-- **Inactivo** — ART +10 días (031), permiso sin goce (082), suspensión (083),
-  ausente con aviso (080), ausente sin aviso (081), maternidad (089), enfermo
-  injustificado (084).
-- **Activo controlable** — permiso con goce, enfermedad (085), accidente (086).
-- **Activo incontrolable** — licencias legales (050 a 059), vacaciones (071),
-  licencia de repartición oficial.
+- **Controlable (evitable)** — se origina en factores donde la organización o el
+  propio colaborador pueden incidir: ausente sin aviso (081), ausente con aviso
+  (080), enfermo injustificado (084), permiso sin goce (082), suspensión (083) y
+  permiso con goce. Entran acá las faltas injustificadas, los temas personales
+  postergables, lo que se explica por clima o motivación, y lo que se repite por
+  mala organización del tiempo.
 
-Los **días gestionables** son la suma de inactivo + activo controlable: es la
-porción sobre la que la tienda y RRHH pueden incidir, y la que corresponde
-discutir con el Gerente de Tienda.
+- **No controlable (inevitable)** — enfermedad (085) y accidente (086)
+  comprobados, accidente laboral a cargo de ART (031), maternidad (089), las
+  licencias amparadas por ley (050 a 059), vacaciones (071), licencia de
+  repartición oficial, y la fuerza mayor. No se gestionan: se planifican.
+
+Los **días evitables** son los del primer grupo, y son los que corresponde
+discutir con el Gerente de Tienda. Que una ausencia pese en la cobertura no la
+vuelve gestionable: una licencia por maternidad hay que cubrirla, no reducirla.
+
+**Sin goce de haberes** es un atributo aparte, no un tercer grupo: marca los días
+que el colaborador no cobra de la empresa —los paga un tercero (ART, ANSES) o no
+se pagan—. Cruza los dos grupos: una suspensión y una licencia por maternidad
+son las dos sin goce, y solo la primera es evitable. Sirve para leer el costo,
+no para decidir sobre qué trabajar.
 
 **Verificación — consolidado de la planilla de ausentismo.** 277 días sobre 4.890
 de vínculo dan 5,6646%, valor que el tablero reproduce.

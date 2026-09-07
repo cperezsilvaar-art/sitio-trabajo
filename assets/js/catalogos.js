@@ -26,37 +26,46 @@ const POSICIONES = [
 /* ------------------------------------------------------------------ *
  * 2. Conceptos de ausentismo — TD01, ESTADISTICA (2)                   *
  *    El código entre paréntesis es el de la planilla original.         *
+ *                                                                      *
+ * El corte que importa es si la ausencia se puede evitar o no:         *
+ *                                                                      *
+ *   CONTROLABLE (evitable): se origina en factores donde la tienda o   *
+ *   el propio colaborador pueden incidir —faltas injustificadas, temas *
+ *   personales postergables, clima, organización del tiempo—. Es sobre *
+ *   estos días que la gestión de RRHH puede trabajar.                  *
+ *                                                                      *
+ *   NO CONTROLABLE (inevitable): enfermedad o accidente comprobados,   *
+ *   accidente laboral, licencias amparadas por ley y fuerza mayor. No  *
+ *   se gestionan: se planifican.                                       *
+ *                                                                      *
+ * `inactivo` es otra cosa y por eso es un atributo, no un grupo: marca *
+ * los días que el colaborador no percibe haberes de la empresa (los    *
+ * paga un tercero, o no se pagan). Sirve para el costo, no para saber  *
+ * si la ausencia se podía evitar.                                      *
  * ------------------------------------------------------------------ */
 const AUSENTISMO_GRUPOS = [
   {
-    id: 'inactivo',
-    nombre: 'Inactivo',
-    ayuda: 'El colaborador no percibe haberes o está fuera de nómina activa.',
-    conceptos: [
-      { cod: '031', nombre: 'Accidente +10 días a cargo ART' },
-      { cod: '082', nombre: 'Permiso sin goce de haberes' },
-      { cod: '083', nombre: 'Suspensión' },
-      { cod: '080', nombre: 'Ausente con aviso' },
-      { cod: '081', nombre: 'Ausente sin aviso' },
-      { cod: '089', nombre: 'Maternidad' },
-      { cod: '084', nombre: 'Enfermo injustificado' }
-    ]
-  },
-  {
     id: 'controlable',
-    nombre: 'Activo controlable',
-    ayuda: 'Ausencias sobre las que la gestión de RRHH y el gerente pueden incidir.',
+    nombre: 'Controlable (evitable)',
+    ayuda: 'Se originan en factores donde la tienda o el colaborador pueden incidir. Es lo que la gestión puede bajar.',
     conceptos: [
-      { cod: '---', nombre: 'Permiso con goce de haberes' },
-      { cod: '085', nombre: 'Enfermedad' },
-      { cod: '086', nombre: 'Accidente' }
+      { cod: '081', nombre: 'Ausente sin aviso',              inactivo: true },
+      { cod: '080', nombre: 'Ausente con aviso',              inactivo: true },
+      { cod: '084', nombre: 'Enfermo injustificado',          inactivo: true },
+      { cod: '082', nombre: 'Permiso sin goce de haberes',    inactivo: true },
+      { cod: '083', nombre: 'Suspensión',                     inactivo: true },
+      { cod: '---', nombre: 'Permiso con goce de haberes' }
     ]
   },
   {
     id: 'incontrolable',
-    nombre: 'Activo incontrolable',
-    ayuda: 'Licencias legales y vacaciones: no son gestionables, pero sí planificables.',
+    nombre: 'No controlable (inevitable)',
+    ayuda: 'Enfermedad y accidente comprobados, licencias legales y fuerza mayor. No se evitan; se planifican.',
     conceptos: [
+      { cod: '085', nombre: 'Enfermedad' },
+      { cod: '086', nombre: 'Accidente' },
+      { cod: '031', nombre: 'Accidente +10 días a cargo ART', inactivo: true },
+      { cod: '089', nombre: 'Maternidad',                     inactivo: true },
       { cod: '050', nombre: 'Nacimiento de hijo' },
       { cod: '051', nombre: 'Matrimonio' },
       { cod: '052', nombre: 'Fallecimiento 1er grado' },
@@ -77,7 +86,7 @@ const AUSENTISMO_GRUPOS = [
 const AUSENTISMO_INDICE = (() => {
   const idx = {};
   AUSENTISMO_GRUPOS.forEach(g => g.conceptos.forEach(c => {
-    idx[c.cod] = { grupo: g.id, grupoNombre: g.nombre, nombre: c.nombre };
+    idx[c.cod] = { grupo: g.id, grupoNombre: g.nombre, nombre: c.nombre, inactivo: !!c.inactivo };
   }));
   return idx;
 })();

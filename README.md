@@ -2,8 +2,7 @@
 
 Tablero para el trabajo de campo del Coordinador de RRHH: registrar las visitas a
 sucursales, calcular el **FTE Real** y el **costo laboral por posición**, seguir
-ausentismo, rotación, sanciones y sucesión, y tomar el **parte diario de
-asistencia y horas extras** de las tiendas.
+ausentismo, rotación, sanciones y sucesión.
 
 De ahí salen **dos documentos distintos** para el Gerente de Operaciones: el
 **reporte de la visita**, apenas se cierra cada visita, y el **informe mensual de
@@ -18,14 +17,10 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
    cifra el contenido guardado en esa computadora. También se puede entrar sin clave.
 2. Ir a **Configuración**. El coordinador y el área vienen cargados; falta el
    nombre y el email del Gerente de Operaciones, y las copias si corresponde.
-3. Ir a **Sucursales**. Vienen las doce sucursales del Área 3 con su ficha; falta
-   cargar, en cada una, la **dotación esperada por turno**, que es contra lo que se
-   mide el presentismo diario.
+3. Ir a **Sucursales**. Vienen las doce sucursales del Área 3 con su ficha.
 4. Desde el **Panel de la red**, botón *Registrar visita* en la sucursal visitada.
 5. Completar las solapas y, al final, **Reporte y Envío**.
-6. Para el día a día, **Parte diario**: el mensaje que se manda al grupo de WhatsApp
-   y la carga de lo que reportan las tiendas.
-7. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, y enviarlo.
+6. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, y enviarlo.
 
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
 equipo o archivarlos, usar **Exportar respaldo** en Configuración.
@@ -35,8 +30,8 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | Solapa | Contenido |
 |---|---|
 | **Minutas** | Reunión con el Gerente de Tienda (puntos y acuerdos) y con un colaborador (feedback y clima) |
-| **FTE y Costo** | Matriz por posición: headcount, altas, bajas, ausencias, horas extras, sueldos, cargas, costo por FTE. Cruza las horas extras contra las cargadas día a día en el parte |
-| **Ausentismo** | Días por concepto, abiertos en inactivo / activo controlable / activo incontrolable |
+| **FTE y Costo** | Matriz por posición: headcount, altas, bajas, ausencias, horas extras, sueldos, cargas, costo por FTE |
+| **Ausentismo** | Días por concepto, separados en controlable (evitable) y no controlable (inevitable) |
 | **Rotación y Bajas** | Rotación mensual y anualizada, altas y bajas con motivo y causa |
 | **Sanciones** | Registro disciplinario del período |
 | **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
@@ -56,35 +51,12 @@ Son cosas distintas y se mandan en momentos distintos:
 | Para qué sirve | Que el gerente y Operaciones tengan los compromisos por escrito | Que Operaciones tenga el número del mes |
 | Dónde está | Solapa *Reporte y Envío* de la visita | Pestaña *Informe mensual* |
 
-El informe mensual **consolida todas las visitas del período** y suma lo que
-aportó el parte diario. Si un mes tuvo dos visitas, toma la matriz de la más
-completa y lo dice en el encabezado; si no tuvo ninguna, se arma igual con el
-parte diario y marca el resto como pendiente.
+El informe mensual **consolida todas las visitas del período**. Si un mes tuvo
+dos visitas, toma la matriz de la más completa y lo dice en el encabezado; si no
+tuvo ninguna, se arma igual con todo marcado como pendiente.
 
 Los dos van al mismo Gerente de Operaciones, con copia al Gerente de Tienda, y
 cada uno deja su propio registro de envío.
-
-## El parte diario
-
-Todos los días las sucursales reportan por un link que se comparte en el grupo de
-WhatsApp: **las ausencias del día** (quién, de qué turno, por qué y si avisó) y
-**las horas extras del día anterior** (quién las hizo, cuántas y por cuál de los
-cuatro motivos: afluencia de público, cubrir una ausencia, promoción bancaria o
-inventario).
-
-Se pide con un día de atraso porque recién con el turno cerrado el gerente sabe
-cuántas horas fueron. Eso alimenta, sin cargar nada dos veces:
-
-- el **presentismo del día** por turno y para toda el área;
-- el **ausentismo del mes** de cada sucursal, que se contrasta con lo cargado en
-  la visita;
-- las **horas extras acumuladas** del mes, por sucursal y consolidadas, con la
-  apertura por motivo y su equivalente en FTE.
-
-El formulario es un link de internet que se publica con Google Apps Script en
-seis pasos: el paso a paso está en
-[`docs/formulario-parte-diario.md`](docs/formulario-parte-diario.md) y el código
-completo, en un solo archivo, en [`docs/parte-diario.gs`](docs/parte-diario.gs).
 
 ## Documentación
 
@@ -96,10 +68,6 @@ completo, en un solo archivo, en [`docs/parte-diario.gs`](docs/parte-diario.gs).
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
-- [`docs/formulario-parte-diario.md`](docs/formulario-parte-diario.md) — el link
-  que se manda por WhatsApp: cómo publicarlo, y cómo vuelven los datos al panel.
-  El script está aparte, listo para copiar, en
-  [`docs/parte-diario.gs`](docs/parte-diario.gs).
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 
