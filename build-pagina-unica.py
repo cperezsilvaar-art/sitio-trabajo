@@ -23,7 +23,7 @@ js  = '\n'.join((raiz / s).read_text(encoding='utf-8') for s in scripts)
 cuerpo = html.split('<body>', 1)[1].split('</body>', 1)[0]
 cuerpo = re.sub(r'\s*<script src="[^"]+"></script>', '', cuerpo).strip()
 
-salida = f"""<title>Tablero de Visitas RRHH</title>
+salida = f"""<title>Panel de Control de RRHH</title>
 <style>
 {css}
 </style>

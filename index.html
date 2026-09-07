@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Gestión Operativa de RRHH · Farmatodo</title>
+  <title>Panel de Control de RRHH · Farmatodo</title>
   <meta name="description" content="Tablero de visitas a sucursales, FTE real, costo laboral y seguimiento de RRHH.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏪</text></svg>">
   <link rel="stylesheet" href="assets/css/styles.css">
@@ -12,12 +12,13 @@
 
   <header class="app">
     <div class="marca">
-      <strong>Gestión Operativa de RRHH</strong>
+      <strong>Panel de Control de RRHH</strong>
       <span>Farmatodo</span>
     </div>
     <div class="crece"></div>
     <select id="selector-sucursal" title="Ir a la última visita de una sucursal"></select>
     <button data-accion="nueva-visita-selector">+ Nueva visita</button>
+    <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
   </header>
 
   <nav class="tabs principal">
@@ -35,6 +36,7 @@
   <script src="assets/js/catalogos.js"></script>
   <script src="assets/js/modelo.js"></script>
   <script src="assets/js/talento.js"></script>
+  <script src="assets/js/acceso.js"></script>
   <script src="assets/js/store.js"></script>
   <script src="assets/js/reporte.js"></script>
   <script src="assets/js/app.js"></script>

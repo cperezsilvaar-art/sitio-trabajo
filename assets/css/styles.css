@@ -1,19 +1,23 @@
-/* Tablero de Gestión Operativa de RRHH — Farmatodo
-   Paleta clara por defecto, con variante oscura según preferencia del sistema. */
+/* Panel de Control de RRHH — Farmatodo
+   Paleta construida sobre el azul marino de la marca. Los neutros llevan sesgo
+   azul: un gris puro al lado de este marino se ve sucio.
+   Sin fuentes web a propósito: el panel tiene que abrir desde el disco y sin
+   internet, y una tipografía remota fallaría en silencio. */
 
 :root {
   color-scheme: light;
-  --azul:        #0b3d70;
-  --azul-claro:  #1c5f9e;
+  --azul:        #0b3b72;   /* marino de marca */
+  --azul-claro:  #1e6fc4;   /* acento interactivo */
+  --marino-hondo:#072c57;
   --rojo:        #c8102e;
-  --barra:       #0b3d70;
-  --fondo:       #f4f6f9;
+  --barra:       #0b3b72;
+  --fondo:       #f5f7fa;
   --panel:       #ffffff;
-  --panel-alt:   #f9fafc;
-  --borde:       #dde3ec;
-  --borde-fuerte:#c3ccdb;
-  --texto:       #16202e;
-  --texto-suave: #5b6879;
+  --panel-alt:   #f7f9fc;
+  --borde:       #dce3ec;
+  --borde-fuerte:#bfcbda;
+  --texto:       #10233b;
+  --texto-suave: #55657c;
   --verde:       #1a7f4b;
   --ambar:       #b7791f;
   --rojo-alerta: #c0392b;
@@ -27,17 +31,18 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
   color-scheme: dark;
-  --azul:        #6fa8dc;
-  --azul-claro:  #8fc0e8;
+  --azul:        #7fb2e6;
+  --azul-claro:  #9cc7f2;
+  --marino-hondo:#050f1d;
   --rojo:        #ff6b7a;
-  --barra:       #16202e;
-  --fondo:       #121821;
-  --panel:       #1a2130;
-  --panel-alt:   #202839;
-  --borde:       #2c3646;
-  --borde-fuerte:#3d4a5e;
-  --texto:       #e6ebf2;
-  --texto-suave: #9aa7b8;
+  --barra:       #0a1424;
+  --fondo:       #0d1626;
+  --panel:       #152034;
+  --panel-alt:   #1b283f;
+  --borde:       #27354e;
+  --borde-fuerte:#3a4a68;
+  --texto:       #e7edf6;
+  --texto-suave: #9aabc2;
   --verde:       #4cc38a;
   --ambar:       #e0a94a;
   --rojo-alerta: #ff7a6b;
@@ -47,17 +52,18 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --azul:        #6fa8dc;
-  --azul-claro:  #8fc0e8;
+  --azul:        #7fb2e6;
+  --azul-claro:  #9cc7f2;
+  --marino-hondo:#050f1d;
   --rojo:        #ff6b7a;
-  --barra:       #16202e;
-  --fondo:       #121821;
-  --panel:       #1a2130;
-  --panel-alt:   #202839;
-  --borde:       #2c3646;
-  --borde-fuerte:#3d4a5e;
-  --texto:       #e6ebf2;
-  --texto-suave: #9aa7b8;
+  --barra:       #0a1424;
+  --fondo:       #0d1626;
+  --panel:       #152034;
+  --panel-alt:   #1b283f;
+  --borde:       #27354e;
+  --borde-fuerte:#3a4a68;
+  --texto:       #e7edf6;
+  --texto-suave: #9aabc2;
   --verde:       #4cc38a;
   --ambar:       #e0a94a;
   --rojo-alerta: #ff7a6b;
@@ -331,7 +337,7 @@ tr.inactivo { opacity: .55; }
    así que el tablero dibuja los suyos. */
 .velo {
   position: fixed; inset: 0; background: rgba(16, 32, 54, .45);
-  display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px;
+  display: flex; align-items: center; justify-content: center; z-index: 300; padding: 20px;
 }
 .dialogo {
   background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
@@ -342,7 +348,7 @@ tr.inactivo { opacity: .55; }
 .dialogo p { margin: 0 0 18px; font-size: 14px; line-height: 1.5; }
 .dialogo .acciones { margin: 0; justify-content: flex-end; }
 
-.avisos { position: fixed; right: 18px; bottom: 18px; z-index: 110; display: flex; flex-direction: column; gap: 8px; }
+.avisos { position: fixed; right: 18px; bottom: 18px; z-index: 400; display: flex; flex-direction: column; gap: 8px; }
 .aviso-flotante {
   background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--verde);
   border-radius: 8px; padding: 11px 16px; box-shadow: var(--sombra); font-size: 13.5px;
@@ -351,6 +357,74 @@ tr.inactivo { opacity: .55; }
 .aviso-flotante.error { border-left-color: var(--rojo-alerta); }
 @keyframes entra { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .aviso-flotante { animation: none; } }
+
+/* =========================== Portada de acceso ========================== *
+   Banda de marca a la izquierda, acceso a la derecha. En pantallas angostas
+   la banda pasa a ser un encabezado y el formulario queda debajo. */
+body.bloqueado { overflow: hidden; }
+body.bloqueado > header.app,
+body.bloqueado > nav.tabs,
+body.bloqueado > main,
+body.bloqueado > footer.app { display: none; }
+
+#acceso { position: fixed; inset: 0; z-index: 200; background: var(--fondo); }
+
+.portada {
+  display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  height: 100%; overflow: auto;
+}
+
+.portada-marca {
+  background: var(--azul);
+  background-image: linear-gradient(158deg, var(--azul) 0%, var(--marino-hondo) 100%);
+  color: #fff; padding: 56px 52px;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 40px;
+}
+.portada-marca .marca { width: 56px; height: 56px; color: #fff; display: block; margin-bottom: 30px; }
+.pm-eyebrow {
+  margin: 0 0 12px; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: 2.2px; color: rgba(255,255,255,.72); font-weight: 600;
+}
+.portada-marca h1 {
+  margin: 0 0 16px; font-size: clamp(30px, 3.6vw, 44px); line-height: 1.08;
+  font-weight: 700; letter-spacing: -.6px; text-wrap: balance; max-width: 12ch;
+}
+.pm-bajada { margin: 0; font-size: 15.5px; line-height: 1.6; color: rgba(255,255,255,.86); max-width: 42ch; }
+.pm-pie { margin: 0; font-size: 12.5px; line-height: 1.55; color: rgba(255,255,255,.6); max-width: 44ch; }
+
+.portada-acceso { display: flex; align-items: center; justify-content: center; padding: 48px 40px; }
+.pa-caja { width: 100%; max-width: 380px; }
+.pa-hola {
+  margin: 0 0 6px; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: 2.2px; color: var(--azul-claro); font-weight: 700;
+}
+.pa-caja h2 { margin: 0 0 10px; font-size: 23px; letter-spacing: -.3px; color: var(--texto); }
+.pa-texto { margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: var(--texto-suave); }
+.pa-caja form { display: flex; flex-direction: column; gap: 14px; }
+.pa-boton { width: 100%; padding: 12px; font-size: 15px; margin-top: 4px; }
+.pa-error {
+  margin: 0; font-size: 13px; color: var(--rojo-alerta); font-weight: 600;
+  background: rgba(192,57,43,.08); border-radius: 6px; padding: 9px 12px;
+}
+.pa-nota {
+  margin: 22px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--texto-suave);
+  border-left: 3px solid var(--ambar); padding-left: 12px;
+}
+.pa-nota strong { color: var(--texto); }
+.pa-link {
+  margin-top: 18px; background: none; border: 0; padding: 0; cursor: pointer;
+  font: inherit; font-size: 13px; color: var(--azul-claro); text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pa-link:hover { color: var(--azul); }
+
+@media (max-width: 860px) {
+  .portada { grid-template-columns: 1fr; height: auto; min-height: 100%; }
+  .portada-marca { padding: 40px 28px; gap: 26px; }
+  .portada-marca .marca { width: 44px; height: 44px; margin-bottom: 20px; }
+  .portada-acceso { padding: 36px 28px 56px; }
+  .pa-caja { max-width: none; }
+}
 
 footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; padding: 26px 20px 40px; }
 

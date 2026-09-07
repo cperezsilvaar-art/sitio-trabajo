@@ -1,4 +1,4 @@
-# Gestión Operativa de RRHH — Farmatodo
+# Panel de Control de RRHH — Farmatodo
 
 Tablero para el trabajo de campo del Coordinador de RRHH: registrar las visitas a
 sucursales, calcular el **FTE Real** y el **costo laboral por posición**, seguir
@@ -10,7 +10,8 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 
 ## Cómo empezar
 
-1. Abrir `index.html`.
+1. Abrir `index.html`. La primera vez, la portada pide crear una clave de acceso:
+   cifra el contenido guardado en esa computadora. También se puede entrar sin clave.
 2. Ir a **Configuración**. El coordinador y el área vienen cargados; falta el
    nombre y el email del Gerente de Operaciones, y las copias si corresponde.
 3. Ir a **Sucursales**. Vienen diez sucursales provisorias (`sucursal1` … `sucursal10`).
@@ -42,6 +43,8 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
   rotación y dotación óptima, con su verificación contra las planillas de origen.
 - [`docs/automatizacion-email.md`](docs/automatizacion-email.md) — cómo dejar el envío
   del reporte 100% automático con Google Apps Script, Make o Zapier.
+- [`docs/acceso-y-clave.md`](docs/acceso-y-clave.md) — qué protege la clave, qué
+  no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada

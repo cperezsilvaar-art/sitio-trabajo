@@ -1441,6 +1441,8 @@ const App = (() => {
 
       if (a === 'imprimir') window.print();
 
+      if (a === 'bloquear') location.reload();
+
       /* --- respaldos --- */
       if (a === 'ejemplo') {
         const ok = await confirmar('Cargar datos de ejemplo',
@@ -1535,10 +1537,40 @@ const App = (() => {
     window.addEventListener('hashchange', render);
   }
 
-  function iniciar() {
-    Store.init();
+  async function iniciar() {
+    const previa = (() => {
+      // El área y el coordinador se muestran en la portada, así que se leen
+      // antes de desbloquear. Si están cifrados, la portada va sin ellos.
+      try {
+        const crudo = localStorage.getItem(CLAVE_ALMACEN);
+        return crudo ? (JSON.parse(crudo).config || {}) : {};
+      } catch (e) { return {}; }
+    })();
+
+    let cif = null;
+    try {
+      cif = await Acceso.pedirAcceso(previa);
+    } catch (err) {
+      console.warn('No se pudo mostrar la portada de acceso.', err);
+    }
+
+    try {
+      await Store.init(cif);
+    } catch (err) {
+      document.getElementById('contenido').innerHTML =
+        `<section class="tarjeta"><h2>No se pudo abrir el contenido</h2>
+         <p class="ayuda">${esc(err.message)} Volvé a cargar la página e ingresá la clave de nuevo.
+         Si tenés un respaldo exportado, podés empezar de cero e importarlo.</p></section>`;
+      return;
+    }
+
     conectar();
     render();
+    if (Store.cifrado()) {
+      const btn = document.getElementById('btn-bloquear');
+      if (btn) btn.hidden = false;
+      avisar('Panel abierto. El contenido se guarda cifrado en esta computadora.');
+    }
   }
 
   return { iniciar, render, refrescar };

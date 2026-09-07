@@ -53,6 +53,8 @@ async function guardarArchivo(nombre, contenido, mime) {
 
 const Store = (() => {
   let estado = null;
+  let cifrador = null;          // null = guardar en claro
+  let colaDeGuardado = Promise.resolve();
   const suscriptores = [];
 
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -156,30 +158,71 @@ const Store = (() => {
     return e;
   }
 
-  function cargar() {
+  /**
+   * Carga el estado. Con cifrador, descifra lo guardado; sin él, lee en claro.
+   * @throws si hay contenido cifrado que no se puede descifrar, para no pisar
+   *         datos que todavía se pueden recuperar con la clave correcta.
+   */
+  async function cargar(cif) {
+    cifrador = cif || null;
+    let crudo = null;
     try {
-      const crudo = localStorage.getItem(CLAVE_ALMACEN);
-      estado = crudo ? normalizar(JSON.parse(crudo)) : estadoInicial();
+      crudo = localStorage.getItem(CLAVE_ALMACEN);
     } catch (err) {
-      console.warn('No se pudo leer el almacenamiento local, se inicia vacío.', err);
-      estado = estadoInicial();
+      console.warn('No se pudo leer el almacenamiento local.', err);
     }
-    return estado;
+    if (!crudo) { estado = estadoInicial(); return estado; }
+
+    try {
+      const plano = cifrador ? await cifrador.descifrar(crudo) : crudo;
+      estado = normalizar(JSON.parse(plano));
+      return estado;
+    } catch (err) {
+      if (!cifrador) {
+        console.warn('El contenido guardado no se pudo leer, se inicia vacío.', err);
+        estado = estadoInicial();
+        return estado;
+      }
+    }
+
+    /* Con cifrador y sin poder descifrar hay dos casos. Puede ser contenido en
+       claro de antes de poner la clave, que corresponde migrar; o contenido
+       cifrado ilegible, que no hay que pisar. Se distinguen por la forma: solo
+       se acepta como claro lo que tiene la estructura del tablero. */
+    try {
+      const obj = JSON.parse(crudo);
+      if (obj && Array.isArray(obj.sucursales)) {
+        estado = normalizar(obj);
+        guardar();                 // de acá en más queda cifrado
+        return estado;
+      }
+    } catch (e) { /* ni cifrado legible ni claro válido */ }
+
+    throw new Error('No se pudo descifrar el contenido guardado.');
   }
 
+  /**
+   * Persiste el estado. El cifrado es asíncrono, así que las escrituras se
+   * encadenan: siempre gana la última y nunca se cruzan entre sí.
+   */
   function guardar() {
-    try {
-      localStorage.setItem(CLAVE_ALMACEN, JSON.stringify(estado));
-    } catch (err) {
-      console.warn('No se pudo guardar en el almacenamiento local.', err);
-    }
+    const instantanea = JSON.stringify(estado);
+    colaDeGuardado = colaDeGuardado.then(async () => {
+      try {
+        const aGuardar = cifrador ? await cifrador.cifrar(instantanea) : instantanea;
+        localStorage.setItem(CLAVE_ALMACEN, aGuardar);
+      } catch (err) {
+        console.warn('No se pudo guardar en el almacenamiento local.', err);
+      }
+    });
     suscriptores.forEach(fn => fn(estado));
   }
 
   return {
     uid,
     init: cargar,
-    get: () => estado || cargar(),
+    cifrado: () => !!cifrador,
+    get: () => estado,
     save: guardar,
     onChange: fn => suscriptores.push(fn),
 
