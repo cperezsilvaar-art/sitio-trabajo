@@ -357,6 +357,13 @@ const Reporte = (() => {
       L.push('');
     }
 
+    /* Lo primero que se lee. Un Gerente de Operaciones no decide sobre una
+       tabla de FTE: decide sobre cobertura, costo y qué hacer este mes. Las
+       tablas siguen abajo para el que quiera el detalle. */
+    L.push('LO QUE HAY QUE MIRAR DE ESTE MES');
+    resumenOperaciones(d, config).forEach(x => L.push('  ' + x));
+    L.push('');
+
     let n = 0;
 
     /* 1. Dotación y FTE */
@@ -368,6 +375,9 @@ const Reporte = (() => {
     L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre una dotación equivalente de ` +
            `${fmtNum(c.matriz.total.fteVinculo)} personas (${c.matriz.total.heads} de mes completo más los días de ingresos y egresos).`);
     L.push(`   Brecha de cobertura: ${fmtNum(c.matriz.total.brechaFte)} FTE por ausencias, neto de horas extras.`);
+    L.push('');
+    L.push('   Cómo se lee:');
+    lecturaFte(c, c.par).forEach(x => L.push('   · ' + x));
     L.push('');
 
     /* 2. Costo laboral */
@@ -447,6 +457,85 @@ const Reporte = (() => {
     }
 
     return L.concat(pie()).join('\n');
+  }
+
+  /**
+   * El resumen de arriba de todo, en el idioma de la operación.
+   *
+   * No repite los números: dice qué significan y qué decisión habilitan. Si una
+   * línea no tiene una acción atrás, no va.
+   */
+  function resumenOperaciones(d, config) {
+    const c = d.calculo;
+    const t = c.matriz.total;
+    const p = c.par;
+    const moneda = p.moneda || '$';
+    const L = [];
+
+    if (!t.diasTrabajados) {
+      return ['- Todavía no hay dotación cargada para el período: no se puede leer nada.'];
+    }
+
+    /* 1. Cobertura */
+    const brecha = t.brechaFte;
+    L.push(`- COBERTURA. La tienda tiene ${t.heads} personas de mes completo y funcionó con ` +
+           `${fmtNum(t.fteReal, 1)} puestos reales.` +
+           (brecha <= -0.3
+             ? ` Trabajó con ${fmtNum(Math.abs(brecha), 1)} puestos menos de los asignados.`
+             : brecha >= 0.3
+               ? ` Cubrió ${fmtNum(brecha, 1)} puestos de más con horas extras, que sale más caro que la dotación.`
+               : ' La cobertura real fue la prevista.'));
+
+    /* 2. Costo sobre la venta: el número que mira la dirección */
+    if (c.dotacion.pctCostoVenta !== null && c.dotacion.tipo !== 'staff') {
+      const b = c.dotacion.banda;
+      L.push(`- COSTO. El costo laboral fue el ${fmtPct(c.dotacion.pctCostoVenta)} de la venta ` +
+             `(objetivo ${fmtPct(c.dotacion.benchmark, 0)}, techo ${fmtPct(c.dotacion.alerta, 0)}): ${b.texto.toLowerCase()}.` +
+             (c.dotacion.diferencia !== null && c.dotacion.diferencia !== 0
+               ? ` Según la venta del mes, la dotación óptima serían ${c.dotacion.dotacionOptima} personas ` +
+                 `(${c.dotacion.diferencia > 0 ? '+' : ''}${c.dotacion.diferencia} respecto de las actuales).`
+               : ''));
+    } else {
+      L.push('- COSTO. Falta la venta neta del período: sin ese dato no se puede medir el costo laboral.');
+    }
+
+    /* 3. Ausentismo, separando lo que se puede bajar */
+    if (c.ausentismo.pctTotal !== null) {
+      const evit = c.ausentismo.diasGestionables;
+      L.push(`- AUSENTISMO. ${fmtPct(c.ausentismo.pctTotal)} del tiempo de vínculo ` +
+             `(${c.ausentismo.totalDias} días).` +
+             (evit
+               ? ` De esos, ${evit} días eran evitables: es la parte sobre la que la tienda puede trabajar.`
+               : ' Ninguno de esos días era evitable: son licencias y enfermedad comprobada, se planifican.'));
+    }
+
+    /* 4. Horas extras, con la lectura de para qué se hicieron */
+    if (t.horasExtras) {
+      L.push(`- HORAS EXTRAS. ${fmtNum(t.horasExtras, 0)} horas, ` +
+             `${fmtPct(t.ratioExtras)} de las teóricas, equivalentes a ${fmtNum(t.horasExtras / p.horasMes, 1)} puestos.` +
+             (t.ratioExtras !== null && t.ratioExtras > p.umbralHorasExtras
+               ? ' Por encima del umbral: conviene ver si cubren ausencias o una dotación corta.'
+               : ''));
+    }
+
+    /* 5. Rotación, solo si hubo movimiento */
+    if (c.rotacion.bajas) {
+      L.push(`- ROTACIÓN. ${c.rotacion.bajas} baja${c.rotacion.bajas === 1 ? '' : 's'} en el mes, ` +
+             `${fmtPct(c.rotacion.proyeccionAnual, 1)} anualizado.` +
+             (c.bajas.total ? ' ' + c.bajas.grupos.filter(g => g.casos).map(g => `${g.nombre} ${g.casos}`).join(' · ') + '.' : ''));
+    }
+
+    /* 6. Lo que hay que decidir */
+    const decisiones = [];
+    if (brecha <= -0.5) decisiones.push('cubrir la brecha de dotación');
+    if (t.ratioExtras !== null && t.ratioExtras > p.umbralHorasExtras) decisiones.push('bajar las horas extras');
+    if (c.ausentismo.pctTotal !== null && c.ausentismo.pctTotal > p.umbralAusentismo) decisiones.push('trabajar el ausentismo evitable');
+    if (c.dotacion.pctCostoVenta !== null && c.dotacion.pctCostoVenta >= p.alertaCostoVenta) decisiones.push('revisar la estructura contra la venta');
+    if (decisiones.length) {
+      L.push('- A DECIDIR: ' + decisiones.join(', ') + '.');
+    }
+
+    return L;
   }
 
   /* --------------------------- secciones sueltas ------------------------ */
@@ -787,6 +876,6 @@ const Reporte = (() => {
     asuntoVisita, asuntoMensual,
     enviarVisita, enviarMensual,
     faltantesVisita, faltantesMensuales,
-    tablaFteTexto, copias, destinatario
+    tablaFteTexto, copias, destinatario, resumenOperaciones, lecturaFte
   };
 })();

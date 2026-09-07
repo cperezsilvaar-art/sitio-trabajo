@@ -1437,7 +1437,7 @@ const App = (() => {
       const k = c.matriz.filas[i];
       return `<tr>
         <td><strong>${esc(f.rol)}</strong></td>
-        <td class="num">${inp(i, 'heads', 70, 'Personas que estuvieron los ' + p.diasMes + ' días. No incluir acá a quienes ingresaron o egresaron durante el mes.')}</td>
+        <td class="num">${inp(i, 'heads', 70, 'Solo las personas que estuvieron los ' + p.diasMes + ' días. Quien entró o se fue durante el mes NO va acá: va en Ingresos o Egresos con sus días.')}</td>
         <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}</td>
         <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}</td>
         <td class="num">${inp(i, 'diasAusentes', 70, 'Días de ausencia y vacaciones')}</td>
@@ -1483,6 +1483,11 @@ const App = (() => {
           <br><br>
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
+        ${c.matriz.total.diasTrabajados ? `<div class="aviso-caja info">
+          <strong>Cómo se lee esta tabla.</strong> Es la traducción del FTE al idioma con el que
+          se conversa con el Gerente de Operaciones; el reporte mensual la lleva tal cual.
+          <ul>${lecturaFte(c, p).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        </div>` : ''}
         ${avisoAltasBajas(v, c, p)}
         ${(() => {
           const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
@@ -1499,9 +1504,10 @@ const App = (() => {
         })()}
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Posición</th><th class="num">Mes completo<br><small style="font-weight:400;text-transform:none">personas</small></th>
-            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
-            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
+            <th>Posición</th>
+            <th class="num">Todo el mes<br><small style="font-weight:400;text-transform:none">personas que no entraron ni salieron</small></th>
+            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
+            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
             <th class="num">Ausencias<br><small style="font-weight:400;text-transform:none">días</small></th>
             <th class="num">Hs. extras</th>
             <th class="num">Días de vínculo</th><th class="num">Personas equiv.</th><th class="num">FTE Real</th>
@@ -1564,6 +1570,32 @@ const App = (() => {
      superan los días de vínculo de la posición. */
   function avisoAltasBajas(v, c, p) {
     const problemas = [];
+    const padron = Store.dotacionDelPadron(v.sucursalId, v.periodo);
+
+    c.matriz.filas.forEach((f, idx) => {
+      /* El negativo es siempre un parche de la misma equivocación: contar a la
+         persona que se fue en "Todo el mes" y después restarle los días. */
+      const campos = [['diasAltas', 'Ingresos'], ['diasBajas', 'Egresos'],
+                      ['diasAusentes', 'Ausencias'], ['heads', 'Todo el mes']];
+      campos.forEach(([k, etiqueta]) => {
+        if (num(v.posiciones[idx][k]) < 0) {
+          problemas.push(`<strong>${esc(f.rol)}</strong>: hay un número negativo en “${etiqueta}”. ` +
+            'No hace falta restar nunca. Si alguien entró o se fue durante el mes, ' +
+            `<strong>no lo cuentes en “Todo el mes”</strong>: poné solo los días que trabajó en Ingresos o Egresos, y esos días suman.`);
+        }
+      });
+
+      /* Si el padrón dice cuántas personas hay en esa posición, contarlas de más
+         en "Todo el mes" es justo lo que después se intenta arreglar restando. */
+      if (padron && padron.personas) {
+        const enPadron = (padron.porPosicion[f.rol] || {}).heads;
+        if (enPadron !== undefined && f.heads > enPadron) {
+          problemas.push(`<strong>${esc(f.rol)}</strong>: cargaste ${f.heads} personas de mes completo pero el padrón ` +
+            `de ${esc(v.periodo)} tiene ${enPadron}. Si alguna entró o se fue en el mes, va en Ingresos o Egresos con sus días, no acá.`);
+        }
+      }
+    });
+
     c.matriz.filas.forEach(f => {
       if (f.diasAltas >= p.diasMes) {
         problemas.push(`<strong>${esc(f.rol)}</strong>: ${fmtNum(f.diasAltas, 0)} días de ingreso equivalen a un mes completo o más. ` +

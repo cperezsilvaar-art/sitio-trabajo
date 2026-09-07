@@ -1481,6 +1481,64 @@ function evaluarRecorrida(recorrida) {
   };
 }
 
+/**
+ * El FTE explicado en el idioma del Gerente de Operaciones.
+ *
+ * La matriz da el número; esto da la frase. Un gerente operativo no decide
+ * sobre "FTE Real 11,42": decide sobre "tenés trece personas y la tienda
+ * trabajó con once y media, y la diferencia te costó horas extras".
+ *
+ * Devuelve líneas sueltas para que las use igual el reporte y la pantalla.
+ */
+function lecturaFte(calc, par) {
+  const t = calc.matriz.total;
+  const p = Object.assign({}, PARAMETROS_DEFECTO, par || {});
+  const L = [];
+
+  if (!t.diasTrabajados) {
+    return ['Sin dotación cargada todavía: la matriz de FTE está vacía.'];
+  }
+
+  /* Los números van en el idioma del lector, con coma decimal. */
+  const n1 = v => _n(v, 1);
+  const equiv = t.diasTrabajados / p.diasMes;
+  const personas = t.heads;
+  const porAusencias = t.diasAusentes / p.diasMes;
+  const porExtras = t.horasExtras / p.horasMes;
+
+  L.push(`En el mes hubo ${personas} persona${personas === 1 ? '' : 's'} de mes completo, que con los ` +
+         `ingresos y egresos equivalen a ${n1(equiv)} puestos de tiempo completo.`);
+
+  if (porAusencias) {
+    L.push(`De esos puestos, ${n1(porAusencias)} no estuvieron: es lo que suman los ` +
+           `${_n(t.diasAusentes, 0)} días de ausencia del período.`);
+  }
+  if (porExtras) {
+    L.push(`Las ${_n(t.horasExtras, 0)} horas extras recuperaron ${n1(porExtras)} puestos.`);
+  }
+
+  L.push(`Resultado: la tienda funcionó con ${n1(t.fteReal)} puestos reales.`);
+
+  /* La brecha es el número que hay que llevarse de acá. Medio puesto en una
+     tienda de doce personas es un turno sin cubrir: el umbral es bajo a
+     propósito. */
+  const brecha = t.brechaFte;
+  if (brecha <= -0.3) {
+    L.push(`Trabajó con ${n1(Math.abs(brecha))} puestos menos de los que tiene asignados. ` +
+           'Eso se siente en la atención, no en la planilla.');
+  } else if (brecha >= 0.3) {
+    L.push(`Trabajó con ${n1(brecha)} puestos más de los que tiene asignados, cubiertos con horas extras. ` +
+           'Sale más caro que cubrirlos con dotación.');
+  } else {
+    L.push('Las ausencias y las horas extras se compensaron: la cobertura real fue la prevista.');
+  }
+
+  if (t.costoPorFte) {
+    L.push(`Cada puesto real costó ${p.moneda} ${_n(t.costoPorFte, 0)} en el mes.`);
+  }
+  return L;
+}
+
 /*
  * talento.js — Evaluación de desempeño y potencial, matriz 9-box y talent card.
  *
@@ -3633,6 +3691,13 @@ const Reporte = (() => {
       L.push('');
     }
 
+    /* Lo primero que se lee. Un Gerente de Operaciones no decide sobre una
+       tabla de FTE: decide sobre cobertura, costo y qué hacer este mes. Las
+       tablas siguen abajo para el que quiera el detalle. */
+    L.push('LO QUE HAY QUE MIRAR DE ESTE MES');
+    resumenOperaciones(d, config).forEach(x => L.push('  ' + x));
+    L.push('');
+
     let n = 0;
 
     /* 1. Dotación y FTE */
@@ -3644,6 +3709,9 @@ const Reporte = (() => {
     L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre una dotación equivalente de ` +
            `${fmtNum(c.matriz.total.fteVinculo)} personas (${c.matriz.total.heads} de mes completo más los días de ingresos y egresos).`);
     L.push(`   Brecha de cobertura: ${fmtNum(c.matriz.total.brechaFte)} FTE por ausencias, neto de horas extras.`);
+    L.push('');
+    L.push('   Cómo se lee:');
+    lecturaFte(c, c.par).forEach(x => L.push('   · ' + x));
     L.push('');
 
     /* 2. Costo laboral */
@@ -3723,6 +3791,85 @@ const Reporte = (() => {
     }
 
     return L.concat(pie()).join('\n');
+  }
+
+  /**
+   * El resumen de arriba de todo, en el idioma de la operación.
+   *
+   * No repite los números: dice qué significan y qué decisión habilitan. Si una
+   * línea no tiene una acción atrás, no va.
+   */
+  function resumenOperaciones(d, config) {
+    const c = d.calculo;
+    const t = c.matriz.total;
+    const p = c.par;
+    const moneda = p.moneda || '$';
+    const L = [];
+
+    if (!t.diasTrabajados) {
+      return ['- Todavía no hay dotación cargada para el período: no se puede leer nada.'];
+    }
+
+    /* 1. Cobertura */
+    const brecha = t.brechaFte;
+    L.push(`- COBERTURA. La tienda tiene ${t.heads} personas de mes completo y funcionó con ` +
+           `${fmtNum(t.fteReal, 1)} puestos reales.` +
+           (brecha <= -0.3
+             ? ` Trabajó con ${fmtNum(Math.abs(brecha), 1)} puestos menos de los asignados.`
+             : brecha >= 0.3
+               ? ` Cubrió ${fmtNum(brecha, 1)} puestos de más con horas extras, que sale más caro que la dotación.`
+               : ' La cobertura real fue la prevista.'));
+
+    /* 2. Costo sobre la venta: el número que mira la dirección */
+    if (c.dotacion.pctCostoVenta !== null && c.dotacion.tipo !== 'staff') {
+      const b = c.dotacion.banda;
+      L.push(`- COSTO. El costo laboral fue el ${fmtPct(c.dotacion.pctCostoVenta)} de la venta ` +
+             `(objetivo ${fmtPct(c.dotacion.benchmark, 0)}, techo ${fmtPct(c.dotacion.alerta, 0)}): ${b.texto.toLowerCase()}.` +
+             (c.dotacion.diferencia !== null && c.dotacion.diferencia !== 0
+               ? ` Según la venta del mes, la dotación óptima serían ${c.dotacion.dotacionOptima} personas ` +
+                 `(${c.dotacion.diferencia > 0 ? '+' : ''}${c.dotacion.diferencia} respecto de las actuales).`
+               : ''));
+    } else {
+      L.push('- COSTO. Falta la venta neta del período: sin ese dato no se puede medir el costo laboral.');
+    }
+
+    /* 3. Ausentismo, separando lo que se puede bajar */
+    if (c.ausentismo.pctTotal !== null) {
+      const evit = c.ausentismo.diasGestionables;
+      L.push(`- AUSENTISMO. ${fmtPct(c.ausentismo.pctTotal)} del tiempo de vínculo ` +
+             `(${c.ausentismo.totalDias} días).` +
+             (evit
+               ? ` De esos, ${evit} días eran evitables: es la parte sobre la que la tienda puede trabajar.`
+               : ' Ninguno de esos días era evitable: son licencias y enfermedad comprobada, se planifican.'));
+    }
+
+    /* 4. Horas extras, con la lectura de para qué se hicieron */
+    if (t.horasExtras) {
+      L.push(`- HORAS EXTRAS. ${fmtNum(t.horasExtras, 0)} horas, ` +
+             `${fmtPct(t.ratioExtras)} de las teóricas, equivalentes a ${fmtNum(t.horasExtras / p.horasMes, 1)} puestos.` +
+             (t.ratioExtras !== null && t.ratioExtras > p.umbralHorasExtras
+               ? ' Por encima del umbral: conviene ver si cubren ausencias o una dotación corta.'
+               : ''));
+    }
+
+    /* 5. Rotación, solo si hubo movimiento */
+    if (c.rotacion.bajas) {
+      L.push(`- ROTACIÓN. ${c.rotacion.bajas} baja${c.rotacion.bajas === 1 ? '' : 's'} en el mes, ` +
+             `${fmtPct(c.rotacion.proyeccionAnual, 1)} anualizado.` +
+             (c.bajas.total ? ' ' + c.bajas.grupos.filter(g => g.casos).map(g => `${g.nombre} ${g.casos}`).join(' · ') + '.' : ''));
+    }
+
+    /* 6. Lo que hay que decidir */
+    const decisiones = [];
+    if (brecha <= -0.5) decisiones.push('cubrir la brecha de dotación');
+    if (t.ratioExtras !== null && t.ratioExtras > p.umbralHorasExtras) decisiones.push('bajar las horas extras');
+    if (c.ausentismo.pctTotal !== null && c.ausentismo.pctTotal > p.umbralAusentismo) decisiones.push('trabajar el ausentismo evitable');
+    if (c.dotacion.pctCostoVenta !== null && c.dotacion.pctCostoVenta >= p.alertaCostoVenta) decisiones.push('revisar la estructura contra la venta');
+    if (decisiones.length) {
+      L.push('- A DECIDIR: ' + decisiones.join(', ') + '.');
+    }
+
+    return L;
   }
 
   /* --------------------------- secciones sueltas ------------------------ */
@@ -4063,7 +4210,7 @@ const Reporte = (() => {
     asuntoVisita, asuntoMensual,
     enviarVisita, enviarMensual,
     faltantesVisita, faltantesMensuales,
-    tablaFteTexto, copias, destinatario
+    tablaFteTexto, copias, destinatario, resumenOperaciones, lecturaFte
   };
 })();
 
@@ -5506,7 +5653,7 @@ const App = (() => {
       const k = c.matriz.filas[i];
       return `<tr>
         <td><strong>${esc(f.rol)}</strong></td>
-        <td class="num">${inp(i, 'heads', 70, 'Personas que estuvieron los ' + p.diasMes + ' días. No incluir acá a quienes ingresaron o egresaron durante el mes.')}</td>
+        <td class="num">${inp(i, 'heads', 70, 'Solo las personas que estuvieron los ' + p.diasMes + ' días. Quien entró o se fue durante el mes NO va acá: va en Ingresos o Egresos con sus días.')}</td>
         <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}</td>
         <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}</td>
         <td class="num">${inp(i, 'diasAusentes', 70, 'Días de ausencia y vacaciones')}</td>
@@ -5552,6 +5699,11 @@ const App = (() => {
           <br><br>
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
+        ${c.matriz.total.diasTrabajados ? `<div class="aviso-caja info">
+          <strong>Cómo se lee esta tabla.</strong> Es la traducción del FTE al idioma con el que
+          se conversa con el Gerente de Operaciones; el reporte mensual la lleva tal cual.
+          <ul>${lecturaFte(c, p).map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        </div>` : ''}
         ${avisoAltasBajas(v, c, p)}
         ${(() => {
           const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
@@ -5568,9 +5720,10 @@ const App = (() => {
         })()}
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Posición</th><th class="num">Mes completo<br><small style="font-weight:400;text-transform:none">personas</small></th>
-            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
-            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días trabajados</small></th>
+            <th>Posición</th>
+            <th class="num">Todo el mes<br><small style="font-weight:400;text-transform:none">personas que no entraron ni salieron</small></th>
+            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
+            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
             <th class="num">Ausencias<br><small style="font-weight:400;text-transform:none">días</small></th>
             <th class="num">Hs. extras</th>
             <th class="num">Días de vínculo</th><th class="num">Personas equiv.</th><th class="num">FTE Real</th>
@@ -5633,6 +5786,32 @@ const App = (() => {
      superan los días de vínculo de la posición. */
   function avisoAltasBajas(v, c, p) {
     const problemas = [];
+    const padron = Store.dotacionDelPadron(v.sucursalId, v.periodo);
+
+    c.matriz.filas.forEach((f, idx) => {
+      /* El negativo es siempre un parche de la misma equivocación: contar a la
+         persona que se fue en "Todo el mes" y después restarle los días. */
+      const campos = [['diasAltas', 'Ingresos'], ['diasBajas', 'Egresos'],
+                      ['diasAusentes', 'Ausencias'], ['heads', 'Todo el mes']];
+      campos.forEach(([k, etiqueta]) => {
+        if (num(v.posiciones[idx][k]) < 0) {
+          problemas.push(`<strong>${esc(f.rol)}</strong>: hay un número negativo en “${etiqueta}”. ` +
+            'No hace falta restar nunca. Si alguien entró o se fue durante el mes, ' +
+            `<strong>no lo cuentes en “Todo el mes”</strong>: poné solo los días que trabajó en Ingresos o Egresos, y esos días suman.`);
+        }
+      });
+
+      /* Si el padrón dice cuántas personas hay en esa posición, contarlas de más
+         en "Todo el mes" es justo lo que después se intenta arreglar restando. */
+      if (padron && padron.personas) {
+        const enPadron = (padron.porPosicion[f.rol] || {}).heads;
+        if (enPadron !== undefined && f.heads > enPadron) {
+          problemas.push(`<strong>${esc(f.rol)}</strong>: cargaste ${f.heads} personas de mes completo pero el padrón ` +
+            `de ${esc(v.periodo)} tiene ${enPadron}. Si alguna entró o se fue en el mes, va en Ingresos o Egresos con sus días, no acá.`);
+        }
+      }
+    });
+
     c.matriz.filas.forEach(f => {
       if (f.diasAltas >= p.diasMes) {
         problemas.push(`<strong>${esc(f.rol)}</strong>: ${fmtNum(f.diasAltas, 0)} días de ingreso equivalen a un mes completo o más. ` +

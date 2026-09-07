@@ -462,3 +462,61 @@ function evaluarRecorrida(recorrida) {
     completa: !sinResponder.length
   };
 }
+
+/**
+ * El FTE explicado en el idioma del Gerente de Operaciones.
+ *
+ * La matriz da el número; esto da la frase. Un gerente operativo no decide
+ * sobre "FTE Real 11,42": decide sobre "tenés trece personas y la tienda
+ * trabajó con once y media, y la diferencia te costó horas extras".
+ *
+ * Devuelve líneas sueltas para que las use igual el reporte y la pantalla.
+ */
+function lecturaFte(calc, par) {
+  const t = calc.matriz.total;
+  const p = Object.assign({}, PARAMETROS_DEFECTO, par || {});
+  const L = [];
+
+  if (!t.diasTrabajados) {
+    return ['Sin dotación cargada todavía: la matriz de FTE está vacía.'];
+  }
+
+  /* Los números van en el idioma del lector, con coma decimal. */
+  const n1 = v => _n(v, 1);
+  const equiv = t.diasTrabajados / p.diasMes;
+  const personas = t.heads;
+  const porAusencias = t.diasAusentes / p.diasMes;
+  const porExtras = t.horasExtras / p.horasMes;
+
+  L.push(`En el mes hubo ${personas} persona${personas === 1 ? '' : 's'} de mes completo, que con los ` +
+         `ingresos y egresos equivalen a ${n1(equiv)} puestos de tiempo completo.`);
+
+  if (porAusencias) {
+    L.push(`De esos puestos, ${n1(porAusencias)} no estuvieron: es lo que suman los ` +
+           `${_n(t.diasAusentes, 0)} días de ausencia del período.`);
+  }
+  if (porExtras) {
+    L.push(`Las ${_n(t.horasExtras, 0)} horas extras recuperaron ${n1(porExtras)} puestos.`);
+  }
+
+  L.push(`Resultado: la tienda funcionó con ${n1(t.fteReal)} puestos reales.`);
+
+  /* La brecha es el número que hay que llevarse de acá. Medio puesto en una
+     tienda de doce personas es un turno sin cubrir: el umbral es bajo a
+     propósito. */
+  const brecha = t.brechaFte;
+  if (brecha <= -0.3) {
+    L.push(`Trabajó con ${n1(Math.abs(brecha))} puestos menos de los que tiene asignados. ` +
+           'Eso se siente en la atención, no en la planilla.');
+  } else if (brecha >= 0.3) {
+    L.push(`Trabajó con ${n1(brecha)} puestos más de los que tiene asignados, cubiertos con horas extras. ` +
+           'Sale más caro que cubrirlos con dotación.');
+  } else {
+    L.push('Las ausencias y las horas extras se compensaron: la cobertura real fue la prevista.');
+  }
+
+  if (t.costoPorFte) {
+    L.push(`Cada puesto real costó ${p.moneda} ${_n(t.costoPorFte, 0)} en el mes.`);
+  }
+  return L;
+}
