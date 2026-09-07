@@ -365,7 +365,7 @@ const App = (() => {
 
       return `<tr>
         <td><strong>${esc(s.nombre || s.codigo)}</strong>
-          ${s.supervisor ? `<div style="font-size:11px;color:var(--texto-suave)">${esc(s.supervisor)}</div>` : ''}</td>
+          ${s.localidad ? `<div style="font-size:11px;color:var(--texto-suave)">${esc(s.localidad)}</div>` : ''}</td>
         <td>${estado}</td>
         ${TURNOS.map(t => {
           const ct = c.porTurno.find(x => x.id === t.id);
@@ -683,7 +683,6 @@ const App = (() => {
       <div class="grid c3">
         ${campo('Gerente de Operaciones', `sucursales.${i}.gerenteOperaciones`, { tipo: 'select', calc: true,
           opciones: [{ valor: '', texto: '—' }].concat(gops.map(g => ({ valor: g.nombre, texto: g.nombre }))) })}
-        ${campo('Supervisor de zona', `sucursales.${i}.supervisor`)}
         ${campo('Director Técnico', `sucursales.${i}.directorTecnico`)}
         ${campo('Contacto administrativo', `sucursales.${i}.contactoAdmin`)}
         ${campo('Email del contacto', `sucursales.${i}.emailContactoAdmin`, { tipo: 'email' })}
@@ -704,7 +703,7 @@ const App = (() => {
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Sucursal</th><th>Localidad</th><th>Tipo</th><th>Supervisor de zona</th>
+            <th>Sucursal</th><th>Localidad</th><th>Tipo</th><th>Gerente de Operaciones</th>
             <th>Gerente de Tienda</th><th>Email del gerente</th><th></th>
           </tr></thead>
           <tbody>
@@ -716,7 +715,10 @@ const App = (() => {
               <option value="venta"${s.tipo === 'venta' ? ' selected' : ''}>🏪 Venta</option>
               <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff</option>
             </select></td>
-            <td><input data-path="sucursales.${i}.supervisor" value="${esc(s.supervisor)}" style="max-width:150px"></td>
+            <td><select data-path="sucursales.${i}.gerenteOperaciones" data-calc="1" style="max-width:190px">
+              <option value="">—</option>
+              ${gops.map(g => `<option value="${esc(g.nombre)}"${s.gerenteOperaciones === g.nombre ? ' selected' : ''}>${esc(g.nombre)}</option>`).join('')}
+            </select></td>
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
             <td class="num" style="white-space:nowrap">

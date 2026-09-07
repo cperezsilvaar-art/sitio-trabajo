@@ -143,11 +143,11 @@ const Store = (() => {
     if (!Array.isArray(e.config.gerentesOperaciones) || !e.config.gerentesOperaciones.length) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
     }
-    /* Corrección de dos campos que se cargaron mal la primera vez: el área
-       tiene un solo Gerente de Operaciones, y todas las tiendas operan bajo la
-       marca Farmatodo. Lo que se había puesto en esos campos era el supervisor
-       de zona y el grupo operador. */
-    if (e.config.gerentesOperaciones.every(g => SUPERVISORES_AREA3.includes(g.nombre) && !String(g.email || '').trim())) {
+    /* Corrección de campos que se cargaron mal la primera vez: el área tiene un
+       solo Gerente de Operaciones —Eduardo José Páez Márquez—, todas las
+       tiendas operan bajo la marca Farmatodo, y los dos nombres que traía la
+       tercera columna del padrón no son referentes de ninguna sucursal. */
+    if (e.config.gerentesOperaciones.every(g => NOMBRES_A_LIMPIAR.includes(g.nombre) && !String(g.email || '').trim())) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
     }
     if (!String((e.config.gerenteOperaciones || {}).email || '').trim()) {
@@ -156,10 +156,10 @@ const Store = (() => {
 
     e.sucursales = e.sucursales.map(s => sucursalNueva(s));
     e.sucursales.forEach(s => {
-      if (SUPERVISORES_AREA3.includes(s.gerenteOperaciones)) {
-        if (!s.supervisor) s.supervisor = s.gerenteOperaciones;
+      if (NOMBRES_A_LIMPIAR.includes(s.gerenteOperaciones)) {
         s.gerenteOperaciones = GERENTES_OPERACIONES_AREA3[0].nombre;
       }
+      if (NOMBRES_A_LIMPIAR.includes(s.supervisor)) s.supervisor = '';
       if (s.marca && s.marca !== MARCA_AREA) {
         if (!s.operador) s.operador = s.marca;
         s.marca = MARCA_AREA;
