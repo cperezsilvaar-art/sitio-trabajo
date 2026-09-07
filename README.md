@@ -2,9 +2,12 @@
 
 Tablero para el trabajo de campo del Coordinador de RRHH: registrar las visitas a
 sucursales, calcular el **FTE Real** y el **costo laboral por posición**, seguir
-ausentismo, rotación, sanciones y sucesión, tomar el **parte diario de asistencia
-y horas extras** de las tiendas, y **enviar el reporte al Gerente de Operaciones**
-apenas se cierra la visita.
+ausentismo, rotación, sanciones y sucesión, y tomar el **parte diario de
+asistencia y horas extras** de las tiendas.
+
+De ahí salen **dos documentos distintos** para el Gerente de Operaciones: el
+**reporte de la visita**, apenas se cierra cada visita, y el **informe mensual de
+la sucursal**, al cerrar el período.
 
 Es un sitio estático: se abre haciendo doble clic en `index.html` o publicándolo
 en GitHub Pages. No necesita servidor, base de datos ni instalación.
@@ -22,6 +25,7 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 5. Completar las solapas y, al final, **Reporte y Envío**.
 6. Para el día a día, **Parte diario**: el mensaje que se manda al grupo de WhatsApp
    y la carga de lo que reportan las tiendas.
+7. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, y enviarlo.
 
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
 equipo o archivarlos, usar **Exportar respaldo** en Configuración.
@@ -38,7 +42,27 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
-| **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío al Gerente de Operaciones |
+| **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío del reporte de la visita |
+
+## Los dos documentos
+
+Son cosas distintas y se mandan en momentos distintos:
+
+| | **Reporte de visita** | **Informe mensual** |
+|---|---|---|
+| Cuándo | Al cerrar cada visita | Al cerrar el mes |
+| De qué es | De esa visita | De la sucursal en ese período |
+| Qué trae | Minutas, sanciones del día, 9-box, sucesión, diagnóstico y plan de acción | Dotación y FTE, costo laboral, ausentismo, horas extras, rotación, dotación vs. venta |
+| Para qué sirve | Que el gerente y Operaciones tengan los compromisos por escrito | Que Operaciones tenga el número del mes |
+| Dónde está | Solapa *Reporte y Envío* de la visita | Pestaña *Informe mensual* |
+
+El informe mensual **consolida todas las visitas del período** y suma lo que
+aportó el parte diario. Si un mes tuvo dos visitas, toma la matriz de la más
+completa y lo dice en el encabezado; si no tuvo ninguna, se arma igual con el
+parte diario y marca el resto como pendiente.
+
+Los dos van al mismo Gerente de Operaciones, con copia al Gerente de Tienda, y
+cada uno deja su propio registro de envío.
 
 ## El parte diario
 

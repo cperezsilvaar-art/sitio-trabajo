@@ -622,6 +622,114 @@ const App = (() => {
       </div>`;
   }
 
+  /* ===================== VISTA: INFORME MENSUAL ==================== *
+     El informe del mes es de la sucursal, no de una visita: consolida todas
+     las visitas del período y el parte diario. Por eso vive acá y no adentro
+     de una visita. */
+  let informeSuc = null;
+  let informePeriodo = null;
+
+  function vistaInforme() {
+    const e = Store.get();
+    contexto = e;
+
+    if (!informeSuc && e.sucursales.length) informeSuc = e.sucursales[0].id;
+    const s = informeSuc ? Store.sucursal(informeSuc) : null;
+    if (!s) {
+      return `<h1 class="titulo">Informe mensual</h1>
+        <section class="tarjeta"><p class="vacio">Cargá primero una sucursal.</p></section>`;
+    }
+
+    const periodos = Store.periodosDe(s.id);
+    if (!informePeriodo || !periodos.includes(informePeriodo)) {
+      informePeriodo = periodos[0] || new Date().toISOString().slice(0, 7);
+    }
+
+    const d = Reporte.datosMensuales(s.id, informePeriodo, e.config);
+    const c = d.calculo;
+    const faltantes = Reporte.faltantesMensuales(d);
+    const registro = Store.informeDe(s.id, informePeriodo);
+    const dest = Reporte.destinatario(s, e.config);
+    const cc = Reporte.copias(s, e.config);
+
+    return `
+      <h1 class="titulo">Informe mensual de la sucursal</h1>
+      <p class="subtitulo">
+        Los números del mes: dotación, costo laboral, ausentismo, horas extras y rotación.
+        Se manda al cerrar el período, aparte del reporte de cada visita.
+      </p>
+
+      <section class="tarjeta">
+        <div class="grid c3">
+          <label class="campo"><span>Sucursal</span>
+            <select id="informe-sucursal">
+              ${e.sucursales.map(x => `<option value="${x.id}"${x.id === s.id ? ' selected' : ''}>${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Período</span>
+            <select id="informe-periodo">
+              ${(periodos.length ? periodos : [informePeriodo]).map(x =>
+                `<option value="${esc(x)}"${x === informePeriodo ? ' selected' : ''}>${esc(x)}</option>`).join('')}
+            </select></label>
+          <div style="display:flex;align-items:flex-end">
+            <p class="ayuda" style="margin:0">
+              ${d.visitas.length
+                ? `${d.visitas.length} visita${d.visitas.length === 1 ? '' : 's'} en el período: ${d.visitas.map(x => fmtFecha(x.fecha)).join(', ')}.`
+                : 'El período todavía no tiene visitas cargadas.'}
+            </p>
+          </div>
+        </div>
+
+        <div class="kpis" style="margin-top:18px">
+          ${kpi('FTE Real', c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—',
+                c.matriz.total.heads ? `${c.matriz.total.heads} de mes completo` : 'sin dotación cargada')}
+          ${kpi('Costo / FTE', c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—',
+                c.matriz.total.costoTotal ? `total ${dinero(c.matriz.total.costoTotal)}` : '')}
+          ${kpi('Ausentismo', c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal),
+                `${c.ausentismo.totalDias} días`,
+                c.ausentismo.pctTotal !== null && c.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
+          ${kpi('Horas extras', d.parte.horas ? fmtNum(d.parte.horas, 1) + ' h' : (c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) + ' h' : '—'),
+                d.parte.horas ? 'cargadas día a día en el parte' : 'según la matriz de FTE', d.parte.horas ? 'aviso' : '')}
+          ${kpi('Rotación anualizada', c.rotacion.proyeccionAnual === null ? '—' : fmtPct(c.rotacion.proyeccionAnual, 1),
+                `${c.rotacion.bajas} bajas en el mes`)}
+        </div>
+
+        ${d.sinVisita ? `<div class="aviso-caja">
+          <strong>El período no tiene ninguna visita cargada.</strong> El informe se arma igual con
+          lo que reportaron las sucursales en el parte diario, y el resto queda como pendiente.
+          ${e.sucursales.length ? `<br><button class="b sec" data-accion="nueva-visita" data-id="${s.id}" style="margin-top:10px">Registrar una visita</button>` : ''}
+        </div>` : ''}
+
+        ${faltantes.length ? `<div class="aviso-caja">
+          <strong>Datos pendientes de carga.</strong> El informe se manda igual, con estos puntos marcados como <code>[PENDIENTE]</code>:
+          <ul>${faltantes.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
+        </div>` : '<div class="aviso-caja info">Período completo: no quedan datos pendientes.</div>'}
+
+        <p class="ayuda">
+          Destinatario: <strong>${esc(dest.nombre || 'sin cargar')}</strong> &lt;${esc(dest.email || 'sin email')}&gt;
+          ${cc.length ? ` · con copia a ${esc(cc.join(', '))}` : ''}
+          · vía ${e.config.webhook ? '<span class="chip verde">envío automático</span>' : '<span class="chip azul">cliente de correo</span>'}
+        </p>
+
+        ${registro && registro.enviado ? `<div class="aviso-caja info">
+          Último envío de este período: ${new Date(registro.fecha).toLocaleString('es-AR')}
+          a ${esc(registro.destinatario)} (${esc(registro.via)}).
+          ${registro.historial.length > 1 ? `Total de envíos: ${registro.historial.length}.` : ''}
+        </div>` : ''}
+
+        <div class="acciones">
+          <button class="b" data-accion="enviar-informe">Enviar el informe mensual</button>
+          <button class="b sec" data-accion="copiar-informe">Copiar</button>
+          <button class="b sec" data-accion="descargar-informe">Descargar .txt</button>
+          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Vista previa del informe</h2>
+        <pre class="reporte" id="vista-informe">${esc(Reporte.textoMensual(s.id, informePeriodo, e.config))}</pre>
+      </section>`;
+  }
+
   /* ======================== VISTA: SUCURSALES ======================= */
   let fichaSucursal = null;   // id de la sucursal con la ficha desplegada
 
@@ -1619,7 +1727,7 @@ const App = (() => {
 
   /* ----------------------- 8. Reporte y envío ----------------------- */
   function panelReporte(v, s, config, c) {
-    const faltantes = Reporte.detectarFaltantes(v, s, c);
+    const faltantes = Reporte.faltantesVisita(v, s, c);
     const plan = v.diagnostico.plan || [];
     return `
       <section class="tarjeta">
@@ -1720,7 +1828,7 @@ const App = (() => {
 
       <section class="tarjeta">
         <h2>Vista previa del reporte</h2>
-        <pre class="reporte" id="vista-reporte">${esc(Reporte.texto(v, s, config))}</pre>
+        <pre class="reporte" id="vista-reporte">${esc(Reporte.textoVisita(v, s, config))}</pre>
       </section>`;
   }
 
@@ -1731,6 +1839,7 @@ const App = (() => {
     let html = '';
 
     if (ruta[0] === 'parte')          { vistaActual = vistaParte;      html = vistaParte(); }
+    else if (ruta[0] === 'informe')   { vistaActual = vistaInforme;    html = vistaInforme(); }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -1759,7 +1868,7 @@ const App = (() => {
     const pre = document.getElementById('vista-reporte');
     if (!pre || !contexto || !contexto.sucursalId) return;
     const s = Store.sucursal(contexto.sucursalId);
-    pre.textContent = Reporte.texto(contexto, s, Store.get().config);
+    pre.textContent = Reporte.textoVisita(contexto, s, Store.get().config);
   }
 
   function refrescar() { if (vistaActual) { const y = window.scrollY; $('#contenido').innerHTML = vistaActual(); window.scrollTo(0, y); } }
@@ -2035,11 +2144,51 @@ const App = (() => {
         }
       }
 
+      /* --- informe mensual --- */
+      if (a === 'enviar-informe' || a === 'copiar-informe' || a === 'descargar-informe') {
+        const suc = Store.sucursal(informeSuc);
+        const texto = Reporte.textoMensual(suc.id, informePeriodo, e.config);
+
+        if (a === 'copiar-informe') {
+          try {
+            await navigator.clipboard.writeText(texto);
+            btn.textContent = '\u2713 Copiado';
+            setTimeout(() => { btn.textContent = 'Copiar'; }, 1800);
+          } catch (err) {
+            const pre = $('#vista-informe');
+            if (pre) { const r = document.createRange(); r.selectNode(pre); getSelection().removeAllRanges(); getSelection().addRange(r); }
+            avisar('No se pudo copiar solo. El informe quedó seleccionado: copialo con Ctrl+C.', 'error');
+          }
+        }
+
+        if (a === 'descargar-informe') {
+          await guardarArchivo(`informe-${suc.codigo}-${informePeriodo}.txt`, texto, 'text/plain');
+        }
+
+        if (a === 'enviar-informe') {
+          const ok = await confirmar(
+            'Enviar el informe mensual',
+            `Se manda el informe de ${Store.etiquetaSucursal(suc)} del período ${informePeriodo} ` +
+            `a ${Reporte.destinatario(suc, e.config).nombre || 'el Gerente de Operaciones'}.`,
+            'Enviar informe');
+          if (!ok) return;
+          try {
+            const r = await Reporte.enviarMensual(suc.id, informePeriodo, e.config);
+            refrescar();
+            avisar(r.via === 'webhook'
+              ? `Informe enviado a ${r.destino}.`
+              : 'Se abrió tu cliente de correo con el informe cargado. Revisalo y mandalo.');
+          } catch (err) {
+            avisar(err.message, 'error');
+          }
+        }
+      }
+
       /* --- reporte --- */
       if (a === 'enviar-reporte' || a === 'copiar-reporte' || a === 'descargar-reporte') {
         const v = Store.visita(btn.dataset.id);
         const s = Store.sucursal(v.sucursalId);
-        const texto = Reporte.texto(v, s, e.config);
+        const texto = Reporte.textoVisita(v, s, e.config);
 
         if (a === 'copiar-reporte') {
           try {
@@ -2062,7 +2211,7 @@ const App = (() => {
           const original = btn.textContent;
           btn.textContent = 'Enviando…';
           try {
-            const r = await Reporte.enviar(v, s, e.config);
+            const r = await Reporte.enviarVisita(v, s, e.config);
             refrescar();
             avisar(r.via === 'webhook' ? `Reporte enviado a ${r.destino}.` : `Se abrió tu cliente de correo con el reporte para ${r.destino}.`);
           } catch (err) {
@@ -2103,6 +2252,17 @@ const App = (() => {
           catch (err) { avisar('El archivo no tiene un formato válido: ' + err.message, 'error'); }
         };
         lector.readAsText(f);
+      }
+      if (ev.target.id === 'informe-sucursal') {
+        informeSuc = ev.target.value;
+        informePeriodo = null;   // se recalcula con los períodos de la nueva sucursal
+        refrescar();
+        return;
+      }
+      if (ev.target.id === 'informe-periodo') {
+        informePeriodo = ev.target.value;
+        refrescar();
+        return;
       }
       if (ev.target.id === 'fecha-parte') {
         fechaParte = ev.target.value || hoyISO();

@@ -1,10 +1,13 @@
 /*
- * reporte.js — Armado del reporte de visita y envío al Gerente de Operaciones.
+ * reporte.js — Los dos documentos que salen del panel, y su envío.
  *
- * El reporte respeta el formato acordado:
- *   1. Minuta de reuniones
- *   2. Matriz de FTE Real y Costo Laboral
- *   3. Diagnóstico y acciones recomendadas
+ *   textoVisita()   Qué pasó el día de la visita: minutas, sanciones, talento,
+ *                   diagnóstico y plan de acción. Se manda al cerrar la visita.
+ *
+ *   textoMensual()  Los números del mes de la sucursal: dotación y FTE, costo
+ *                   laboral, ausentismo, horas extras, rotación y dotación vs.
+ *                   venta. Consolida todas las visitas del período y el parte
+ *                   diario. Se manda al cerrar el mes.
  *
  * Los campos sin cargar se marcan como [PENDIENTE] en lugar de omitirse, para
  * que el Gerente de Operaciones vea qué información falta relevar.
@@ -100,30 +103,63 @@ const Reporte = (() => {
     return [linea(cols), sep, ...matriz.filas.map(fila), sep, fila(matriz.total)].join('\n');
   }
 
-  /** Reporte completo en texto plano (el que viaja en el cuerpo del email). */
-  function texto(visita, sucursal, config) {
-    const c = calcular(visita, sucursal, config);
-    const moneda = c.par.moneda || '$';
-    const L = [];
-    const barra = '='.repeat(60);
+  /* ===================================================================== *
+   * Dos documentos distintos, con públicos y ritmos distintos:            *
+   *                                                                       *
+   *   - El REPORTE DE VISITA cuenta qué pasó el día que se fue a la        *
+   *     tienda: lo que se habló, lo que se acordó, lo que hay que hacer.   *
+   *     Se manda al cerrar la visita.                                      *
+   *                                                                       *
+   *   - El INFORME MENSUAL son los números de la sucursal en el mes: FTE,  *
+   *     costo, ausentismo, rotación, horas extras, dotación vs. venta.     *
+   *     Se manda al cerrar el período y consolida todas las visitas.       *
+   *                                                                       *
+   * Mezclarlos obligaba a leer treinta líneas de tabla para llegar a un    *
+   * acuerdo con el gerente, y a esperar la visita para tener el número.    *
+   * ===================================================================== */
 
-    L.push(barra);
-    L.push('REPORTE DE VISITA A SUCURSAL - FARMATODO');
+  /* ------------------------------ encabezados --------------------------- */
+
+  function encabezado(titulo, sucursal, config, lineas) {
+    const barra = '='.repeat(60);
+    const L = [barra, titulo];
     // Si el área ya se llama "Área 3", no repetir la palabra en la etiqueta
     if (config.area) L.push('Área: ' + String(config.area).replace(/^\s*[áa]rea\s+/i, ''));
     L.push('Sucursal: ' + Store.etiquetaSucursal(sucursal) +
            (sucursal.marca ? ` · ${sucursal.marca}` : '') +
            (sucursal.localidad ? ` · ${sucursal.localidad}` : ''));
     if (sucursal.gerenteOperaciones) L.push('Gerente de Operaciones: ' + sucursal.gerenteOperaciones);
-    L.push('Fecha de Visita: ' + fmtFecha(visita.fecha));
-    L.push('Período analizado: ' + oPendiente(visita.periodo));
-    L.push('Coordinador de RRHH: ' + oPendiente(visita.coordinador || config.coordinador));
+    lineas.forEach(x => L.push(x));
     L.push('Gerente de Tienda: ' + oPendiente(sucursal.gerente));
     L.push(barra);
     L.push('');
+    return L;
+  }
+
+  const pie = () => {
+    const barra = '='.repeat(60);
+    return [barra, 'Generado desde el Panel de Control de RRHH.', barra];
+  };
+
+  /* =============== DOCUMENTO 1: REPORTE DE LA VISITA ==================== */
+
+  /**
+   * Lo que pasó en la tienda ese día. Sin tablas de costos: el gerente y el
+   * Gerente de Operaciones tienen que poder leerlo entero y quedarse con los
+   * compromisos.
+   */
+  function textoVisita(visita, sucursal, config) {
+    const c = calcular(visita, sucursal, config);
+    const L = encabezado('REPORTE DE VISITA A SUCURSAL - FARMATODO', sucursal, config, [
+      'Fecha de Visita: ' + fmtFecha(visita.fecha),
+      'Período de referencia: ' + oPendiente(visita.periodo),
+      'Coordinador de RRHH: ' + oPendiente(visita.coordinador || config.coordinador)
+    ]);
+
+    let n = 0;
 
     /* 1. Minutas */
-    L.push('1. MINUTA DE REUNIONES');
+    L.push(++n + '. MINUTA DE REUNIONES');
     L.push('- Reunión Gerente de Tienda:');
     L.push('  * Participante: ' + oPendiente(visita.minutaGerente.participante || sucursal.gerente));
     L.push('  * Puntos Tratados:');
@@ -137,148 +173,29 @@ const Reporte = (() => {
     L.push(bloque(visita.minutaColaborador.feedback, '      '));
     L.push('');
 
-    /* 2. Matriz FTE */
-    L.push('2. MATRIZ DE FTE REAL Y COSTO LABORAL');
-    L.push('   "Mes compl." son las personas que cubrieron los ' + c.par.diasMes + ' días. Quien ingresó o egresó');
-    L.push('   durante el mes no figura ahí: sus días efectivos están sumados en "Días Vínc.".');
-    L.push(tablaFteTexto(c.matriz, moneda));
-    L.push('');
-    L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre una dotación equivalente de ` +
-           `${fmtNum(c.matriz.total.fteVinculo)} personas (${c.matriz.total.heads} de mes completo más los días de ingresos y egresos).`);
-    L.push(`   Brecha de cobertura: ${fmtNum(c.matriz.total.brechaFte)} FTE por ausencias, neto de horas extras.`);
-    L.push(`   Costo laboral total: ${fmtMoneda(c.matriz.total.costoTotal || null, moneda)} · ` +
-           `Costo promedio por FTE: ${c.matriz.total.costoPorFte === null ? PENDIENTE : fmtMoneda(c.matriz.total.costoPorFte, moneda)}`);
-    L.push(`   Cargas sociales aplicadas con factor ${fmtNum(c.par.factorCargas)} sobre los brutos.`);
-    L.push('');
+    /* 2. Sanciones */
+    if (visita.sanciones.length) {
+      L.push(++n + '. SANCIONES DISCIPLINARIAS REGISTRADAS');
+      seccionSanciones(visita, L);
+      L.push('');
+    }
 
-    /* 3. Indicadores */
-    L.push('3. INDICADORES DE PERSONAL DEL PERÍODO');
-    L.push(`- Ausentismo total: ${fmtPct(c.ausentismo.pctTotal)} (${c.ausentismo.totalDias} días sobre ${c.ausentismo.diasDisponibles} de vínculo).`);
-    if (c.ausentismo.sinApertura) {
-      L.push('  * Sin apertura por concepto: el dato surge de la columna “Días ausentes” de la matriz de FTE.');
-    } else {
-      c.ausentismo.grupos.forEach(g => {
-        L.push(`  * ${g.nombre}: ${g.dias} días (${fmtPct(g.pct)})`);
-      });
-      L.push(`  * Días gestionables por la tienda: ${c.ausentismo.diasGestionables} (${fmtPct(c.ausentismo.pctGestionable)})`);
-    }
-    L.push(`- Horas extras: ${fmtNum(c.matriz.total.horasExtras, 0)} hs, equivalentes a ${fmtNum(c.matriz.total.horasExtras / c.par.horasMes)} FTE ` +
-           `(${fmtPct(c.matriz.total.ratioExtras)} de las horas teóricas).`);
-    if (typeof acumuladoMes === 'function' && typeof Store !== 'undefined') {
-      const ac = acumuladoMes(Store.get().partes, visita.sucursalId, visita.periodo);
-      if (ac.horas) {
-        const det = MOTIVOS_HORAS
-          .map(m => ({ m, h: ac.horasPorMotivo[m.id] || 0 })).filter(x => x.h)
-          .sort((x, y) => y.h - x.h)
-          .map(x => `${x.m.nombre.toLowerCase()} ${fmtNum(x.h, 1)} hs`).join(' · ');
-        L.push(`  * Parte diario del período: ${fmtNum(ac.horas, 1)} hs cargadas día a día sobre ` +
-               `${ac.diasConHoras} jornada${ac.diasConHoras === 1 ? '' : 's'} (${det}).`);
-      }
-    }
-    L.push(`- Rotación del mes: ${fmtPct(c.rotacion.mensual)} · Proyección anual: ${fmtPct(c.rotacion.proyeccionAnual, 1)}`);
-    L.push(`  * Dotación anterior ${c.rotacion.anterior} → nueva dotación ${c.rotacion.nueva} ` +
-           `(altas ${c.rotacion.altasExt + c.rotacion.altasInt} / bajas ${c.rotacion.bajas})`);
-    if (c.bajas.total) {
-      L.push('  * Bajas por categoría: ' + c.bajas.grupos.map(g => `${g.nombre} ${g.casos}`).join(' · '));
-    }
-    L.push(`- Sanciones disciplinarias del período: ${visita.sanciones.length}`);
-    visita.sanciones.forEach(sc => {
-      const dias = num(sc.dias) ? `, ${num(sc.dias)} día${num(sc.dias) === 1 ? '' : 's'}` : '';
-      L.push(`  * ${oPendiente(sc.nombre)} (${oPendiente(sc.puesto)}) — ${oPendiente(sc.tipo)}${dias}`);
-      L.push(`    Motivo: ${oPendiente(sc.motivo)}${sc.fecha ? ` · Fecha: ${fmtFecha(sc.fecha)}` : ''}`);
-      L.push(`    Aplicada por: ${oPendiente(sc.aplicadaPor)} · Notificación: ${ETIQUETA_NOTIFICADA[sc.notificada] || PENDIENTE}`);
-      if (String(sc.observaciones || '').trim()) L.push(`    Detalle: ${String(sc.observaciones).trim()}`);
-    });
-    const sinNotificar = visita.sanciones.filter(sc => !sc.notificada || sc.notificada === 'no').length;
-    if (sinNotificar) L.push(`  * ${sinNotificar} sanción/es sin constancia de notificación.`);
-    L.push('');
-
-    /* 4. Dotación óptima */
-    L.push('4. DOTACIÓN vs. VENTA');
-    if (c.dotacion.tipo === 'staff') {
-      L.push(`- Sucursal de estructura/soporte. Costo laboral sobre venta de la red: ${fmtPct(c.dotacion.pctCostoVenta)} ` +
-             `(benchmark ${fmtPct(c.dotacion.benchmark, 0)}).`);
-      L.push(`- Lectura: ${c.dotacion.semaforo.icono} ${c.dotacion.semaforo.texto}`);
-    } else {
-      L.push(`- Venta neta del período: ${fmtMoneda(num(visita.comercial.venta) || null, moneda)}`);
-      L.push(`- Costo laboral / venta: ${fmtPct(c.dotacion.pctCostoVenta)} ` +
-             `(objetivo ${fmtPct(c.dotacion.benchmark, 0)} · techo de alerta ${fmtPct(c.dotacion.alerta, 0)})`);
-      L.push(`  ${c.dotacion.banda.icono} ${c.dotacion.banda.texto}. ${c.dotacion.banda.lectura}`);
-      L.push(`- Dotación actual: ${c.matriz.total.heads} · Dotación óptima según venta: ${c.dotacion.dotacionOptima === null ? PENDIENTE : c.dotacion.dotacionOptima}` +
-             (c.dotacion.dotacionMaxima === null || c.dotacion.dotacionMaxima === undefined ? '' : ` · Máxima antes del techo: ${c.dotacion.dotacionMaxima}`) +
-             (c.dotacion.diferencia === null ? '' : ` · Diferencia: ${c.dotacion.diferencia > 0 ? '+' : ''}${c.dotacion.diferencia}`));
-      if (c.dotacion.ahorro !== null) {
-        L.push(`- ${c.dotacion.ahorro >= 0 ? 'Inversión requerida' : 'Ahorro potencial'}: ${fmtMoneda(Math.abs(c.dotacion.ahorro), moneda)}`);
-      }
-      L.push(`- Lectura: ${c.dotacion.semaforo.icono} ${c.dotacion.semaforo.texto}`);
-    }
-    if (c.productividad) {
-      L.push(`- Productividad: ${fmtNum(c.productividad.ticketsHora)} tickets/hora sobre un objetivo de ${c.productividad.objetivo} ` +
-             `(cumplimiento ${fmtPct(c.productividad.cumplimiento)}).`);
-    }
-    L.push('');
-
-    let seccion = 4;
-
-    /* Talento: matriz de desempeño y potencial del plantel */
+    /* 3. Talento */
     if (c.talento.evaluados.length) {
-      const t9 = c.talento;
-      seccion++;
-      L.push(seccion + '. DESEMPEÑO Y POTENCIAL DEL PLANTEL');
-      L.push(`- Evaluados junto con el Gerente de Tienda: ${t9.evaluados.length} de ${t9.activos.length} colaboradores.`);
-      if (t9.sinEvaluar.length) {
-        L.push(`- Sin evaluar: ${t9.sinEvaluar.map(x => oPendiente(x.nombre)).join(', ')}.`);
-      }
-      L.push('- Ubicación en la matriz 9-box:');
-      [['3', 'Potencial alto'], ['2', 'Puede crecer'], ['1', 'En su nivel']].forEach(([pot, etiqueta]) => {
-        const fila = ['3', '2', '1'].map(des => {
-          const gente = t9.celdas[pot + des] || [];
-          if (!gente.length) return null;
-          const q = NINE_BOX[pot + des];
-          return `${q.nombre}: ${gente.map(x => oPendiente(x.nombre)).join(', ')}`;
-        }).filter(Boolean);
-        if (fila.length) {
-          L.push(`  * ${etiqueta} — ${fila.join(' · ')}`);
-        }
-      });
-      if (t9.listosParaCrecer.length) {
-        L.push(`- Listos para asumir más: ${t9.listosParaCrecer.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
-      }
-      if (t9.enRiesgo.length) {
-        L.push(`- Con plan de mejora pendiente: ${t9.enRiesgo.map(x => oPendiente(x.nombre)).join(', ')}.`);
-      }
-      if (t9.riesgoDeSalida.length) {
-        L.push(`- Riesgo de salida alto: ${t9.riesgoDeSalida.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
-      }
-      if (t9.estudiando.length) {
-        L.push(`- Con formación en curso: ${t9.estudiando.length} colaborador${t9.estudiando.length === 1 ? '' : 'es'}.`);
-        t9.estudiando.forEach(x => {
-          const nivel = (NIVELES_ESTUDIO.find(n => n.id === x.estudia) || {}).nombre || '';
-          L.push(`  * ${oPendiente(x.nombre)}: ${nivel}${x.carrera ? ' — ' + x.carrera : ''}` +
-                 `${x.interesDesarrollo ? ` · quiere desarrollarse en: ${x.interesDesarrollo}` : ''}`);
-        });
-      }
+      L.push(++n + '. DESEMPEÑO Y POTENCIAL DEL PLANTEL');
+      seccionTalento(c, L);
       L.push('');
     }
 
-    /* Sucesión de posiciones críticas */
+    /* 4. Sucesión */
     if (visita.sucesion.length) {
-      seccion++;
-      L.push(seccion + '. SUCESIÓN Y TALENTO CRÍTICO');
-      L.push(`- Posiciones críticas identificadas: ${c.sucesion.posicionesCriticas} · con plan de sucesión: ${c.sucesion.criticasConPlan}`);
-      L.push(`- Candidatos listos en menos de 1 año: ${c.sucesion.candidatosListos}`);
-      c.sucesion.lista.forEach(i => {
-        const cands = i.candidatos.length
-          ? i.candidatos.map(x => `${x.nombre} (${(READINESS.find(r => r.id === x.readiness) || {}).nombre || '—'})`).join('; ')
-          : 'sin candidatos identificados';
-        L.push(`  * ${i.posicion} — titular ${oPendiente(i.incumbent)} — criticidad ${i.criticidad}/3, escasez ${i.escasez}/3 → ${cands}`);
-      });
+      L.push(++n + '. SUCESIÓN Y TALENTO CRÍTICO');
+      seccionSucesion(visita, c, L);
       L.push('');
     }
 
-    /* 6. Diagnóstico */
-    seccion++;
-    L.push(seccion + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
+    /* 5. Diagnóstico */
+    L.push(++n + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
     L.push('- Hallazgos sobre ausentismo y desviación de horas extras:');
     const hallazgos = String(visita.diagnostico.hallazgos || '').trim();
     if (hallazgos) {
@@ -292,53 +209,337 @@ const Reporte = (() => {
     L.push(bloque(visita.diagnostico.impacto, '      '));
     L.push('');
 
-    /* Plan de acción, separado según a cargo de quién queda cada punto */
-    seccion++;
-    L.push(seccion + '. PLAN DE ACCIÓN');
-    const plan = visita.diagnostico.plan || [];
-    if (!plan.length) {
-      L.push('   ' + PENDIENTE);
-    } else {
-      const bloques = [
-        ['tienda',      'A cargo del Gerente de Tienda'],
-        ['rrhh',        'A cargo de RRHH'],
-        ['operaciones', 'A cargo de Operaciones'],
-        ['otro',        'Otras acciones']
-      ];
-      bloques.forEach(([clave, titulo]) => {
-        const items = plan.filter(x => (x.aCargo || 'tienda') === clave);
-        if (!items.length) return;
-        L.push('');
-        L.push(`   ${titulo}:`);
-        items.forEach((x, i) => {
-          L.push(`   ${i + 1}. ${oPendiente(x.compromiso)}`);
-          L.push(`      Responsable: ${oPendiente(x.responsable)} · Plazo: ${fmtFecha(x.plazo)} · ` +
-                 `Prioridad: ${oPendiente(x.prioridad)} · Estado: ${oPendiente(x.estado)}`);
-        });
-      });
-      const hoy = new Date().toISOString().slice(0, 10);
-      const vencidas = plan.filter(x => x.estado !== 'Cumplido' && x.plazo && x.plazo < hoy);
-      if (vencidas.length) {
-        L.push('');
-        L.push(`   ${vencidas.length} acción/es con el plazo vencido: ` +
-               vencidas.map(x => oPendiente(x.compromiso)).join(' · '));
-      }
-    }
+    /* 6. Plan de acción */
+    L.push(++n + '. PLAN DE ACCIÓN');
+    seccionPlan(visita, L);
     L.push('');
 
-    /* Datos faltantes */
-    const faltantes = detectarFaltantes(visita, sucursal, c);
+    L.push('El detalle de dotación, costo laboral, ausentismo y rotación del período');
+    L.push('va en el informe mensual de la sucursal, que se manda por separado.');
+    L.push('');
+
+    const faltantes = faltantesVisita(visita, sucursal, c);
     if (faltantes.length) {
       L.push('DATOS PENDIENTES DE CARGA');
       faltantes.forEach(f => L.push('  - ' + f));
       L.push('');
     }
 
-    L.push(barra);
-    L.push('Reporte generado desde el Tablero de Gestión Operativa de RRHH.');
-    L.push(barra);
+    return L.concat(pie()).join('\n');
+  }
 
-    return L.join('\n');
+  /* ============== DOCUMENTO 2: INFORME MENSUAL DE LA SUCURSAL =========== */
+
+  /**
+   * Reúne el mes de una sucursal. Los números salen de la visita del período
+   * que tenga la matriz cargada —si hubo más de una, la última—, y el parte
+   * diario aporta el presentismo y las horas extras cargadas día a día.
+   *
+   * Si el mes todavía no tiene visita, el informe igual se arma con lo que hay
+   * y marca el resto como pendiente: el parte diario ya dice bastante.
+   */
+  function datosMensuales(sucursalId, periodo, config) {
+    const e = Store.get();
+    const sucursal = Store.sucursal(sucursalId);
+    const visitas = e.visitas
+      .filter(v => v.sucursalId === sucursalId && v.periodo === periodo)
+      .sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || '')));
+
+    const conMatriz = visitas.filter(v =>
+      calcularMatriz(v.posiciones, config.parametros).total.heads > 0);
+    const base = conMatriz.length ? conMatriz[conMatriz.length - 1]
+               : (visitas.length ? visitas[visitas.length - 1] : visitaEnBlanco(sucursalId, periodo));
+
+    const sanciones = [];
+    visitas.forEach(v => (v.sanciones || []).forEach(x => sanciones.push({ sancion: x, visita: v })));
+
+    return {
+      sucursal, periodo, visitas, base, sanciones,
+      sinVisita: !visitas.length,
+      calculo: calcular(base, sucursal, config),
+      parte: acumuladoMes(e.partes, sucursalId, periodo)
+    };
+  }
+
+  /** Visita vacía, solo para poder calcular un mes que todavía no tuvo una. */
+  function visitaEnBlanco(sucursalId, periodo) {
+    return {
+      id: null, sucursalId, fecha: '', periodo, coordinador: '',
+      minutaGerente: { participante: '', puntos: '', acuerdos: '' },
+      minutaColaborador: { nombre: '', posicion: '', feedback: '' },
+      posiciones: POSICIONES.map(p => ({
+        rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+        horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
+      })),
+      ausentismo: { detalle: {} },
+      rotacion: { dotacionAnterior: '', altasExternas: '', altasInternas: '', bajasExternas: '', bajasInternas: '' },
+      movimientos: [], sanciones: [], sucesion: [],
+      comercial: { venta: '', ventaRed: '', tickets: '', horasTrabajadas: '' },
+      diagnostico: { hallazgos: '', impacto: '', plan: [] },
+      envio: { enviado: false, fecha: null, destinatario: null, via: null, historial: [] }
+    };
+  }
+
+  /** El informe con los números del mes. */
+  function textoMensual(sucursalId, periodo, config) {
+    const d = datosMensuales(sucursalId, periodo, config);
+    const c = d.calculo;
+    const v = d.base;
+    const moneda = c.par.moneda || '$';
+
+    const L = encabezado('INFORME MENSUAL DE SUCURSAL - FARMATODO', d.sucursal, config, [
+      'Período: ' + oPendiente(periodo),
+      'Coordinador de RRHH: ' + oPendiente(config.coordinador),
+      'Visitas del período: ' + (d.visitas.length
+        ? d.visitas.map(x => fmtFecha(x.fecha)).join(' · ')
+        : 'ninguna registrada')
+    ]);
+
+    if (d.sinVisita) {
+      L.push('AVISO: el período todavía no tiene una visita cargada. Los indicadores');
+      L.push('de dotación, costo y rotación figuran como pendientes; lo que sí hay es');
+      L.push('lo que reportaron las sucursales en el parte diario.');
+      L.push('');
+    } else if (d.visitas.length > 1) {
+      L.push(`El mes tuvo ${d.visitas.length} visitas. Los indicadores toman la matriz cargada`);
+      L.push(`en la del ${fmtFecha(v.fecha)}, que es la más completa del período.`);
+      L.push('');
+    }
+
+    let n = 0;
+
+    /* 1. Dotación y FTE */
+    L.push(++n + '. DOTACIÓN Y FTE REAL');
+    L.push('   "Mes compl." son las personas que cubrieron los ' + c.par.diasMes + ' días. Quien ingresó o egresó');
+    L.push('   durante el mes no figura ahí: sus días efectivos están sumados en "Días Vínc.".');
+    L.push(tablaFteTexto(c.matriz, moneda));
+    L.push('');
+    L.push(`   FTE Real total: ${fmtNum(c.matriz.total.fteReal)} sobre una dotación equivalente de ` +
+           `${fmtNum(c.matriz.total.fteVinculo)} personas (${c.matriz.total.heads} de mes completo más los días de ingresos y egresos).`);
+    L.push(`   Brecha de cobertura: ${fmtNum(c.matriz.total.brechaFte)} FTE por ausencias, neto de horas extras.`);
+    L.push('');
+
+    /* 2. Costo laboral */
+    L.push(++n + '. COSTO LABORAL');
+    L.push(`- Costo laboral total del período: ${fmtMoneda(c.matriz.total.costoTotal || null, moneda)}`);
+    L.push(`- Costo promedio por FTE: ${c.matriz.total.costoPorFte === null ? PENDIENTE : fmtMoneda(c.matriz.total.costoPorFte, moneda)}`);
+    L.push(`- Cargas sociales aplicadas con factor ${fmtNum(c.par.factorCargas)} sobre los brutos.`);
+    L.push('');
+
+    /* 3. Ausentismo */
+    L.push(++n + '. AUSENTISMO');
+    seccionAusentismo(c, L);
+    if (d.parte.diasAusencia) {
+      L.push(`- Según el parte diario: ${d.parte.diasAusencia} día/s de ausencia sobre ` +
+             `${d.parte.diasConParte} jornada/s reportada/s, ${d.parte.gestionables} gestionables y ` +
+             `${d.parte.sinAviso} sin aviso.`);
+    }
+    L.push('');
+
+    /* 4. Horas extras */
+    L.push(++n + '. HORAS EXTRAS');
+    L.push(`- En la matriz de FTE: ${fmtNum(c.matriz.total.horasExtras, 0)} hs, equivalentes a ` +
+           `${fmtNum(c.matriz.total.horasExtras / c.par.horasMes)} FTE ` +
+           `(${fmtPct(c.matriz.total.ratioExtras)} de las horas teóricas).`);
+    if (d.parte.horas) {
+      const det = MOTIVOS_HORAS
+        .map(m => ({ m, h: d.parte.horasPorMotivo[m.id] || 0 })).filter(x => x.h)
+        .sort((x, y) => y.h - x.h)
+        .map(x => `${x.m.nombre.toLowerCase()} ${fmtNum(x.h, 1)} hs`).join(' · ');
+      L.push(`- Cargadas día a día en el parte: ${fmtNum(d.parte.horas, 1)} hs sobre ` +
+             `${d.parte.diasConHoras} jornada/s (${det}).`);
+      const dif = d.parte.horas - c.matriz.total.horasExtras;
+      if (c.matriz.total.horasExtras && Math.abs(dif) >= 0.5) {
+        L.push(`- Diferencia entre ambas fuentes: ${fmtNum(Math.abs(dif), 1)} hs ` +
+               `${dif > 0 ? 'de más en el parte diario' : 'de más en la matriz'}. Conviene revisar cuál está completa.`);
+      }
+      const cubrir = d.parte.horasPorMotivo.ausencia || 0;
+      if (cubrir) {
+        L.push(`- ${fmtNum(cubrir, 1)} hs (${fmtPct(cubrir / d.parte.horas, 0)}) se hicieron para cubrir ausencias: ` +
+               'es el ausentismo de la tienda traducido a costo.');
+      }
+    }
+    L.push('');
+
+    /* 5. Rotación */
+    L.push(++n + '. ROTACIÓN Y BAJAS');
+    L.push(`- Rotación del mes: ${fmtPct(c.rotacion.mensual)} · Proyección anual: ${fmtPct(c.rotacion.proyeccionAnual, 1)}`);
+    L.push(`- Dotación anterior ${c.rotacion.anterior} → nueva dotación ${c.rotacion.nueva} ` +
+           `(altas ${c.rotacion.altasExt + c.rotacion.altasInt} / bajas ${c.rotacion.bajas})`);
+    if (c.bajas.total) {
+      L.push('- Bajas por categoría: ' + c.bajas.grupos.map(g => `${g.nombre} ${g.casos}`).join(' · '));
+      (v.movimientos || []).filter(m => m.tipo === 'baja').forEach(m => {
+        L.push(`  * ${oPendiente(m.nombre)} (${oPendiente(m.puesto)}) — ${oPendiente(m.motivo)}` +
+               `${m.fecha ? ` · ${fmtFecha(m.fecha)}` : ''}`);
+      });
+    }
+    L.push('');
+
+    /* 6. Dotación vs. venta */
+    L.push(++n + '. DOTACIÓN vs. VENTA');
+    seccionDotacion(c, v, moneda, L);
+    L.push('');
+
+    /* 7. Disciplina del período */
+    L.push(++n + '. DISCIPLINA DEL PERÍODO');
+    if (!d.sanciones.length) {
+      L.push('- Sin sanciones registradas en el período.');
+    } else {
+      L.push(`- Sanciones aplicadas: ${d.sanciones.length}`);
+      const porTipo = {};
+      d.sanciones.forEach(x => {
+        const t = x.sancion.tipo || 'Sin tipificar';
+        porTipo[t] = (porTipo[t] || 0) + 1;
+      });
+      L.push('  * Por tipo: ' + Object.keys(porTipo).map(t => `${t} ${porTipo[t]}`).join(' · '));
+      const sinNotificar = d.sanciones.filter(x => !x.sancion.notificada || x.sancion.notificada === 'no').length;
+      if (sinNotificar) L.push(`  * ${sinNotificar} sin constancia de notificación.`);
+      L.push('  El detalle de cada sanción está en el reporte de la visita en que se registró.');
+    }
+    L.push('');
+
+    /* 8. Lectura del mes */
+    L.push(++n + '. LECTURA DEL MES');
+    if (c.hallazgosAuto.length) {
+      c.hallazgosAuto.forEach(h => L.push('- ' + h));
+    } else {
+      L.push('- Sin desvíos automáticos detectados sobre los umbrales configurados.');
+    }
+    L.push('');
+
+    const faltantes = faltantesMensuales(d);
+    if (faltantes.length) {
+      L.push('DATOS PENDIENTES DE CARGA');
+      faltantes.forEach(f => L.push('  - ' + f));
+      L.push('');
+    }
+
+    return L.concat(pie()).join('\n');
+  }
+
+  /* --------------------------- secciones sueltas ------------------------ */
+
+  function seccionSanciones(visita, L) {
+    visita.sanciones.forEach(sc => {
+      const dias = num(sc.dias) ? `, ${num(sc.dias)} día${num(sc.dias) === 1 ? '' : 's'}` : '';
+      L.push(`- ${oPendiente(sc.nombre)} (${oPendiente(sc.puesto)}) — ${oPendiente(sc.tipo)}${dias}`);
+      L.push(`  * Motivo: ${oPendiente(sc.motivo)}${sc.fecha ? ` · Fecha: ${fmtFecha(sc.fecha)}` : ''}`);
+      L.push(`  * Aplicada por: ${oPendiente(sc.aplicadaPor)} · Notificación: ${ETIQUETA_NOTIFICADA[sc.notificada] || PENDIENTE}`);
+      if (String(sc.observaciones || '').trim()) L.push(`    Detalle: ${String(sc.observaciones).trim()}`);
+    });
+    const sinNotificar = visita.sanciones.filter(sc => !sc.notificada || sc.notificada === 'no').length;
+    if (sinNotificar) L.push(`- ${sinNotificar} sanción/es sin constancia de notificación.`);
+  }
+
+  function seccionTalento(c, L) {
+    const t9 = c.talento;
+    L.push(`- Evaluados junto con el Gerente de Tienda: ${t9.evaluados.length} de ${t9.activos.length} colaboradores.`);
+    if (t9.sinEvaluar.length) {
+      L.push(`- Sin evaluar: ${t9.sinEvaluar.map(x => oPendiente(x.nombre)).join(', ')}.`);
+    }
+    L.push('- Ubicación en la matriz 9-box:');
+    [['3', 'Potencial alto'], ['2', 'Puede crecer'], ['1', 'En su nivel']].forEach(([pot, etiqueta]) => {
+      const fila = ['3', '2', '1'].map(des => {
+        const gente = t9.celdas[pot + des] || [];
+        if (!gente.length) return null;
+        const q = NINE_BOX[pot + des];
+        return `${q.nombre}: ${gente.map(x => oPendiente(x.nombre)).join(', ')}`;
+      }).filter(Boolean);
+      if (fila.length) L.push(`  * ${etiqueta} — ${fila.join(' · ')}`);
+    });
+    if (t9.listosParaCrecer.length) {
+      L.push(`- Listos para asumir más: ${t9.listosParaCrecer.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
+    }
+    if (t9.enRiesgo.length) {
+      L.push(`- Con plan de mejora pendiente: ${t9.enRiesgo.map(x => oPendiente(x.nombre)).join(', ')}.`);
+    }
+    if (t9.riesgoDeSalida.length) {
+      L.push(`- Riesgo de salida alto: ${t9.riesgoDeSalida.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
+    }
+    if (t9.estudiando.length) {
+      L.push(`- Con formación en curso: ${t9.estudiando.length} colaborador${t9.estudiando.length === 1 ? '' : 'es'}.`);
+      t9.estudiando.forEach(x => {
+        const nivel = (NIVELES_ESTUDIO.find(nn => nn.id === x.estudia) || {}).nombre || '';
+        L.push(`  * ${oPendiente(x.nombre)}: ${nivel}${x.carrera ? ' — ' + x.carrera : ''}` +
+               `${x.interesDesarrollo ? ` · quiere desarrollarse en: ${x.interesDesarrollo}` : ''}`);
+      });
+    }
+  }
+
+  function seccionSucesion(visita, c, L) {
+    L.push(`- Posiciones críticas identificadas: ${c.sucesion.posicionesCriticas} · con plan de sucesión: ${c.sucesion.criticasConPlan}`);
+    L.push(`- Candidatos listos en menos de 1 año: ${c.sucesion.candidatosListos}`);
+    c.sucesion.lista.forEach(i => {
+      const cands = i.candidatos.length
+        ? i.candidatos.map(x => `${x.nombre} (${(READINESS.find(r => r.id === x.readiness) || {}).nombre || '—'})`).join('; ')
+        : 'sin candidatos identificados';
+      L.push(`  * ${i.posicion} — titular ${oPendiente(i.incumbent)} — criticidad ${i.criticidad}/3, escasez ${i.escasez}/3 → ${cands}`);
+    });
+  }
+
+  function seccionAusentismo(c, L) {
+    L.push(`- Ausentismo total: ${fmtPct(c.ausentismo.pctTotal)} (${c.ausentismo.totalDias} días sobre ${c.ausentismo.diasDisponibles} de vínculo).`);
+    if (c.ausentismo.sinApertura) {
+      L.push('  * Sin apertura por concepto: el dato surge de la columna “Días ausentes” de la matriz de FTE.');
+    } else {
+      c.ausentismo.grupos.forEach(g => L.push(`  * ${g.nombre}: ${g.dias} días (${fmtPct(g.pct)})`));
+      L.push(`  * Días gestionables por la tienda: ${c.ausentismo.diasGestionables} (${fmtPct(c.ausentismo.pctGestionable)})`);
+    }
+    L.push(`- Impacto en el FTE: ${fmtNum(c.ausentismo.totalDias / c.par.diasMes)} FTE perdidos por ausencia.`);
+  }
+
+  function seccionDotacion(c, visita, moneda, L) {
+    if (c.dotacion.tipo === 'staff') {
+      L.push(`- Sucursal de estructura/soporte. Costo laboral sobre venta de la red: ${fmtPct(c.dotacion.pctCostoVenta)} ` +
+             `(benchmark ${fmtPct(c.dotacion.benchmark, 0)}).`);
+      L.push(`- Lectura: ${c.dotacion.semaforo.icono} ${c.dotacion.semaforo.texto}`);
+      return;
+    }
+    L.push(`- Venta neta del período: ${fmtMoneda(num(visita.comercial.venta) || null, moneda)}`);
+    L.push(`- Costo laboral / venta: ${fmtPct(c.dotacion.pctCostoVenta)} ` +
+           `(objetivo ${fmtPct(c.dotacion.benchmark, 0)} · techo de alerta ${fmtPct(c.dotacion.alerta, 0)})`);
+    L.push(`  ${c.dotacion.banda.icono} ${c.dotacion.banda.texto}. ${c.dotacion.banda.lectura}`);
+    L.push(`- Dotación actual: ${c.matriz.total.heads} · Dotación óptima según venta: ${c.dotacion.dotacionOptima === null ? PENDIENTE : c.dotacion.dotacionOptima}` +
+           (c.dotacion.dotacionMaxima === null || c.dotacion.dotacionMaxima === undefined ? '' : ` · Máxima antes del techo: ${c.dotacion.dotacionMaxima}`) +
+           (c.dotacion.diferencia === null ? '' : ` · Diferencia: ${c.dotacion.diferencia > 0 ? '+' : ''}${c.dotacion.diferencia}`));
+    if (c.dotacion.ahorro !== null) {
+      L.push(`- ${c.dotacion.ahorro >= 0 ? 'Inversión requerida' : 'Ahorro potencial'}: ${fmtMoneda(Math.abs(c.dotacion.ahorro), moneda)}`);
+    }
+    L.push(`- Lectura: ${c.dotacion.semaforo.icono} ${c.dotacion.semaforo.texto}`);
+    if (c.productividad) {
+      L.push(`- Productividad: ${fmtNum(c.productividad.ticketsHora)} tickets/hora sobre un objetivo de ${c.productividad.objetivo} ` +
+             `(cumplimiento ${fmtPct(c.productividad.cumplimiento)}).`);
+    }
+  }
+
+  function seccionPlan(visita, L) {
+    const plan = visita.diagnostico.plan || [];
+    if (!plan.length) { L.push('   ' + PENDIENTE); return; }
+
+    const bloques = [
+      ['tienda',      'A cargo del Gerente de Tienda'],
+      ['rrhh',        'A cargo de RRHH'],
+      ['operaciones', 'A cargo de Operaciones'],
+      ['otro',        'Otras acciones']
+    ];
+    bloques.forEach(([clave, titulo]) => {
+      const items = plan.filter(x => (x.aCargo || 'tienda') === clave);
+      if (!items.length) return;
+      L.push('');
+      L.push(`   ${titulo}:`);
+      items.forEach((x, i) => {
+        L.push(`   ${i + 1}. ${oPendiente(x.compromiso)}`);
+        L.push(`      Responsable: ${oPendiente(x.responsable)} · Plazo: ${fmtFecha(x.plazo)} · ` +
+               `Prioridad: ${oPendiente(x.prioridad)} · Estado: ${oPendiente(x.estado)}`);
+      });
+    });
+    const hoy = new Date().toISOString().slice(0, 10);
+    const vencidas = plan.filter(x => x.estado !== 'Cumplido' && x.plazo && x.plazo < hoy);
+    if (vencidas.length) {
+      L.push('');
+      L.push(`   ${vencidas.length} acción/es con el plazo vencido: ` +
+             vencidas.map(x => oPendiente(x.compromiso)).join(' · '));
+    }
   }
 
   function bloque(txt, sangria) {
@@ -347,13 +548,30 @@ const Reporte = (() => {
     return t.split('\n').map(l => sangria + l.trim()).join('\n');
   }
 
-  /** Lista los campos que quedaron sin cargar, para pedirlos explícitamente. */
-  function detectarFaltantes(visita, sucursal, c) {
+  /* Lo que quedó sin cargar. Se separa por documento: al reporte de la visita
+     le falta lo cualitativo, al informe mensual le faltan números. */
+
+  function faltantesVisita(visita, sucursal, c) {
     const f = [];
     if (!sucursal.nombre) f.push('Nombre real de la sucursal (hoy figura como ' + sucursal.codigo + ').');
     if (!sucursal.gerente) f.push('Nombre del Gerente de Tienda.');
     if (!String(visita.minutaGerente.puntos || '').trim()) f.push('Puntos tratados en la reunión con el Gerente de Tienda.');
+    if (!String(visita.minutaGerente.acuerdos || '').trim()) f.push('Acuerdos y compromisos de la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaColaborador.nombre || '').trim()) f.push('Colaborador entrevistado.');
+    if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
+    if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
+    else if (c.talento.sinEvaluar.length) {
+      f.push(`Evaluación de desempeño y potencial de ${c.talento.sinEvaluar.length} colaborador/es: ` +
+             c.talento.sinEvaluar.map(x => x.nombre || 'sin nombre').join(', ') + '.');
+    }
+    if (!sucursal.emailGerente) f.push('Email del Gerente de Tienda, para que reciba copia.');
+    return f;
+  }
+
+  function faltantesMensuales(d) {
+    const c = d.calculo, v = d.base, s = d.sucursal;
+    const f = [];
+    if (d.sinVisita) f.push('El período no tiene ninguna visita cargada: los indicadores salen en blanco.');
     if (!c.matriz.total.heads) f.push('Headcount base por posición.');
     if (!c.matriz.total.costoTotal) f.push('Costos laborales (sueldos brutos, horas extras, bonos).');
     if (!c.ausentismo.totalDias) f.push('Días de ausentismo del período.');
@@ -363,15 +581,9 @@ const Reporte = (() => {
              `pero la matriz de FTE tiene cargados ${c.matriz.total.diasAusentes}. ` +
              `El FTE Real se calcula con el dato de la matriz.`);
     }
-    if (!num(visita.comercial.venta) && sucursal.tipo === 'venta') f.push('Venta neta del período (necesaria para el análisis de dotación óptima).');
-    if (!num(visita.rotacion.dotacionAnterior)) f.push('Dotación del mes anterior (para el cálculo de rotación).');
-    if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
-    if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
-    else if (c.talento.sinEvaluar.length) {
-      f.push(`Evaluación de desempeño y potencial de ${c.talento.sinEvaluar.length} colaborador/es: ` +
-             c.talento.sinEvaluar.map(x => x.nombre || 'sin nombre').join(', ') + '.');
-    }
-    if (!sucursal.emailGerente) f.push('Email del Gerente de Tienda, para que reciba copia del reporte.');
+    if (!num(v.comercial.venta) && s.tipo === 'venta') f.push('Venta neta del período (necesaria para el análisis de dotación óptima).');
+    if (!num(v.rotacion.dotacionAnterior)) f.push('Dotación del mes anterior (para el cálculo de rotación).');
+    if (!d.parte.diasConParte) f.push('Partes diarios del período: sin ellos no hay presentismo ni horas cargadas día a día.');
     return f;
   }
 
@@ -403,23 +615,25 @@ const Reporte = (() => {
     return fijas;
   }
 
-  function asunto(visita, sucursal, config) {
+  function asuntoVisita(visita, sucursal, config) {
     const area = config && config.area ? config.area + ' · ' : '';
     return `Visita RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${fmtFecha(visita.fecha)}`;
   }
 
+  function asuntoMensual(sucursal, periodo, config) {
+    const area = config && config.area ? config.area + ' · ' : '';
+    return `Informe mensual RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${periodo || ''}`;
+  }
+
   /**
-   * Envía el reporte. Dos vías:
+   * Envío, común a los dos documentos. Dos vías:
    *  - webhook: si hay un endpoint configurado (Zapier, Make, Google Apps
    *    Script, etc.) se hace un POST y el envío es automático.
    *  - mailto:  abre el cliente de correo con todo pre-cargado; el coordinador
    *    solo confirma el envío.
-   * En ambos casos se deja registro en el historial de la visita.
    */
-  async function enviar(visita, sucursal, config, opciones) {
+  async function despachar({ sucursal, config, asunto, cuerpo, payloadExtra, opciones }) {
     opciones = opciones || {};
-    const cuerpo = texto(visita, sucursal, config);
-    const asu = asunto(visita, sucursal, config);
     const dest = destinatario(sucursal, config);
     const destino = dest.email;
 
@@ -429,29 +643,14 @@ const Reporte = (() => {
         : 'Falta cargar el email del Gerente de Operaciones en Configuración.');
     }
 
-    let via = 'mailto';
+    const cc = copias(sucursal, config);
+
     if (config.webhook && String(config.webhook).trim() && !opciones.forzarMailto) {
-      const c = calcular(visita, sucursal, config);
-      const payload = {
-        para: destino,
-        cc: copias(sucursal, config),
-        asunto: asu,
-        cuerpo,
+      const payload = Object.assign({
+        para: destino, cc, asunto, cuerpo,
         area: config.area || '',
-        sucursal: { codigo: sucursal.codigo, nombre: sucursal.nombre, tipo: sucursal.tipo },
-        visita: { id: visita.id, fecha: visita.fecha, periodo: visita.periodo, coordinador: visita.coordinador },
-        metricas: {
-          headcount: c.matriz.total.heads,
-          fteReal: redondear(c.matriz.total.fteReal, 2),
-          costoLaboralTotal: redondear(c.matriz.total.costoTotal, 2),
-          costoPorFte: c.matriz.total.costoPorFte === null ? null : redondear(c.matriz.total.costoPorFte, 2),
-          ausentismoPct: c.ausentismo.pctTotal,
-          horasExtras: c.matriz.total.horasExtras,
-          rotacionMensual: c.rotacion.mensual,
-          dotacionOptima: c.dotacion.dotacionOptima,
-          diferenciaDotacion: c.dotacion.diferencia
-        }
-      };
+        sucursal: { codigo: sucursal.codigo, nombre: sucursal.nombre, tipo: sucursal.tipo }
+      }, payloadExtra || {});
       // El cuerpo es JSON, pero se declara text/plain a propósito: así el
       // navegador lo trata como "simple request" y no dispara el preflight
       // OPTIONS, que Google Apps Script no sabe responder.
@@ -461,28 +660,86 @@ const Reporte = (() => {
         body: JSON.stringify(payload)
       });
       if (!resp.ok) throw new Error('El endpoint de envío respondió ' + resp.status + '.');
-      via = 'webhook';
-    } else {
-      const cc = copias(sucursal, config).join(',');
-      const url = 'mailto:' + encodeURIComponent(destino) +
-        '?subject=' + encodeURIComponent(asu) +
-        (cc ? '&cc=' + encodeURIComponent(cc) : '') +
-        '&body=' + encodeURIComponent(cuerpo);
-      // Algunos clientes de correo truncan URLs muy largas; si pasa, el
-      // coordinador tiene el botón "Copiar reporte" como respaldo.
-      window.location.href = url;
+      return { via: 'webhook', destino, copias: cc, largo: cuerpo.length };
     }
 
-    const sello = new Date().toISOString();
-    visita.envio.enviado = true;
-    visita.envio.fecha = sello;
-    visita.envio.destinatario = destino;
-    visita.envio.via = via;
-    visita.envio.copias = copias(sucursal, config);
-    visita.envio.historial.push({ fecha: sello, destinatario: destino, copias: visita.envio.copias, via });
-    Store.save();
-    return { via, destino, largo: cuerpo.length };
+    const url = 'mailto:' + encodeURIComponent(destino) +
+      '?subject=' + encodeURIComponent(asunto) +
+      (cc.length ? '&cc=' + encodeURIComponent(cc.join(',')) : '') +
+      '&body=' + encodeURIComponent(cuerpo);
+    // Algunos clientes de correo truncan URLs muy largas; si pasa, el
+    // coordinador tiene el botón "Copiar" como respaldo.
+    window.location.href = url;
+    return { via: 'mailto', destino, copias: cc, largo: cuerpo.length };
   }
 
-  return { calcular, texto, asunto, enviar, detectarFaltantes, tablaFteTexto, copias, destinatario };
+  function sellar(registro, r) {
+    const sello = new Date().toISOString();
+    registro.enviado = true;
+    registro.fecha = sello;
+    registro.destinatario = r.destino;
+    registro.via = r.via;
+    registro.copias = r.copias;
+    if (!Array.isArray(registro.historial)) registro.historial = [];
+    registro.historial.push({ fecha: sello, destinatario: r.destino, copias: r.copias, via: r.via });
+    Store.save();
+  }
+
+  /** Manda el reporte de la visita y lo deja registrado en la visita. */
+  async function enviarVisita(visita, sucursal, config, opciones) {
+    const c = calcular(visita, sucursal, config);
+    const r = await despachar({
+      sucursal, config, opciones,
+      asunto: asuntoVisita(visita, sucursal, config),
+      cuerpo: textoVisita(visita, sucursal, config),
+      payloadExtra: {
+        tipo: 'visita',
+        visita: { id: visita.id, fecha: visita.fecha, periodo: visita.periodo, coordinador: visita.coordinador },
+        acuerdos: (visita.diagnostico.plan || []).length,
+        sanciones: visita.sanciones.length,
+        evaluados: c.talento.evaluados.length
+      }
+    });
+    sellar(visita.envio, r);
+    return r;
+  }
+
+  /** Manda el informe mensual y lo deja registrado en el período. */
+  async function enviarMensual(sucursalId, periodo, config, opciones) {
+    const d = datosMensuales(sucursalId, periodo, config);
+    const c = d.calculo;
+    const r = await despachar({
+      sucursal: d.sucursal, config, opciones,
+      asunto: asuntoMensual(d.sucursal, periodo, config),
+      cuerpo: textoMensual(sucursalId, periodo, config),
+      payloadExtra: {
+        tipo: 'mensual',
+        periodo,
+        visitas: d.visitas.map(v => v.fecha),
+        metricas: {
+          headcount: c.matriz.total.heads,
+          fteReal: redondear(c.matriz.total.fteReal, 2),
+          costoLaboralTotal: redondear(c.matriz.total.costoTotal, 2),
+          costoPorFte: c.matriz.total.costoPorFte === null ? null : redondear(c.matriz.total.costoPorFte, 2),
+          ausentismoPct: c.ausentismo.pctTotal,
+          horasExtrasMatriz: c.matriz.total.horasExtras,
+          horasExtrasParte: redondear(d.parte.horas, 1),
+          rotacionMensual: c.rotacion.mensual,
+          dotacionOptima: c.dotacion.dotacionOptima,
+          diferenciaDotacion: c.dotacion.diferencia
+        }
+      }
+    });
+    sellar(Store.asegurarInforme(sucursalId, periodo), r);
+    return r;
+  }
+
+  return {
+    calcular, datosMensuales,
+    textoVisita, textoMensual,
+    asuntoVisita, asuntoMensual,
+    enviarVisita, enviarMensual,
+    faltantesVisita, faltantesMensuales,
+    tablaFteTexto, copias, destinatario
+  };
 })();

@@ -98,7 +98,8 @@ const Store = (() => {
       },
       sucursales,
       visitas: [],
-      partes: []                          // parte diario de asistencia
+      partes: [],                         // parte diario de asistencia
+      informes: []                        // envíos del informe mensual por sucursal
     };
   }
 
@@ -177,6 +178,11 @@ const Store = (() => {
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
+    e.informes = Array.isArray(e.informes) ? e.informes : [];
+    e.informes.forEach(i => {
+      if (!i.id) i.id = uid();
+      if (!Array.isArray(i.historial)) i.historial = [];
+    });
     e.partes = Array.isArray(e.partes) ? e.partes : [];
     e.partes.forEach(p => {
       if (!p.id) p.id = uid();
@@ -353,6 +359,36 @@ const Store = (() => {
         guardar();
       }
       return p;
+    },
+
+    /* --------------------- informe mensual ------------------------ *
+       Solo guarda el registro del envío: el contenido se recalcula siempre
+       desde las visitas y los partes del período, así nunca queda desfasado. */
+    informeDe(sucursalId, periodo) {
+      return this.get().informes.find(i => i.sucursalId === sucursalId && i.periodo === periodo) || null;
+    },
+
+    asegurarInforme(sucursalId, periodo) {
+      const e = this.get();
+      let i = this.informeDe(sucursalId, periodo);
+      if (!i) {
+        i = { id: uid(), sucursalId, periodo, enviado: false, fecha: null,
+              destinatario: null, via: null, copias: [], historial: [] };
+        e.informes.push(i);
+        guardar();
+      }
+      return i;
+    },
+
+    /** Períodos con algo cargado: visitas o partes diarios. */
+    periodosDe(sucursalId) {
+      const e = this.get();
+      const set = {};
+      e.visitas.forEach(v => { if (v.sucursalId === sucursalId && v.periodo) set[v.periodo] = true; });
+      e.partes.forEach(p => {
+        if (p.sucursalId === sucursalId && p.fecha) set[String(p.fecha).slice(0, 7)] = true;
+      });
+      return Object.keys(set).sort().reverse();
     },
 
     eliminarParte(id) {
