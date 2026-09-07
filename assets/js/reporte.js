@@ -187,8 +187,11 @@ const Reporte = (() => {
       L.push(`- Lectura: ${c.dotacion.semaforo.icono} ${c.dotacion.semaforo.texto}`);
     } else {
       L.push(`- Venta neta del período: ${fmtMoneda(num(visita.comercial.venta) || null, moneda)}`);
-      L.push(`- Costo laboral / venta: ${fmtPct(c.dotacion.pctCostoVenta)} (benchmark ${fmtPct(c.dotacion.benchmark, 0)})`);
+      L.push(`- Costo laboral / venta: ${fmtPct(c.dotacion.pctCostoVenta)} ` +
+             `(objetivo ${fmtPct(c.dotacion.benchmark, 0)} · techo de alerta ${fmtPct(c.dotacion.alerta, 0)})`);
+      L.push(`  ${c.dotacion.banda.icono} ${c.dotacion.banda.texto}. ${c.dotacion.banda.lectura}`);
       L.push(`- Dotación actual: ${c.matriz.total.heads} · Dotación óptima según venta: ${c.dotacion.dotacionOptima === null ? PENDIENTE : c.dotacion.dotacionOptima}` +
+             (c.dotacion.dotacionMaxima === null || c.dotacion.dotacionMaxima === undefined ? '' : ` · Máxima antes del techo: ${c.dotacion.dotacionMaxima}`) +
              (c.dotacion.diferencia === null ? '' : ` · Diferencia: ${c.dotacion.diferencia > 0 ? '+' : ''}${c.dotacion.diferencia}`));
       if (c.dotacion.ahorro !== null) {
         L.push(`- ${c.dotacion.ahorro >= 0 ? 'Inversión requerida' : 'Ahorro potencial'}: ${fmtMoneda(Math.abs(c.dotacion.ahorro), moneda)}`);

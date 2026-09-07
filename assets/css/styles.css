@@ -216,6 +216,38 @@ pre.reporte {
 
 .vacio { color: var(--texto-suave); font-style: italic; padding: 14px 0; font-size: 13.5px; }
 
+/* --------------- Medidor de costo laboral sobre la venta ---------------- *
+   Un valor contra dos umbrales: no es un gráfico, es un indicador de estado.
+   El color nunca va solo; siempre lo acompañan el ícono y el texto. */
+.medidor { margin: 18px 0 6px; }
+.medidor .pista {
+  position: relative; height: 26px; border-radius: 6px; overflow: hidden;
+  display: flex; border: 1px solid var(--borde);
+}
+.medidor .zona { height: 100%; }
+.medidor .zona.z1 { background: rgba(26,127,75,.20); }
+.medidor .zona.z2 { background: rgba(183,121,31,.22); }
+.medidor .zona.z3 { background: rgba(192,57,43,.20); }
+.medidor .marca {
+  position: absolute; top: -3px; bottom: -3px; width: 3px; border-radius: 2px;
+  background: var(--texto); box-shadow: 0 0 0 2px var(--panel);
+}
+.medidor .umbral {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--texto-suave); opacity: .55;
+}
+.medidor .escala { position: relative; height: 34px; margin-top: 5px; font-variant-numeric: tabular-nums; }
+.medidor .escala span {
+  position: absolute; transform: translateX(-50%); text-align: center;
+  font-size: 11px; color: var(--texto-suave); line-height: 1.35; white-space: nowrap;
+}
+.medidor .escala span b { display: block; color: var(--texto); font-size: 12px; }
+.medidor .valor {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px;
+}
+.medidor .valor strong { font-size: 26px; font-variant-numeric: tabular-nums; }
+.medidor .valor em { font-style: normal; font-size: 13px; color: var(--texto-suave); }
+
 /* ----------------------------- Matriz 9-box ---------------------------- */
 /* Cinco columnas: eje vertical, etiquetas de fila y los tres cuadrantes.
    Cada elemento fuera de la grilla de cuadrantes lleva su columna explícita,

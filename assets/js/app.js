@@ -164,7 +164,14 @@ const App = (() => {
         ${kpi('Costo laboral', costo ? dinero(costo) : '—', fte ? `${dinero(costo / fte)} por FTE` : '')}
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', he ? fmtNum(he, 0) + ' hs' : '—', he ? `${fmtNum(he / e.config.parametros.horasMes)} FTE equivalentes` : '')}
-        ${kpi('Venta neta', ventaRed ? dinero(ventaRed) : '—', costo && ventaRed ? `costo/venta ${fmtPct(costo / ventaRed)}` : '')}
+        ${(() => {
+          const pct = costo && ventaRed ? costo / ventaRed : null;
+          const banda = evaluarCostoVenta(pct, e.config.parametros);
+          return kpi('Costo / venta de la red', pct === null ? '—' : fmtPct(pct),
+                     pct === null ? 'sin ventas cargadas' : `${banda.icono} ${banda.texto}`,
+                     { eficiente: 'ok', atencion: 'aviso', alerta: 'alerta', sd: '' }[banda.zona]);
+        })()}
+        ${kpi('Venta neta', ventaRed ? dinero(ventaRed) : '—', costo ? `costo laboral ${dinero(costo)}` : '')}
         ${kpi('Reportes enviados', `${enviadas} / ${visitadas}`, 'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
@@ -303,7 +310,8 @@ const App = (() => {
           ${campo('Días del mes (divisor FTE)', 'parametros.diasMes', { tipo: 'number', calc: true })}
           ${campo('Horas del mes (divisor HE)', 'parametros.horasMes', { tipo: 'number', calc: true })}
           ${campo('Factor de cargas sociales', 'parametros.factorCargas', { tipo: 'number', step: '0.01', calc: true })}
-          ${campo('Benchmark costo/venta', 'parametros.benchmarkCostoVenta', { tipo: 'number', step: '0.01', calc: true })}
+          ${campo('Objetivo costo/venta', 'parametros.benchmarkCostoVenta', { tipo: 'number', step: '0.01', calc: true })}
+          ${campo('Techo de alerta costo/venta', 'parametros.alertaCostoVenta', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Benchmark staff s/venta red', 'parametros.benchmarkStaff', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Objetivo tickets/hora', 'parametros.ticketsHoraObjetivo', { tipo: 'number', step: '0.5', calc: true })}
           ${campo('Umbral de ausentismo', 'parametros.umbralAusentismo', { tipo: 'number', step: '0.01', calc: true })}
@@ -1013,6 +1021,36 @@ const App = (() => {
       </section>`;
   }
 
+  /* Medidor del costo laboral sobre la venta contra la banda de referencia.
+     Un valor y dos umbrales: indicador de estado, no gráfico. */
+  function medidorCostoVenta(d, p) {
+    if (d.pctCostoVenta === null) return '';
+    const tope = Math.max(0.20, d.pctCostoVenta * 1.25);
+    const x = v => Math.min(100, (v / tope) * 100);
+    const clase = { eficiente: 'verde', atencion: 'ambar', alerta: 'rojo', sd: '' }[d.banda.zona];
+
+    return `<div class="medidor">
+      <div class="valor">
+        <strong>${fmtPct(d.pctCostoVenta)}</strong>
+        <span class="chip ${clase}">${d.banda.icono} ${esc(d.banda.texto)}</span>
+        <em>del costo laboral sobre la venta neta</em>
+      </div>
+      <div class="pista">
+        <div class="zona z1" style="width:${x(p.benchmarkCostoVenta)}%"></div>
+        <div class="zona z2" style="width:${x(p.alertaCostoVenta) - x(p.benchmarkCostoVenta)}%"></div>
+        <div class="zona z3" style="width:${100 - x(p.alertaCostoVenta)}%"></div>
+        <div class="umbral" style="left:${x(p.benchmarkCostoVenta)}%"></div>
+        <div class="umbral" style="left:${x(p.alertaCostoVenta)}%"></div>
+        <div class="marca" style="left:${x(d.pctCostoVenta)}%" title="Esta sucursal: ${fmtPct(d.pctCostoVenta)}"></div>
+      </div>
+      <div class="escala">
+        <span style="left:${x(p.benchmarkCostoVenta)}%"><b>${fmtPct(p.benchmarkCostoVenta, 0)}</b>objetivo</span>
+        <span style="left:${x(p.alertaCostoVenta)}%"><b>${fmtPct(p.alertaCostoVenta, 0)}</b>techo de alerta</span>
+      </div>
+      <p style="font-size:13px;margin:6px 0 0">${esc(d.banda.lectura)}</p>
+    </div>`;
+  }
+
   /* ---------------------- 7. Dotación vs. venta --------------------- */
   function panelDotacion(v, s, c) {
     const d = c.dotacion, p = Store.get().config.parametros;
@@ -1020,8 +1058,10 @@ const App = (() => {
       <section class="tarjeta">
         <h2>7. Dotación óptima según venta</h2>
         <p class="ayuda">
-          Modelo del tablero de dotación: costo laboral real ÷ venta neta comparado contra el benchmark de ${fmtPct(p.benchmarkCostoVenta, 0)}.
-          La dotación óptima surge de repartir el presupuesto teórico (venta × benchmark) entre el costo promedio por empleado.
+          El costo laboral sobre la venta se lee contra dos umbrales: hasta ${fmtPct(p.benchmarkCostoVenta, 0)} es el objetivo,
+          y ${fmtPct(p.alertaCostoVenta, 0)} es el techo de alerta de la actividad.
+          La dotación óptima reparte el presupuesto del objetivo (venta × ${fmtPct(p.benchmarkCostoVenta, 0)}) entre el costo promedio por empleado;
+          la dotación máxima es la que la venta sostiene antes de tocar el techo.
           ${s.tipo === 'staff' ? 'Esta sucursal está marcada como <strong>staff</strong>: se mide contra la venta de la red, no contra venta propia.' : ''}
         </p>
         <div class="grid c4">
@@ -1031,13 +1071,16 @@ const App = (() => {
           ${campo('Horas trabajadas', 'comercial.horasTrabajadas', { tipo: 'number', calc: true })}
         </div>
 
+        ${d.tipo === 'venta' ? medidorCostoVenta(d, p) : ''}
+
         <div class="kpis" style="margin-top:18px">
-          ${kpi('Costo laboral real', d.costoReal ? dinero(d.costoReal) : '—', `factor de cargas ${p.factorCargas}`)}
-          ${kpi('% costo / venta', fmtPct(d.pctCostoVenta), `benchmark ${fmtPct(d.benchmark, 0)}`,
-                d.pctCostoVenta !== null && d.pctCostoVenta > d.benchmark ? 'alerta' : 'ok')}
+          ${kpi('Costo laboral real', d.costoReal ? dinero(d.costoReal) : '—', `factor de cargas ${fmtNum(p.factorCargas)}`)}
           ${kpi('Dotación actual', c.matriz.total.heads || '—')}
           ${kpi('Dotación óptima', d.dotacionOptima === null ? '—' : d.dotacionOptima,
                 d.diferencia === null ? '' : `diferencia ${d.diferencia > 0 ? '+' : ''}${d.diferencia}`)}
+          ${d.dotacionMaxima === null || d.dotacionMaxima === undefined ? '' :
+            kpi('Dotación máxima', d.dotacionMaxima, `antes del techo del ${fmtPct(p.alertaCostoVenta, 0)}`,
+                c.matriz.total.heads > d.dotacionMaxima ? 'alerta' : '')}
           ${d.ahorro === null || d.ahorro === undefined ? '' :
             kpi(d.ahorro >= 0 ? 'Inversión requerida' : 'Ahorro potencial', dinero(Math.abs(d.ahorro)), '',
                 d.ahorro >= 0 ? 'aviso' : 'ok')}

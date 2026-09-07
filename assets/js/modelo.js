@@ -240,28 +240,34 @@ function calcularDotacionOptima({ tipo, empleados, costoLaboralReal, venta, vent
 
   if (!v || !emp || !costo) {
     return {
-      tipo: 'venta', costoReal: costo, pctCostoVenta: null, benchmark: p.benchmarkCostoVenta,
-      dotacionOptima: null, diferencia: null, costoOptimo: null, ahorro: null,
-      semaforo: semaforoDotacion(null)
+      tipo: 'venta', costoReal: costo, pctCostoVenta: null,
+      benchmark: p.benchmarkCostoVenta, alerta: p.alertaCostoVenta,
+      dotacionOptima: null, dotacionMaxima: null, diferencia: null, costoOptimo: null, ahorro: null,
+      semaforo: semaforoDotacion(null), banda: evaluarCostoVenta(null, p)
     };
   }
 
   const costoPorEmpleado = costo / emp;
   const dotacionOptima = Math.round((v * p.benchmarkCostoVenta) / costoPorEmpleado);
+  const dotacionMaxima = Math.floor((v * p.alertaCostoVenta) / costoPorEmpleado);
   const diferencia = dotacionOptima - emp;
   const costoOptimo = dotacionOptima * costoPorEmpleado;
+  const pct = costo / v;
 
   return {
     tipo: 'venta',
     costoReal: costo,
-    pctCostoVenta: costo / v,
+    pctCostoVenta: pct,
     benchmark: p.benchmarkCostoVenta,
+    alerta: p.alertaCostoVenta,
     costoPorEmpleado,
     dotacionOptima,
+    dotacionMaxima,          // dotación que la venta sostiene antes del techo de alerta
     diferencia,
     costoOptimo,
     ahorro: costoOptimo - costo,
-    semaforo: semaforoDotacion(diferencia)
+    semaforo: semaforoDotacion(diferencia),
+    banda: evaluarCostoVenta(pct, p)
   };
 }
 
@@ -365,6 +371,28 @@ function generarHallazgos(v, par) {
       out.push(`${f.rol}: ${f.horasExtras} hs extras (${_pct(f.ratioExtras)} de sus horas teóricas). Verificar si es un déficit estructural de dotación.`);
     }
   });
+
+  const dot = calcularDotacionOptima({
+    tipo: 'venta', empleados: m.total.heads, costoLaboralReal: m.total.costoTotal,
+    venta: v.comercial && v.comercial.venta
+  }, p);
+  if (dot.pctCostoVenta !== null) {
+    if (dot.banda.zona === 'alerta') {
+      const causas = [];
+      if (m.total.ratioExtras !== null && m.total.ratioExtras > p.umbralHorasExtras) {
+        causas.push(`las horas extras representan el ${_pct(m.total.ratioExtras)} de las horas teóricas`);
+      }
+      if (m.total.heads > dot.dotacionMaxima) {
+        causas.push(`la venta sostiene hasta ${dot.dotacionMaxima} personas antes del techo y la tienda tiene ${m.total.heads}`);
+      }
+      out.push(`Costo laboral en ${_pct(dot.pctCostoVenta)} de la venta, por encima del techo de alerta del ${_pct(p.alertaCostoVenta, 0)}. ` +
+        (causas.length ? `En esta tienda: ${causas.join('; ')}. ` : '') +
+        'Revisar si es sobreestructura, caída de ventas o un modelo operativo costoso.');
+    } else if (dot.banda.zona === 'atencion') {
+      out.push(`Costo laboral en ${_pct(dot.pctCostoVenta)} de la venta: por encima del objetivo del ${_pct(p.benchmarkCostoVenta, 0)} ` +
+        `pero por debajo del techo de alerta del ${_pct(p.alertaCostoVenta, 0)}.`);
+    }
+  }
 
   if (rot.proyeccionAnual !== null && rot.proyeccionAnual > 0.30) {
     out.push(`Rotación mensual del ${_pct(rot.mensual)}, que proyectada al año da ${_pct(rot.proyeccionAnual, 1)}. Revisar causas de egreso.`);

@@ -138,12 +138,32 @@ de rotación codificada (A-1 a C-3) del tablero de estadísticas.
 Costo laboral real  = brutos × factor de cargas
 % costo / venta     = costo laboral real ÷ venta neta
 Costo por empleado  = costo laboral real ÷ empleados
-Dotación óptima     = (venta × benchmark) ÷ costo por empleado
+Dotación óptima     = (venta × objetivo 10%) ÷ costo por empleado
+Dotación máxima     = (venta × alerta 15%) ÷ costo por empleado
 Ahorro / inversión  = costo óptimo − costo real
 ```
 
-Benchmark por defecto: **10%** de costo laboral sobre venta para sucursales de
-venta, **6%** sobre venta de la red para estructura de soporte.
+### La banda de costo laboral sobre venta
+
+El costo laboral no se mide contra un único valor sino contra dos umbrales:
+
+| Zona | Lectura |
+|---|---|
+| **Hasta 10%** 🟢 | Farmacia eficiente. Alta facturación por empleado, procesos optimizados, o peso fuerte de venta libre y perfumería, que requieren menos personal especializado por volumen o tienen mejor margen |
+| **Entre 10% y 15%** 🟡 | Por encima del objetivo pero por debajo del techo. Conviene entender qué lo empuja: horas extras, cobertura de francos o venta por debajo de lo previsto |
+| **15% o más** 🔴 | Techo de alerta. Suele significar tienda sobreestructurada, caída de ventas, o un modelo operativo costoso: horario extendido con plus nocturnos y horas extras, o recetario magistral de alta demanda de mano de obra |
+
+De ahí salen dos dotaciones distintas: la **óptima**, que es la que sostiene el
+presupuesto del objetivo, y la **máxima**, que es hasta dónde llega la venta
+antes de tocar el techo de alerta. Entre ambas hay margen de decisión; por
+encima de la máxima, no.
+
+Cuando la tienda supera el techo, el diagnóstico automático cruza el dato con lo
+que el propio tablero ya sabe: si las horas extras están desviadas, lo dice; si
+la dotación excede la máxima sostenible, lo cuantifica.
+
+Para estructura de soporte el benchmark sigue siendo **6%** sobre la venta de la
+red. Los tres valores se editan en Configuración.
 
 Semáforo, según `diferencia = dotación óptima − dotación actual`:
 

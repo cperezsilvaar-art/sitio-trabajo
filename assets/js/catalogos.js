@@ -179,13 +179,43 @@ const PARAMETROS_DEFECTO = {
   diasMes: 30,              // divisor de días para FTE
   horasMes: 200,            // divisor de horas extras para FTE
   factorCargas: 1.65,       // bruto -> costo laboral real
-  benchmarkCostoVenta: 0.10,// 10% costo laboral sobre venta neta (sucursal de venta)
+  benchmarkCostoVenta: 0.10,// 10% o menos: farmacia eficiente. Es el objetivo
+  alertaCostoVenta: 0.15,   // 15%: techo de alerta. Por encima, sobreestructura
   benchmarkStaff: 0.06,     // 6% sobre venta de la red (estructura de soporte)
   ticketsHoraObjetivo: 6,   // 6 tickets por hora cada 6 horas trabajadas
   umbralAusentismo: 0.05,   // 5% de ausentismo total como alerta
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
   moneda: '$'
 };
+
+/**
+ * Lectura del costo laboral sobre la venta, contra la banda de referencia de la
+ * actividad en Argentina:
+ *
+ *   hasta 10%  farmacia eficiente: alta facturación por empleado, procesos
+ *              optimizados, o peso fuerte de venta libre y perfumería.
+ *   10% a 15%  por encima del objetivo, todavía manejable.
+ *   15% o más  techo de alerta: sobreestructura, caída de ventas, o un modelo
+ *              operativo caro (24 horas con plus nocturnos y horas extras,
+ *              recetario magistral de alta demanda de mano de obra).
+ */
+function evaluarCostoVenta(pct, par) {
+  const p = Object.assign({}, PARAMETROS_DEFECTO, par || {});
+  if (pct === null || pct === undefined || isNaN(pct)) {
+    return { zona: 'sd', icono: '⚪', texto: 'Sin datos de venta',
+             lectura: 'Cargá la venta neta del período para poder medir el costo laboral.' };
+  }
+  if (pct <= p.benchmarkCostoVenta) {
+    return { zona: 'eficiente', icono: '🟢', texto: 'Eficiente',
+             lectura: 'El costo laboral está dentro del objetivo. Indica buena facturación por empleado y procesos ordenados.' };
+  }
+  if (pct < p.alertaCostoVenta) {
+    return { zona: 'atencion', icono: '🟡', texto: 'Por encima del objetivo',
+             lectura: 'Todavía por debajo del techo de alerta, pero conviene entender qué lo empuja: horas extras, cobertura de francos o venta por debajo de lo previsto.' };
+  }
+  return { zona: 'alerta', icono: '🔴', texto: 'Techo de alerta superado',
+           lectura: 'Suele significar tienda sobreestructurada, caída de ventas, o un modelo operativo costoso: horario extendido con plus nocturnos y horas extras, o recetario de alta demanda de mano de obra.' };
+}
 
 /* Semáforo de dotación: reproduce el criterio de la planilla Selma.
    diferencia = dotación óptima - dotación actual                        */
