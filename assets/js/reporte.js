@@ -12,6 +12,19 @@
 
 const PENDIENTE = '[PENDIENTE]';
 
+const ETIQUETA_NOTIFICADA = {
+  si: 'notificada y firmada',
+  sinFirma: 'notificada sin firma',
+  no: 'sin notificar'
+};
+
+const ETIQUETA_A_CARGO = {
+  tienda: 'Gerente de Tienda',
+  rrhh: 'RRHH',
+  operaciones: 'Operaciones',
+  otro: 'Otro'
+};
+
 const fmtNum = (n, d = 2) => {
   if (n === null || n === undefined || n === '' || isNaN(n)) return PENDIENTE;
   // El "+ 0" convierte el -0 que deja el redondeo en 0, para no mostrar "-0,00".
@@ -153,10 +166,16 @@ const Reporte = (() => {
     if (c.bajas.total) {
       L.push('  * Bajas por categoría: ' + c.bajas.grupos.map(g => `${g.nombre} ${g.casos}`).join(' · '));
     }
-    L.push(`- Sanciones registradas: ${visita.sanciones.length}`);
-    visita.sanciones.forEach(s => {
-      L.push(`  * ${oPendiente(s.nombre)} — ${oPendiente(s.tipo)} — ${oPendiente(s.motivo)} (${oPendiente(s.puesto)})`);
+    L.push(`- Sanciones disciplinarias del período: ${visita.sanciones.length}`);
+    visita.sanciones.forEach(sc => {
+      const dias = num(sc.dias) ? `, ${num(sc.dias)} día${num(sc.dias) === 1 ? '' : 's'}` : '';
+      L.push(`  * ${oPendiente(sc.nombre)} (${oPendiente(sc.puesto)}) — ${oPendiente(sc.tipo)}${dias}`);
+      L.push(`    Motivo: ${oPendiente(sc.motivo)}${sc.fecha ? ` · Fecha: ${fmtFecha(sc.fecha)}` : ''}`);
+      L.push(`    Aplicada por: ${oPendiente(sc.aplicadaPor)} · Notificación: ${ETIQUETA_NOTIFICADA[sc.notificada] || PENDIENTE}`);
+      if (String(sc.observaciones || '').trim()) L.push(`    Detalle: ${String(sc.observaciones).trim()}`);
     });
+    const sinNotificar = visita.sanciones.filter(sc => !sc.notificada || sc.notificada === 'no').length;
+    if (sinNotificar) L.push(`  * ${sinNotificar} sanción/es sin constancia de notificación.`);
     L.push('');
 
     /* 4. Dotación óptima */
@@ -196,7 +215,8 @@ const Reporte = (() => {
     }
 
     /* 6. Diagnóstico */
-    L.push((visita.sucesion.length ? '6' : '5') + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
+    let seccion = visita.sucesion.length ? 6 : 5;
+    L.push(seccion + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
     L.push('- Hallazgos sobre ausentismo y desviación de horas extras:');
     const hallazgos = String(visita.diagnostico.hallazgos || '').trim();
     if (hallazgos) {
@@ -208,14 +228,39 @@ const Reporte = (() => {
     }
     L.push('- Evaluación del impacto en el costo laboral de la tienda:');
     L.push(bloque(visita.diagnostico.impacto, '      '));
-    L.push('- Plan de Seguimiento de RRHH:');
-    if ((visita.diagnostico.plan || []).length) {
-      visita.diagnostico.plan.forEach((p, i) => {
-        L.push(`      ${i + 1}. ${oPendiente(p.compromiso)}`);
-        L.push(`         Responsable: ${oPendiente(p.responsable)} · Plazo: ${fmtFecha(p.plazo)} · Estado: ${oPendiente(p.estado)}`);
-      });
+    L.push('');
+
+    /* Plan de acción, separado según a cargo de quién queda cada punto */
+    seccion++;
+    L.push(seccion + '. PLAN DE ACCIÓN');
+    const plan = visita.diagnostico.plan || [];
+    if (!plan.length) {
+      L.push('   ' + PENDIENTE);
     } else {
-      L.push('      ' + PENDIENTE);
+      const bloques = [
+        ['tienda',      'A cargo del Gerente de Tienda'],
+        ['rrhh',        'A cargo de RRHH'],
+        ['operaciones', 'A cargo de Operaciones'],
+        ['otro',        'Otras acciones']
+      ];
+      bloques.forEach(([clave, titulo]) => {
+        const items = plan.filter(x => (x.aCargo || 'tienda') === clave);
+        if (!items.length) return;
+        L.push('');
+        L.push(`   ${titulo}:`);
+        items.forEach((x, i) => {
+          L.push(`   ${i + 1}. ${oPendiente(x.compromiso)}`);
+          L.push(`      Responsable: ${oPendiente(x.responsable)} · Plazo: ${fmtFecha(x.plazo)} · ` +
+                 `Prioridad: ${oPendiente(x.prioridad)} · Estado: ${oPendiente(x.estado)}`);
+        });
+      });
+      const hoy = new Date().toISOString().slice(0, 10);
+      const vencidas = plan.filter(x => x.estado !== 'Cumplido' && x.plazo && x.plazo < hoy);
+      if (vencidas.length) {
+        L.push('');
+        L.push(`   ${vencidas.length} acción/es con el plazo vencido: ` +
+               vencidas.map(x => oPendiente(x.compromiso)).join(' · '));
+      }
     }
     L.push('');
 
@@ -258,11 +303,20 @@ const Reporte = (() => {
     }
     if (!num(visita.comercial.venta) && sucursal.tipo === 'venta') f.push('Venta neta del período (necesaria para el análisis de dotación óptima).');
     if (!num(visita.rotacion.dotacionAnterior)) f.push('Dotación del mes anterior (para el cálculo de rotación).');
-    if (!(visita.diagnostico.plan || []).length) f.push('Plan de seguimiento con responsables y plazos.');
+    if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
+    if (!sucursal.emailGerente) f.push('Email del Gerente de Tienda, para que reciba copia del reporte.');
     return f;
   }
 
   /* ---------------------- Envío al Gerente de Operaciones ---------------------- */
+
+  /** Copias del reporte: las fijas de Configuración más el Gerente de Tienda. */
+  function copias(sucursal, config) {
+    const fijas = String(config.copias || '').split(',').map(x => x.trim()).filter(Boolean);
+    const gerente = String(sucursal.emailGerente || '').trim();
+    if (gerente && !fijas.some(x => x.toLowerCase() === gerente.toLowerCase())) fijas.push(gerente);
+    return fijas;
+  }
 
   function asunto(visita, sucursal, config) {
     const area = config && config.area ? config.area + ' · ' : '';
@@ -292,7 +346,7 @@ const Reporte = (() => {
       const c = calcular(visita, sucursal, config);
       const payload = {
         para: destino,
-        cc: (config.copias || '').split(',').map(s => s.trim()).filter(Boolean),
+        cc: copias(sucursal, config),
         asunto: asu,
         cuerpo,
         area: config.area || '',
@@ -321,7 +375,7 @@ const Reporte = (() => {
       if (!resp.ok) throw new Error('El endpoint de envío respondió ' + resp.status + '.');
       via = 'webhook';
     } else {
-      const cc = (config.copias || '').trim();
+      const cc = copias(sucursal, config).join(',');
       const url = 'mailto:' + encodeURIComponent(destino) +
         '?subject=' + encodeURIComponent(asu) +
         (cc ? '&cc=' + encodeURIComponent(cc) : '') +
@@ -336,10 +390,11 @@ const Reporte = (() => {
     visita.envio.fecha = sello;
     visita.envio.destinatario = destino;
     visita.envio.via = via;
-    visita.envio.historial.push({ fecha: sello, destinatario: destino, via });
+    visita.envio.copias = copias(sucursal, config);
+    visita.envio.historial.push({ fecha: sello, destinatario: destino, copias: visita.envio.copias, via });
     Store.save();
     return { via, destino, largo: cuerpo.length };
   }
 
-  return { calcular, texto, asunto, enviar, detectarFaltantes, tablaFteTexto };
+  return { calcular, texto, asunto, enviar, detectarFaltantes, tablaFteTexto, copias };
 })();

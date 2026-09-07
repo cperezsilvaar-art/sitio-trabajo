@@ -66,6 +66,7 @@ const Store = (() => {
         nombre: '',          // el coordinador reemplaza el código por el nombre real
         tipo: 'venta',
         gerente: '',
+        emailGerente: '',    // recibe copia del reporte de su sucursal
         direccion: '',
         dotacionNominal: null,
         notas: ''
@@ -137,6 +138,11 @@ const Store = (() => {
       ['posiciones', 'movimientos', 'sanciones', 'sucesion'].forEach(k => {
         if (!Array.isArray(v[k])) v[k] = [];
       });
+      // Los planes anteriores no distinguían a cargo de quién estaba cada acción
+      v.diagnostico.plan.forEach(x => {
+        if (!x.aCargo) x.aCargo = 'tienda';
+        if (!x.prioridad) x.prioridad = 'Media';
+      });
     });
     return e;
   }
@@ -182,7 +188,8 @@ const Store = (() => {
         .map(s => parseInt((s.codigo.match(/^sucursal(\d+)$/) || [])[1], 10))
         .filter(n => !isNaN(n));
       const n = usados.length ? Math.max(...usados) + 1 : 1;
-      const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '', direccion: '', dotacionNominal: null, notas: '' };
+      const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '',
+                  emailGerente: '', direccion: '', dotacionNominal: null, notas: '' };
       e.sucursales.push(s);
       guardar();
       return s;

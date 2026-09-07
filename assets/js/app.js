@@ -107,6 +107,18 @@ const App = (() => {
     return `<label class="campo"><span>${esc(etiqueta)}</span>${control}</label>`;
   }
 
+  const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+  /* Acciones sin cumplir de la visita anterior a la misma sucursal. */
+  function pendientesAnteriores(v) {
+    const previas = Store.visitasDe(v.sucursalId).filter(x => x.id !== v.id && (x.fecha || '') <= (v.fecha || ''));
+    const anterior = previas[0];
+    if (!anterior) return [];
+    const yaEstan = new Set((v.diagnostico.plan || []).map(x => (x.compromiso || '').trim()));
+    return (anterior.diagnostico.plan || [])
+      .filter(x => x.estado !== 'Cumplido' && (x.compromiso || '').trim() && !yaEstan.has(x.compromiso.trim()));
+  }
+
   function kpi(etiqueta, valor, nota, clase) {
     return `<div class="kpi ${clase || ''}">
       <div class="etiqueta">${esc(etiqueta)}</div>
@@ -227,10 +239,11 @@ const App = (() => {
     contexto = e;
     return `
       <h1 class="titulo">Sucursales de ${esc(e.config.area || 'mi área')}</h1>
-      <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.</p>
+      <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.
+        El email del gerente recibe automáticamente copia del reporte de su sucursal.</p>
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Código</th><th>Nombre real</th><th>Tipo</th><th>Gerente de Tienda</th><th>Dirección</th><th></th></tr></thead>
+          <thead><tr><th>Código</th><th>Nombre real</th><th>Tipo</th><th>Gerente de Tienda</th><th>Email del gerente</th><th>Dirección</th><th></th></tr></thead>
           <tbody>
           ${e.sucursales.map((s, i) => `<tr>
             <td><input data-path="sucursales.${i}.codigo" value="${esc(s.codigo)}" style="max-width:120px"></td>
@@ -240,6 +253,7 @@ const App = (() => {
               <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff / soporte</option>
             </select></td>
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
+            <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia del reporte"></td>
             <td><input data-path="sucursales.${i}.direccion" value="${esc(s.direccion)}"></td>
             <td class="num"><button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">Eliminar</button></td>
           </tr>`).join('')}
@@ -666,34 +680,57 @@ const App = (() => {
   /* --------------------------- 5. Sanciones ------------------------- */
   function panelSanciones(v) {
     const ss = v.sanciones || [];
+    const conteo = t => ss.filter(x => x.tipo === t).length;
+
     return `
       <section class="tarjeta">
-        <h2>5. Sanciones del período</h2>
-        <p class="ayuda">Registro disciplinario de la sucursal. La concentración por motivo suele explicar buena parte del ausentismo controlable.</p>
+        <h2>5. Sanciones disciplinarias</h2>
+        <p class="ayuda">
+          Registro de las medidas aplicadas en el período: a quién, por qué motivo, quién la aplicó y si
+          quedó notificada. La concentración por motivo suele explicar buena parte del ausentismo controlable.
+        </p>
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Apellido y nombre</th><th>Fecha</th><th>Tipo</th><th>Motivo</th><th>Puesto</th><th>Observaciones</th><th></th></tr></thead>
+          <thead><tr>
+            <th>Colaborador</th><th>Fecha</th><th>Tipo</th><th>Motivo</th><th>Posición</th>
+            <th class="num">Días</th><th>Aplicada por</th><th>Notificada</th><th>Detalle del hecho</th><th></th>
+          </tr></thead>
           <tbody>
-          ${ss.length ? ss.map((s, i) => `<tr>
-            <td><input data-path="sanciones.${i}.nombre" value="${esc(s.nombre)}"></td>
-            <td><input type="date" data-path="sanciones.${i}.fecha" value="${esc(s.fecha)}"></td>
-            <td><select data-path="sanciones.${i}.tipo">
+          ${ss.length ? ss.map((x, i) => `<tr>
+            <td><input data-path="sanciones.${i}.nombre" data-calc="1" value="${esc(x.nombre)}" placeholder="Apellido y nombre"></td>
+            <td><input type="date" data-path="sanciones.${i}.fecha" value="${esc(x.fecha)}"></td>
+            <td><select data-path="sanciones.${i}.tipo" data-calc="1">
               <option value="">—</option>
-              ${TIPOS_SANCION.map(t => `<option value="${esc(t)}"${s.tipo === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+              ${TIPOS_SANCION.map(t => `<option value="${esc(t)}"${x.tipo === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
             </select></td>
-            <td><select data-path="sanciones.${i}.motivo">
+            <td><select data-path="sanciones.${i}.motivo" data-calc="1">
               <option value="">—</option>
-              ${MOTIVOS_SANCION.map(t => `<option value="${esc(t)}"${s.motivo === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+              ${MOTIVOS_SANCION.map(t => `<option value="${esc(t)}"${x.motivo === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
             </select></td>
             <td><select data-path="sanciones.${i}.puesto">
               <option value="">—</option>
-              ${POSICIONES.map(p => `<option value="${esc(p.nombre)}"${s.puesto === p.nombre ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('')}
+              ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${x.puesto === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
             </select></td>
-            <td><input data-path="sanciones.${i}.observaciones" value="${esc(s.observaciones)}"></td>
+            <td class="num"><input class="num" type="number" data-path="sanciones.${i}.dias" value="${esc(x.dias)}" style="width:60px" title="Días de suspensión, si corresponde"></td>
+            <td><input data-path="sanciones.${i}.aplicadaPor" value="${esc(x.aplicadaPor)}" placeholder="Quién la aplicó"></td>
+            <td><select data-path="sanciones.${i}.notificada" data-calc="1">
+              <option value=""${!x.notificada ? ' selected' : ''}>—</option>
+              <option value="si"${x.notificada === 'si' ? ' selected' : ''}>Sí, firmada</option>
+              <option value="sinFirma"${x.notificada === 'sinFirma' ? ' selected' : ''}>Notificada sin firma</option>
+              <option value="no"${x.notificada === 'no' ? ' selected' : ''}>No</option>
+            </select></td>
+            <td><textarea data-path="sanciones.${i}.observaciones" style="min-height:56px" placeholder="Qué pasó y qué se le dijo">${esc(x.observaciones)}</textarea></td>
             <td class="num"><button class="mini" data-accion="borrar-item" data-arr="sanciones" data-idx="${i}">✕</button></td>
-          </tr>`).join('') : '<tr><td colspan="7" class="vacio">Sin sanciones registradas en el período.</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="10" class="vacio">Sin sanciones registradas en el período.</td></tr>'}
           </tbody>
         </table></div>
-        <div class="acciones"><button class="b sec" data-accion="agregar-sancion">+ Agregar sanción</button></div>
+        <div class="acciones"><button class="b sec" data-accion="agregar-sancion">+ Registrar sanción</button></div>
+
+        ${ss.length ? `<div class="kpis" style="margin-top:18px">
+          ${kpi('Total del período', ss.length)}
+          ${TIPOS_SANCION.map(t => conteo(t) ? kpi(t, conteo(t)) : '').join('')}
+          ${kpi('Sin notificar', ss.filter(x => x.notificada === 'no' || !x.notificada).length, 'revisar la notificación',
+                ss.filter(x => x.notificada === 'no' || !x.notificada).length ? 'aviso' : 'ok')}
+        </div>` : ''}
       </section>`;
   }
 
@@ -822,22 +859,54 @@ const App = (() => {
           <ul>${c.hallazgosAuto.map(h => `<li>${esc(h)}</li>`).join('')}</ul>
         </div>` : ''}
 
-        <h3 style="font-size:14px;margin:20px 0 8px">Plan de seguimiento de RRHH</h3>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Plan de acción</h2>
+        <p class="ayuda">
+          Lo que queda comprometido al cerrar la visita. Cada acción indica a cargo de quién queda:
+          en el reporte se separan las del Gerente de Tienda de las de RRHH, para que cada uno vea lo suyo.
+        </p>
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Compromiso</th><th>Responsable</th><th>Plazo</th><th>Estado</th><th></th></tr></thead>
+          <thead><tr>
+            <th>Acción</th><th>A cargo de</th><th>Responsable</th><th>Plazo</th>
+            <th>Prioridad</th><th>Estado</th><th></th>
+          </tr></thead>
           <tbody>
           ${plan.length ? plan.map((x, i) => `<tr>
-            <td><input data-path="diagnostico.plan.${i}.compromiso" value="${esc(x.compromiso)}"></td>
-            <td><input data-path="diagnostico.plan.${i}.responsable" value="${esc(x.responsable)}"></td>
-            <td><input type="date" data-path="diagnostico.plan.${i}.plazo" value="${esc(x.plazo)}"></td>
-            <td><select data-path="diagnostico.plan.${i}.estado">
+            <td><textarea data-path="diagnostico.plan.${i}.compromiso" data-calc="1" style="min-height:56px" placeholder="Qué hay que hacer">${esc(x.compromiso)}</textarea></td>
+            <td><select data-path="diagnostico.plan.${i}.aCargo" data-calc="1">
+              <option value="tienda"${x.aCargo === 'tienda' ? ' selected' : ''}>Gerente de Tienda</option>
+              <option value="rrhh"${x.aCargo === 'rrhh' ? ' selected' : ''}>RRHH</option>
+              <option value="operaciones"${x.aCargo === 'operaciones' ? ' selected' : ''}>Operaciones</option>
+              <option value="otro"${x.aCargo === 'otro' ? ' selected' : ''}>Otro</option>
+            </select></td>
+            <td><input data-path="diagnostico.plan.${i}.responsable" value="${esc(x.responsable)}" placeholder="Nombre"></td>
+            <td><input type="date" data-path="diagnostico.plan.${i}.plazo" data-calc="1" value="${esc(x.plazo)}"></td>
+            <td><select data-path="diagnostico.plan.${i}.prioridad" data-calc="1">
+              ${['Alta', 'Media', 'Baja'].map(pr => `<option value="${pr}"${x.prioridad === pr ? ' selected' : ''}>${pr}</option>`).join('')}
+            </select></td>
+            <td><select data-path="diagnostico.plan.${i}.estado" data-calc="1">
               ${['Pendiente', 'En curso', 'Cumplido'].map(e2 => `<option value="${e2}"${x.estado === e2 ? ' selected' : ''}>${e2}</option>`).join('')}
             </select></td>
             <td class="num"><button class="mini" data-accion="borrar-item" data-arr="diagnostico.plan" data-idx="${i}">✕</button></td>
-          </tr>`).join('') : '<tr><td colspan="5" class="vacio">Sin compromisos cargados.</td></tr>'}
+          </tr>`).join('') : '<tr><td colspan="7" class="vacio">Sin acciones cargadas.</td></tr>'}
           </tbody>
         </table></div>
-        <div class="acciones"><button class="b sec" data-accion="agregar-compromiso">+ Agregar compromiso</button></div>
+        <div class="acciones">
+          <button class="b sec" data-accion="agregar-compromiso">+ Agregar acción</button>
+          ${pendientesAnteriores(v).length
+            ? `<button class="b sec" data-accion="traer-pendientes" data-id="${v.id}">Traer ${pendientesAnteriores(v).length} pendiente${pendientesAnteriores(v).length === 1 ? '' : 's'} de la visita anterior</button>`
+            : ''}
+        </div>
+
+        ${plan.length ? `<div class="kpis" style="margin-top:18px">
+          ${kpi('A cargo del Gerente de Tienda', plan.filter(x => x.aCargo === 'tienda').length)}
+          ${kpi('A cargo de RRHH', plan.filter(x => x.aCargo === 'rrhh').length)}
+          ${kpi('Vencidas', plan.filter(x => x.estado !== 'Cumplido' && x.plazo && x.plazo < hoyISO()).length, 'con plazo pasado',
+                plan.filter(x => x.estado !== 'Cumplido' && x.plazo && x.plazo < hoyISO()).length ? 'alerta' : 'ok')}
+          ${kpi('Cumplidas', `${plan.filter(x => x.estado === 'Cumplido').length} / ${plan.length}`)}
+        </div>` : ''}
       </section>
 
       <section class="tarjeta">
@@ -845,7 +914,11 @@ const App = (() => {
         <p class="ayuda">
           Destinatario: <strong>${esc(config.gerenteOperaciones.nombre || 'sin cargar')}</strong>
           &lt;${esc(config.gerenteOperaciones.email || 'sin email')}&gt;
-          ${config.copias ? ` · con copia a ${esc(config.copias)}` : ''}
+          ${(() => {
+            const cc = Reporte.copias(s, config);
+            return cc.length ? ` · con copia a ${esc(cc.join(', '))}` : '';
+          })()}
+          ${!s.emailGerente ? '<br><span class="chip ambar">falta el email del Gerente de Tienda</span> Cargalo en Sucursales para que reciba copia.' : ''}
           · vía ${config.webhook ? '<span class="chip verde">envío automático</span>' : '<span class="chip azul">cliente de correo</span>'}
         </p>
 
@@ -994,8 +1067,17 @@ const App = (() => {
         Store.save(); refrescar();
       }
       if (a === 'agregar-compromiso') {
-        contexto.diagnostico.plan.push({ compromiso: '', responsable: '', plazo: '', estado: 'Pendiente' });
+        contexto.diagnostico.plan.push({ compromiso: '', aCargo: 'tienda', responsable: '',
+                                         plazo: '', prioridad: 'Media', estado: 'Pendiente' });
         Store.save(); refrescar();
+      }
+      if (a === 'traer-pendientes') {
+        const vi = Store.visita(btn.dataset.id);
+        const traidas = pendientesAnteriores(vi);
+        traidas.forEach(x => vi.diagnostico.plan.push(
+          Object.assign({}, x, { estado: x.estado === 'Cumplido' ? 'Pendiente' : x.estado })));
+        Store.save(); refrescar();
+        avisar(`${traidas.length} acción${traidas.length === 1 ? '' : 'es'} traída${traidas.length === 1 ? '' : 's'} de la visita anterior.`);
       }
       if (a === 'agregar-candidato') {
         contexto.sucesion[+btn.dataset.idx].candidatos.push({ nombre: '', readiness: '1a2' });
