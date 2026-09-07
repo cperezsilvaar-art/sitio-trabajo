@@ -128,7 +128,7 @@ const App = (() => {
             const s = f.s, v = f.v, c = f.c;
             return `<tr>
               <td><strong>${esc(Store.etiquetaSucursal(s))}</strong>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
-              <td>${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
+              <td class="tipo">${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
               <td class="num">${c ? (c.matriz.total.heads || '—') : '—'}</td>
               <td class="num">${c && c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
@@ -254,8 +254,10 @@ const App = (() => {
 
       <section class="tarjeta">
         <h2>Respaldo de datos</h2>
-        <p class="ayuda">La información se guarda solo en este navegador. Exportá un respaldo para llevarla a otro equipo o para archivarla.</p>
+        <p class="ayuda">La información se guarda solo en este navegador. Exportá un respaldo para llevarla a otro equipo o para archivarla.
+          Los datos de ejemplo sirven para recorrer el tablero antes de cargar información real: reemplazan todo el contenido y se limpian con “Borrar todo”.</p>
         <div class="acciones">
+          <button class="b sec" data-accion="ejemplo">Cargar datos de ejemplo</button>
           <button class="b sec" data-accion="exportar">Exportar respaldo (.json)</button>
           <button class="b sec" data-accion="importar">Importar respaldo</button>
           <button class="b peligro" data-accion="reiniciar">Borrar todo</button>
@@ -928,13 +930,7 @@ const App = (() => {
         }
 
         if (a === 'descargar-reporte') {
-          const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.download = `visita-${s.codigo}-${v.fecha}.txt`;
-          document.body.appendChild(link); link.click(); link.remove();
-          setTimeout(() => URL.revokeObjectURL(url), 1000);
+          await guardarArchivo(`visita-${s.codigo}-${v.fecha}.txt`, texto, 'text/plain');
         }
 
         if (a === 'enviar-reporte') {
@@ -955,6 +951,11 @@ const App = (() => {
       if (a === 'imprimir') window.print();
 
       /* --- respaldos --- */
+      if (a === 'ejemplo') {
+        if (confirm('Se reemplaza todo el contenido actual por dos sucursales de ejemplo. ¿Continuar?')) {
+          Store.cargarEjemplo(); location.hash = '#/red'; render();
+        }
+      }
       if (a === 'exportar') Store.exportar();
       if (a === 'importar') $('#archivo-import').click();
       if (a === 'reiniciar') {

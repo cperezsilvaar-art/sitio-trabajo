@@ -8,6 +8,49 @@
 
 const CLAVE_ALMACEN = 'farmatodo.rrhh.operativo.v1';
 
+/**
+ * Entrega un archivo al usuario.
+ *
+ * Abierto como archivo local o publicado en un servidor propio, alcanza con un
+ * enlace de descarga. Dentro de una página publicada en claude.ai el visor no
+ * permite descargas directas, así que hay que pedirlas por la capacidad
+ * `downloads`, que muestra una confirmación antes de guardar.
+ *
+ * @returns {Promise<boolean>} true si el archivo se entregó.
+ */
+async function guardarArchivo(nombre, contenido, mime) {
+  if (typeof window !== 'undefined' && window.claude && typeof window.claude.use === 'function') {
+    let descargas = null;
+    try { descargas = await window.claude.use('downloads'); } catch (err) { descargas = null; }
+    if (descargas) {
+      try {
+        await descargas.save({ filename: nombre, data: contenido });
+        return true;
+      } catch (err) {
+        if (err && err.code === 'declined') return false;          // el usuario canceló
+        if (err && (err.code === 'unavailable' || err.code === 'not_granted' ||
+                    err.code === 'capability_disabled' || err.code === 'capability_removed')) {
+          // sin capacidad de descarga: se intenta el enlace común más abajo
+        } else {
+          alert('No se pudo guardar el archivo: ' + ((err && err.message) || 'error desconocido'));
+          return false;
+        }
+      }
+    }
+  }
+
+  const blob = new Blob([contenido], { type: (mime || 'text/plain') + ';charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return true;
+}
+
 const Store = (() => {
   let estado = null;
   const suscriptores = [];
@@ -176,15 +219,11 @@ const Store = (() => {
 
     /* ------------------------- respaldos -------------------------- */
     exportar() {
-      const blob = new Blob([JSON.stringify(this.get(), null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `rrhh-farmatodo-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return guardarArchivo(
+        `rrhh-farmatodo-${new Date().toISOString().slice(0, 10)}.json`,
+        JSON.stringify(this.get(), null, 2),
+        'application/json'
+      );
     },
 
     importar(texto) {
@@ -196,6 +235,72 @@ const Store = (() => {
 
     reiniciar() {
       estado = estadoInicial();
+      guardar();
+    },
+
+    /* Datos de ejemplo para recorrer el tablero antes de cargar información
+       real. Reemplaza todo el contenido, así nunca se mezcla con datos de
+       verdad; “Borrar todo” lo deja limpio de nuevo. */
+    cargarEjemplo() {
+      const e = estadoInicial();
+      e.config.coordinador = 'Coordinador de RRHH';
+      e.config.gerenteOperaciones = { nombre: 'Gerencia de Operaciones', email: '' };
+
+      const demo = [
+        { i: 0, nombre: 'Centro — ejemplo', gerente: 'Gerente de Tienda 1',
+          pos: [[1,0,0,0,0,2800000,0,0],[2,0,0,0,0,3600000,0,0],[6,18,0,22,86,8400000,310000,0],
+                [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[1,0,0,9,0,1900000,0,0]],
+          aus: { '085': 14, '071': 9, '081': 5, '086': 3 },
+          rot: ['12','1','0','1','0'], venta: '268000000', tickets: '41000', horas: '5600' },
+        { i: 1, nombre: 'Norte — ejemplo', gerente: 'Gerente de Tienda 2',
+          pos: [[1,0,0,0,0,2800000,0,0],[1,0,0,0,0,1800000,0,0],[4,0,0,6,22,5600000,80000,0],
+                [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[0,0,0,0,0,0,0,0]],
+          aus: { '085': 6 },
+          rot: ['8','0','0','0','0'], venta: '142000000', tickets: '19000', horas: '3900' }
+      ];
+
+      const campos = ['heads', 'diasAltas', 'diasBajas', 'diasAusentes', 'horasExtras',
+                      'sueldoBruto', 'costoHE', 'bonos'];
+      const rotCampos = ['dotacionAnterior', 'altasExternas', 'altasInternas', 'bajasExternas', 'bajasInternas'];
+
+      estado = e;
+      demo.forEach(d => {
+        const suc = e.sucursales[d.i];
+        suc.nombre = d.nombre;
+        suc.gerente = d.gerente;
+        const v = visitaNueva(suc.id);
+        v.coordinador = e.config.coordinador;
+        v.minutaGerente = {
+          participante: d.gerente,
+          puntos: 'Cobertura de francos en fin de semana.\nQuiebres recurrentes en dermo.\nSeguimiento de llegadas tarde en el turno mañana.',
+          acuerdos: 'Rearmar la grilla horaria antes del día 15.\nEntrevista individual con los dos casos de ausentismo reiterado.'
+        };
+        v.minutaColaborador = {
+          nombre: 'Colaborador entrevistado', posicion: 'APV',
+          feedback: 'Buen clima de equipo. Pide previsibilidad en la asignación de francos y más apoyo en las horas pico.'
+        };
+        d.pos.forEach((fila, j) => campos.forEach((c, k) => { v.posiciones[j][c] = fila[k] ? String(fila[k]) : ''; }));
+        v.ausentismo.detalle = d.aus;
+        rotCampos.forEach((c, k) => { v.rotacion[c] = d.rot[k]; });
+        v.comercial.venta = d.venta;
+        v.comercial.tickets = d.tickets;
+        v.comercial.horasTrabajadas = d.horas;
+        e.visitas.push(v);
+      });
+
+      // Un plan de seguimiento cargado en la primera visita, para ver el reporte completo
+      e.visitas[0].diagnostico.plan.push(
+        { compromiso: 'Rearmar la grilla horaria para reducir horas extras', responsable: 'Gerente de Tienda', plazo: '', estado: 'Pendiente' },
+        { compromiso: 'Entrevistas individuales por ausentismo reiterado', responsable: 'Coordinador de RRHH', plazo: '', estado: 'En curso' }
+      );
+      e.visitas[0].sucesion.push(
+        { posicion: 'Gerente de Tienda', incumbent: 'Gerente de Tienda 1', criticidad: 3, escasez: 3, disponibilidad: '1a2',
+          candidatos: [{ nombre: 'Senior de la tienda', readiness: '1a2' }] },
+        { posicion: 'Farmacéutico', incumbent: 'Farmacéutico 1', criticidad: 3, escasez: 3, disponibilidad: 'lt1', candidatos: [] }
+      );
+      e.visitas[0].sanciones.push(
+        { nombre: 'Colaborador A', fecha: '', tipo: 'Suspensión', motivo: 'Llegadas tarde', puesto: 'APV', observaciones: '' }
+      );
       guardar();
     }
   };
