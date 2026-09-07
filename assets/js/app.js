@@ -619,9 +619,23 @@ const App = (() => {
   let estadSuc = null;
   let estadPeriodo = null;
 
-  function vistaEstadistica() {
+  const PESTANAS_ESTAD = [
+    ['resumen',    'Resumen del mes'],
+    ['minutas',    'Minutas'],
+    ['fte',        'FTE y Costo'],
+    ['ausentismo', 'Ausentismo'],
+    ['rotacion',   'Rotación y Bajas'],
+    ['sanciones',  'Sanciones'],
+    ['sucesion',   'Sucesión'],
+    ['dotacion',   'Dotación vs. Venta'],
+    ['reporte',    'Reporte y Envío']
+  ];
+
+  function vistaEstadistica(pestana) {
     const e = Store.get();
     contexto = e;
+    visitaEnCurso = null;
+    pestana = pestana || 'resumen';
 
     if (!estadSuc && e.sucursales.length) estadSuc = e.sucursales[0].id;
     const s = estadSuc ? Store.sucursal(estadSuc) : null;
@@ -630,10 +644,10 @@ const App = (() => {
         <section class="tarjeta"><p class="vacio">Cargá primero una sucursal.</p></section>`;
     }
 
+    /* El período es un mes libre: se puede mirar uno que todavía no tenga nada
+       cargado. Los períodos con datos solo alimentan las sugerencias. */
     const periodos = Store.periodosDe(s.id);
-    if (!estadPeriodo || !periodos.includes(estadPeriodo)) {
-      estadPeriodo = periodos[0] || new Date().toISOString().slice(0, 7);
-    }
+    if (!estadPeriodo) estadPeriodo = periodos[0] || new Date().toISOString().slice(0, 7);
 
     const d = Reporte.datosMensuales(s.id, estadPeriodo, e.config);
     const c = d.calculo;
@@ -642,11 +656,16 @@ const App = (() => {
     const dest = Reporte.destinatario(s, e.config);
     const cc = Reporte.copias(s, e.config);
 
-    return `
-      <h1 class="titulo">Estadística mensual de la sucursal</h1>
+    /* Todas las solapas menos el resumen editan el registro del período. Si el
+       mes todavía no tiene ninguno no hay dónde escribir, así que se ofrece
+       crearlo en lugar de mostrar campos que no guardan nada. */
+    const v = d.sinVisita ? null : d.base;
+    if (v) { contexto = v; visitaEnCurso = v; }
+
+    const cabecera = `
+      <h1 class="titulo">Estadística mensual</h1>
       <p class="subtitulo">
-        Los números del mes: dotación, costo laboral, ausentismo, horas extras y rotación.
-        Se manda al cerrar el período, aparte del reporte de cada visita.
+        Los números del mes de la sucursal. Lo de todas las semanas está en <em>Visitas</em>.
       </p>
 
       <section class="tarjeta">
@@ -656,8 +675,7 @@ const App = (() => {
               ${e.sucursales.map(x => `<option value="${x.id}"${x.id === s.id ? ' selected' : ''}>${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
             </select></label>
           <label class="campo"><span>Período</span>
-            <input type="month" id="estad-periodo" value="${esc(estadPeriodo)}"
-                   list="periodos-cargados">
+            <input type="month" id="estad-periodo" value="${esc(estadPeriodo)}" list="periodos-cargados">
             <datalist id="periodos-cargados">
               ${periodos.map(x => `<option value="${esc(x)}"></option>`).join('')}
             </datalist></label>
@@ -669,8 +687,45 @@ const App = (() => {
             </p>
           </div>
         </div>
+      </section>
 
-        <div class="kpis" style="margin-top:18px">
+      <nav class="tabs" style="border-radius:10px;border:1px solid var(--borde);margin-bottom:18px">
+        ${PESTANAS_ESTAD.map(([k, t]) => `<a href="#/estadistica/${k}" class="${k === pestana ? 'activo' : ''}">${t}</a>`).join('')}
+      </nav>`;
+
+    if (pestana !== 'resumen' && !v) {
+      return cabecera + `<section class="tarjeta">
+        <div class="aviso-caja">
+          <strong>${esc(estadPeriodo)} no tiene todavía un registro donde guardar estos datos.</strong>
+          La estadística se apoya en el relevamiento del período; creá uno y quedan
+          todas las solapas disponibles.
+          <div class="acciones" style="margin-top:10px">
+            <button class="b" data-accion="crear-registro-periodo">Crear el registro de ${esc(estadPeriodo)}</button>
+          </div>
+        </div>
+      </section>`;
+    }
+
+    const cuerpo = {
+      resumen:    () => estadResumen(s, e, d, c, faltantes, registro, dest, cc),
+      minutas:    () => panelMinutas(v, s),
+      fte:        () => panelFte(v, c),
+      ausentismo: () => panelAusentismo(v, c),
+      rotacion:   () => panelRotacion(v, c),
+      sanciones:  () => panelSanciones(v),
+      sucesion:   () => panelSucesion(v, c),
+      dotacion:   () => panelDotacion(v, s, c),
+      reporte:    () => panelReporte(v, s, e.config, c)
+    }[pestana] || (() => estadResumen(s, e, d, c, faltantes, registro, dest, cc));
+
+    return cabecera + cuerpo();
+  }
+
+  /** Solapa de resumen: los indicadores del mes y el envío de la estadística. */
+  function estadResumen(s, e, d, c, faltantes, registro, dest, cc) {
+    return `
+      <section class="tarjeta">
+        <div class="kpis">
           ${kpi('FTE Real', c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—',
                 c.matriz.total.heads ? `${c.matriz.total.heads} de mes completo` : 'sin dotación cargada')}
           ${kpi('Costo / FTE', c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—',
@@ -751,8 +806,8 @@ const App = (() => {
           </table></div>
           ${d.sinPosicion.length ? `<div class="aviso-caja">
             <strong>${d.sinPosicion.length} persona${d.sinPosicion.length === 1 ? '' : 's'} sin posición asignada.</strong>
-            La planilla de liquidación no trae el puesto: asignalo una vez en la solapa
-            <em>Talento y 9-box</em> de una visita y queda para todos los meses.
+            La planilla de liquidación no trae el puesto: asignalo una vez en el perfil
+            de cada persona —desde el organigrama de la sucursal— y queda para todos los meses.
             <br>${esc(d.sinPosicion.slice(0, 12).join(' · '))}${d.sinPosicion.length > 12 ? ' …' : ''}
           </div>` : ''}`;
         })()}
@@ -969,19 +1024,11 @@ const App = (() => {
   }
 
   /* ========================== VISTA: VISITA ========================= */
-  /* Las solapas siguen el orden de la visita: primero lo que se recorre y se
-     conversa, después los números del período. */
+  /* La visita es lo de todas las semanas: recorrer la tienda y mirar a la
+     gente. Los números del período viven en Estadística mensual. */
   const PESTANAS = [
-    ['recorrida',  'Recorrida'],
-    ['minutas',    'Minutas'],
-    ['fte',        'FTE y Costo'],
-    ['ausentismo', 'Ausentismo'],
-    ['rotacion',   'Rotación y Bajas'],
-    ['sanciones',  'Sanciones'],
-    ['talento',    'Talento y 9-box'],
-    ['sucesion',   'Sucesión'],
-    ['dotacion',   'Dotación vs. Venta'],
-    ['reporte',    'Reporte y Envío']
+    ['recorrida', 'Recorrida'],
+    ['talento',   'Talento y 9-box']
   ];
 
   function vistaVisita(id, pestana) {
@@ -994,16 +1041,8 @@ const App = (() => {
     const c = Reporte.calcular(v, s, e.config);
 
     const cuerpo = {
-      recorrida:  () => panelRecorrida(v, s),
-      minutas:    () => panelMinutas(v, s),
-      fte:        () => panelFte(v, c),
-      ausentismo: () => panelAusentismo(v, c),
-      rotacion:   () => panelRotacion(v, c),
-      sanciones:  () => panelSanciones(v),
-      talento:    () => panelTalento(v, s),
-      sucesion:   () => panelSucesion(v, c),
-      dotacion:   () => panelDotacion(v, s, c),
-      reporte:    () => panelReporte(v, s, e.config, c)
+      recorrida: () => panelRecorrida(v, s),
+      talento:   () => panelTalento(v, s)
     }[pestana] || (() => panelRecorrida(v, s));
 
     return `
@@ -1194,21 +1233,6 @@ const App = (() => {
           <br><br>
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
-        ${(() => {
-          const otras = Store.visitasDe(v.sucursalId).filter(x =>
-            x.id !== v.id && x.periodo === v.periodo &&
-            calcularMatriz(x.posiciones, p).total.heads > 0);
-          if (!otras.length || c.matriz.total.heads) return '';
-          return `<div class="aviso-caja">
-            <strong>Los números de ${esc(v.periodo)} ya están cargados en otra visita.</strong>
-            Con visitas semanales alcanza con completar la matriz una vez por mes;
-            la estadística mensual toma la visita más completa del período.
-            <div class="acciones" style="margin-top:10px">
-              <a class="b sec" href="#/visita/${otras[0].id}/fte" style="text-decoration:none">Abrir la del ${fmtFecha(otras[0].fecha)}</a>
-              <a class="b sec" href="#/estadistica" style="text-decoration:none">Ver la estadística del mes</a>
-            </div>
-          </div>`;
-        })()}
         ${avisoAltasBajas(v, c, p)}
         ${(() => {
           const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
@@ -1961,7 +1985,11 @@ const App = (() => {
       vistaActual = () => vistaSucursal(id);
       html = vistaSucursal(id);
     }
-    else if (ruta[0] === 'estadistica')   { vistaActual = vistaEstadistica;    html = vistaEstadistica(); }
+    else if (ruta[0] === 'estadistica') {
+      const tab = ruta[1] || 'resumen';
+      vistaActual = () => vistaEstadistica(tab);
+      html = vistaEstadistica(tab);
+    }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -2285,6 +2313,18 @@ const App = (() => {
           </div>`;
         }
         avisar(`${r.total} persona${r.total === 1 ? '' : 's'} cargada${r.total === 1 ? '' : 's'} en ${estadPeriodo}.`);
+      }
+
+      if (a === 'crear-registro-periodo') {
+        const v = Store.crearVisita(estadSuc);
+        /* Se fecha al último día del mes: es el registro del período, no una
+           visita del día de hoy. */
+        const [anio, mes] = estadPeriodo.split('-').map(Number);
+        v.fecha = new Date(anio, mes, 0).toISOString().slice(0, 10);
+        v.periodo = estadPeriodo;
+        Store.save();
+        refrescar();
+        avisar(`Registro de ${estadPeriodo} creado.`);
       }
 
       /* --- estadística mensual --- */

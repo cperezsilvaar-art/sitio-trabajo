@@ -26,20 +26,35 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
 equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 
-## Qué contiene cada solapa de una visita
+## Los dos ritmos
+
+El trabajo está partido en dos, porque son dos cosas distintas:
+
+**Visitas** — lo de todas las semanas. Se recorre la tienda y se mira a la gente.
 
 | Solapa | Contenido |
 |---|---|
 | **Recorrida** | El check de la visita: 21 puntos en cuatro bloques, en el orden en que transcurre |
-| **Minutas** | Reunión con el Gerente de Tienda (puntos y acuerdos) y con un colaborador (feedback y clima) |
+| **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
+
+**Estadística mensual** — los números del período, una vez por mes.
+
+| Solapa | Contenido |
+|---|---|
+| **Resumen del mes** | Indicadores, datos pendientes, importación de novedades y envío |
+| **Minutas** | Reunión con el Gerente de Tienda y con un colaborador |
 | **FTE y Costo** | Matriz por posición: headcount, altas, bajas, ausencias, horas extras, sueldos, cargas, costo por FTE |
 | **Ausentismo** | Días por concepto, separados en controlable (evitable) y no controlable (inevitable) |
 | **Rotación y Bajas** | Rotación mensual y anualizada, altas y bajas con motivo y causa |
 | **Sanciones** | Registro disciplinario del período |
-| **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío del reporte de la visita |
+
+Las solapas de la estadística escriben sobre el **registro del período**. Si el
+mes todavía no tiene ninguno, el panel ofrece crearlo en lugar de mostrar campos
+que no guardan nada.
+
 
 ## La nómina y el perfil de cada persona
 

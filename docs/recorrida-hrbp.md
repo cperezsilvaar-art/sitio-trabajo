@@ -55,6 +55,10 @@ El panel muestra el avance, los puntos clave que quedaron sin cubrir y los que
 todavía no marcaste. Los puntos con observación y los que quedaron sin hacer
 entran en el reporte de la visita que recibe el Gerente de Operaciones.
 
+La visita tiene solo dos solapas —**Recorrida** y **Talento y 9-box**—, que es
+lo que se hace estando en la tienda. Los números del mes viven en *Estadística
+mensual*: son de la sucursal y del período, no de la visita del día.
+
 ## Qué NO es esta lista
 
 No es una auditoría de la tienda ni un formulario de cumplimiento. Es la memoria
