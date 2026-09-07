@@ -16,7 +16,6 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 3. Ir a **Sucursales**. Vienen diez sucursales provisorias (`sucursal1` … `sucursal10`).
    Reemplazar el campo *Nombre real* por el nombre que corresponda a medida que se
    conozcan las tiendas; el código provisorio queda como identificador interno.
-   Cargar también la **jurisdicción**: define si a esa sucursal le aplica el CCT 414/05.
 4. Desde el **Panel de la red**, botón *Registrar visita* en la sucursal visitada.
 5. Completar las solapas y, al final, **Reporte y Envío**.
 
@@ -34,7 +33,6 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Sanciones** | Registro disciplinario del período |
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
-| **Alertas normativas** | Situaciones relevadas contrastadas contra la Ley 20.744 y el CCT 414/05, con consulta rápida sobre el catálogo de normas |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío al Gerente de Operaciones |
 
 ## Documentación
@@ -43,8 +41,6 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
   rotación y dotación óptima, con su verificación contra las planillas de origen.
 - [`docs/automatizacion-email.md`](docs/automatizacion-email.md) — cómo dejar el envío
   del reporte 100% automático con Google Apps Script, Make o Zapier.
-- [`docs/alertas-normativas.md`](docs/alertas-normativas.md) — cómo funcionan las
-  alertas, el encuadre de categorías y el ámbito del convenio.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 
@@ -64,8 +60,8 @@ python3 build-pagina-unica.py tablero.html
 ```
 
 El orden de los archivos se lee de `index.html`, así que sumar un script al HTML
-alcanza para que entre en la versión única. Antes había una lista escrita a mano
-en el generador y se publicó una versión sin `normativa.js`, que no arrancaba.
+alcanza para que entre en la versión única: no hay una segunda lista que
+mantener sincronizada.
 
 Después de generarla, conviene abrirla y confirmar que el panel dibuja: si falta
 un módulo, la página queda en blanco sin error visible.

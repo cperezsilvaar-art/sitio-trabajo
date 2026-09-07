@@ -109,13 +109,6 @@ const App = (() => {
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', he ? fmtNum(he, 0) + ' hs' : '—', he ? `${fmtNum(he / e.config.parametros.horasMes)} FTE equivalentes` : '')}
         ${kpi('Venta neta', ventaRed ? dinero(ventaRed) : '—', costo && ventaRed ? `costo/venta ${fmtPct(costo / ventaRed)}` : '')}
-        ${(() => {
-          const crit = conDatos.reduce((a, f) => a + f.c.normativa.conteo.critica, 0);
-          const alta = conDatos.reduce((a, f) => a + f.c.normativa.conteo.alta, 0);
-          return kpi('Alertas normativas', crit || alta || '0',
-                     crit ? `${crit} crítica${crit === 1 ? '' : 's'} y ${alta} alta${alta === 1 ? '' : 's'}` : `${alta} de prioridad alta`,
-                     crit ? 'alerta' : (alta ? 'aviso' : 'ok'));
-        })()}
         ${kpi('Reportes enviados', `${enviadas} / ${visitadas}`, 'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
@@ -128,7 +121,7 @@ const App = (() => {
             <th>Sucursal</th><th>Tipo</th><th>Última visita</th>
             <th class="num">HC</th><th class="num">FTE Real</th><th class="num">Ausent.</th>
             <th class="num">Hs. Ext.</th><th class="num">Costo / FTE</th>
-            <th>Dotación</th><th>Alertas</th><th>Reporte</th><th></th>
+            <th>Dotación</th><th>Reporte</th><th></th>
           </tr></thead>
           <tbody>
           ${e.sucursales.map(({ id }) => {
@@ -144,13 +137,6 @@ const App = (() => {
               <td class="num">${c && c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) : '—'}</td>
               <td class="num">${c && c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—'}</td>
               <td>${c ? chipSemaforo(c.dotacion.semaforo) : '—'}</td>
-              <td>${c
-                  ? (c.normativa.conteo.critica
-                      ? `<a class="chip rojo" href="#/visita/${v.id}/alertas" style="text-decoration:none">${c.normativa.conteo.critica} crítica${c.normativa.conteo.critica === 1 ? '' : 's'}</a>`
-                      : (c.normativa.conteo.alta
-                          ? `<a class="chip ambar" href="#/visita/${v.id}/alertas" style="text-decoration:none">${c.normativa.conteo.alta} alta${c.normativa.conteo.alta === 1 ? '' : 's'}</a>`
-                          : '<span class="chip verde">sin alertas</span>'))
-                  : '—'}</td>
               <td>${v ? (v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>') : '—'}</td>
               <td class="num">${v
                   ? `<a class="chip azul" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a>`
@@ -198,11 +184,10 @@ const App = (() => {
     contexto = e;
     return `
       <h1 class="titulo">Sucursales a cargo</h1>
-      <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.
-        La jurisdicción define si a la sucursal le aplica el CCT 414/05, que rige solo en CABA y en los partidos que enumera su artículo 3.</p>
+      <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.</p>
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Código</th><th>Nombre real</th><th>Tipo</th><th>Jurisdicción</th><th>Gerente de Tienda</th><th>Dirección</th><th></th></tr></thead>
+          <thead><tr><th>Código</th><th>Nombre real</th><th>Tipo</th><th>Gerente de Tienda</th><th>Dirección</th><th></th></tr></thead>
           <tbody>
           ${e.sucursales.map((s, i) => `<tr>
             <td><input data-path="sucursales.${i}.codigo" value="${esc(s.codigo)}" style="max-width:120px"></td>
@@ -210,11 +195,6 @@ const App = (() => {
             <td><select data-path="sucursales.${i}.tipo" data-calc="1">
               <option value="venta"${s.tipo === 'venta' ? ' selected' : ''}>🏪 Venta</option>
               <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff / soporte</option>
-            </select></td>
-            <td><select data-path="sucursales.${i}.jurisdiccion" data-calc="1">
-              <option value="">— sin definir —</option>
-              ${JURISDICCIONES_CCT414.map(j => `<option value="${esc(j)}"${s.jurisdiccion === j ? ' selected' : ''}>${esc(j)}</option>`).join('')}
-              <option value="Otra jurisdicción"${s.jurisdiccion === 'Otra jurisdicción' ? ' selected' : ''}>Otra jurisdicción</option>
             </select></td>
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input data-path="sucursales.${i}.direccion" value="${esc(s.direccion)}"></td>
@@ -274,44 +254,6 @@ const App = (() => {
       </section>
 
       <section class="tarjeta">
-        <h2>Encuadre normativo</h2>
-        <p class="ayuda">
-          Las alertas se evalúan contra la Ley de Contrato de Trabajo y, cuando corresponde, contra el
-          CCT 414/05 de ADEF. Como el convenio no usa las mismas categorías que las posiciones de tienda,
-          acá se define el encuadre de cada una.
-        </p>
-        <div class="grid c2">
-          ${campo('Evaluar contra el CCT 414/05', 'normativa.aplicaCCT414', {
-            tipo: 'select', calc: true,
-            opciones: [{ valor: 'true', texto: 'Sí, la red está en el ámbito del convenio' },
-                       { valor: 'false', texto: 'No, evaluar solo la LCT' }]
-          })}
-        </div>
-        <h3 style="font-size:14px;margin:20px 0 10px">Encuadre de las posiciones</h3>
-        <div class="tabla-scroll"><table>
-          <thead><tr><th>Posición de tienda</th><th>Categoría del convenio</th><th>Artículo</th></tr></thead>
-          <tbody>
-          ${POSICIONES.map(pos => {
-            const actual = (e.config.normativa.mapeo || {})[pos.nombre] || 'fueraConvenio';
-            const cat = CATEGORIAS_CCT.find(x => x.id === actual) || {};
-            return `<tr>
-              <td><strong>${esc(pos.nombre)}</strong></td>
-              <td><select data-path="normativa.mapeo.${pos.nombre}" data-calc="1">
-                ${CATEGORIAS_CCT.map(x => `<option value="${x.id}"${x.id === actual ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
-              </select></td>
-              <td>${esc(cat.art || '—')}</td>
-            </tr>`;
-          }).join('')}
-          </tbody>
-        </table></div>
-        <div class="aviso-caja">
-          El encuadre propuesto es una lectura de las tareas descriptas en los artículos 5 a 9 del convenio,
-          no una definición de la empresa. Confirmalo con Legales o con Relaciones Laborales antes de usarlo
-          para liquidar: de él dependen el básico, el escalafón por antigüedad y los adicionales del artículo 18.
-        </div>
-      </section>
-
-      <section class="tarjeta">
         <h2>Respaldo de datos</h2>
         <p class="ayuda">La información se guarda solo en este navegador. Exportá un respaldo para llevarla a otro equipo o para archivarla.
           Los datos de ejemplo sirven para recorrer el tablero antes de cargar información real: reemplazan todo el contenido y se limpian con “Borrar todo”.</p>
@@ -334,7 +276,6 @@ const App = (() => {
     ['sanciones',  'Sanciones'],
     ['sucesion',   'Sucesión'],
     ['dotacion',   'Dotación vs. Venta'],
-    ['alertas',    'Alertas normativas'],
     ['reporte',    'Reporte y Envío']
   ];
 
@@ -345,7 +286,6 @@ const App = (() => {
     const s = Store.sucursal(v.sucursalId);
     contexto = v;
     const c = Reporte.calcular(v, s, e.config);
-    const norm = c.normativa;
 
     const cuerpo = {
       minutas:    () => panelMinutas(v, s),
@@ -355,7 +295,6 @@ const App = (() => {
       sanciones:  () => panelSanciones(v),
       sucesion:   () => panelSucesion(v, c),
       dotacion:   () => panelDotacion(v, s, c),
-      alertas:    () => panelAlertas(v, s, e.config, c),
       reporte:    () => panelReporte(v, s, e.config, c)
     }[pestana] || (() => panelMinutas(v, s));
 
@@ -373,17 +312,10 @@ const App = (() => {
         ${kpi('Horas extras', c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) + ' hs' : '—', fmtPct(c.matriz.total.ratioExtras) + ' de las teóricas',
               c.matriz.total.ratioExtras !== null && c.matriz.total.ratioExtras > e.config.parametros.umbralHorasExtras ? 'alerta' : 'ok')}
         ${kpi('Rotación anualizada', c.rotacion.proyeccionAnual === null ? '—' : fmtPct(c.rotacion.proyeccionAnual, 1), `${c.rotacion.bajas} bajas en el mes`)}
-        ${kpi('Alertas normativas', norm.accionables || '0',
-              norm.conteo.critica ? `${norm.conteo.critica} crítica${norm.conteo.critica === 1 ? '' : 's'}` : 'sin alertas críticas',
-              norm.conteo.critica ? 'alerta' : (norm.accionables ? 'aviso' : 'ok'))}
       </div>
 
       <nav class="tabs" style="border-radius:10px;border:1px solid var(--borde);margin-bottom:18px">
-        ${PESTANAS.map(([k, t]) => {
-          const marca = k === 'alertas' && norm.accionables
-            ? ` <span class="chip ${norm.conteo.critica ? 'rojo' : 'ambar'}">${norm.accionables}</span>` : '';
-          return `<a href="#/visita/${v.id}/${k}" class="${k === pestana ? 'activo' : ''}">${t}${marca}</a>`;
-        }).join('')}
+        ${PESTANAS.map(([k, t]) => `<a href="#/visita/${v.id}/${k}" class="${k === pestana ? 'activo' : ''}">${t}</a>`).join('')}
       </nav>
 
       ${cuerpo()}`;
@@ -828,110 +760,7 @@ const App = (() => {
       </section>`;
   }
 
-  /* ----------------------- 8. Alertas normativas -------------------- */
-  const CLASE_SEVERIDAD = { critica: 'rojo', alta: 'ambar', media: '', info: 'azul' };
-
-  function tarjetaAlerta(a) {
-    return `<div class="alerta sev-${a.severidad}">
-      <div class="alerta-cab">
-        <span class="chip ${CLASE_SEVERIDAD[a.severidad]}">${esc(ETIQUETA_SEVERIDAD[a.severidad])}</span>
-        <strong>${esc(a.fuente)}</strong>
-        <span class="alerta-titulo">${esc(a.titulo)}</span>
-      </div>
-      <p class="alerta-msg">${esc(a.mensaje)}</p>
-      <p class="alerta-regla">${esc(a.regla)}</p>
-      ${a.origen ? `<p class="alerta-origen">Detectado en ${esc(a.origen)}.</p>` : ''}
-    </div>`;
-  }
-
-  function panelAlertas(v, s, config, c) {
-    const norm = c.normativa;
-    const casos = v.casos || [];
-    const cfg = config.normativa || {};
-
-    const grupos = ['critica', 'alta', 'media', 'info'].map(sev => ({
-      sev, items: norm.alertas.filter(a => a.severidad === sev)
-    })).filter(g => g.items.length);
-
-    return `
-      <section class="tarjeta">
-        <h2>Situaciones relevadas en la visita</h2>
-        <p class="ayuda">
-          Cargá acá lo que surja de las conversaciones con el gerente o con los colaboradores.
-          Cada situación se contrasta contra la Ley de Contrato de Trabajo y el CCT 414/05, y las alertas
-          aparecen abajo y viajan en el reporte al Gerente de Operaciones.
-        </p>
-        <div class="tabla-scroll"><table>
-          <thead><tr>
-            <th>Colaborador</th><th>Posición</th><th>Situación</th>
-            <th class="num">Dato</th><th class="num">Antigüedad</th><th>Cargas fam.</th><th>Notas</th><th></th>
-          </tr></thead>
-          <tbody>
-          ${casos.length ? casos.map((x, i) => {
-            const tipo = TIPOS_CASO_POR_ID[x.tipo] || {};
-            return `<tr>
-              <td><input data-path="casos.${i}.colaborador" data-calc="1" value="${esc(x.colaborador)}"></td>
-              <td><select data-path="casos.${i}.posicion" data-calc="1">
-                <option value="">—</option>
-                ${POSICIONES.map(p => `<option value="${esc(p.nombre)}"${x.posicion === p.nombre ? ' selected' : ''}>${esc(p.nombre)}</option>`).join('')}
-              </select></td>
-              <td><select data-path="casos.${i}.tipo" data-calc="1">
-                ${TIPOS_CASO.map(t => `<option value="${t.id}"${x.tipo === t.id ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')}
-              </select></td>
-              <td class="num">${tipo.campo
-                ? `<input class="num" type="number" data-path="casos.${i}.valor" data-calc="1" value="${esc(x.valor)}" style="width:80px" title="${esc(tipo.campo)}">
-                   <div style="font-size:11px;color:var(--texto-suave);text-align:right">${esc(tipo.campo)}</div>`
-                : '—'}</td>
-              <td class="num"><input class="num" type="number" step="0.5" data-path="casos.${i}.antiguedadAnios" data-calc="1" value="${esc(x.antiguedadAnios)}" style="width:70px" title="Años de antigüedad">
-                <div style="font-size:11px;color:var(--texto-suave);text-align:right">años</div></td>
-              <td><select data-path="casos.${i}.cargasFamilia" data-calc="1">
-                <option value=""${!x.cargasFamilia ? ' selected' : ''}>No</option>
-                <option value="si"${x.cargasFamilia ? ' selected' : ''}>Sí</option>
-              </select></td>
-              <td><textarea data-path="casos.${i}.notas" data-calc="1" style="min-height:60px" placeholder="Qué dijo, qué se acordó">${esc(x.notas)}</textarea></td>
-              <td class="num"><button class="mini" data-accion="borrar-item" data-arr="casos" data-idx="${i}">✕</button></td>
-            </tr>`;
-          }).join('') : '<tr><td colspan="8" class="vacio">Sin situaciones cargadas. El tablero igual revisa los datos de ausentismo, sanciones, bajas y minutas.</td></tr>'}
-          </tbody>
-        </table></div>
-        <div class="acciones"><button class="b sec" data-accion="agregar-caso">+ Agregar situación</button></div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Consulta rápida</h2>
-        <p class="ayuda">Escribí o pegá lo que quieras chequear y el tablero busca las normas que aplican.</p>
-        <textarea id="consulta-normativa" placeholder="Ej.: le quieren descontar una falla de caja del sueldo; hace cuatro meses que cubre la gerencia; está embarazada y vence el contrato" style="min-height:80px"></textarea>
-        <div class="acciones"><button class="b" data-accion="consultar-normativa">Buscar en la normativa</button></div>
-        <div id="resultado-consulta"></div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Alertas de esta visita</h2>
-        <p class="ayuda">
-          ${norm.alertas.length
-            ? `${norm.conteo.critica} crítica${norm.conteo.critica === 1 ? '' : 's'} ·
-               ${norm.conteo.alta} de prioridad alta ·
-               ${norm.conteo.media} a revisar ·
-               ${norm.conteo.info} de referencia.`
-            : 'Sin alertas con los datos cargados hasta ahora.'}
-        </p>
-
-        <div class="aviso-caja info">
-          <strong>Cómo leer esto.</strong> El tablero marca los temas que la norma regula, a partir de los datos
-          numéricos y de las palabras que aparecen en las minutas. No interpreta los hechos ni reemplaza la
-          consulta con el área legal. Ante un caso concreto, la decisión se toma con el expediente completo.
-          ${cfg.aplicaCCT414 === false ? '<br><br>El chequeo contra el CCT 414/05 está desactivado en Configuración: solo se evalúa la LCT.' : ''}
-        </div>
-
-        ${grupos.map(g => `
-          <h3 style="font-size:14px;margin:22px 0 10px">${esc(ETIQUETA_SEVERIDAD[g.sev])}
-            <span class="chip ${CLASE_SEVERIDAD[g.sev]}">${g.items.length}</span></h3>
-          ${g.items.map(tarjetaAlerta).join('')}
-        `).join('')}
-      </section>`;
-  }
-
-  /* ----------------------- 9. Reporte y envío ----------------------- */
+  /* ----------------------- 8. Reporte y envío ----------------------- */
   function panelReporte(v, s, config, c) {
     const faltantes = Reporte.detectarFaltantes(v, s, c);
     const plan = v.diagnostico.plan || [];
@@ -1054,10 +883,7 @@ const App = (() => {
     cont.addEventListener('change', ev => {
       const el = ev.target.closest('[data-path]');
       if (!el || !contexto) return;
-      let valor = el.value;
-      if (/\.cargasFamilia$/.test(el.dataset.path)) valor = el.value === 'si';
-      if (/aplicaCCT414$/.test(el.dataset.path)) valor = el.value === 'true';
-      setPath(contexto, el.dataset.path, valor);
+      setPath(contexto, el.dataset.path, el.value);
       Store.save();
       if (el.dataset.calc) refrescar(); else actualizarVistaPrevia();
     });
@@ -1108,26 +934,6 @@ const App = (() => {
       if (a === 'agregar-sucesion') {
         contexto.sucesion.push({ posicion: POSICIONES[0].nombre, incumbent: '', criticidad: 3, escasez: 2, disponibilidad: '1a2', candidatos: [] });
         Store.save(); refrescar();
-      }
-      if (a === 'agregar-caso') {
-        contexto.casos.push({ id: Store.uid(), colaborador: '', posicion: '', tipo: 'clima',
-                              valor: '', antiguedadAnios: '', cargasFamilia: false, fecha: '', notas: '' });
-        Store.save(); refrescar();
-      }
-      if (a === 'consultar-normativa') {
-        const caja = document.getElementById('consulta-normativa');
-        const salida = document.getElementById('resultado-consulta');
-        if (!caja || !salida) return;
-        const encontradas = buscarNormas(caja.value);
-        salida.innerHTML = !caja.value.trim()
-          ? '<p class="vacio">Escribí algo para buscar.</p>'
-          : (encontradas.length
-              ? `<p class="ayuda" style="margin:14px 0 8px">${encontradas.length} norma${encontradas.length === 1 ? '' : 's'} relacionada${encontradas.length === 1 ? '' : 's'}:</p>` +
-                encontradas.map(n => tarjetaAlerta({
-                  severidad: n.severidad, fuente: n.fuente, titulo: n.titulo,
-                  regla: n.regla, mensaje: `Tema: ${n.tema}.`, origen: ''
-                })).join('')
-              : '<div class="aviso-caja">No encontré normas para esos términos. Probá con palabras del tema: vacaciones, suspensión, embarazo, categoría, horas extras, falla de caja.</div>');
       }
       if (a === 'agregar-compromiso') {
         contexto.diagnostico.plan.push({ compromiso: '', responsable: '', plazo: '', estado: 'Pendiente' });

@@ -66,7 +66,6 @@ const Store = (() => {
         nombre: '',          // el coordinador reemplaza el código por el nombre real
         tipo: 'venta',
         gerente: '',
-        jurisdiccion: '',    // define si le aplica el CCT 414/05 (art. 3)
         direccion: '',
         dotacionNominal: null,
         notas: ''
@@ -79,11 +78,7 @@ const Store = (() => {
         gerenteOperaciones: { nombre: '', email: '' },
         copias: '',
         webhook: '',
-        parametros: Object.assign({}, PARAMETROS_DEFECTO),
-        normativa: {
-          aplicaCCT414: true,
-          mapeo: Object.assign({}, MAPEO_CATEGORIAS_DEFECTO)
-        }
+        parametros: Object.assign({}, PARAMETROS_DEFECTO)
       },
       sucursales,
       visitas: []
@@ -110,7 +105,6 @@ const Store = (() => {
       movimientos: [],
       sanciones: [],
       sucesion: [],
-      casos: [],
       comercial: { venta: '', ventaRed: '', tickets: '', horasTrabajadas: '' },
       diagnostico: { hallazgos: '', impacto: '', plan: [] },
       envio: { enviado: false, fecha: null, destinatario: null, via: null, historial: [] },
@@ -137,7 +131,7 @@ const Store = (() => {
       v.comercial = Object.assign({ venta: '', ventaRed: '', tickets: '', horasTrabajadas: '' }, v.comercial || {});
       v.diagnostico = Object.assign({ hallazgos: '', impacto: '', plan: [] }, v.diagnostico || {});
       v.envio = Object.assign({ enviado: false, fecha: null, destinatario: null, via: null, historial: [] }, v.envio || {});
-      ['posiciones', 'movimientos', 'sanciones', 'sucesion', 'casos'].forEach(k => {
+      ['posiciones', 'movimientos', 'sanciones', 'sucesion'].forEach(k => {
         if (!Array.isArray(v[k])) v[k] = [];
       });
     });
@@ -185,8 +179,7 @@ const Store = (() => {
         .map(s => parseInt((s.codigo.match(/^sucursal(\d+)$/) || [])[1], 10))
         .filter(n => !isNaN(n));
       const n = usados.length ? Math.max(...usados) + 1 : 1;
-      const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '',
-                  jurisdiccion: '', direccion: '', dotacionNominal: null, notas: '' };
+      const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '', direccion: '', dotacionNominal: null, notas: '' };
       e.sucursales.push(s);
       guardar();
       return s;
@@ -254,12 +247,12 @@ const Store = (() => {
       e.config.gerenteOperaciones = { nombre: 'Gerencia de Operaciones', email: '' };
 
       const demo = [
-        { i: 0, nombre: 'Centro — ejemplo', gerente: 'Gerente de Tienda 1', jurisdiccion: 'Ciudad Autónoma de Buenos Aires',
+        { i: 0, nombre: 'Centro — ejemplo', gerente: 'Gerente de Tienda 1',
           pos: [[1,0,0,0,0,2800000,0,0],[2,0,0,0,0,3600000,0,0],[6,18,0,22,86,8400000,310000,0],
                 [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[1,0,0,9,0,1900000,0,0]],
           aus: { '085': 14, '071': 9, '081': 5, '086': 3 },
           rot: ['12','1','0','1','0'], venta: '268000000', tickets: '41000', horas: '5600' },
-        { i: 1, nombre: 'Norte — ejemplo', gerente: 'Gerente de Tienda 2', jurisdiccion: 'Vicente López',
+        { i: 1, nombre: 'Norte — ejemplo', gerente: 'Gerente de Tienda 2',
           pos: [[1,0,0,0,0,2800000,0,0],[1,0,0,0,0,1800000,0,0],[4,0,0,6,22,5600000,80000,0],
                 [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[0,0,0,0,0,0,0,0]],
           aus: { '085': 6 },
@@ -275,7 +268,6 @@ const Store = (() => {
         const suc = e.sucursales[d.i];
         suc.nombre = d.nombre;
         suc.gerente = d.gerente;
-        suc.jurisdiccion = d.jurisdiccion;
         const v = visitaNueva(suc.id);
         v.coordinador = e.config.coordinador;
         v.minutaGerente = {
@@ -307,16 +299,7 @@ const Store = (() => {
         { posicion: 'Farmacéutico', incumbent: 'Farmacéutico 1', criticidad: 3, escasez: 3, disponibilidad: 'lt1', candidatos: [] }
       );
       e.visitas[0].sanciones.push(
-        { nombre: 'Colaborador A', fecha: '', tipo: 'Suspensión', motivo: 'Llegadas tarde', puesto: 'APV', observaciones: '' },
-        { nombre: 'Colaborador B', fecha: '', tipo: 'Suspensión', motivo: 'Falla de caja', puesto: 'APV', observaciones: '' }
-      );
-      e.visitas[0].casos.push(
-        { id: uid(), colaborador: 'Colaborador C', posicion: 'Senior', tipo: 'reemplazo',
-          antiguedadAnios: '4', valor: '4', cargasFamilia: false, fecha: '',
-          notas: 'Cubre la gerencia desde que la gerente salió de licencia. Cobra su categoría de siempre.' },
-        { id: uid(), colaborador: 'Colaborador D', posicion: 'APV', tipo: 'enfermedad',
-          antiguedadAnios: '2', valor: '78', cargasFamilia: true, fecha: '',
-          notas: 'Licencia prolongada, presenta certificados en tiempo.' }
+        { nombre: 'Colaborador A', fecha: '', tipo: 'Suspensión', motivo: 'Llegadas tarde', puesto: 'APV', observaciones: '' }
       );
       guardar();
     }
