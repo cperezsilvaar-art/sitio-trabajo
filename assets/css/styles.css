@@ -216,6 +216,84 @@ pre.reporte {
 
 .vacio { color: var(--texto-suave); font-style: italic; padding: 14px 0; font-size: 13.5px; }
 
+/* ----------------------------- Matriz 9-box ---------------------------- */
+/* Cinco columnas: eje vertical, etiquetas de fila y los tres cuadrantes.
+   Cada elemento fuera de la grilla de cuadrantes lleva su columna explícita,
+   porque el autoposicionamiento corría todo una columna. */
+.ninebox {
+  display: grid; grid-template-columns: 26px 132px repeat(3, 1fr); gap: 6px;
+  margin-top: 14px; align-items: stretch;
+}
+.ninebox .esquina { grid-column: 1 / span 2; grid-row: 1; }
+.ninebox .eje-y {
+  grid-column: 1; grid-row: 2 / span 3;
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--texto-suave); font-weight: 600;
+}
+.ninebox .rot-cab, .ninebox .eje-x {
+  text-align: center; font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+  color: var(--texto-suave); font-weight: 600; padding: 4px 0;
+}
+.ninebox .eje-x { grid-column: 3 / span 3; }
+.ninebox .eje-lbl {
+  grid-column: 2;
+  display: flex; align-items: center; justify-content: flex-end; padding-right: 10px;
+  font-size: 12.5px; color: var(--texto-suave); font-weight: 600; text-align: right;
+}
+.ninebox .caja {
+  min-height: 112px; border: 1px solid var(--borde); border-radius: 8px; padding: 8px;
+  display: flex; flex-direction: column; gap: 6px; transition: outline-color .12s;
+  outline: 2px solid transparent; outline-offset: -2px;
+}
+.ninebox .caja.encima { outline-color: var(--azul-claro); background: var(--panel-alt); }
+.ninebox .caja-cab {
+  font-size: 11.5px; font-weight: 700; color: var(--texto); display: flex;
+  justify-content: space-between; gap: 6px; letter-spacing: .2px;
+}
+.ninebox .caja-cab span { color: var(--texto-suave); font-weight: 600; }
+.ninebox .caja-gente { display: flex; flex-direction: column; gap: 4px; }
+
+.caja.tono-verde    { background: rgba(26,127,75,.10);  border-color: rgba(26,127,75,.30); }
+.caja.tono-azul     { background: rgba(28,95,158,.09);  border-color: rgba(28,95,158,.26); }
+.caja.tono-amarillo { background: rgba(183,121,31,.12); border-color: rgba(183,121,31,.30); }
+.caja.tono-rojo     { background: rgba(192,57,43,.11);  border-color: rgba(192,57,43,.30); }
+
+.persona {
+  background: var(--panel); border: 1px solid var(--borde-fuerte); border-radius: 6px;
+  padding: 5px 8px; font-size: 12.5px; font-weight: 600; cursor: grab; line-height: 1.3;
+  box-shadow: 0 1px 2px rgba(16,32,54,.07);
+}
+.persona span { display: block; font-size: 11px; font-weight: 400; color: var(--texto-suave); }
+.persona:active { cursor: grabbing; }
+.persona.arrastrando { opacity: .4; }
+
+.alerta.tono-borde-verde    { border-left-color: var(--verde); }
+.alerta.tono-borde-azul     { border-left-color: var(--azul-claro); }
+.alerta.tono-borde-amarillo { border-left-color: var(--ambar); }
+.alerta.tono-borde-rojo     { border-left-color: var(--rojo-alerta); }
+
+/* ------------------------------ Talent card ---------------------------- */
+tr.ficha-fila > td { background: var(--panel-alt); padding: 0; }
+tr.inactivo { opacity: .55; }
+.talent-card { padding: 18px 20px; }
+.talent-card .tc-cab {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  flex-wrap: wrap; padding-bottom: 12px; margin-bottom: 6px; border-bottom: 1px solid var(--borde);
+}
+.talent-card .tc-cab strong { font-size: 15px; }
+.talent-card .tc-cab span { display: block; font-size: 12.5px; color: var(--texto-suave); }
+.talent-card h4 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--texto-suave); margin: 18px 0 8px;
+}
+
+@media (max-width: 720px) {
+  .ninebox { grid-template-columns: 20px 84px repeat(3, 1fr); }
+  .ninebox .eje-lbl { font-size: 11px; }
+}
+
 /* ------------------- Confirmación y avisos propios --------------------- *
    El visor de la página publicada bloquea confirm() y alert() del navegador,
    así que el tablero dibuja los suyos. */

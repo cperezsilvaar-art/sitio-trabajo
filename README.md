@@ -31,6 +31,7 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 | **Ausentismo** | Días por concepto, abiertos en inactivo / activo controlable / activo incontrolable |
 | **Rotación y Bajas** | Rotación mensual y anualizada, altas y bajas con motivo y causa |
 | **Sanciones** | Registro disciplinario del período |
+| **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
 | **Sucesión** | Posiciones críticas, criticidad × escasez, candidatos y *readiness*, mapa de calor |
 | **Dotación vs. Venta** | Dotación óptima según venta, % costo/venta, productividad por tickets/hora |
 | **Reporte y Envío** | Diagnóstico, plan de seguimiento y envío al Gerente de Operaciones |
@@ -41,6 +42,8 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
   rotación y dotación óptima, con su verificación contra las planillas de origen.
 - [`docs/automatizacion-email.md`](docs/automatizacion-email.md) — cómo dejar el envío
   del reporte 100% automático con Google Apps Script, Make o Zapier.
+- [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
+  potencial, los nueve cuadrantes y la talent card.
 - [`docs/origen-de-los-datos.md`](docs/origen-de-los-datos.md) — qué se tomó de cada
   planilla del relevamiento inicial.
 

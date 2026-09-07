@@ -72,8 +72,9 @@ const Reporte = (() => {
       horasTrabajadas: visita.comercial.horasTrabajadas
     }, par);
     const hallazgosAuto = generarHallazgos(visita, par);
+    const talento = distribucion9Box(sucursal.colaboradores);
 
-    return { matriz, ausentismo, rotacion, bajas, sucesion, dotacion, productividad, hallazgosAuto, par };
+    return { matriz, ausentismo, rotacion, bajas, sucesion, dotacion, productividad, hallazgosAuto, talento, par };
   }
 
   /** Tabla de FTE en texto plano, alineada en columnas. */
@@ -200,9 +201,53 @@ const Reporte = (() => {
     }
     L.push('');
 
-    /* 5. Sucesión */
+    let seccion = 4;
+
+    /* Talento: matriz de desempeño y potencial del plantel */
+    if (c.talento.evaluados.length) {
+      const t9 = c.talento;
+      seccion++;
+      L.push(seccion + '. DESEMPEÑO Y POTENCIAL DEL PLANTEL');
+      L.push(`- Evaluados junto con el Gerente de Tienda: ${t9.evaluados.length} de ${t9.activos.length} colaboradores.`);
+      if (t9.sinEvaluar.length) {
+        L.push(`- Sin evaluar: ${t9.sinEvaluar.map(x => oPendiente(x.nombre)).join(', ')}.`);
+      }
+      L.push('- Ubicación en la matriz 9-box:');
+      [['3', 'Potencial alto'], ['2', 'Puede crecer'], ['1', 'En su nivel']].forEach(([pot, etiqueta]) => {
+        const fila = ['3', '2', '1'].map(des => {
+          const gente = t9.celdas[pot + des] || [];
+          if (!gente.length) return null;
+          const q = NINE_BOX[pot + des];
+          return `${q.nombre}: ${gente.map(x => oPendiente(x.nombre)).join(', ')}`;
+        }).filter(Boolean);
+        if (fila.length) {
+          L.push(`  * ${etiqueta} — ${fila.join(' · ')}`);
+        }
+      });
+      if (t9.listosParaCrecer.length) {
+        L.push(`- Listos para asumir más: ${t9.listosParaCrecer.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
+      }
+      if (t9.enRiesgo.length) {
+        L.push(`- Con plan de mejora pendiente: ${t9.enRiesgo.map(x => oPendiente(x.nombre)).join(', ')}.`);
+      }
+      if (t9.riesgoDeSalida.length) {
+        L.push(`- Riesgo de salida alto: ${t9.riesgoDeSalida.map(x => `${oPendiente(x.nombre)} (${oPendiente(x.posicion)})`).join(', ')}.`);
+      }
+      if (t9.estudiando.length) {
+        L.push(`- Con formación en curso: ${t9.estudiando.length} colaborador${t9.estudiando.length === 1 ? '' : 'es'}.`);
+        t9.estudiando.forEach(x => {
+          const nivel = (NIVELES_ESTUDIO.find(n => n.id === x.estudia) || {}).nombre || '';
+          L.push(`  * ${oPendiente(x.nombre)}: ${nivel}${x.carrera ? ' — ' + x.carrera : ''}` +
+                 `${x.interesDesarrollo ? ` · quiere desarrollarse en: ${x.interesDesarrollo}` : ''}`);
+        });
+      }
+      L.push('');
+    }
+
+    /* Sucesión de posiciones críticas */
     if (visita.sucesion.length) {
-      L.push('5. SUCESIÓN Y TALENTO CRÍTICO');
+      seccion++;
+      L.push(seccion + '. SUCESIÓN Y TALENTO CRÍTICO');
       L.push(`- Posiciones críticas identificadas: ${c.sucesion.posicionesCriticas} · con plan de sucesión: ${c.sucesion.criticasConPlan}`);
       L.push(`- Candidatos listos en menos de 1 año: ${c.sucesion.candidatosListos}`);
       c.sucesion.lista.forEach(i => {
@@ -215,7 +260,7 @@ const Reporte = (() => {
     }
 
     /* 6. Diagnóstico */
-    let seccion = visita.sucesion.length ? 6 : 5;
+    seccion++;
     L.push(seccion + '. DIAGNÓSTICO Y ACCIONES RECOMENDADAS');
     L.push('- Hallazgos sobre ausentismo y desviación de horas extras:');
     const hallazgos = String(visita.diagnostico.hallazgos || '').trim();
@@ -304,6 +349,11 @@ const Reporte = (() => {
     if (!num(visita.comercial.venta) && sucursal.tipo === 'venta') f.push('Venta neta del período (necesaria para el análisis de dotación óptima).');
     if (!num(visita.rotacion.dotacionAnterior)) f.push('Dotación del mes anterior (para el cálculo de rotación).');
     if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
+    if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
+    else if (c.talento.sinEvaluar.length) {
+      f.push(`Evaluación de desempeño y potencial de ${c.talento.sinEvaluar.length} colaborador/es: ` +
+             c.talento.sinEvaluar.map(x => x.nombre || 'sin nombre').join(', ') + '.');
+    }
     if (!sucursal.emailGerente) f.push('Email del Gerente de Tienda, para que reciba copia del reporte.');
     return f;
   }

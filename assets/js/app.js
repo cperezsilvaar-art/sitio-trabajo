@@ -10,6 +10,7 @@
 
 const App = (() => {
   let contexto = null;          // objeto que editan los campos con data-path
+  let visitaEnCurso = null;     // visita abierta, para fechar las evaluaciones
   let vistaActual = null;       // función de re-render de la vista en curso
   let temporizador = null;
 
@@ -332,6 +333,7 @@ const App = (() => {
     ['ausentismo', 'Ausentismo'],
     ['rotacion',   'Rotación y Bajas'],
     ['sanciones',  'Sanciones'],
+    ['talento',    'Talento y 9-box'],
     ['sucesion',   'Sucesión'],
     ['dotacion',   'Dotación vs. Venta'],
     ['reporte',    'Reporte y Envío']
@@ -343,6 +345,7 @@ const App = (() => {
     if (!v) return `<p class="vacio">La visita no existe o fue eliminada.</p>`;
     const s = Store.sucursal(v.sucursalId);
     contexto = v;
+    visitaEnCurso = v;
     const c = Reporte.calcular(v, s, e.config);
 
     const cuerpo = {
@@ -351,6 +354,7 @@ const App = (() => {
       ausentismo: () => panelAusentismo(v, c),
       rotacion:   () => panelRotacion(v, c),
       sanciones:  () => panelSanciones(v),
+      talento:    () => panelTalento(v, s),
       sucesion:   () => panelSucesion(v, c),
       dotacion:   () => panelDotacion(v, s, c),
       reporte:    () => panelReporte(v, s, e.config, c)
@@ -734,7 +738,213 @@ const App = (() => {
       </section>`;
   }
 
-  /* --------------------------- 6. Sucesión -------------------------- */
+  /* --------------------- 6. Talento y matriz 9-box ------------------- */
+  /* Los colaboradores viven en la sucursal, no en la visita: la evaluación es
+     un estado vigente que se ajusta cuando el gerente aporta algo nuevo, y
+     cada movimiento queda fechado en el historial. */
+
+  let fichaAbierta = null;   // id del colaborador con la talent card desplegada
+
+  function panelTalento(v, s) {
+    const d = distribucion9Box(s.colaboradores);
+    const equipo = s.colaboradores || [];
+
+    const chip = c => {
+      const q = cuadranteDe(c.potencial, c.desempeno);
+      return `<div class="persona" draggable="true" data-colab="${c.id}" title="${esc(c.nombre)} — ${esc(c.posicion || 'sin posición')}${q ? ' · ' + esc(q.nombre) : ''}">
+        ${esc(c.nombre || 'Sin nombre')}
+        <span>${esc(c.posicion || '')}</span>
+      </div>`;
+    };
+
+    const celda = (pot, des) => {
+      const q = NINE_BOX[String(pot) + String(des)];
+      const gente = d.celdas[String(pot) + String(des)] || [];
+      return `<div class="caja tono-${q.tono}" data-pot="${pot}" data-des="${des}">
+        <div class="caja-cab">${esc(q.nombre)} <span>${gente.length}</span></div>
+        <div class="caja-gente">${gente.map(chip).join('')}</div>
+      </div>`;
+    };
+
+    return `
+      <section class="tarjeta">
+        <h2>6. Evaluación de desempeño y potencial</h2>
+        <p class="ayuda">
+          Evaluación hecha en conjunto con el Gerente de Tienda. Vive en la sucursal, no en esta visita:
+          cuando el gerente aporte algo nuevo, cambiás el valor acá o arrastrás a la persona en la matriz
+          y el movimiento queda fechado en su historial.
+        </p>
+        <div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Colaborador</th><th>Posición</th><th>Ingreso</th><th class="num">Antig.</th>
+            <th>Desempeño</th><th>Potencial</th><th>Cuadrante</th><th>Último movimiento</th><th></th>
+          </tr></thead>
+          <tbody>
+          ${equipo.length ? equipo.map((c, i) => {
+            const q = cuadranteDe(c.potencial, c.desempeno);
+            const ant = antiguedadAnios(c.fechaIngreso);
+            const ult = (c.historial || []).slice(-1)[0];
+            return `<tr class="${c.activo === false ? 'inactivo' : ''}">
+              <td><input data-colab-campo="${c.id}|nombre" value="${esc(c.nombre)}" placeholder="Apellido y nombre"></td>
+              <td><select data-colab-campo="${c.id}|posicion">
+                <option value="">—</option>
+                ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${c.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
+              </select></td>
+              <td><input type="date" data-colab-campo="${c.id}|fechaIngreso" value="${esc(c.fechaIngreso)}"></td>
+              <td class="num">${ant === null ? '—' : fmtNum(ant, 1)}</td>
+              <td><select data-colab-eval="${c.id}|desempeno">
+                <option value="">— sin evaluar —</option>
+                ${ESCALA_DESEMPENO.map(x => `<option value="${x.valor}"${Number(c.desempeno) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+              </select></td>
+              <td><select data-colab-eval="${c.id}|potencial">
+                <option value="">— sin evaluar —</option>
+                ${ESCALA_POTENCIAL.map(x => `<option value="${x.valor}"${Number(c.potencial) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
+              </select></td>
+              <td>${q ? `<span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[q.tono]}">${esc(q.nombre)}</span>` : '<span class="chip">sin ubicar</span>'}</td>
+              <td style="font-size:12px;color:var(--texto-suave)">${ult ? `${fmtFecha(ult.fecha)}${ult.desde ? ` · desde ${ult.desde.desempeno || '—'}/${ult.desde.potencial || '—'}` : ''}` : '—'}</td>
+              <td class="num" style="white-space:nowrap">
+                <button class="mini" data-accion="ficha" data-id="${c.id}" style="color:var(--azul);border-color:var(--azul)">${fichaAbierta === c.id ? 'Cerrar' : 'Ficha'}</button>
+                <button class="mini" data-accion="borrar-colaborador" data-id="${c.id}">✕</button>
+              </td>
+            </tr>
+            ${fichaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${talentCard(c, s)}</td></tr>` : ''}`;
+          }).join('') : '<tr><td colspan="9" class="vacio">Sin colaboradores cargados. Agregá el plantel de la sucursal para poder evaluarlo.</td></tr>'}
+          </tbody>
+        </table></div>
+        <div class="acciones">
+          <button class="b sec" data-accion="agregar-colaborador">+ Agregar colaborador</button>
+          ${d.sinEvaluar.length ? `<span class="chip ambar">${d.sinEvaluar.length} sin evaluar</span>` : ''}
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Matriz 9-box</h2>
+        <p class="ayuda">
+          Arrastrá a una persona de un cuadrante a otro para reubicarla; el cambio queda registrado con la fecha
+          de esta visita y el nombre del gerente con quien lo evaluaste.
+        </p>
+
+        <div class="ninebox">
+          <div class="esquina"></div>
+          <div class="rot-cab">Por debajo</div>
+          <div class="rot-cab">Esperado</div>
+          <div class="rot-cab">Supera</div>
+
+          <div class="eje-y">Potencial</div>
+
+          <div class="eje-lbl">Alto</div>${celda(3, 1)}${celda(3, 2)}${celda(3, 3)}
+          <div class="eje-lbl">Puede crecer</div>${celda(2, 1)}${celda(2, 2)}${celda(2, 3)}
+          <div class="eje-lbl">En su nivel</div>${celda(1, 1)}${celda(1, 2)}${celda(1, 3)}
+
+          <div class="eje-x">Desempeño</div>
+        </div>
+
+        ${d.sinEvaluar.length ? `<div class="aviso-caja">
+          Sin ubicar en la matriz: ${d.sinEvaluar.map(c => esc(c.nombre || 'sin nombre')).join(', ')}.
+        </div>` : ''}
+
+        <div class="kpis" style="margin-top:18px">
+          ${kpi('Plantel evaluado', `${d.evaluados.length} / ${d.activos.length}`)}
+          ${kpi('Listos para crecer', d.listosParaCrecer.length, 'desempeño y potencial ≥ 2', d.listosParaCrecer.length ? 'ok' : '')}
+          ${kpi('A trabajar', d.aTrabajar.length, d.aTrabajar.map(c => c.nombre).join(', ').slice(0, 60), d.aTrabajar.length ? 'aviso' : '')}
+          ${kpi('En riesgo', d.enRiesgo.length, d.enRiesgo.map(c => c.nombre).join(', ').slice(0, 60), d.enRiesgo.length ? 'alerta' : 'ok')}
+          ${kpi('Riesgo de salida alto', d.riesgoDeSalida.length, d.riesgoDeSalida.map(c => c.nombre).join(', ').slice(0, 60), d.riesgoDeSalida.length ? 'alerta' : 'ok')}
+          ${kpi('Estudiando', d.estudiando.length, 'con formación en curso')}
+        </div>
+      </section>
+
+      ${equipo.some(c => c.desempeno && c.potencial) ? `
+      <section class="tarjeta">
+        <h2>Qué hacer con cada cuadrante</h2>
+        <div class="grid c2">
+          ${Object.keys(NINE_BOX).filter(k => (d.celdas[k] || []).length).map(k => {
+            const q = NINE_BOX[k];
+            return `<div class="alerta tono-borde-${q.tono}">
+              <div class="alerta-cab">
+                <span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[q.tono]}">${esc(q.nombre)}</span>
+                <span class="alerta-titulo">${d.celdas[k].map(c => esc(c.nombre)).join(', ')}</span>
+              </div>
+              <p class="alerta-msg">${esc(q.lectura)}</p>
+              <p class="alerta-regla">${esc(q.accion)}</p>
+            </div>`;
+          }).join('')}
+        </div>
+      </section>` : ''}`;
+  }
+
+  /* ---------------------------- Talent card --------------------------- */
+  function talentCard(c, s) {
+    const q = cuadranteDe(c.potencial, c.desempeno);
+    const ant = antiguedadAnios(c.fechaIngreso);
+    const campoC = (etiqueta, campo, opciones) => {
+      const o = opciones || {};
+      const val = esc(c[campo] ?? '');
+      let control;
+      if (o.tipo === 'textarea') control = `<textarea data-colab-campo="${c.id}|${campo}" style="min-height:70px" placeholder="${esc(o.placeholder || '')}">${val}</textarea>`;
+      else if (o.tipo === 'select') control = `<select data-colab-campo="${c.id}|${campo}">${o.opciones.map(x =>
+        `<option value="${esc(x.id)}"${c[campo] === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}</select>`;
+      else control = `<input type="${o.tipo || 'text'}" data-colab-campo="${c.id}|${campo}" value="${val}" placeholder="${esc(o.placeholder || '')}">`;
+      return `<label class="campo"><span>${esc(etiqueta)}</span>${control}</label>`;
+    };
+
+    return `<div class="talent-card">
+      <div class="tc-cab">
+        <div>
+          <strong>${esc(c.nombre || 'Sin nombre')}</strong>
+          <span>${esc(c.posicion || 'sin posición')}${ant === null ? '' : ` · ${fmtNum(ant, 1)} años en la empresa`}</span>
+        </div>
+        ${q ? `<span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[q.tono]}">${esc(q.nombre)}</span>` : ''}
+      </div>
+
+      <h4>Formación</h4>
+      <div class="grid c3">
+        ${campoC('¿Estudia?', 'estudia', { tipo: 'select', opciones: NIVELES_ESTUDIO })}
+        ${campoC('Carrera o curso', 'carrera', { placeholder: 'ej. Farmacia' })}
+        ${campoC('Avance', 'avanceEstudio', { placeholder: 'ej. 2º año, 40%' })}
+        ${campoC('Formación previa', 'formacionPrevia', { placeholder: 'Títulos, cursos anteriores' })}
+      </div>
+
+      <h4>Desarrollo</h4>
+      <div class="grid c3">
+        ${campoC('¿Dónde quiere desarrollarse?', 'interesDesarrollo', { placeholder: 'Lo que dijo el colaborador' })}
+        ${campoC('Próxima posición que aspira', 'aspiracion', { placeholder: 'ej. Senior, Farmacéutica' })}
+        ${campoC('Movilidad', 'movilidad', { tipo: 'select', opciones: MOVILIDAD })}
+      </div>
+
+      <h4>Lectura del desempeño</h4>
+      <div class="grid c2">
+        ${campoC('Fortalezas', 'fortalezas', { tipo: 'textarea', placeholder: 'En qué se destaca' })}
+        ${campoC('A desarrollar', 'aDesarrollar', { tipo: 'textarea', placeholder: 'Qué necesita para el próximo paso' })}
+      </div>
+      <div class="grid c2" style="margin-top:12px">
+        ${campoC('Riesgo de salida', 'riesgoSalida', { tipo: 'select', opciones: RIESGO_SALIDA })}
+        ${campoC('Notas', 'notas', { placeholder: 'Lo que quieras recordar de esta persona' })}
+      </div>
+
+      ${q ? `<div class="aviso-caja info" style="margin-top:16px">
+        <strong>${esc(q.nombre)}.</strong> ${esc(q.lectura)} ${esc(q.accion)}
+      </div>` : ''}
+
+      ${(c.historial || []).length ? `
+        <h4>Historial de evaluaciones</h4>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Desempeño</th><th>Potencial</th><th>Cuadrante</th><th>Evaluado con</th><th>Motivo</th></tr></thead>
+          <tbody>${c.historial.slice().reverse().map(h => {
+            const hq = cuadranteDe(h.potencial, h.desempeno);
+            return `<tr>
+              <td>${fmtFecha(h.fecha)}</td>
+              <td>${(ESCALA_DESEMPENO.find(x => x.valor === h.desempeno) || {}).nombre || '—'}</td>
+              <td>${(ESCALA_POTENCIAL.find(x => x.valor === h.potencial) || {}).nombre || '—'}</td>
+              <td>${hq ? esc(hq.nombre) : '—'}</td>
+              <td>${esc(h.evaluadoCon || '—')}</td>
+              <td>${esc(h.motivo || '—')}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : ''}
+    </div>`;
+  }
+
+  /* --------------------------- 7. Sucesión -------------------------- */
   function panelSucesion(v, c) {
     const items = c.sucesion.lista;
     const nivel = it => (it.criticidad >= 2.5 ? 3 : it.criticidad >= 1.5 ? 2 : 1);
@@ -989,6 +1199,46 @@ const App = (() => {
   function conectar() {
     const cont = document.body;
 
+    /* Campos de la talent card: colaborador identificado por id, no por índice,
+       para que reordenar la tabla no pise datos de otra persona. */
+    function colaboradorDe(ref) {
+      const [id] = String(ref).split('|');
+      const suc = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : null;
+      return suc ? (suc.colaboradores.find(c => c.id === id) || null) : null;
+    }
+
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-colab-campo]');
+      if (!el) return;
+      const c = colaboradorDe(el.dataset.colabCampo);
+      if (!c) return;
+      c[el.dataset.colabCampo.split('|')[1]] = el.value;
+      guardarDiferido();
+    });
+
+    cont.addEventListener('change', ev => {
+      const campo = ev.target.closest('[data-colab-campo]');
+      if (campo) {
+        const c = colaboradorDe(campo.dataset.colabCampo);
+        if (c) { c[campo.dataset.colabCampo.split('|')[1]] = campo.value; Store.save(); refrescar(); }
+        return;
+      }
+      const evalu = ev.target.closest('[data-colab-eval]');
+      if (evalu) {
+        const [id, cual] = evalu.dataset.colabEval.split('|');
+        const c = colaboradorDe(id);
+        if (!c) return;
+        const s = Store.sucursal(visitaEnCurso.sucursalId);
+        registrarEvaluacion(c,
+          cual === 'desempeno' ? evalu.value : c.desempeno,
+          cual === 'potencial' ? evalu.value : c.potencial,
+          { fecha: visitaEnCurso.fecha,
+            evaluadoCon: visitaEnCurso.minutaGerente.participante || s.gerente || '',
+            motivo: 'Ajuste en la visita' });
+        Store.save(); refrescar();
+      }
+    });
+
     // Escritura de campos: guarda siempre; recalcula al salir del campo.
     cont.addEventListener('input', ev => {
       const el = ev.target.closest('[data-path]');
@@ -1057,6 +1307,22 @@ const App = (() => {
       if (a === 'agregar-movimiento') {
         contexto.movimientos.push({ tipo: 'baja', nombre: '', fecha: '', puesto: '', categoria: '', motivo: '', causa: '' });
         Store.save(); refrescar();
+      }
+      if (a === 'agregar-colaborador') {
+        Store.agregarColaborador(visitaEnCurso.sucursalId, {});
+        refrescar();
+      }
+      if (a === 'ficha') {
+        fichaAbierta = fichaAbierta === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+      if (a === 'borrar-colaborador') {
+        const suc = Store.sucursal(visitaEnCurso.sucursalId);
+        const c = suc.colaboradores.find(x => x.id === btn.dataset.id);
+        const ok = await confirmar('Quitar del plantel',
+          `${c && c.nombre ? c.nombre : 'El colaborador'} se elimina junto con su evaluación y su historial.`,
+          'Quitar');
+        if (ok) { Store.eliminarColaborador(suc.id, btn.dataset.id); refrescar(); avisar('Colaborador eliminado.'); }
       }
       if (a === 'agregar-sancion') {
         contexto.sanciones.push({ nombre: '', fecha: '', tipo: '', motivo: '', puesto: '', observaciones: '' });
@@ -1172,6 +1438,54 @@ const App = (() => {
             const nueva = Store.crearVisita(idSuc);
             location.hash = `#/visita/${nueva.id}/minutas`;
           });
+      }
+    });
+
+    /* Arrastrar una persona entre cuadrantes de la matriz. */
+    let arrastrando = null;
+    cont.addEventListener('dragstart', ev => {
+      const el = ev.target.closest('.persona');
+      if (!el) return;
+      arrastrando = el.dataset.colab;
+      el.classList.add('arrastrando');
+      ev.dataTransfer.effectAllowed = 'move';
+      ev.dataTransfer.setData('text/plain', arrastrando);
+    });
+    cont.addEventListener('dragend', ev => {
+      const el = ev.target.closest('.persona');
+      if (el) el.classList.remove('arrastrando');
+      document.querySelectorAll('.caja.encima').forEach(x => x.classList.remove('encima'));
+      arrastrando = null;
+    });
+    cont.addEventListener('dragover', ev => {
+      const caja = ev.target.closest('.caja');
+      if (!caja || !arrastrando) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      caja.classList.add('encima');
+    });
+    cont.addEventListener('dragleave', ev => {
+      const caja = ev.target.closest('.caja');
+      if (caja) caja.classList.remove('encima');
+    });
+    cont.addEventListener('drop', ev => {
+      const caja = ev.target.closest('.caja');
+      const id = arrastrando || ev.dataTransfer.getData('text/plain');
+      if (!caja || !id || !visitaEnCurso) return;
+      ev.preventDefault();
+      const suc = Store.sucursal(visitaEnCurso.sucursalId);
+      const c = suc && suc.colaboradores.find(x => x.id === id);
+      if (!c) return;
+      const antes = cuadranteDe(c.potencial, c.desempeno);
+      const cambio = registrarEvaluacion(c, caja.dataset.des, caja.dataset.pot, {
+        fecha: visitaEnCurso.fecha,
+        evaluadoCon: visitaEnCurso.minutaGerente.participante || suc.gerente || '',
+        motivo: 'Reubicado en la matriz'
+      });
+      Store.save(); refrescar();
+      if (cambio) {
+        const ahora = cuadranteDe(c.potencial, c.desempeno);
+        avisar(`${c.nombre || 'Colaborador'}: ${antes ? antes.nombre + ' → ' : ''}${ahora ? ahora.nombre : 'sin ubicar'}.`);
       }
     });
 

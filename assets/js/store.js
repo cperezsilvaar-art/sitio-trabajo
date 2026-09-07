@@ -67,6 +67,7 @@ const Store = (() => {
         tipo: 'venta',
         gerente: '',
         emailGerente: '',    // recibe copia del reporte de su sucursal
+        colaboradores: [],   // plantel con su evaluación vigente e historial
         direccion: '',
         dotacionNominal: null,
         notas: ''
@@ -125,7 +126,15 @@ const Store = (() => {
     e.config.gerenteOperaciones = Object.assign({}, base.config.gerenteOperaciones, e.config.gerenteOperaciones || {});
     e.config.parametros = Object.assign({}, PARAMETROS_DEFECTO, e.config.parametros || {});
     e.sucursales = Array.isArray(e.sucursales) ? e.sucursales : base.sucursales;
-    e.sucursales.forEach(s => { if (!s.id) s.id = uid(); });
+    e.sucursales.forEach(s => {
+      if (!s.id) s.id = uid();
+      if (!Array.isArray(s.colaboradores)) s.colaboradores = [];
+      s.colaboradores.forEach(c => {
+        if (!c.id) c.id = uid();
+        if (!Array.isArray(c.historial)) c.historial = [];
+        if (c.activo === undefined) c.activo = true;
+      });
+    });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
     e.visitas.forEach(v => {
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
@@ -189,7 +198,7 @@ const Store = (() => {
         .filter(n => !isNaN(n));
       const n = usados.length ? Math.max(...usados) + 1 : 1;
       const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '',
-                  emailGerente: '', direccion: '', dotacionNominal: null, notas: '' };
+                  emailGerente: '', colaboradores: [], direccion: '', dotacionNominal: null, notas: '' };
       e.sucursales.push(s);
       guardar();
       return s;
@@ -199,6 +208,35 @@ const Store = (() => {
       const e = this.get();
       e.sucursales = e.sucursales.filter(s => s.id !== id);
       e.visitas = e.visitas.filter(v => v.sucursalId !== id);
+      guardar();
+    },
+
+    /* ------------------------- colaboradores ---------------------- */
+    agregarColaborador(sucursalId, datos) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return null;
+      const c = Object.assign({
+        id: uid(), nombre: '', posicion: '', fechaIngreso: '', activo: true,
+        desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
+        estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
+        interesDesarrollo: '', aspiracion: '', movilidad: '',
+        fortalezas: '', aDesarrollar: '', riesgoSalida: '', notas: '',
+        historial: []
+      }, datos || {});
+      s.colaboradores.push(c);
+      guardar();
+      return c;
+    },
+
+    colaborador(sucursalId, colabId) {
+      const s = this.sucursal(sucursalId);
+      return s ? (s.colaboradores.find(c => c.id === colabId) || null) : null;
+    },
+
+    eliminarColaborador(sucursalId, colabId) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return;
+      s.colaboradores = s.colaboradores.filter(c => c.id !== colabId);
       guardar();
     },
 
@@ -296,6 +334,33 @@ const Store = (() => {
         v.comercial.tickets = d.tickets;
         v.comercial.horasTrabajadas = d.horas;
         e.visitas.push(v);
+      });
+
+      // Plantel de ejemplo en la primera sucursal, con la matriz ya poblada
+      const plantel = [
+        ['Ana López',        'Gerente de Tienda', '2019-03-04', 3, 3, 'universitario', 'Lic. en Administración', 'Dirección de varias tiendas', 'bajo'],
+        ['Marta Díaz',       'Senior',            '2021-06-14', 3, 3, 'terciario',     'Tecnicatura en Comercialización', 'Gerencia de tienda', 'medio'],
+        ['Pablo Ruiz',       'Senior',            '2020-01-20', 2, 2, 'noEstudia',     '', 'Seguir en el rol, sumar formación', 'bajo'],
+        ['Sofía Medina',     'APV',               '2023-09-01', 3, 2, 'universitario', 'Farmacia, 2º año', 'Pasar a Farmacéutica', 'medio'],
+        ['Julián Ferrer',    'APV',               '2022-04-11', 2, 3, 'curso',         'Atención al cliente', 'Coordinación de turno', 'bajo'],
+        ['Carla Bustos',     'APV',               '2024-02-05', 1, 2, '',              '', 'Todavía no lo definió', 'alto'],
+        ['Diego Arce',       'APV',               '2018-08-19', 3, 1, 'noEstudia',     '', 'Referente técnico del equipo', 'alto'],
+        ['Lucía Ponce',      'Farmacéutico',      '2021-11-02', 3, 2, 'posgrado',      'Especialización en Farmacia Clínica', 'Dirección Técnica', 'medio'],
+        ['Ramiro Vega',      'DT',                '2017-05-30', 2, 1, 'noEstudia',     '', 'Se siente cómodo donde está', 'bajo'],
+        ['Valentina Soto',   'Asesora de Dermo',  '2023-03-13', 1, 1, '',              '', '', 'medio']
+      ];
+      plantel.forEach(([nombre, posicion, ingreso, des, pot, estudia, carrera, interes, riesgo]) => {
+        const c = {
+          id: uid(), nombre, posicion, fechaIngreso: ingreso, activo: true,
+          desempeno: des, potencial: pot,
+          fechaEvaluacion: e.visitas[0] ? e.visitas[0].fecha : '', evaluadoCon: 'Gerente de Tienda 1',
+          estudia, carrera, avanceEstudio: '', formacionPrevia: '',
+          interesDesarrollo: interes, aspiracion: '', movilidad: '',
+          fortalezas: '', aDesarrollar: '', riesgoSalida: riesgo, notas: '',
+          historial: [{ fecha: ingreso, desempeno: des, potencial: pot, desde: null,
+                        evaluadoCon: 'Gerente de Tienda 1', motivo: 'Evaluación inicial' }]
+        };
+        e.sucursales[0].colaboradores.push(c);
       });
 
       // Un plan de seguimiento cargado en la primera visita, para ver el reporte completo
