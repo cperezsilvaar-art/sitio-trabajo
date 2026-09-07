@@ -78,6 +78,7 @@ un módulo, la página queda en blanco sin error visible.
 index.html                 estructura de la página
 assets/css/styles.css      estilos (claro y oscuro)
 assets/js/catalogos.js     taxonomías: posiciones, ausentismo, bajas, sucesión
+assets/js/sucursales-area3.js  padrón de las doce sucursales del Área 3
 assets/js/modelo.js        cálculos: FTE, costos, ausentismo, rotación, dotación
 assets/js/store.js         estado y persistencia local, respaldos
 assets/js/reporte.js       armado del reporte y envío al Gerente de Operaciones

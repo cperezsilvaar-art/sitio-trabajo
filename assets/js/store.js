@@ -59,28 +59,31 @@ const Store = (() => {
 
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
+  /* Ficha de sucursal con todos sus campos, para que el padrón y las altas
+     manuales produzcan el mismo objeto. */
+  function sucursalNueva(datos) {
+    return Object.assign({
+      id: uid(),
+      codigo: '', rvd: '', nombre: '', tipo: 'venta', marca: '',
+      razonSocial: '', cuit: '', direccion: '', localidad: '', horario: '', art: '',
+      gerenteOperaciones: '',
+      gerente: '', emailGerente: '',      // el gerente recibe copia del reporte
+      directorTecnico: '',
+      contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
+      colaboradores: [],                  // plantel con su evaluación e historial
+      dotacionNominal: null, notas: ''
+    }, datos || {});
+  }
+
   function estadoInicial() {
-    const sucursales = [];
-    for (let i = 1; i <= 10; i++) {
-      sucursales.push({
-        id: uid(),
-        codigo: 'sucursal' + i,
-        nombre: '',          // el coordinador reemplaza el código por el nombre real
-        tipo: 'venta',
-        gerente: '',
-        emailGerente: '',    // recibe copia del reporte de su sucursal
-        colaboradores: [],   // plantel con su evaluación vigente e historial
-        direccion: '',
-        dotacionNominal: null,
-        notas: ''
-      });
-    }
+    const sucursales = SUCURSALES_AREA3.map(x => sucursalNueva(x));
     return {
       version: 1,
       config: {
         coordinador: 'Christian Pérez',
         area: 'Área 3',
         gerenteOperaciones: { nombre: '', email: '' },
+        gerentesOperaciones: GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g)),
         copias: '',
         webhook: '',
         parametros: Object.assign({}, PARAMETROS_DEFECTO)
@@ -128,6 +131,10 @@ const Store = (() => {
     e.config.gerenteOperaciones = Object.assign({}, base.config.gerenteOperaciones, e.config.gerenteOperaciones || {});
     e.config.parametros = Object.assign({}, PARAMETROS_DEFECTO, e.config.parametros || {});
     e.sucursales = Array.isArray(e.sucursales) ? e.sucursales : base.sucursales;
+    if (!Array.isArray(e.config.gerentesOperaciones) || !e.config.gerentesOperaciones.length) {
+      e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
+    }
+    e.sucursales = e.sucursales.map(s => sucursalNueva(s));
     e.sucursales.forEach(s => {
       if (!s.id) s.id = uid();
       if (!Array.isArray(s.colaboradores)) s.colaboradores = [];
@@ -240,8 +247,7 @@ const Store = (() => {
         .map(s => parseInt((s.codigo.match(/^sucursal(\d+)$/) || [])[1], 10))
         .filter(n => !isNaN(n));
       const n = usados.length ? Math.max(...usados) + 1 : 1;
-      const s = { id: uid(), codigo: 'sucursal' + n, nombre: '', tipo: 'venta', gerente: '',
-                  emailGerente: '', colaboradores: [], direccion: '', dotacionNominal: null, notas: '' };
+      const s = sucursalNueva({ codigo: 'sucursal' + n });
       e.sucursales.push(s);
       guardar();
       return s;
@@ -252,6 +258,37 @@ const Store = (() => {
       e.sucursales = e.sucursales.filter(s => s.id !== id);
       e.visitas = e.visitas.filter(v => v.sucursalId !== id);
       guardar();
+    },
+
+    /**
+     * Incorpora el padrón del Área 3. No pisa lo ya cargado: en las sucursales
+     * que ya existen solo completa los campos vacíos.
+     */
+    cargarPadronArea3() {
+      const e = this.get();
+      const clave = x => String(x || '').trim().toUpperCase();
+      let nuevas = 0, completadas = 0;
+
+      SUCURSALES_AREA3.forEach(fila => {
+        const existente = e.sucursales.find(s =>
+          clave(s.codigo) === clave(fila.codigo) ||
+          (s.nombre && clave(s.nombre) === clave(fila.nombre)));
+
+        if (!existente) { e.sucursales.push(sucursalNueva(fila)); nuevas++; return; }
+
+        let toco = false;
+        Object.keys(fila).forEach(k => {
+          if (k === 'id') return;
+          if (!String(existente[k] ?? '').trim() && String(fila[k] ?? '').trim()) {
+            existente[k] = fila[k];
+            toco = true;
+          }
+        });
+        if (toco) completadas++;
+      });
+
+      guardar();
+      return { nuevas, completadas };
     },
 
     /* ------------------------- colaboradores ---------------------- */
@@ -338,12 +375,12 @@ const Store = (() => {
       e.config.gerenteOperaciones = { nombre: 'Gerencia de Operaciones', email: '' };
 
       const demo = [
-        { i: 0, nombre: 'Centro — ejemplo', gerente: 'Gerente de Tienda 1',
+        { nombre: 'Sucursal de ejemplo A', gerente: 'Gerente de Tienda 1',
           pos: [[1,0,0,0,0,2800000,0,0],[2,0,0,0,0,3600000,0,0],[6,18,0,22,86,8400000,310000,0],
                 [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[1,0,0,9,0,1900000,0,0]],
           aus: { '085': 14, '071': 9, '081': 5, '086': 3 },
           rot: ['12','1','0','1','0'], venta: '395000000', tickets: '38000', horas: '5600' },
-        { i: 1, nombre: 'Norte — ejemplo', gerente: 'Gerente de Tienda 2',
+        { nombre: 'Sucursal de ejemplo B', gerente: 'Gerente de Tienda 2',
           pos: [[1,0,0,0,0,2800000,0,0],[1,0,0,0,0,1800000,0,0],[4,0,0,6,22,5600000,80000,0],
                 [1,0,0,0,0,3100000,0,0],[1,0,0,0,0,2600000,0,0],[0,0,0,0,0,0,0,0]],
           aus: { '085': 6 },
@@ -355,10 +392,15 @@ const Store = (() => {
       const rotCampos = ['dotacionAnterior', 'altasExternas', 'altasInternas', 'bajasExternas', 'bajasInternas'];
 
       estado = e;
+      // Las de ejemplo se agregan aparte, para no confundirse nunca con las
+      // sucursales reales del padrón ni pisar sus datos.
       demo.forEach(d => {
-        const suc = e.sucursales[d.i];
-        suc.nombre = d.nombre;
-        suc.gerente = d.gerente;
+        const suc = sucursalNueva({
+          codigo: 'EJEMPLO', nombre: d.nombre, gerente: d.gerente,
+          marca: 'Farmatodo', localidad: 'CABA',
+          notas: 'Sucursal de ejemplo. Se elimina desde esta misma tabla o con “Borrar todo”.'
+        });
+        e.sucursales.push(suc);
         const v = visitaNueva(suc.id);
         v.coordinador = e.config.coordinador;
         v.minutaGerente = {
@@ -380,6 +422,7 @@ const Store = (() => {
       });
 
       // Plantel de ejemplo en la primera sucursal, con la matriz ya poblada
+      const sucEjemplo = e.sucursales.find(x => x.nombre === 'Sucursal de ejemplo A');
       const plantel = [
         ['Ana López',        'Gerente de Tienda', '2019-03-04', 3, 3, 'universitario', 'Lic. en Administración', 'Dirección de varias tiendas', 'bajo'],
         ['Marta Díaz',       'Senior',            '2021-06-14', 3, 3, 'terciario',     'Tecnicatura en Comercialización', 'Gerencia de tienda', 'medio'],
@@ -403,7 +446,7 @@ const Store = (() => {
           historial: [{ fecha: ingreso, desempeno: des, potencial: pot, desde: null,
                         evaluadoCon: 'Gerente de Tienda 1', motivo: 'Evaluación inicial' }]
         };
-        e.sucursales[0].colaboradores.push(c);
+        sucEjemplo.colaboradores.push(c);
       });
 
       // Un plan de seguimiento cargado en la primera visita, para ver el reporte completo

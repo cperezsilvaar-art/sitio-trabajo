@@ -242,35 +242,104 @@ const App = (() => {
   }
 
   /* ======================== VISTA: SUCURSALES ======================= */
+  let fichaSucursal = null;   // id de la sucursal con la ficha desplegada
+
   function vistaSucursales() {
     const e = Store.get();
     contexto = e;
+    const gops = e.config.gerentesOperaciones || [];
+
+    const ficha = (s, i) => `<tr class="ficha-fila"><td colspan="8"><div class="talent-card">
+      <div class="tc-cab">
+        <div><strong>${esc(s.nombre || s.codigo)}</strong>
+          <span>${esc(s.razonSocial || 'sin razón social')}${s.cuit ? ` · CUIT ${esc(s.cuit)}` : ''}</span></div>
+        ${s.rvd ? `<span class="chip azul">RVD ${esc(s.rvd)}</span>` : ''}
+      </div>
+
+      <h4>Identificación</h4>
+      <div class="grid c3">
+        ${campo('Código interno', `sucursales.${i}.codigo`)}
+        ${campo('Código en el RVD', `sucursales.${i}.rvd`, { placeholder: 'ej. 008' })}
+        ${campo('Marca', `sucursales.${i}.marca`, { tipo: 'select', calc: true,
+          opciones: [{ valor: '', texto: '—' }].concat(MARCAS.map(m => ({ valor: m, texto: m }))) })}
+        ${campo('Razón social', `sucursales.${i}.razonSocial`)}
+        ${campo('CUIT', `sucursales.${i}.cuit`)}
+        ${campo('ART', `sucursales.${i}.art`, { tipo: 'select',
+          opciones: [{ valor: '', texto: '—' }].concat(ARTS.map(a => ({ valor: a, texto: a }))) })}
+      </div>
+
+      <h4>Ubicación y horario</h4>
+      <div class="grid c2">
+        ${campo('Dirección', `sucursales.${i}.direccion`)}
+        ${campo('Localidad o partido', `sucursales.${i}.localidad`)}
+      </div>
+      <div style="margin-top:12px">${campo('Horario de atención', `sucursales.${i}.horario`, { tipo: 'textarea', alto: 60 })}</div>
+
+      <h4>Referentes</h4>
+      <div class="grid c3">
+        ${campo('Director Técnico', `sucursales.${i}.directorTecnico`)}
+        ${campo('Contacto administrativo', `sucursales.${i}.contactoAdmin`)}
+        ${campo('Email del contacto', `sucursales.${i}.emailContactoAdmin`, { tipo: 'email' })}
+        ${campo('Referente de RRHH', `sucursales.${i}.referenteRRHH`)}
+      </div>
+
+      <h4>Notas</h4>
+      ${campo('', `sucursales.${i}.notas`, { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta sucursal' })}
+    </div></td></tr>`;
+
     return `
       <h1 class="titulo">Sucursales de ${esc(e.config.area || 'mi área')}</h1>
-      <p class="subtitulo">Los códigos provisorios <em>sucursal1…N</em> se mantienen como identificador interno; el campo “Nombre real” es el que aparece en los reportes.
-        El email del gerente recibe automáticamente copia del reporte de su sucursal.</p>
+      <p class="subtitulo">
+        El email del gerente recibe copia automática del reporte de su sucursal, y el reporte se manda al
+        Gerente de Operaciones que tenga asignado la tienda.
+      </p>
+
       <section class="tarjeta">
         <div class="tabla-scroll"><table>
-          <thead><tr><th>Código</th><th>Nombre real</th><th>Tipo</th><th>Gerente de Tienda</th><th>Email del gerente</th><th>Dirección</th><th></th></tr></thead>
+          <thead><tr>
+            <th>Sucursal</th><th>Marca</th><th>Localidad</th><th>Tipo</th>
+            <th>Gerente de Operaciones</th><th>Gerente de Tienda</th><th>Email del gerente</th><th></th>
+          </tr></thead>
           <tbody>
           ${e.sucursales.map((s, i) => `<tr>
-            <td><input data-path="sucursales.${i}.codigo" value="${esc(s.codigo)}" style="max-width:120px"></td>
-            <td><input data-path="sucursales.${i}.nombre" data-calc="1" value="${esc(s.nombre)}" placeholder="ej. Farmatodo Centro"></td>
+            <td><input data-path="sucursales.${i}.nombre" data-calc="1" value="${esc(s.nombre)}" placeholder="${esc(s.codigo || 'Nombre')}">
+              ${s.rvd ? `<div style="font-size:11px;color:var(--texto-suave);margin-top:3px">RVD ${esc(s.rvd)}</div>` : ''}</td>
+            <td><select data-path="sucursales.${i}.marca" data-calc="1">
+              <option value="">—</option>
+              ${MARCAS.map(m => `<option value="${esc(m)}"${s.marca === m ? ' selected' : ''}>${esc(m)}</option>`).join('')}
+            </select></td>
+            <td><input data-path="sucursales.${i}.localidad" value="${esc(s.localidad)}" style="max-width:130px"></td>
             <td><select data-path="sucursales.${i}.tipo" data-calc="1">
               <option value="venta"${s.tipo === 'venta' ? ' selected' : ''}>🏪 Venta</option>
-              <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff / soporte</option>
+              <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff</option>
+            </select></td>
+            <td><select data-path="sucursales.${i}.gerenteOperaciones" data-calc="1">
+              <option value="">—</option>
+              ${gops.map(g => `<option value="${esc(g.nombre)}"${s.gerenteOperaciones === g.nombre ? ' selected' : ''}>${esc(g.nombre)}</option>`).join('')}
             </select></td>
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
-            <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia del reporte"></td>
-            <td><input data-path="sucursales.${i}.direccion" value="${esc(s.direccion)}"></td>
-            <td class="num"><button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">Eliminar</button></td>
-          </tr>`).join('')}
+            <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
+            <td class="num" style="white-space:nowrap">
+              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Ficha'}</button>
+              <button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">✕</button>
+            </td>
+          </tr>
+          ${fichaSucursal === s.id ? ficha(s, i) : ''}`).join('')}
           </tbody>
         </table></div>
         <div class="acciones">
           <button class="b" data-accion="agregar-sucursal">+ Agregar sucursal</button>
+          <button class="b sec" data-accion="cargar-padron">Cargar padrón del Área 3</button>
         </div>
-      </section>`;
+      </section>
+
+      ${e.sucursales.some(s => s.notas) ? `<section class="tarjeta">
+        <h2>Puntos a confirmar</h2>
+        <ul style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.7">
+          ${e.sucursales.filter(s => s.notas).map(s =>
+            `<li><strong>${esc(s.nombre || s.codigo)}:</strong> ${esc(s.notas)}</li>`).join('')}
+        </ul>
+      </section>` : ''}`;
   }
 
   /* ========================== VISTA: CONFIG ========================= */
@@ -287,13 +356,28 @@ const App = (() => {
         <div class="grid c2">
           ${campo('Coordinador de RRHH', 'coordinador', { calc: true, placeholder: 'Tu nombre' })}
           ${campo('Área a cargo', 'area', { calc: true, placeholder: 'ej. Área 3' })}
-          ${campo('Gerente de Operaciones', 'gerenteOperaciones.nombre')}
-          ${campo('Email del Gerente de Operaciones', 'gerenteOperaciones.email', { tipo: 'email', placeholder: 'nombre@empresa.com' })}
+          ${campo('Gerente de Operaciones por defecto', 'gerenteOperaciones.nombre')}
+          ${campo('Su email', 'gerenteOperaciones.email', { tipo: 'email', placeholder: 'nombre@empresa.com' })}
           ${campo('Copias (separadas por coma)', 'copias', { placeholder: 'rrhh@empresa.com, gerencia@empresa.com' })}
         </div>
         <div class="grid" style="margin-top:14px">
           ${campo('Endpoint de envío automático (opcional)', 'webhook', { placeholder: 'https://hook.make.com/... o URL de Google Apps Script' })}
         </div>
+        <h3 style="font-size:14px;margin:22px 0 8px">Gerentes de Operaciones del área</h3>
+        <p class="ayuda">Cada sucursal se asigna a uno de ellos, y su reporte se manda a ese. El de arriba queda como respaldo si a una sucursal no se le asignó ninguno.</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Nombre</th><th>Email</th><th class="num">Sucursales</th><th></th></tr></thead>
+          <tbody>
+          ${(e.config.gerentesOperaciones || []).map((g, i) => `<tr>
+            <td><input data-path="gerentesOperaciones.${i}.nombre" data-calc="1" value="${esc(g.nombre)}"></td>
+            <td><input type="email" data-path="gerentesOperaciones.${i}.email" data-calc="1" value="${esc(g.email)}" placeholder="nombre@empresa.com"></td>
+            <td class="num">${e.sucursales.filter(s => s.gerenteOperaciones === g.nombre).length}</td>
+            <td class="num"><button class="mini" data-accion="borrar-item" data-arr="gerentesOperaciones" data-idx="${i}">✕</button></td>
+          </tr>`).join('')}
+          </tbody>
+        </table></div>
+        <div class="acciones"><button class="b sec" data-accion="agregar-gop">+ Agregar gerente</button></div>
+
         <div class="aviso-caja info">
           <strong>Cómo se envía el reporte.</strong>
           <ul>
@@ -1165,8 +1249,10 @@ const App = (() => {
       <section class="tarjeta">
         <h2>Cierre de visita y envío al Gerente de Operaciones</h2>
         <p class="ayuda">
-          Destinatario: <strong>${esc(config.gerenteOperaciones.nombre || 'sin cargar')}</strong>
-          &lt;${esc(config.gerenteOperaciones.email || 'sin email')}&gt;
+          ${(() => {
+            const d = Reporte.destinatario(s, config);
+            return `Destinatario: <strong>${esc(d.nombre || 'sin cargar')}</strong> &lt;${esc(d.email || 'sin email')}&gt;`;
+          })()}
           ${(() => {
             const cc = Reporte.copias(s, config);
             return cc.length ? ` · con copia a ${esc(cc.join(', '))}` : '';
@@ -1306,6 +1392,20 @@ const App = (() => {
 
       /* --- sucursales --- */
       if (a === 'agregar-sucursal') { Store.agregarSucursal(); refrescar(); }
+
+      if (a === 'ficha-sucursal') {
+        fichaSucursal = fichaSucursal === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'cargar-padron') {
+        const r = Store.cargarPadronArea3();
+        refrescar();
+        avisar(!r.nuevas && !r.completadas
+          ? 'El padrón ya estaba cargado, no hubo cambios.'
+          : `${r.nuevas} sucursal${r.nuevas === 1 ? '' : 'es'} agregada${r.nuevas === 1 ? '' : 's'}` +
+            (r.completadas ? ` y ${r.completadas} completada${r.completadas === 1 ? '' : 's'}.` : '.'));
+      }
 
       if (a === 'borrar-sucursal') {
         const suc = Store.sucursal(btn.dataset.id);

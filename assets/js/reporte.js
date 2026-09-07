@@ -111,7 +111,10 @@ const Reporte = (() => {
     L.push('REPORTE DE VISITA A SUCURSAL - FARMATODO');
     // Si el área ya se llama "Área 3", no repetir la palabra en la etiqueta
     if (config.area) L.push('Área: ' + String(config.area).replace(/^\s*[áa]rea\s+/i, ''));
-    L.push('Sucursal: ' + Store.etiquetaSucursal(sucursal));
+    L.push('Sucursal: ' + Store.etiquetaSucursal(sucursal) +
+           (sucursal.marca ? ` · ${sucursal.marca}` : '') +
+           (sucursal.localidad ? ` · ${sucursal.localidad}` : ''));
+    if (sucursal.gerenteOperaciones) L.push('Gerente de Operaciones: ' + sucursal.gerenteOperaciones);
     L.push('Fecha de Visita: ' + fmtFecha(visita.fecha));
     L.push('Período analizado: ' + oPendiente(visita.periodo));
     L.push('Coordinador de RRHH: ' + oPendiente(visita.coordinador || config.coordinador));
@@ -363,6 +366,24 @@ const Reporte = (() => {
 
   /* ---------------------- Envío al Gerente de Operaciones ---------------------- */
 
+  /**
+   * Destinatario del reporte: el Gerente de Operaciones asignado a la sucursal.
+   * Si la sucursal no tiene uno, o no tiene email cargado, cae en el de
+   * Configuración, que sigue siendo el destinatario por defecto del área.
+   */
+  function destinatario(sucursal, config) {
+    const lista = config.gerentesOperaciones || [];
+    const propio = lista.find(g => g.nombre === sucursal.gerenteOperaciones);
+    if (propio && String(propio.email || '').trim()) {
+      return { nombre: propio.nombre, email: propio.email.trim() };
+    }
+    const gral = config.gerenteOperaciones || {};
+    return {
+      nombre: (propio && propio.nombre) || gral.nombre || '',
+      email: String(gral.email || '').trim()
+    };
+  }
+
   /** Copias del reporte: las fijas de Configuración más el Gerente de Tienda. */
   function copias(sucursal, config) {
     const fijas = String(config.copias || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -388,10 +409,13 @@ const Reporte = (() => {
     opciones = opciones || {};
     const cuerpo = texto(visita, sucursal, config);
     const asu = asunto(visita, sucursal, config);
-    const destino = (config.gerenteOperaciones && config.gerenteOperaciones.email || '').trim();
+    const dest = destinatario(sucursal, config);
+    const destino = dest.email;
 
     if (!destino) {
-      throw new Error('Falta cargar el email del Gerente de Operaciones en Configuración.');
+      throw new Error(sucursal.gerenteOperaciones
+        ? `Falta el email de ${sucursal.gerenteOperaciones} en Configuración.`
+        : 'Falta cargar el email del Gerente de Operaciones en Configuración.');
     }
 
     let via = 'mailto';
@@ -449,5 +473,5 @@ const Reporte = (() => {
     return { via, destino, largo: cuerpo.length };
   }
 
-  return { calcular, texto, asunto, enviar, detectarFaltantes, tablaFteTexto, copias };
+  return { calcular, texto, asunto, enviar, detectarFaltantes, tablaFteTexto, copias, destinatario };
 })();
