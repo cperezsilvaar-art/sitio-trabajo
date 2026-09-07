@@ -164,6 +164,17 @@ const Reporte = (() => {
     }
     L.push(`- Horas extras: ${fmtNum(c.matriz.total.horasExtras, 0)} hs, equivalentes a ${fmtNum(c.matriz.total.horasExtras / c.par.horasMes)} FTE ` +
            `(${fmtPct(c.matriz.total.ratioExtras)} de las horas teóricas).`);
+    if (typeof acumuladoMes === 'function' && typeof Store !== 'undefined') {
+      const ac = acumuladoMes(Store.get().partes, visita.sucursalId, visita.periodo);
+      if (ac.horas) {
+        const det = MOTIVOS_HORAS
+          .map(m => ({ m, h: ac.horasPorMotivo[m.id] || 0 })).filter(x => x.h)
+          .sort((x, y) => y.h - x.h)
+          .map(x => `${x.m.nombre.toLowerCase()} ${fmtNum(x.h, 1)} hs`).join(' · ');
+        L.push(`  * Parte diario del período: ${fmtNum(ac.horas, 1)} hs cargadas día a día sobre ` +
+               `${ac.diasConHoras} jornada${ac.diasConHoras === 1 ? '' : 's'} (${det}).`);
+      }
+    }
     L.push(`- Rotación del mes: ${fmtPct(c.rotacion.mensual)} · Proyección anual: ${fmtPct(c.rotacion.proyeccionAnual, 1)}`);
     L.push(`  * Dotación anterior ${c.rotacion.anterior} → nueva dotación ${c.rotacion.nueva} ` +
            `(altas ${c.rotacion.altasExt + c.rotacion.altasInt} / bajas ${c.rotacion.bajas})`);

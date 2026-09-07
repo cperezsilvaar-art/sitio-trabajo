@@ -72,12 +72,17 @@ const Store = (() => {
       directorTecnico: '',
       contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
       colaboradores: [],                  // plantel con su evaluación e historial
+      turnos: null,                       // dotación esperada por turno
       dotacionNominal: null, notas: ''
     }, datos || {});
   }
 
   function estadoInicial() {
-    const sucursales = SUCURSALES_AREA3.map(x => sucursalNueva(x));
+    const sucursales = SUCURSALES_AREA3.map(x => {
+      const s = sucursalNueva(x);
+      s.turnos = turnosPorDefecto(s);
+      return s;
+    });
     return {
       version: 1,
       config: {
@@ -87,10 +92,13 @@ const Store = (() => {
         gerentesOperaciones: GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g)),
         copias: '',
         webhook: '',
+        linkParteDiario: '',      // formulario que se comparte por WhatsApp
+        endpointPartes: '',       // de dónde se traen los partes cargados
         parametros: Object.assign({}, PARAMETROS_DEFECTO)
       },
       sucursales,
-      visitas: []
+      visitas: [],
+      partes: []                          // parte diario de asistencia
     };
   }
 
@@ -156,6 +164,8 @@ const Store = (() => {
         if (!s.operador) s.operador = s.marca;
         s.marca = MARCA_AREA;
       }
+      // Los turnos se derivan del horario la primera vez y quedan editables
+      if (!s.turnos) s.turnos = turnosPorDefecto(s);
     });
     e.sucursales.forEach(s => {
       if (!s.id) s.id = uid();
@@ -167,6 +177,12 @@ const Store = (() => {
       });
     });
     e.visitas = Array.isArray(e.visitas) ? e.visitas : [];
+    e.partes = Array.isArray(e.partes) ? e.partes : [];
+    e.partes.forEach(p => {
+      if (!p.id) p.id = uid();
+      if (!Array.isArray(p.ausencias)) p.ausencias = [];
+      if (!Array.isArray(p.horasExtras)) p.horasExtras = [];
+    });
     e.visitas.forEach(v => {
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
       v.minutaColaborador = Object.assign({ nombre: '', posicion: '', feedback: '' }, v.minutaColaborador || {});
@@ -270,6 +286,7 @@ const Store = (() => {
         .filter(n => !isNaN(n));
       const n = usados.length ? Math.max(...usados) + 1 : 1;
       const s = sucursalNueva({ codigo: 'sucursal' + n });
+      s.turnos = turnosPorDefecto(s);
       e.sucursales.push(s);
       guardar();
       return s;
@@ -296,7 +313,13 @@ const Store = (() => {
           clave(s.codigo) === clave(fila.codigo) ||
           (s.nombre && clave(s.nombre) === clave(fila.nombre)));
 
-        if (!existente) { e.sucursales.push(sucursalNueva(fila)); nuevas++; return; }
+        if (!existente) {
+          const nueva = sucursalNueva(fila);
+          nueva.turnos = turnosPorDefecto(nueva);
+          e.sucursales.push(nueva);
+          nuevas++;
+          return;
+        }
 
         let toco = false;
         Object.keys(fila).forEach(k => {
@@ -311,6 +334,108 @@ const Store = (() => {
 
       guardar();
       return { nuevas, completadas };
+    },
+
+    /* ------------------------- parte diario ----------------------- */
+    parteDe(sucursalId, fecha) {
+      return this.get().partes.find(p => p.sucursalId === sucursalId && p.fecha === fecha) || null;
+    },
+
+    /** Devuelve el parte del día, creándolo si todavía no existe. */
+    asegurarParte(sucursalId, fecha) {
+      const e = this.get();
+      let p = this.parteDe(sucursalId, fecha);
+      if (!p) {
+        p = { id: uid(), sucursalId, fecha, reportadoPor: '', sinNovedad: false,
+              ausencias: [], horasExtras: [], creado: new Date().toISOString(),
+              origen: 'panel' };
+        e.partes.push(p);
+        guardar();
+      }
+      return p;
+    },
+
+    eliminarParte(id) {
+      const e = this.get();
+      e.partes = e.partes.filter(p => p.id !== id);
+      guardar();
+    },
+
+    /**
+     * Incorpora partes que llegan del formulario externo. Cada fila trae la
+     * sucursal por nombre o por código; las que no se reconocen se devuelven
+     * para que el coordinador vea qué quedó afuera en lugar de perderse.
+     */
+    importarPartes(filas) {
+      const e = this.get();
+      const norm = x => String(x || '').trim().toUpperCase();
+      let nuevos = 0, actualizados = 0;
+      const sinReconocer = [];
+
+      (filas || []).forEach(f => {
+        const suc = e.sucursales.find(s =>
+          norm(s.codigo) === norm(f.sucursal) || norm(s.nombre) === norm(f.sucursal));
+        if (!suc || !f.fecha) { sinReconocer.push(f); return; }
+
+        let p = e.partes.find(x => x.sucursalId === suc.id && x.fecha === f.fecha);
+        if (!p) {
+          p = { id: uid(), sucursalId: suc.id, fecha: f.fecha, reportadoPor: f.reportadoPor || '',
+                sinNovedad: !!f.sinNovedad, ausencias: [], horasExtras: [],
+                creado: new Date().toISOString(), origen: 'formulario' };
+          e.partes.push(p);
+          nuevos++;
+        } else {
+          actualizados++;
+          if (f.reportadoPor) p.reportadoPor = f.reportadoPor;
+        }
+        if (!Array.isArray(p.horasExtras)) p.horasExtras = [];
+        (f.horasExtras || []).forEach(h => {
+          if (!h.colaborador && !h.horas) return;
+          /* Las horas se piden al día siguiente: se guardan en el parte del
+             día en que se trabajaron, no en el que se reportaron. */
+          const dia = String(h.fecha || f.fechaHoras || f.fecha).slice(0, 10);
+          let destino = p;
+          if (dia !== p.fecha) {
+            destino = e.partes.find(x => x.sucursalId === suc.id && x.fecha === dia);
+            if (!destino) {
+              destino = { id: uid(), sucursalId: suc.id, fecha: dia, reportadoPor: f.reportadoPor || '',
+                          sinNovedad: false, ausencias: [], horasExtras: [],
+                          creado: new Date().toISOString(), origen: 'formulario' };
+              e.partes.push(destino);
+              nuevos++;
+            }
+            if (!Array.isArray(destino.horasExtras)) destino.horasExtras = [];
+          }
+          const yaEsta = destino.horasExtras.some(x =>
+            norm(x.colaborador) === norm(h.colaborador) && x.motivo === h.motivo);
+          if (!yaEsta) {
+            destino.horasExtras.push({
+              colaborador: h.colaborador || '', posicion: h.posicion || '',
+              horas: h.horas || '', motivo: h.motivo || 'afluencia',
+              autorizadoPor: h.autorizadoPor || '', notas: h.notas || ''
+            });
+          }
+        });
+
+        if (f.sinNovedad) { p.sinNovedad = true; return; }
+
+        (f.ausencias || []).forEach(a => {
+          const yaEsta = p.ausencias.some(x =>
+            norm(x.colaborador) === norm(a.colaborador) && x.turno === a.turno);
+          if (!yaEsta) {
+            p.ausencias.push({
+              colaborador: a.colaborador || '', posicion: a.posicion || '',
+              turno: a.turno || 'manana', motivo: a.motivo || 'otro',
+              aviso: a.aviso || 'no', quienAviso: a.quienAviso || '',
+              horaAviso: a.horaAviso || '', notas: a.notas || ''
+            });
+            p.sinNovedad = false;
+          }
+        });
+      });
+
+      guardar();
+      return { nuevos, actualizados, sinReconocer };
     },
 
     /* ------------------------- colaboradores ---------------------- */
