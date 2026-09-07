@@ -420,3 +420,45 @@ function generarHallazgos(v, par) {
 
   return out;
 }
+
+/* ------------------------- Recorrida del HRBP ----------------------- */
+
+/**
+ * Avance de la recorrida de una visita.
+ *
+ * Lo que no aplica no cuenta en contra: el porcentaje se calcula sobre lo que
+ * correspondía hacer, no sobre la lista entera. Los puntos marcados como clave
+ * se siguen aparte, porque son los que no deberían quedar sin hacer.
+ */
+function evaluarRecorrida(recorrida) {
+  const checks = (recorrida && recorrida.checks) || {};
+  const bloques = RECORRIDA_HRBP.map(b => {
+    const items = b.items.map(i => ({
+      id: b.id + '_' + i.id,
+      texto: i.texto, ayuda: i.ayuda, clave: !!i.clave,
+      estado: checks[b.id + '_' + i.id] || ''
+    }));
+    const aplica = items.filter(i => i.estado !== 'na');
+    const hechos = items.filter(i => i.estado === 'ok');
+    return {
+      id: b.id, nombre: b.nombre, ayuda: b.ayuda, items,
+      total: items.length, aplican: aplica.length, hechos: hechos.length,
+      pct: aplica.length ? hechos.length / aplica.length : null
+    };
+  });
+
+  const todos = bloques.reduce((a, b) => a.concat(b.items), []);
+  const aplican = todos.filter(i => i.estado !== 'na');
+  const hechos = todos.filter(i => i.estado === 'ok');
+  const sinHacer = todos.filter(i => i.estado === 'no');
+  const sinResponder = todos.filter(i => !i.estado);
+  const clavesPendientes = todos.filter(i => i.clave && i.estado !== 'ok' && i.estado !== 'na');
+
+  return {
+    bloques, total: todos.length,
+    aplican: aplican.length, hechos: hechos.length,
+    sinHacer, sinResponder, clavesPendientes,
+    pct: aplican.length ? hechos.length / aplican.length : null,
+    completa: !sinResponder.length
+  };
+}

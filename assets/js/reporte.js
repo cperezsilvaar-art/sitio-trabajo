@@ -158,7 +158,28 @@ const Reporte = (() => {
 
     let n = 0;
 
-    /* 1. Minutas */
+    /* 1. Recorrida */
+    const rec = evaluarRecorrida(visita.recorrida);
+    if (rec.hechos || rec.sinHacer.length) {
+      L.push(++n + '. RECORRIDA DE LA SUCURSAL');
+      L.push(`- Puntos cubiertos: ${rec.hechos} de ${rec.aplican} que aplicaban (${fmtPct(rec.pct, 0)}).`);
+      rec.bloques.forEach(b => {
+        const conNota = b.items.filter(i => (visita.recorrida.notas || {})[i.id]);
+        if (!b.hechos && !conNota.length) return;
+        L.push(`  * ${b.nombre}: ${b.hechos}/${b.aplican}`);
+        conNota.forEach(i => L.push(`    - ${i.texto}: ${visita.recorrida.notas[i.id]}`));
+      });
+      if (rec.sinHacer.length) {
+        L.push('- Puntos que no se pudieron cubrir en esta visita:');
+        rec.sinHacer.forEach(i => L.push(`  * ${i.texto}`));
+      }
+      if (rec.clavesPendientes.length) {
+        L.push(`- Quedaron ${rec.clavesPendientes.length} punto/s clave sin cubrir.`);
+      }
+      L.push('');
+    }
+
+    /* 2. Minutas */
     L.push(++n + '. MINUTA DE REUNIONES');
     L.push('- Reunión Gerente de Tienda:');
     L.push('  * Participante: ' + oPendiente(visita.minutaGerente.participante || sucursal.gerente));
@@ -215,7 +236,7 @@ const Reporte = (() => {
     L.push('');
 
     L.push('El detalle de dotación, costo laboral, ausentismo y rotación del período');
-    L.push('va en el informe mensual de la sucursal, que se manda por separado.');
+    L.push('va en la estadística mensual de la sucursal, que se manda por separado.');
     L.push('');
 
     const faltantes = faltantesVisita(visita, sucursal, c);
@@ -234,7 +255,7 @@ const Reporte = (() => {
    * Reúne el mes de una sucursal. Los números salen de la visita del período
    * que tenga la matriz cargada; si hubo más de una, de la última.
    *
-   * Si el mes todavía no tiene visita, el informe se arma igual y marca todo
+   * Si el mes todavía no tiene visita, la estadística se arma igual y marca todo
    * como pendiente, que deja a la vista qué falta relevar.
    */
   function datosMensuales(sucursalId, periodo, config) {
@@ -278,14 +299,14 @@ const Reporte = (() => {
     };
   }
 
-  /** El informe con los números del mes. */
+  /** La estadística con los números del mes. */
   function textoMensual(sucursalId, periodo, config) {
     const d = datosMensuales(sucursalId, periodo, config);
     const c = d.calculo;
     const v = d.base;
     const moneda = c.par.moneda || '$';
 
-    const L = encabezado('INFORME MENSUAL DE SUCURSAL - FARMATODO', d.sucursal, config, [
+    const L = encabezado('ESTADÍSTICA MENSUAL DE SUCURSAL - FARMATODO', d.sucursal, config, [
       'Período: ' + oPendiente(periodo),
       'Coordinador de RRHH: ' + oPendiente(config.coordinador),
       'Visitas del período: ' + (d.visitas.length
@@ -532,7 +553,7 @@ const Reporte = (() => {
   }
 
   /* Lo que quedó sin cargar. Se separa por documento: al reporte de la visita
-     le falta lo cualitativo, al informe mensual le faltan números. */
+     le falta lo cualitativo, a la estadística mensual le faltan números. */
 
   function faltantesVisita(visita, sucursal, c) {
     const f = [];
@@ -541,6 +562,10 @@ const Reporte = (() => {
     if (!String(visita.minutaGerente.puntos || '').trim()) f.push('Puntos tratados en la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaGerente.acuerdos || '').trim()) f.push('Acuerdos y compromisos de la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaColaborador.nombre || '').trim()) f.push('Colaborador entrevistado.');
+    const rec = evaluarRecorrida(visita.recorrida);
+    if (rec.clavesPendientes.length) {
+      f.push(`Puntos clave de la recorrida sin cubrir: ${rec.clavesPendientes.map(x => x.texto).join('; ')}.`);
+    }
     if (!(visita.diagnostico.plan || []).length) f.push('Plan de acción con responsables y plazos.');
     if (!(sucursal.colaboradores || []).length) f.push('Plantel de la sucursal, para poder evaluar desempeño y potencial.');
     else if (c.talento.sinEvaluar.length) {
@@ -604,7 +629,7 @@ const Reporte = (() => {
 
   function asuntoMensual(sucursal, periodo, config) {
     const area = config && config.area ? config.area + ' · ' : '';
-    return `Informe mensual RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${periodo || ''}`;
+    return `Estadística mensual RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${periodo || ''}`;
   }
 
   /**
@@ -686,7 +711,7 @@ const Reporte = (() => {
     return r;
   }
 
-  /** Manda el informe mensual y lo deja registrado en el período. */
+  /** Manda la estadística mensual y la deja registrada en el período. */
   async function enviarMensual(sucursalId, periodo, config, opciones) {
     const d = datosMensuales(sucursalId, periodo, config);
     const c = d.calculo;

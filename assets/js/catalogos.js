@@ -277,3 +277,106 @@ function semaforoDotacion(diferencia) {
   if (diferencia >= -2) return { clave: 'revisar', icono: '🟡', texto: 'Revisar' };
   return { clave: 'reducir', icono: '🔴', texto: 'Reducir dotación' };
 }
+
+/* ------------------------------------------------------------------ *
+ * 7. Recorrida del HRBP                                                *
+ *                                                                      *
+ * El check de la visita semanal. Está ordenado como transcurre la       *
+ * visita, no por tema: primero lo que se ve antes de que nadie sepa     *
+ * que llegaste, después la gente, después el gerente, y al final el     *
+ * cierre. Ese orden importa: si arrancás por la oficina del gerente,    *
+ * el resto de la visita ya es la versión que él te quiere mostrar.      *
+ *                                                                      *
+ * `clave: true` marca lo que no debería quedar sin hacer nunca.         *
+ * ------------------------------------------------------------------ */
+const RECORRIDA_HRBP = [
+  {
+    id: 'previo',
+    nombre: 'Antes de entrar',
+    ayuda: 'Diez minutos de preparación cambian la calidad de toda la visita.',
+    items: [
+      { id: 'pendientes', clave: true, texto: 'Repasé los compromisos pendientes de la visita anterior',
+        ayuda: 'Si no se revisan, el plan de acción se convierte en una lista de deseos.' },
+      { id: 'numeros', clave: true, texto: 'Miré los números del mes antes de entrar',
+        ayuda: 'Ausentismo, rotación y horas extras. Entrar sabiendo qué preguntar.' },
+      { id: 'novedades', texto: 'Revisé ingresos, egresos y licencias desde la última visita' }
+    ]
+  },
+  {
+    id: 'piso',
+    nombre: 'Recorrida del salón',
+    ayuda: 'Antes de reunirte con nadie. Lo que se ve sin avisar es el dato más honesto de la visita.',
+    items: [
+      { id: 'dotacionTurno', clave: true, texto: 'Conté la gente en el piso y la comparé con la que debía estar',
+        ayuda: 'La diferencia entre la dotación planificada y la real del turno explica media visita.' },
+      { id: 'uniforme', texto: 'Uniforme, credencial y presentación del equipo' },
+      { id: 'clima', clave: true, texto: 'Observé el clima: cómo se tratan entre ellos y cómo atienden',
+        ayuda: 'Se mira, no se pregunta. El trato entre compañeros delante de un cliente dice más que una encuesta.' },
+      { id: 'condiciones', texto: 'Condiciones de trabajo: iluminación, temperatura, sillas, orden del depósito' },
+      { id: 'cartelera', texto: 'Cartelera y comunicación interna al día' },
+      { id: 'seguridad', clave: true, texto: 'Seguridad e higiene: matafuegos vigentes, salidas libres, botiquín, señalética',
+        ayuda: 'Es lo primero que pregunta un inspector y lo último que mira una visita apurada.' }
+    ]
+  },
+  {
+    id: 'gente',
+    nombre: 'Con la gente',
+    ayuda: 'La visita existe para esto. Si te fuiste sin hablar con nadie del piso, no fuiste.',
+    items: [
+      { id: 'colaborador', clave: true, texto: 'Hablé a solas con al menos un colaborador que no eligió el gerente',
+        ayuda: 'Elegirlo vos, en el piso, y sin el gerente cerca. Es la única fuente no filtrada que tenés.' },
+      { id: 'ingresos', clave: true, texto: 'Pregunté a los ingresos recientes cómo fue su inducción',
+        ayuda: 'Si tienen uniforme, usuario, capacitación y quién les explicó la caja. La mayoría de las bajas tempranas se decide en las primeras dos semanas.' },
+      { id: 'liquidacion', texto: 'Escuché reclamos de recibo, horas extras o liquidación',
+        ayuda: 'Un error de liquidación sin resolver es la razón más barata de perder a alguien.' },
+      { id: 'riesgoSalida', texto: 'Identifiqué a quién veo en riesgo de irse y por qué' },
+      { id: 'reconocimiento', texto: 'Reconocí en persona algo bien hecho',
+        ayuda: 'Concreto y a la persona. La visita de RRHH no puede ser solo la que viene a marcar lo que falta.' }
+    ]
+  },
+  {
+    id: 'gerente',
+    nombre: 'Con el Gerente de Tienda',
+    ayuda: 'Después de recorrer, no antes: así la conversación arranca sobre hechos.',
+    items: [
+      { id: 'planAnterior', clave: true, texto: 'Repasamos el plan de acción de la visita anterior, punto por punto' },
+      { id: 'cobertura', clave: true, texto: 'Revisamos la cobertura de turnos y francos del mes que viene',
+        ayuda: 'Es lo que evita las horas extras del mes siguiente. Se planifica antes, no se explica después.' },
+      { id: 'vacaciones', texto: 'Vacaciones planificadas y cómo se cubren' },
+      { id: 'bajoDesempeno', texto: 'Personas por debajo de lo esperado: qué está haciendo el gerente al respecto' },
+      { id: 'sucesion', texto: 'Quién cubre al gerente si falta, y quién viene atrás de cada posición clave' },
+      { id: 'sanciones', texto: 'Sanciones aplicadas: notificadas, firmadas y archivadas' },
+      { id: 'necesidades', texto: 'Qué necesita de RRHH que hoy no está teniendo',
+        ayuda: 'Preguntarlo explícitamente. Es la parte de "business partner" que suele quedar afuera.' }
+    ]
+  },
+  {
+    id: 'administrativo',
+    nombre: 'Cumplimiento y legajos',
+    ayuda: 'Lo aburrido que solo aparece cuando ya es un problema.',
+    items: [
+      { id: 'legajos', texto: 'Legajos completos: documentación, altas y firmas al día' },
+      { id: 'certificados', texto: 'Certificados médicos presentados y cargados' },
+      { id: 'capacitaciones', texto: 'Capacitaciones obligatorias con registro de asistencia' },
+      { id: 'art', texto: 'Exámenes periódicos y trámites de ART sin pendientes' }
+    ]
+  },
+  {
+    id: 'cierre',
+    nombre: 'Cierre de la visita',
+    ayuda: 'Nunca irse sin devolución: sin esto la visita es una auditoría, no un acompañamiento.',
+    items: [
+      { id: 'devolucion', clave: true, texto: 'Le di devolución al gerente antes de irme, con lo bueno y lo que hay que corregir' },
+      { id: 'compromisos', clave: true, texto: 'Acordamos compromisos concretos, con responsable y fecha',
+        ayuda: 'Dos o tres. Diez compromisos es ninguno.' },
+      { id: 'proxima', texto: 'Quedó acordado cuándo es la próxima visita' }
+    ]
+  }
+];
+
+const ESTADOS_CHECK = [
+  { id: '',    nombre: '—' },
+  { id: 'ok',  nombre: 'Hecho' },
+  { id: 'no',  nombre: 'No pude' },
+  { id: 'na',  nombre: 'No aplica' }
+];

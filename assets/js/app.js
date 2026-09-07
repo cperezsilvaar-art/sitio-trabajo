@@ -204,7 +204,7 @@ const App = (() => {
               <td>${c ? chipSemaforo(c.dotacion.semaforo) : '—'}</td>
               <td>${v ? (v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>') : '—'}</td>
               <td class="num">${v
-                  ? `<a class="chip azul" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a>`
+                  ? `<a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>`
                   : `<button class="mini" data-accion="nueva-visita" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">Registrar visita</button>`}</td>
             </tr>`;
           }).join('')}
@@ -234,13 +234,123 @@ const App = (() => {
             <td>${esc(v.coordinador || '—')}</td>
             <td>${v.envio.enviado ? `<span class="chip verde">${esc(v.envio.via)}</span>` : '<span class="chip ambar">pendiente</span>'}</td>
             <td class="num">
-              <a class="chip azul" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a>
+              <a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>
               <button class="mini" data-accion="borrar-visita" data-id="${v.id}">Borrar</button>
             </td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
     </section>`;
+  }
+
+  /* ========================= VISTA: VISITAS ======================== *
+     El ritmo semanal, separado del mensual. Acá se decide a dónde ir hoy:
+     las sucursales ordenadas por cuánto hace que no se las visita. */
+  function vistaVisitas() {
+    const e = Store.get();
+    contexto = e;
+    const hoy = hoyISO();
+    const dias = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
+
+    const filas = e.sucursales.map(s => {
+      const vs = Store.visitasDe(s.id);
+      const ult = vs[0] || null;
+      const desde = ult && ult.fecha ? dias(ult.fecha, hoy) : null;
+      const r = ult ? evaluarRecorrida(ult.recorrida) : null;
+      const pend = vs.reduce((a2, v) => a2 + (v.diagnostico.plan || [])
+        .filter(x => x.estado !== 'Cumplido').length, 0);
+      return { s, ult, desde, r, pend, visitas: vs.length };
+    }).sort((a, b) => {
+      if (a.desde === null) return -1;          // sin visitar, primero
+      if (b.desde === null) return 1;
+      return b.desde - a.desde;
+    });
+
+    const estaSemana = e.visitas.filter(v => v.fecha && dias(v.fecha, hoy) <= 7 && v.fecha <= hoy);
+    const sinVisitar = filas.filter(f => f.desde === null).length;
+    const atrasadas = filas.filter(f => f.desde !== null && f.desde > 7).length;
+
+    const semaforo = d => d === null ? '<span class="chip rojo">nunca</span>'
+      : d <= 7  ? `<span class="chip verde">hace ${d} día${d === 1 ? '' : 's'}</span>`
+      : d <= 14 ? `<span class="chip ambar">hace ${d} días</span>`
+      : `<span class="chip rojo">hace ${d} días</span>`;
+
+    return `
+      <h1 class="titulo">Visitas a sucursales</h1>
+      <p class="subtitulo">
+        El trabajo de todas las semanas. Los números del mes están en <em>Estadística mensual</em>.
+      </p>
+
+      <section class="tarjeta">
+        <h2>Registrar una visita</h2>
+        <p class="ayuda">Elegí la sucursal a la que vas y se abre la recorrida.</p>
+        <div class="acciones" style="margin-top:6px">
+          <select id="visita-sucursal" style="max-width:340px">
+            <option value="">Elegí la sucursal…</option>
+            ${filas.map(f => `<option value="${f.s.id}">${esc(Store.etiquetaSucursal(f.s))}${
+              f.desde === null ? ' — sin visitar' : ` — hace ${f.desde} días`}</option>`).join('')}
+          </select>
+          <button class="b grande" data-accion="nueva-visita-desde-selector">+ Registrar visita</button>
+        </div>
+      </section>
+
+      <div class="kpis">
+        ${kpi('Visitas en los últimos 7 días', estaSemana.length,
+              `${e.sucursales.length} sucursales en el área`,
+              estaSemana.length ? 'ok' : 'aviso')}
+        ${kpi('Sin visitar nunca', sinVisitar, sinVisitar ? 'empezar por acá' : 'todas visitadas',
+              sinVisitar ? 'alerta' : 'ok')}
+        ${kpi('Con más de una semana', atrasadas, atrasadas ? 'se pasaron del ritmo semanal' : 'al día',
+              atrasadas ? 'aviso' : 'ok')}
+        ${kpi('Compromisos abiertos', filas.reduce((a, f) => a + f.pend, 0), 'en toda el área')}
+      </div>
+
+      <section class="tarjeta">
+        <h2>A quién le toca</h2>
+        <p class="ayuda">Ordenadas por cuánto hace que no se las visita.</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Sucursal</th><th>Última visita</th><th>Recorrida</th>
+            <th class="num">Compromisos abiertos</th><th class="num">Visitas</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${filas.map(f => `<tr>
+              <td><a href="#/sucursal/${f.s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(f.s))}</a>
+                ${f.s.gerente ? `<div style="font-size:12px;color:var(--texto-suave)">${esc(f.s.gerente)}</div>` : ''}</td>
+              <td>${f.ult ? `${fmtFecha(f.ult.fecha)} · ${semaforo(f.desde)}` : semaforo(null)}</td>
+              <td>${f.r && f.r.pct !== null
+                    ? `${fmtPct(f.r.pct, 0)}${f.r.clavesPendientes.length ? ` <span class="chip ambar">${f.r.clavesPendientes.length} clave</span>` : ''}`
+                    : '—'}</td>
+              <td class="num">${f.pend || '—'}</td>
+              <td class="num">${f.visitas || '—'}</td>
+              <td class="num" style="white-space:nowrap">
+                <button class="b sec" data-accion="nueva-visita" data-id="${f.s.id}">Visitar</button>
+                ${f.ult ? `<a class="mini" href="#/visita/${f.ult.id}/recorrida" style="text-decoration:none;display:inline-block;margin-left:6px">Última</a>` : ''}
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Últimas visitas registradas</h2>
+        ${e.visitas.length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Sucursal</th><th>Recorrida</th><th class="num">Compromisos</th><th>Reporte</th><th></th></tr></thead>
+          <tbody>${e.visitas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 15).map(v => {
+            const su = Store.sucursal(v.sucursalId);
+            const rr = evaluarRecorrida(v.recorrida);
+            const plan = (v.diagnostico.plan || []).length;
+            return `<tr>
+              <td><strong>${fmtFecha(v.fecha)}</strong></td>
+              <td>${su ? esc(Store.etiquetaSucursal(su)) : '—'}</td>
+              <td>${rr.pct === null ? '—' : fmtPct(rr.pct, 0)}</td>
+              <td class="num">${plan || '—'}</td>
+              <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
+              <td class="num"><a class="mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none;display:inline-block">Abrir</a></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Todavía no registraste ninguna visita.</p>'}
+      </section>`;
   }
 
   /* ====================== VISTA: UNA SUCURSAL ====================== *
@@ -302,9 +412,10 @@ const App = (() => {
       </div>
 
       <div class="acciones" style="margin-bottom:18px">
-        <button class="b" data-accion="nueva-visita" data-id="${s.id}">Registrar una visita</button>
-        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/minutas" style="text-decoration:none">Abrir la última visita</a>` : ''}
-        <a class="b sec" href="#/informe" style="text-decoration:none">Informe mensual</a>
+        <button class="b grande" data-accion="nueva-visita" data-id="${s.id}">+ Registrar visita</button>
+        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/recorrida" style="text-decoration:none">Abrir la última visita${
+          ultima.fecha ? ` (${fmtFecha(ultima.fecha)})` : ''}</a>` : ''}
+        <a class="b sec" href="#/estadistica" style="text-decoration:none">Estadística mensual</a>
         <a class="b sec" href="#/sucursales" style="text-decoration:none">Editar la ficha</a>
       </div>
 
@@ -346,7 +457,7 @@ const App = (() => {
               <td class="num">${c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</td>
               <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
-              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/minutas" style="text-decoration:none">Abrir</a></td>
+              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>` : '<p class="vacio">Sin visitas registradas todavía.</p>'}
@@ -503,36 +614,36 @@ const App = (() => {
   }
 
   /* ===================== VISTA: INFORME MENSUAL ==================== *
-     El informe del mes es de la sucursal, no de una visita: consolida todas
+     La estadística del mes es de la sucursal, no de una visita: consolida todas
      las visitas del período. Por eso vive acá y no adentro de una visita. */
-  let informeSuc = null;
-  let informePeriodo = null;
+  let estadSuc = null;
+  let estadPeriodo = null;
 
-  function vistaInforme() {
+  function vistaEstadistica() {
     const e = Store.get();
     contexto = e;
 
-    if (!informeSuc && e.sucursales.length) informeSuc = e.sucursales[0].id;
-    const s = informeSuc ? Store.sucursal(informeSuc) : null;
+    if (!estadSuc && e.sucursales.length) estadSuc = e.sucursales[0].id;
+    const s = estadSuc ? Store.sucursal(estadSuc) : null;
     if (!s) {
-      return `<h1 class="titulo">Informe mensual</h1>
+      return `<h1 class="titulo">Estadística mensual</h1>
         <section class="tarjeta"><p class="vacio">Cargá primero una sucursal.</p></section>`;
     }
 
     const periodos = Store.periodosDe(s.id);
-    if (!informePeriodo || !periodos.includes(informePeriodo)) {
-      informePeriodo = periodos[0] || new Date().toISOString().slice(0, 7);
+    if (!estadPeriodo || !periodos.includes(estadPeriodo)) {
+      estadPeriodo = periodos[0] || new Date().toISOString().slice(0, 7);
     }
 
-    const d = Reporte.datosMensuales(s.id, informePeriodo, e.config);
+    const d = Reporte.datosMensuales(s.id, estadPeriodo, e.config);
     const c = d.calculo;
     const faltantes = Reporte.faltantesMensuales(d);
-    const registro = Store.informeDe(s.id, informePeriodo);
+    const registro = Store.informeDe(s.id, estadPeriodo);
     const dest = Reporte.destinatario(s, e.config);
     const cc = Reporte.copias(s, e.config);
 
     return `
-      <h1 class="titulo">Informe mensual de la sucursal</h1>
+      <h1 class="titulo">Estadística mensual de la sucursal</h1>
       <p class="subtitulo">
         Los números del mes: dotación, costo laboral, ausentismo, horas extras y rotación.
         Se manda al cerrar el período, aparte del reporte de cada visita.
@@ -541,11 +652,11 @@ const App = (() => {
       <section class="tarjeta">
         <div class="grid c3">
           <label class="campo"><span>Sucursal</span>
-            <select id="informe-sucursal">
+            <select id="estad-sucursal">
               ${e.sucursales.map(x => `<option value="${x.id}"${x.id === s.id ? ' selected' : ''}>${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
             </select></label>
           <label class="campo"><span>Período</span>
-            <input type="month" id="informe-periodo" value="${esc(informePeriodo)}"
+            <input type="month" id="estad-periodo" value="${esc(estadPeriodo)}"
                    list="periodos-cargados">
             <datalist id="periodos-cargados">
               ${periodos.map(x => `<option value="${esc(x)}"></option>`).join('')}
@@ -575,13 +686,13 @@ const App = (() => {
         </div>
 
         ${d.sinVisita ? `<div class="aviso-caja">
-          <strong>El período no tiene ninguna visita cargada.</strong> El informe se arma igual,
+          <strong>El período no tiene ninguna visita cargada.</strong> La estadística se arma igual,
           con los indicadores marcados como pendientes.
           ${e.sucursales.length ? `<br><button class="b sec" data-accion="nueva-visita" data-id="${s.id}" style="margin-top:10px">Registrar una visita</button>` : ''}
         </div>` : ''}
 
         ${faltantes.length ? `<div class="aviso-caja">
-          <strong>Datos pendientes de carga.</strong> El informe se manda igual, con estos puntos marcados como <code>[PENDIENTE]</code>:
+          <strong>Datos pendientes de carga.</strong> La estadística se manda igual, con estos puntos marcados como <code>[PENDIENTE]</code>:
           <ul>${faltantes.map(f => `<li>${esc(f)}</li>`).join('')}</ul>
         </div>` : '<div class="aviso-caja info">Período completo: no quedan datos pendientes.</div>'}
 
@@ -598,9 +709,9 @@ const App = (() => {
         </div>` : ''}
 
         <div class="acciones">
-          <button class="b" data-accion="enviar-informe">Enviar el informe mensual</button>
-          <button class="b sec" data-accion="copiar-informe">Copiar</button>
-          <button class="b sec" data-accion="descargar-informe">Descargar .txt</button>
+          <button class="b" data-accion="enviar-estadistica">Enviar la estadística</button>
+          <button class="b sec" data-accion="copiar-estadistica">Copiar</button>
+          <button class="b sec" data-accion="descargar-estadistica">Descargar .txt</button>
           <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
         </div>
       </section>
@@ -615,12 +726,12 @@ const App = (() => {
         <textarea id="pegar-novedades" style="min-height:110px"
           placeholder="MES  TIENDA  LEGAJO  CUIL  APELLIDO  NOMBRE  HORAS NOCTURNAS  …"></textarea>
         <div class="acciones">
-          <button class="b" data-accion="importar-novedades">Importar en ${esc(informePeriodo)}</button>
+          <button class="b" data-accion="importar-novedades">Importar en ${esc(estadPeriodo)}</button>
         </div>
         <div id="resultado-novedades"></div>
 
         ${(() => {
-          const d = Store.dotacionDelPadron(s.id, informePeriodo);
+          const d = Store.dotacionDelPadron(s.id, estadPeriodo);
           if (!d || !d.personas) return '';
           const roles = Object.keys(d.porPosicion);
           return `<div class="tabla-scroll" style="margin-top:16px"><table>
@@ -648,8 +759,8 @@ const App = (() => {
       </section>
 
       <section class="tarjeta">
-        <h2>Vista previa del informe</h2>
-        <pre class="reporte" id="vista-informe">${esc(Reporte.textoMensual(s.id, informePeriodo, e.config))}</pre>
+        <h2>Vista previa de la estadística</h2>
+        <pre class="reporte" id="vista-estadistica">${esc(Reporte.textoMensual(s.id, estadPeriodo, e.config))}</pre>
       </section>`;
   }
 
@@ -731,6 +842,7 @@ const App = (() => {
             <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
             <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
             <td class="num" style="white-space:nowrap">
+              <button class="b sec" data-accion="nueva-visita" data-id="${s.id}" style="padding:5px 12px;font-size:13px">Visitar</button>
               <a class="mini" href="#/sucursal/${s.id}" style="color:var(--azul);border-color:var(--azul);text-decoration:none;display:inline-block">Ver</a>
               <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Editar'}</button>
               <button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">✕</button>
@@ -857,7 +969,10 @@ const App = (() => {
   }
 
   /* ========================== VISTA: VISITA ========================= */
+  /* Las solapas siguen el orden de la visita: primero lo que se recorre y se
+     conversa, después los números del período. */
   const PESTANAS = [
+    ['recorrida',  'Recorrida'],
     ['minutas',    'Minutas'],
     ['fte',        'FTE y Costo'],
     ['ausentismo', 'Ausentismo'],
@@ -879,6 +994,7 @@ const App = (() => {
     const c = Reporte.calcular(v, s, e.config);
 
     const cuerpo = {
+      recorrida:  () => panelRecorrida(v, s),
       minutas:    () => panelMinutas(v, s),
       fte:        () => panelFte(v, c),
       ausentismo: () => panelAusentismo(v, c),
@@ -888,7 +1004,7 @@ const App = (() => {
       sucesion:   () => panelSucesion(v, c),
       dotacion:   () => panelDotacion(v, s, c),
       reporte:    () => panelReporte(v, s, e.config, c)
-    }[pestana] || (() => panelMinutas(v, s));
+    }[pestana] || (() => panelRecorrida(v, s));
 
     return `
       <h1 class="titulo">${esc(Store.etiquetaSucursal(s))}</h1>
@@ -912,6 +1028,72 @@ const App = (() => {
       </nav>
 
       ${cuerpo()}`;
+  }
+
+  /* -------------------------- 0. Recorrida -------------------------- *
+     El check de la visita. Va primero porque es lo que se hace primero: si
+     arrancás por la oficina del gerente, el resto de la visita ya es la
+     versión que te quieren mostrar. */
+  function panelRecorrida(v, s) {
+    const r = evaluarRecorrida(v.recorrida);
+    const pendientes = pendientesAnteriores(v);
+
+    const item = (b, i) => `<tr>
+      <td>
+        <strong style="font-weight:${i.clave ? 600 : 400}">${esc(i.texto)}</strong>
+        ${i.clave ? '<span class="chip azul" style="margin-left:6px">clave</span>' : ''}
+        ${i.ayuda ? `<div class="ayuda" style="margin:3px 0 0">${esc(i.ayuda)}</div>` : ''}
+      </td>
+      <td style="width:150px">
+        <select data-path="recorrida.checks.${i.id}" data-calc="1">
+          ${ESTADOS_CHECK.map(e2 => `<option value="${e2.id}"${i.estado === e2.id ? ' selected' : ''}>${esc(e2.nombre)}</option>`).join('')}
+        </select>
+      </td>
+      <td><input data-path="recorrida.notas.${i.id}" value="${esc((v.recorrida.notas || {})[i.id] || '')}"
+                 placeholder="Qué viste"></td>
+    </tr>`;
+
+    return `
+      <section class="tarjeta">
+        <h2>Recorrida de la visita</h2>
+        <p class="ayuda">
+          Lo que conviene no saltearse en una visita a sucursal, en el orden en que pasa.
+          Lo que no aplica se marca como tal y no cuenta en contra.
+        </p>
+
+        <div class="kpis">
+          ${kpi('Avance', r.pct === null ? '—' : fmtPct(r.pct, 0),
+                `${r.hechos} de ${r.aplican} puntos que aplican`,
+                r.pct === null ? '' : (r.pct >= 0.9 ? 'ok' : r.pct >= 0.6 ? 'aviso' : 'alerta'))}
+          ${kpi('Puntos clave pendientes', r.clavesPendientes.length,
+                r.clavesPendientes.length ? 'no deberían quedar sin hacer' : 'todos cubiertos',
+                r.clavesPendientes.length ? 'alerta' : 'ok')}
+          ${kpi('Sin responder', r.sinResponder.length,
+                r.sinResponder.length ? 'quedan por marcar' : 'recorrida completa',
+                r.sinResponder.length ? 'aviso' : 'ok')}
+        </div>
+
+        ${pendientes.length ? `<div class="aviso-caja">
+          <strong>Antes de arrancar: quedaron ${pendientes.length} compromiso${pendientes.length === 1 ? '' : 's'} de la visita anterior.</strong>
+          <ul>${pendientes.slice(0, 6).map(x => `<li>${esc(x.compromiso || 'sin descripción')}
+            ${x.responsable ? `— ${esc(x.responsable)}` : ''}${x.plazo ? ` · plazo ${fmtFecha(x.plazo)}` : ''}</li>`).join('')}</ul>
+        </div>` : ''}
+
+        ${r.clavesPendientes.length ? `<div class="aviso-caja">
+          <strong>Puntos clave sin cubrir:</strong>
+          <ul>${r.clavesPendientes.map(x => `<li>${esc(x.texto)}</li>`).join('')}</ul>
+        </div>` : ''}
+      </section>
+
+      ${r.bloques.map(b => `<section class="tarjeta">
+        <h2>${esc(b.nombre)}
+          <span class="chip ${b.pct === 1 ? 'verde' : b.pct === null ? '' : 'ambar'}">${b.hechos}/${b.aplican}</span></h2>
+        <p class="ayuda">${esc(b.ayuda)}</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Punto</th><th>Estado</th><th>Observación</th></tr></thead>
+          <tbody>${b.items.map(i => item(b, i)).join('')}</tbody>
+        </table></div>
+      </section>`).join('')}`;
   }
 
   /* --------------------------- 1. Minutas --------------------------- */
@@ -1012,6 +1194,21 @@ const App = (() => {
           <br><br>
           La columna <strong>Personas equiv.</strong> es el control: tiene que parecerse a la dotación que viste en la tienda.
         </div>
+        ${(() => {
+          const otras = Store.visitasDe(v.sucursalId).filter(x =>
+            x.id !== v.id && x.periodo === v.periodo &&
+            calcularMatriz(x.posiciones, p).total.heads > 0);
+          if (!otras.length || c.matriz.total.heads) return '';
+          return `<div class="aviso-caja">
+            <strong>Los números de ${esc(v.periodo)} ya están cargados en otra visita.</strong>
+            Con visitas semanales alcanza con completar la matriz una vez por mes;
+            la estadística mensual toma la visita más completa del período.
+            <div class="acciones" style="margin-top:10px">
+              <a class="b sec" href="#/visita/${otras[0].id}/fte" style="text-decoration:none">Abrir la del ${fmtFecha(otras[0].fecha)}</a>
+              <a class="b sec" href="#/estadistica" style="text-decoration:none">Ver la estadística del mes</a>
+            </div>
+          </div>`;
+        })()}
         ${avisoAltasBajas(v, c, p)}
         ${(() => {
           const d = Store.dotacionDelPadron(v.sucursalId, v.periodo);
@@ -1758,12 +1955,13 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'sucursal' && ruta[1]) {
+    if (ruta[0] === 'visitas')       { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    else if (ruta[0] === 'sucursal' && ruta[1]) {
       const id = ruta[1];
       vistaActual = () => vistaSucursal(id);
       html = vistaSucursal(id);
     }
-    else if (ruta[0] === 'informe')   { vistaActual = vistaInforme;    html = vistaInforme(); }
+    else if (ruta[0] === 'estadistica')   { vistaActual = vistaEstadistica;    html = vistaEstadistica(); }
     else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -1911,14 +2109,21 @@ const App = (() => {
       /* --- visitas --- */
       if (a === 'nueva-visita') {
         const v = Store.crearVisita(btn.dataset.id);
-        location.hash = `#/visita/${v.id}/minutas`;
+        location.hash = `#/visita/${v.id}/recorrida`;
+      }
+
+      if (a === 'nueva-visita-desde-selector') {
+        const sel = $('#visita-sucursal');
+        if (!sel || !sel.value) return avisar('Elegí primero a qué sucursal vas.', 'error');
+        const v = Store.crearVisita(sel.value);
+        location.hash = `#/visita/${v.id}/recorrida`;
       }
 
       if (a === 'nueva-visita-selector') {
         const sel = $('#selector-sucursal');
         if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/minutas`;
+        location.hash = `#/visita/${v.id}/recorrida`;
       }
 
       if (a === 'borrar-visita') {
@@ -2053,18 +2258,18 @@ const App = (() => {
           return avisar(leido.avisos[0] || 'No se pudo leer la planilla.', 'error');
         }
 
-        const suc = Store.sucursal(informeSuc);
+        const suc = Store.sucursal(estadSuc);
         const resumen = resumirNovedades(leido.filas);
         const ok = await confirmar(
           `Importar ${resumen.personas} persona${resumen.personas === 1 ? '' : 's'}`,
-          `Se cargan en ${Store.etiquetaSucursal(suc)}, período ${informePeriodo}: ` +
+          `Se cargan en ${Store.etiquetaSucursal(suc)}, período ${estadPeriodo}: ` +
           `${fmtNum(resumen.horasExtras, 1)} horas extras y ${fmtNum(resumen.diasAusencia, 0)} días de ausencia. ` +
           (leido.tienda ? `La planilla dice tienda “${leido.tienda}”. ` : '') +
           'Si ya habías importado este mes, se reemplazan sus novedades.',
           'Importar');
         if (!ok) return;
 
-        const r = Store.importarNovedades(suc.id, informePeriodo, leido.filas);
+        const r = Store.importarNovedades(suc.id, estadPeriodo, leido.filas);
         refrescar();
 
         const caja = $('#resultado-novedades');
@@ -2079,43 +2284,43 @@ const App = (() => {
               Revisá si son bajas.` : ''}
           </div>`;
         }
-        avisar(`${r.total} persona${r.total === 1 ? '' : 's'} cargada${r.total === 1 ? '' : 's'} en ${informePeriodo}.`);
+        avisar(`${r.total} persona${r.total === 1 ? '' : 's'} cargada${r.total === 1 ? '' : 's'} en ${estadPeriodo}.`);
       }
 
-      /* --- informe mensual --- */
-      if (a === 'enviar-informe' || a === 'copiar-informe' || a === 'descargar-informe') {
-        const suc = Store.sucursal(informeSuc);
-        const texto = Reporte.textoMensual(suc.id, informePeriodo, e.config);
+      /* --- estadística mensual --- */
+      if (a === 'enviar-estadistica' || a === 'copiar-estadistica' || a === 'descargar-estadistica') {
+        const suc = Store.sucursal(estadSuc);
+        const texto = Reporte.textoMensual(suc.id, estadPeriodo, e.config);
 
-        if (a === 'copiar-informe') {
+        if (a === 'copiar-estadistica') {
           try {
             await navigator.clipboard.writeText(texto);
             btn.textContent = '\u2713 Copiado';
             setTimeout(() => { btn.textContent = 'Copiar'; }, 1800);
           } catch (err) {
-            const pre = $('#vista-informe');
+            const pre = $('#vista-estadistica');
             if (pre) { const r = document.createRange(); r.selectNode(pre); getSelection().removeAllRanges(); getSelection().addRange(r); }
-            avisar('No se pudo copiar solo. El informe quedó seleccionado: copialo con Ctrl+C.', 'error');
+            avisar('No se pudo copiar solo. La estadística quedó seleccionada: copialo con Ctrl+C.', 'error');
           }
         }
 
-        if (a === 'descargar-informe') {
-          await guardarArchivo(`informe-${suc.codigo}-${informePeriodo}.txt`, texto, 'text/plain');
+        if (a === 'descargar-estadistica') {
+          await guardarArchivo(`estadistica-${suc.codigo}-${estadPeriodo}.txt`, texto, 'text/plain');
         }
 
-        if (a === 'enviar-informe') {
+        if (a === 'enviar-estadistica') {
           const ok = await confirmar(
-            'Enviar el informe mensual',
-            `Se manda el informe de ${Store.etiquetaSucursal(suc)} del período ${informePeriodo} ` +
+            'Enviar la estadística',
+            `Se manda la estadística de ${Store.etiquetaSucursal(suc)} del período ${estadPeriodo} ` +
             `a ${Reporte.destinatario(suc, e.config).nombre || 'el Gerente de Operaciones'}.`,
-            'Enviar informe');
+            'Enviar estadística');
           if (!ok) return;
           try {
-            const r = await Reporte.enviarMensual(suc.id, informePeriodo, e.config);
+            const r = await Reporte.enviarMensual(suc.id, estadPeriodo, e.config);
             refrescar();
             avisar(r.via === 'webhook'
-              ? `Informe enviado a ${r.destino}.`
-              : 'Se abrió tu cliente de correo con el informe cargado. Revisalo y mandalo.');
+              ? `Estadística enviada a ${r.destino}.`
+              : 'Se abrió tu cliente de correo con la estadística cargada. Revisalo y mandalo.');
           } catch (err) {
             avisar(err.message, 'error');
           }
@@ -2209,14 +2414,14 @@ const App = (() => {
         };
         lector.readAsText(f);
       }
-      if (ev.target.id === 'informe-sucursal') {
-        informeSuc = ev.target.value;
-        informePeriodo = null;   // se recalcula con los períodos de la nueva sucursal
+      if (ev.target.id === 'estad-sucursal') {
+        estadSuc = ev.target.value;
+        estadPeriodo = null;   // se recalcula con los períodos de la nueva sucursal
         refrescar();
         return;
       }
-      if (ev.target.id === 'informe-periodo') {
-        informePeriodo = ev.target.value || hoyISO().slice(0, 7);
+      if (ev.target.id === 'estad-periodo') {
+        estadPeriodo = ev.target.value || hoyISO().slice(0, 7);
         refrescar();
         return;
       }
@@ -2224,13 +2429,13 @@ const App = (() => {
         const v = Store.ultimaVisita(ev.target.value);
         const idSuc = ev.target.value;
         ev.target.value = '';
-        if (v) { location.hash = `#/visita/${v.id}/minutas`; return; }
+        if (v) { location.hash = `#/visita/${v.id}/recorrida`; return; }
         confirmar('Sin visitas registradas',
           `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
           'Registrar visita').then(ok => {
             if (!ok) return;
             const nueva = Store.crearVisita(idSuc);
-            location.hash = `#/visita/${nueva.id}/minutas`;
+            location.hash = `#/visita/${nueva.id}/recorrida`;
           });
       }
     });

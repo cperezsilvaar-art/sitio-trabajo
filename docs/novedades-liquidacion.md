@@ -36,7 +36,7 @@ hojas. Por eso el puesto se asigna una vez, a mano, en la solapa *Talento y
 
 1. Abrí el libro del mes en Excel y andá a la hoja de la sucursal.
 2. Seleccioná **desde la fila de encabezados hasta la última persona** y copiá.
-3. En el panel: **Informe mensual** → elegí la sucursal y el mes → pegá en
+3. En el panel: **Estadística mensual** → elegí la sucursal y el mes → pegá en
    *Novedades de liquidación* → **Importar**.
 
 Se repite por cada hoja. La importación es acumulativa por sucursal y mes: si

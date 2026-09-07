@@ -177,6 +177,7 @@ button.b {
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 button.b:hover { background: var(--azul-claro); }
+button.b.grande { padding: 13px 26px; font-size: 15.5px; }
 button.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
 button.b.sec:hover { background: var(--panel-alt); }
 button.b.peligro { background: transparent; color: var(--rojo-alerta); border: 1px solid var(--rojo-alerta); }

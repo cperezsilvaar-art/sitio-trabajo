@@ -5,8 +5,8 @@ sucursales, calcular el **FTE Real** y el **costo laboral por posición**, segui
 ausentismo, rotación, sanciones y sucesión.
 
 De ahí salen **dos documentos distintos** para el Gerente de Operaciones: el
-**reporte de la visita**, apenas se cierra cada visita, y el **informe mensual de
-la sucursal**, al cerrar el período.
+**reporte de la visita**, apenas se cierra cada visita, y la **estadística mensual
+de la sucursal**, al cerrar el período.
 
 Es un sitio estático: se abre haciendo doble clic en `index.html` o publicándolo
 en GitHub Pages. No necesita servidor, base de datos ni instalación.
@@ -18,9 +18,9 @@ en GitHub Pages. No necesita servidor, base de datos ni instalación.
 2. Ir a **Configuración**. El coordinador y el área vienen cargados; falta el
    nombre y el email del Gerente de Operaciones, y las copias si corresponde.
 3. Ir a **Sucursales**. Vienen las doce sucursales del Área 3 con su ficha.
-4. Desde el **Panel de la red**, botón *Registrar visita* en la sucursal visitada.
+4. Desde **Visitas**, elegir la sucursal a la que vas y *Registrar visita*.
 5. Completar las solapas y, al final, **Reporte y Envío**.
-6. Al cerrar el mes, **Informe mensual**: elegir sucursal y período, importar ahí
+6. Al cerrar el mes, **Estadística mensual**: elegir sucursal y período, importar ahí
    la hoja del libro de novedades de liquidación, y enviar el informe.
 
 Los datos quedan guardados en el navegador (`localStorage`). Para pasarlos a otro
@@ -30,6 +30,7 @@ equipo o archivarlos, usar **Exportar respaldo** en Configuración.
 
 | Solapa | Contenido |
 |---|---|
+| **Recorrida** | El check de la visita: 28 puntos en seis bloques, en el orden en que transcurre |
 | **Minutas** | Reunión con el Gerente de Tienda (puntos y acuerdos) y con un colaborador (feedback y clima) |
 | **FTE y Costo** | Matriz por posición: headcount, altas, bajas, ausencias, horas extras, sueldos, cargas, costo por FTE |
 | **Ausentismo** | Días por concepto, separados en controlable (evitable) y no controlable (inevitable) |
@@ -61,7 +62,7 @@ Detalle en [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md).
 ## Las novedades de liquidación
 
 La planilla que arma Nómina todos los meses —una hoja por sucursal, una fila por
-persona— se pega directo en *Informe mensual* y carga de una sola vez el plantel,
+persona— se pega directo en *Estadística mensual* y carga de una sola vez el plantel,
 las horas extras y los días de ausencia abiertos por concepto.
 
 Lo que esa planilla **no** trae es la posición de cada persona: se asigna una vez
@@ -76,15 +77,15 @@ en [`docs/novedades-liquidacion.md`](docs/novedades-liquidacion.md).
 
 Son cosas distintas y se mandan en momentos distintos:
 
-| | **Reporte de visita** | **Informe mensual** |
+| | **Reporte de visita** | **Estadística mensual** |
 |---|---|---|
 | Cuándo | Al cerrar cada visita | Al cerrar el mes |
 | De qué es | De esa visita | De la sucursal en ese período |
 | Qué trae | Minutas, sanciones del día, 9-box, sucesión, diagnóstico y plan de acción | Dotación y FTE, costo laboral, ausentismo, horas extras, rotación, dotación vs. venta |
 | Para qué sirve | Que el gerente y Operaciones tengan los compromisos por escrito | Que Operaciones tenga el número del mes |
-| Dónde está | Solapa *Reporte y Envío* de la visita | Pestaña *Informe mensual* |
+| Dónde está | Solapa *Reporte y Envío* de la visita | Pestaña *Estadística mensual* |
 
-El informe mensual **consolida todas las visitas del período**. Si un mes tuvo
+La estadística mensual **consolida todas las visitas del período**. Si un mes tuvo
 dos visitas, toma la matriz de la más completa y lo dice en el encabezado; si no
 tuvo ninguna, se arma igual con todo marcado como pendiente.
 
@@ -101,6 +102,8 @@ cada uno deja su propio registro de envío.
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes y la talent card.
+- [`docs/recorrida-hrbp.md`](docs/recorrida-hrbp.md) — los 28 puntos de la
+  recorrida, por qué están y en qué orden.
 - [`docs/nomina-y-perfiles.md`](docs/nomina-y-perfiles.md) — el padrón de
   personas, el mapeo de cargos a posiciones y qué contiene cada perfil.
 - [`docs/novedades-liquidacion.md`](docs/novedades-liquidacion.md) — cómo se

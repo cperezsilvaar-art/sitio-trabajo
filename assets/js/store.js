@@ -104,6 +104,7 @@ const Store = (() => {
       fecha: hoy.toISOString().slice(0, 10),
       periodo,
       coordinador: estado.config.coordinador || '',
+      recorrida: { checks: {}, notas: {} },   // { checks: {piso.clima:'ok'}, notas: {...} }
       minutaGerente: { participante: '', puntos: '', acuerdos: '' },
       minutaColaborador: { nombre: '', posicion: '', feedback: '' },
       posiciones: POSICIONES.map(p => ({
@@ -195,6 +196,9 @@ const Store = (() => {
           !POSICIONES.some(p => p.nombre === f.rol) &&
           Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
 
+      v.recorrida = Object.assign({ checks: {}, notas: {} }, v.recorrida || {});
+      if (!v.recorrida.checks || typeof v.recorrida.checks !== 'object') v.recorrida.checks = {};
+      if (!v.recorrida.notas || typeof v.recorrida.notas !== 'object') v.recorrida.notas = {};
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
       v.minutaColaborador = Object.assign({ nombre: '', posicion: '', feedback: '' }, v.minutaColaborador || {});
       v.ausentismo = Object.assign({ detalle: {} }, v.ausentismo || {});

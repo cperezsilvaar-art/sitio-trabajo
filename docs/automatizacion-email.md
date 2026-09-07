@@ -3,8 +3,8 @@
 El panel manda **dos documentos distintos**, por el mismo camino:
 
 - El **reporte de la visita**, al cerrar cada visita (solapa *Reporte y Envío*).
-- El **informe mensual de la sucursal**, al cerrar el período (pestaña *Informe
-  mensual*).
+- La **estadística mensual de la sucursal**, al cerrar el período (pestaña
+  *Estadística mensual*).
 
 Los dos usan el mismo destinatario, las mismas copias y el mismo endpoint. Se
 distinguen por el campo `tipo` del envío. Hay dos modos: el primero funciona sin
@@ -13,7 +13,7 @@ configurar nada; el segundo deja el envío totalmente automático.
 ## Modo 1 — Cliente de correo (sin configuración)
 
 Es el modo por defecto. Al presionar **Enviar** —el reporte de la visita o el
-informe mensual, según dónde estés— se abre Outlook, Gmail o el cliente que esté
+la estadística mensual, según dónde estés— se abre Outlook, Gmail o el cliente que esté
 configurado en el equipo, con destinatario, copias, asunto y el documento
 completo ya cargados en el cuerpo. Solo hay que confirmar el envío.
 
@@ -53,14 +53,14 @@ presiona el botón y el mail sale solo.
 }
 ```
 
-**Informe mensual** (`"tipo": "mensual"`):
+**Estadística mensual** (`"tipo": "mensual"`):
 
 ```json
 {
   "para": "operaciones@empresa.com",
   "cc": ["rrhh@empresa.com", "gerente.tienda@empresa.com"],
-  "asunto": "Informe mensual RRHH · Área 3 · Botánico (BOTANICO) · 2026-04",
-  "cuerpo": "INFORME MENSUAL DE SUCURSAL - FARMATODO ...",
+  "asunto": "Estadística mensual RRHH · Área 3 · Botánico (BOTANICO) · 2026-04",
+  "cuerpo": "ESTADÍSTICA MENSUAL DE SUCURSAL - FARMATODO ...",
   "area": "Área 3",
   "sucursal": { "codigo": "BOTANICO", "nombre": "Botánico", "tipo": "venta" },
   "tipo": "mensual",
