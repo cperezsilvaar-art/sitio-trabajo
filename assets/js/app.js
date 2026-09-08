@@ -1162,6 +1162,7 @@ const App = (() => {
               data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
               <strong>${esc(c.nombre)}</strong>
               <span>${esc(c.cargo || c.posicion || '')}</span>
+              ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
               <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
             </button>`).join('')}
           </div>` : ''}
@@ -1235,6 +1236,8 @@ const App = (() => {
           ${dato('Estatus', c.estatus)}
         </div>
 
+        ${fichaConvenio(c, anios)}
+
         <h4>Vínculo</h4>
         <div class="grid c4">
           ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : '')}
@@ -1306,7 +1309,6 @@ const App = (() => {
 
         ${talentCard(c, s, { sinCabecera: true })}
 
-        ${fichaConvenio(c, anios)}
         ${fichaLicencias(c)}
         ${fichaSanciones(c)}
         ${fichaAusencias(c, periodos)}
@@ -1318,15 +1320,24 @@ const App = (() => {
     const cat = categoriaCct(c.categoriaConvenio || c.cargo);
     const esc2 = escalafonDe(anios);
     const vac = vacacionesDe(anios);
+    const faltaNomina = !String(c.cargo || '').trim() && !String(c.categoriaConvenio || '').trim();
 
-    return `<h4>Encuadre — ${esc(CCT.nombre)}</h4>
+    return `<h4>Puesto y encuadre</h4>
+      ${faltaNomina ? `<div class="aviso-caja">
+        <strong>No tiene cargado el puesto.</strong> Esta persona vino de un listado que no trae
+        el cargo. Importá la nómina completa desde <a href="#/sucursales">Sucursales</a> y se
+        completan el cargo, el nivel y la categoría del convenio.
+      </div>` : ''}
       <div class="grid c4">
-        ${dato('Categoría del convenio', cat ? `${cat.nombre} (art. ${cat.articulo || '—'})` : (c.categoriaConvenio || ''))}
+        ${dato('Cargo', c.cargo)}
+        ${dato('Nivel de cargo', c.nivelCargo)}
+        ${dato('Categoría de la nómina', c.categoriaConvenio)}
+        ${dato('Categoría del convenio', cat ? `${cat.nombre} (art. ${cat.articulo || '—'})` : '')}
         ${dato('Antigüedad', anios ? `${fmtNum(anios, 1)} años` : '')}
         ${dato('Escalafón por antigüedad (art. 13)', esc2.pct ? fmtPct(esc2.pct, 0) : 'todavía sin escalafón')}
-        ${dato('Vacaciones que le corresponden (art. 24)', `${vac.dias} días corridos`)}
+        ${dato('Vacaciones al año (art. 24)', `${vac.dias} días corridos`)}
       </div>
-      ${cat && cat.detalle ? `<p class="ayuda">${esc(cat.detalle)}</p>` : ''}
+      ${cat && cat.detalle ? `<p class="ayuda">${esc(CCT.nombre)} · ${esc(cat.detalle)}</p>` : ''}
       ${esc2.proximo ? `<p class="ayuda">Pasa al ${fmtPct(esc2.proximo.pct, 0)} de escalafón
         ${esc2.faltanAnios === 0 ? 'este año' : `en ${esc2.faltanAnios} año${esc2.faltanAnios === 1 ? '' : 's'}`}.
         ${vac.proximo ? `Las vacaciones suben a ${vac.proximo.dias} días
@@ -1515,7 +1526,8 @@ const App = (() => {
     const tarjeta = c => `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}"
         data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
       <strong>${esc(c.nombre || 'Sin nombre')}</strong>
-      <span>${esc(c.cargo || c.posicion || '—')}</span>
+      <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
+      ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
       ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
                     : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
     </button>`;

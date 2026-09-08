@@ -535,3 +535,10 @@ footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; pad
 .marca-check input { width: auto; margin: 0; }
 tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, transparent); }
 .org-persona.no-presencial { border-style: dashed; opacity: .9; }
+/* La categoría de convenio en la tarjeta del organigrama: es lo que define el
+   básico y los adicionales, así que se lee sin abrir el perfil. */
+.org-persona .cat {
+  font-size: 11px; color: var(--texto-suave); text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.org-persona em { font-style: italic; opacity: .7; }
