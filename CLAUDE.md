@@ -49,6 +49,11 @@ ni guarda la escala salarial**, que la fijan las paritarias.
   `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
   `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
+- **Trampa conocida:** todo lo que entra al panel se pega desde Excel, y Excel
+  entrecomilla las celdas que tienen un salto de línea adentro —los encabezados
+  de la nómina los tienen—. Nunca partir el texto pegado por `\n`: usar
+  `filasPegadas()` de `catalogos.js`, que respeta el entrecomillado. Partir por
+  `\n` pierde en silencio todas las columnas posteriores al primer salto.
 - **Trampa conocida:** `setPath` parte la ruta por el punto. Cualquier clave
   compuesta que lleve un punto crea objetos anidados en vez de una clave plana.
   Usar `_` como separador (`piso_clima`) o un binding propio (`data-diario`).

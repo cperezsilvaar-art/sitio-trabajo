@@ -139,15 +139,16 @@ function nombreDeNomina(fila) {
  * columna anterior al CUIL.
  */
 function interpretarNomina(crudo) {
-  const texto = String(crudo || '').replace(/\r/g, '');
-  const lineas = texto.split('\n').filter(l => l.trim());
+  /* filasPegadas respeta las celdas entrecomilladas: los encabezados de la
+     nómina traen saltos de línea adentro y partir por \n perdía en silencio
+     todas las columnas que venían después. */
+  const lineas = filasPegadas(crudo);
   if (lineas.length < 2) return { filas: [], avisos: ['No hay filas para leer.'] };
 
-  const sep = lineas[0].includes('\t') ? '\t' : (lineas[0].includes(';') ? ';' : ',');
-  const partir = l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+  const partir = f => f;
 
-  const iEnc = lineas.findIndex(l => {
-    const c = partir(l).map(_normNom);
+  const iEnc = lineas.findIndex(f => {
+    const c = partir(f).map(_normNom);
     return c.includes('CUIL') &&
       (c.includes('APELLIDO') || c.includes('CARGO') || c.includes('COLABORADOR'));
   });

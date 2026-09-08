@@ -91,12 +91,12 @@ function numeroNovedad(v) {
  *    primera aparición de cada campo.
  */
 function interpretarNovedades(crudo) {
-  const texto = String(crudo || '').replace(/\r/g, '');
-  const lineas = texto.split('\n').filter(l => l.trim());
+  /* Por filasPegadas y no por \n: los encabezados del libro de novedades
+     también traen saltos de línea adentro de la celda. */
+  const lineas = filasPegadas(crudo);
   if (lineas.length < 2) return { filas: [], avisos: ['No hay filas para leer.'], tienda: '', mes: '' };
 
-  const sep = lineas[0].includes('\t') ? '\t' : (lineas[0].includes(';') ? ';' : ',');
-  const partir = l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+  const partir = f => f;
 
   /* El encabezado es la primera línea que nombra CUIL o APELLIDO: así se puede
      pegar con o sin las filas de título que a veces trae la hoja. */

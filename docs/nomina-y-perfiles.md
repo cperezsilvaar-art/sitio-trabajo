@@ -181,3 +181,26 @@ En el archivo de septiembre había dos así.
 
 La solución está en el origen: formatear la columna CBU como texto antes de
 exportar.
+
+
+### Pegar desde Excel: las celdas con salto de línea
+
+Cuatro encabezados de esta planilla tienen un **salto de línea adentro de la
+celda**:
+
+```
+Razón Social⏎Contratado/a
+Fecha de ⏎Nacimiento
+Fecha de  Ingreso Farmatodo⏎Ingreso a FTD
+Antigüedad ⏎en Farmatodo
+```
+
+Al copiar, Excel encierra esas celdas entre comillas y el salto viaja adentro.
+Un lector que parta el texto por `\n` a secas rompe la fila de encabezados en
+cinco y **pierde en silencio todas las columnas que vienen después** —incluida
+`NOMBRE DE SUCURSAL`, que es la columna 10—.
+
+Los tres importadores (nómina, novedades de liquidación y RDV) usan
+`filasPegadas()`, en `catalogos.js`, que respeta el entrecomillado, une la celda
+partida en una sola etiqueta y devuelve una fila por registro real. Con las 140
+líneas de esta planilla, el pegado son 145 líneas físicas y 140 filas.

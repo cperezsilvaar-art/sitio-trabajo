@@ -794,6 +794,57 @@ const DISPONIBILIDAD_ROL = [
 /* ------------------------------------------------------------------ *
  * 6. Parámetros por defecto — Dotacion_Selma_Abril2026                 *
  * ------------------------------------------------------------------ */
+/* ==================== LECTURA DE TEXTO PEGADO ====================
+ *
+ * Todo lo que entra al panel entra pegando desde Excel, y Excel encierra entre
+ * comillas cualquier celda que tenga un salto de línea adentro. Los
+ * encabezados de la nómina los tienen —"Fecha de  Ingreso Farmatodo\nIngreso a
+ * FTD"—, así que partir el texto por \n a secas rompe esa fila en varias y se
+ * pierden en silencio todas las columnas que vienen después.
+ *
+ * Devuelve una fila por registro real, ya partida en celdas.
+ */
+function filasPegadas(crudo, separador) {
+  const texto = String(crudo == null ? '' : crudo).replace(/\r\n?/g, '\n');
+  if (!texto) return [];
+
+  /* El separador se detecta sobre la primera línea física, que alcanza: si el
+     encabezado se corta, igual conserva sus tabulaciones. */
+  const primera = texto.split('\n')[0] || '';
+  const sep = separador ||
+    (primera.indexOf('\t') >= 0 ? '\t' : (primera.indexOf(';') >= 0 ? ';' : ','));
+
+  const filas = [];
+  let fila = [], celda = '', enComillas = false;
+
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+
+    if (enComillas) {
+      if (ch === '"') {
+        /* Dos comillas seguidas dentro de una celda son una comilla literal. */
+        if (texto[i + 1] === '"') { celda += '"'; i++; }
+        else enComillas = false;
+      } else {
+        celda += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' && celda.trim() === '') { enComillas = true; celda = ''; continue; }
+    if (ch === sep) { fila.push(celda); celda = ''; continue; }
+    if (ch === '\n') { fila.push(celda); filas.push(fila); fila = []; celda = ''; continue; }
+    celda += ch;
+  }
+  if (celda !== '' || fila.length) { fila.push(celda); filas.push(fila); }
+
+  /* Las celdas conservan sus saltos internos como espacios: un encabezado
+     partido en dos renglones es una sola etiqueta. */
+  return filas
+    .map(f => f.map(c => c.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()))
+    .filter(f => f.some(c => c));
+}
+
 const PARAMETROS_DEFECTO = {
   diasMes: 30,              // divisor de días para FTE
   horasMes: 200,            // divisor de horas extras para FTE
@@ -1880,12 +1931,12 @@ function numeroNovedad(v) {
  *    primera aparición de cada campo.
  */
 function interpretarNovedades(crudo) {
-  const texto = String(crudo || '').replace(/\r/g, '');
-  const lineas = texto.split('\n').filter(l => l.trim());
+  /* Por filasPegadas y no por \n: los encabezados del libro de novedades
+     también traen saltos de línea adentro de la celda. */
+  const lineas = filasPegadas(crudo);
   if (lineas.length < 2) return { filas: [], avisos: ['No hay filas para leer.'], tienda: '', mes: '' };
 
-  const sep = lineas[0].includes('\t') ? '\t' : (lineas[0].includes(';') ? ';' : ',');
-  const partir = l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+  const partir = f => f;
 
   /* El encabezado es la primera línea que nombra CUIL o APELLIDO: así se puede
      pegar con o sin las filas de título que a veces trae la hoja. */
@@ -2112,15 +2163,16 @@ function nombreDeNomina(fila) {
  * columna anterior al CUIL.
  */
 function interpretarNomina(crudo) {
-  const texto = String(crudo || '').replace(/\r/g, '');
-  const lineas = texto.split('\n').filter(l => l.trim());
+  /* filasPegadas respeta las celdas entrecomilladas: los encabezados de la
+     nómina traen saltos de línea adentro y partir por \n perdía en silencio
+     todas las columnas que venían después. */
+  const lineas = filasPegadas(crudo);
   if (lineas.length < 2) return { filas: [], avisos: ['No hay filas para leer.'] };
 
-  const sep = lineas[0].includes('\t') ? '\t' : (lineas[0].includes(';') ? ';' : ',');
-  const partir = l => l.split(sep).map(x => x.trim().replace(/^"|"$/g, ''));
+  const partir = f => f;
 
-  const iEnc = lineas.findIndex(l => {
-    const c = partir(l).map(_normNom);
+  const iEnc = lineas.findIndex(f => {
+    const c = partir(f).map(_normNom);
     return c.includes('CUIL') &&
       (c.includes('APELLIDO') || c.includes('CARGO') || c.includes('COLABORADOR'));
   });
@@ -3305,10 +3357,11 @@ function _numeroRdv(v) {
  * trae el título del reporte y filas vacías arriba.
  */
 function interpretarRDV(texto, areaFiltro) {
-  const lineas = String(texto || '').split(/\r?\n/).filter(l => l.trim());
+  /* Por filasPegadas: el RDV trae los títulos de bloque con saltos adentro. */
+  const lineas = filasPegadas(texto, '\t');
   if (!lineas.length) return { filas: [], error: 'No se pegó nada.' };
 
-  const partir = l => l.split('\t').map(c => c.trim());
+  const partir = f => f;
 
   let iCab = -1, cab = null;
   for (let i = 0; i < lineas.length && i < 20; i++) {

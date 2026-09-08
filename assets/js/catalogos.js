@@ -224,6 +224,57 @@ const DISPONIBILIDAD_ROL = [
 /* ------------------------------------------------------------------ *
  * 6. Parámetros por defecto — Dotacion_Selma_Abril2026                 *
  * ------------------------------------------------------------------ */
+/* ==================== LECTURA DE TEXTO PEGADO ====================
+ *
+ * Todo lo que entra al panel entra pegando desde Excel, y Excel encierra entre
+ * comillas cualquier celda que tenga un salto de línea adentro. Los
+ * encabezados de la nómina los tienen —"Fecha de  Ingreso Farmatodo\nIngreso a
+ * FTD"—, así que partir el texto por \n a secas rompe esa fila en varias y se
+ * pierden en silencio todas las columnas que vienen después.
+ *
+ * Devuelve una fila por registro real, ya partida en celdas.
+ */
+function filasPegadas(crudo, separador) {
+  const texto = String(crudo == null ? '' : crudo).replace(/\r\n?/g, '\n');
+  if (!texto) return [];
+
+  /* El separador se detecta sobre la primera línea física, que alcanza: si el
+     encabezado se corta, igual conserva sus tabulaciones. */
+  const primera = texto.split('\n')[0] || '';
+  const sep = separador ||
+    (primera.indexOf('\t') >= 0 ? '\t' : (primera.indexOf(';') >= 0 ? ';' : ','));
+
+  const filas = [];
+  let fila = [], celda = '', enComillas = false;
+
+  for (let i = 0; i < texto.length; i++) {
+    const ch = texto[i];
+
+    if (enComillas) {
+      if (ch === '"') {
+        /* Dos comillas seguidas dentro de una celda son una comilla literal. */
+        if (texto[i + 1] === '"') { celda += '"'; i++; }
+        else enComillas = false;
+      } else {
+        celda += ch;
+      }
+      continue;
+    }
+
+    if (ch === '"' && celda.trim() === '') { enComillas = true; celda = ''; continue; }
+    if (ch === sep) { fila.push(celda); celda = ''; continue; }
+    if (ch === '\n') { fila.push(celda); filas.push(fila); fila = []; celda = ''; continue; }
+    celda += ch;
+  }
+  if (celda !== '' || fila.length) { fila.push(celda); filas.push(fila); }
+
+  /* Las celdas conservan sus saltos internos como espacios: un encabezado
+     partido en dos renglones es una sola etiqueta. */
+  return filas
+    .map(f => f.map(c => c.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim()))
+    .filter(f => f.some(c => c));
+}
+
 const PARAMETROS_DEFECTO = {
   diasMes: 30,              // divisor de días para FTE
   horasMes: 200,            // divisor de horas extras para FTE

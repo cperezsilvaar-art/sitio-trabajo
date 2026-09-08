@@ -314,10 +314,11 @@ function _numeroRdv(v) {
  * trae el título del reporte y filas vacías arriba.
  */
 function interpretarRDV(texto, areaFiltro) {
-  const lineas = String(texto || '').split(/\r?\n/).filter(l => l.trim());
+  /* Por filasPegadas: el RDV trae los títulos de bloque con saltos adentro. */
+  const lineas = filasPegadas(texto, '\t');
   if (!lineas.length) return { filas: [], error: 'No se pegó nada.' };
 
-  const partir = l => l.split('\t').map(c => c.trim());
+  const partir = f => f;
 
   let iCab = -1, cab = null;
   for (let i = 0; i < lineas.length && i < 20; i++) {
