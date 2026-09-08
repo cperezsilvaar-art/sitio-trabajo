@@ -92,23 +92,31 @@ function calcularDiario(dia, sucursales, par) {
 
   const t = {
     planificados: 0, presentes: 0, ausentes: 0, minimo: 0,
-    horasExtras: 0, horasOrdinarias: 0, novedades: 0, controlables: 0
+    horasExtras: 0, horasOrdinarias: 0, novedades: 0, controlables: 0,
+    presentesConMinimo: 0, conMinimo: 0, bajoMinimo: 0
   };
   filas.forEach(f => {
     t.planificados += f.k.planificados;
     t.presentes += f.k.presentes;
     t.ausentes += f.k.ausentes;
-    t.minimo += f.k.minimo;
     t.horasExtras += f.k.horasExtras;
     t.horasOrdinarias += f.k.horasOrdinarias;
     t.novedades += f.k.novedades;
     t.controlables += f.k.controlables;
+    /* La cobertura solo suma sobre las tiendas que tienen mínimo definido.
+       Dividir los presentes de doce tiendas por el mínimo de una daba 2.825%. */
+    if (f.k.minimo) {
+      t.conMinimo++;
+      t.minimo += f.k.minimo;
+      t.presentesConMinimo += f.k.presentes;
+      if (f.k.cobertura < 1) t.bajoMinimo++;
+    }
   });
 
   t.pctAusentismo = t.planificados ? t.ausentes / t.planificados : null;
   t.pctExtras = t.horasOrdinarias ? t.horasExtras / t.horasOrdinarias : null;
   t.fteReal = t.planificados ? t.planificados - t.ausentes + t.horasExtras / p.horasJornada : null;
-  t.cobertura = t.minimo ? t.presentes / t.minimo : null;
+  t.cobertura = t.minimo ? t.presentesConMinimo / t.minimo : null;
 
   /* Venta del día: sirve para leer la cobertura contra lo que efectivamente
      había que atender. Una tienda al 80% de cobertura en un día flojo no es
@@ -152,12 +160,14 @@ function alertasDiarias(calc) {
         texto: `${nom(f.sucursal)} operó con ${k.presentes} persona${k.presentes === 1 ? '' : 's'} ` +
                `sobre un mínimo de ${k.minimo}: falta${k.faltanParaMinimo === 1 ? '' : 'n'} ${k.faltanParaMinimo}.`
       });
-    } else if (k.cobertura !== null && k.cobertura < p.coberturaMinima + 0.10 && k.cobertura < 1.05) {
+    } else if (k.cobertura !== null && k.presentes - k.minimo <= 1) {
+      /* El umbral no es un porcentaje: es cuántas personas de colchón quedan.
+         En una tienda de tres, una sola persona de más ya es el límite. */
       A.push({
         nivel: 'atencion', sucursal: nom(f.sucursal),
         titulo: 'Cobertura al límite',
-        texto: `${nom(f.sucursal)} cubrió el mínimo justo (${k.presentes} sobre ${k.minimo}). ` +
-               `Una ausencia más y no abre en condiciones.`
+        texto: `${nom(f.sucursal)} cubrió el mínimo con ${k.presentes - k.minimo === 0 ? 'lo justo' : 'una sola persona de colchón'} ` +
+               `(${k.presentes} sobre ${k.minimo}). Una ausencia más y no abre en condiciones.`
       });
     }
     if (k.pctAusentismo !== null && k.pctAusentismo > p.umbralAusentismo * 2) {

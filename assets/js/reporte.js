@@ -914,9 +914,9 @@ const Reporte = (() => {
     if (t.cobertura !== null) {
       const bajo = calc.filas.filter(f => f.k.cobertura !== null && f.k.cobertura < 1);
       frases.push(bajo.length
-        ? `${bajo.length} sucursal${bajo.length === 1 ? '' : 'es'} quedó por debajo del mínimo para operar: ` +
+        ? `${bajo.length} de las ${t.conMinimo} sucursales con mínimo definido quedó por debajo: ` +
           bajo.map(f => nom(f.sucursal)).join(', ') + '.'
-        : 'Todas las sucursales reportadas cubrieron el mínimo para operar.');
+        : `Las ${t.conMinimo} sucursales con mínimo definido lo cubrieron.`);
     }
     if (t.horasExtras) {
       frases.push(

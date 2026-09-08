@@ -72,7 +72,9 @@ const Store = (() => {
       directorTecnico: '',
       contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
       colaboradores: [],                  // plantel con su evaluación e historial
-      dotacionNominal: null, notas: ''
+      dotacionNominal: null,
+      minimoTurno: null,                  // con cuánta gente abre en condiciones
+      notas: ''
     }, datos || {});
   }
 
@@ -481,18 +483,25 @@ const Store = (() => {
       const e = this.get();
       const d = this.asegurarDiario(fecha);
       const periodo = String(fecha).slice(0, 7);
-      const p = e.config.parametros;
       let completadas = 0;
 
       e.sucursales.forEach(s => {
         const padron = this.dotacionDelPadron(s.id, periodo);
-        const heads = padron ? padron.personas : (s.colaboradores || []).filter(c => c.activo !== false).length;
+        /* El padrón del período existe recién cuando se importaron las
+           novedades de liquidación. Hasta entonces vale el plantel cargado. */
+        const heads = (padron && padron.personas)
+          ? padron.personas
+          : (s.colaboradores || []).filter(c => c.activo !== false).length;
         if (!heads) return;
         const x = this.diarioSucursal(fecha, s.id);
         let toco = false;
         if (String(x.planificados || '').trim() === '') { x.planificados = heads; toco = true; }
-        if (String(x.minimo || '').trim() === '') {
-          x.minimo = Math.max(1, Math.round(heads * p.coberturaMinima * 0.75));
+        /* El mínimo NO se estima: depende de cada tienda —su horario, su
+           mostrador, su recetario— y una fracción del plantel daba coberturas
+           del 150% que no querían decir nada. Se toma el que el coordinador
+           definió una vez para esa sucursal. */
+        if (String(x.minimo || '').trim() === '' && s.minimoTurno) {
+          x.minimo = s.minimoTurno;
           toco = true;
         }
         if (toco) completadas++;
