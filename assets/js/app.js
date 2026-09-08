@@ -1135,6 +1135,20 @@ const App = (() => {
           El plantel que está en el piso, ordenado por posición. Las tarjetas se abren para ver
           el perfil completo.
         </p>
+
+        ${(() => {
+          /* El listado corto del área trae nombre y tienda pero no el cargo, así
+             que esa gente queda sin puesto. Decirlo acá evita que se lea como
+             un error del panel: falta un archivo, no falla una cuenta. */
+          const sinCargo = plantel.filter(c => !String(c.cargo || '').trim());
+          if (!sinCargo.length) return '';
+          return `<div class="aviso-caja">
+            <strong>${sinCargo.length} de ${plantel.length} personas no tienen el puesto cargado.</strong>
+            Vinieron de un listado que trae el nombre y la tienda pero no el cargo.
+            Importá la nómina completa desde <a href="#/sucursales">Sucursales</a> y se
+            completan solas: no se duplica a nadie ni se pierde lo que ya cargaste a mano.
+          </div>`;
+        })()}
         ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
 
         ${noPresenciales.length ? `<h3 style="margin-top:22px">Fuera de la dotación de piso</h3>
@@ -1858,7 +1872,18 @@ const App = (() => {
             ${noPres ? `Otras ${noPres} están en la nómina con bloqueo de título o como no
               presenciales: cuestan, pero no cubren turno.` : ''}
             ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
-          </div>`;
+          </div>
+          ${(() => {
+            const sinCargo = con.reduce((a, x) =>
+              a + activos(x).filter(c => !String(c.cargo || '').trim()).length, 0);
+            if (!sinCargo) return '';
+            return `<div class="aviso-caja">
+              <strong>${sinCargo} persona${sinCargo === 1 ? '' : 's'} sin puesto cargado.</strong>
+              El listado corto del área trae el nombre y la tienda, pero no el cargo: sin eso
+              el organigrama no puede ordenar a nadie por posición. Pegá acá abajo la nómina
+              completa —la que tiene las columnas CARGO y NIVEL DE CARGO— y se completa sola.
+            </div>`;
+          })()}`;
         })()}
       </section>
 
