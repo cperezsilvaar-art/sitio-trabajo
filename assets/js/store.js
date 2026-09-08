@@ -95,7 +95,8 @@ const Store = (() => {
       visitas: [],
       informes: [],                       // envíos de la estadística mensual
       reclamos: [],                       // lo que plantea la gente en las visitas
-      diarios: []                         // reporte de operación de cada día
+      diarios: [],                        // reporte de operación de cada día
+      avisos: []                          // cartelera: lo que le informan al área
     };
   }
 
@@ -185,6 +186,13 @@ const Store = (() => {
       if (!r.id) r.id = uid();
       if (!Array.isArray(r.historial)) r.historial = [];
       if (!r.estado) r.estado = 'abierto';
+    });
+    e.avisos = Array.isArray(e.avisos) ? e.avisos : [];
+    e.avisos.forEach(a => {
+      if (!a.id) a.id = uid();
+      if (!Array.isArray(a.hitos)) a.hitos = [];
+      if (!Array.isArray(a.sucursales)) a.sucursales = [];
+      if (!a.categoria) a.categoria = 'otros';
     });
     e.diarios = Array.isArray(e.diarios) ? e.diarios : [];
     e.diarios.forEach(d => {
@@ -426,6 +434,73 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* --------------------------- cartelera --------------------------- *
+       Lo que le informan al coordinador y tiene que llegar a las tiendas.
+       Vive en la raíz porque no pertenece a una sucursal ni a un período: un
+       aviso de pago del 14 sigue estando el 14 aunque el mes ya haya cerrado. */
+    agregarAviso(datos) {
+      const e = this.get();
+      const a = Object.assign({
+        id: uid(),
+        titulo: '',
+        cuerpo: '',
+        categoria: 'otros',
+        fuente: '',
+        fecha: new Date().toISOString().slice(0, 10),
+        hitos: [],
+        sucursales: [],          // vacío = para toda el área
+        fijado: false,
+        creado: new Date().toISOString()
+      }, datos || {});
+      e.avisos.unshift(a);
+      guardar();
+      return a;
+    },
+
+    aviso(id) { return this.get().avisos.find(a => a.id === id) || null; },
+
+    eliminarAviso(id) {
+      const e = this.get();
+      e.avisos = e.avisos.filter(a => a.id !== id);
+      guardar();
+    },
+
+    /**
+     * Crea un aviso a partir del mensaje pegado tal como llegó: saca el
+     * título, la categoría probable y las fechas. Todo se puede corregir
+     * después; la idea es que cargar un aviso cueste un pegado.
+     */
+    avisoDesdeTexto(texto, fechaRef) {
+      const crudo = String(texto || '').trim();
+      const ref = fechaRef || new Date().toISOString().slice(0, 10);
+      const titulo = tituloDeTexto(crudo);
+
+      /* Si la primera línea se usó de título, no se repite en el cuerpo. */
+      const lineas = crudo.split('\n');
+      const iTitulo = lineas.findIndex(l => tituloDeTexto(l) === titulo && titulo);
+      const cuerpo = (iTitulo >= 0 ? lineas.slice(iTitulo + 1) : lineas).join('\n').trim();
+
+      return this.agregarAviso({
+        titulo: titulo || 'Aviso sin título',
+        cuerpo,
+        categoria: categoriaDeTexto(crudo),
+        fecha: ref,
+        hitos: fechasDeTexto(crudo, ref)
+      });
+    },
+
+    /** Avisos ordenados por lo que viene primero, con los fijados arriba. */
+    avisosOrdenados(hoyISO) {
+      const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+      return this.get().avisos.slice().sort((x, y) => {
+        if (!!y.fijado !== !!x.fijado) return y.fijado ? 1 : -1;
+        const ex = estadoAviso(x, hoy), ey = estadoAviso(y, hoy);
+        if (ex.vencido !== ey.vencido) return ex.vencido ? 1 : -1;
+        if (ex.dias !== null && ey.dias !== null && ex.dias !== ey.dias) return ex.dias - ey.dias;
+        return String(y.fecha).localeCompare(String(x.fecha));
+      });
     },
 
     /* ------------------------ reporte diario ------------------------ *

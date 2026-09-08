@@ -36,10 +36,11 @@ y decir con cuál de estos criterios se alinea:
 ## Arquitectura
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
-  `talento`, `novedades`, `nomina`, `reclamos`, `diario`, `acceso`, `store`,
-  `reporte`, `app`. `build-pagina-unica.py` lee ese orden del propio HTML.
-- Ruteo por hash: `#/red`, `#/diario`, `#/visitas`, `#/reclamos`, `#/sucursales`,
-  `#/sucursal/<id>`, `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
+  `talento`, `novedades`, `nomina`, `reclamos`, `cartelera`, `diario`, `acceso`,
+  `store`, `reporte`, `app`. `build-pagina-unica.py` lee ese orden del HTML.
+- Ruteo por hash: `#/red`, `#/cartelera`, `#/diario`, `#/visitas`, `#/reclamos`,
+  `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
+  `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
 - **Trampa conocida:** `setPath` parte la ruta por el punto. Cualquier clave
   compuesta que lleve un punto crea objetos anidados en vez de una clave plana.
@@ -54,6 +55,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 | Escala | Pantalla | Pregunta |
 |---|---|---|
 | El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
+| Lo que vence | Cartelera | ¿Qué tengo que avisar en la tienda esta semana? |
 | La semana | Visitas (recorrida + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 

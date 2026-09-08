@@ -893,9 +893,27 @@ const Reporte = (() => {
     L.push(barra);
     L.push('');
 
+    /* La cartelera no depende de que se haya cargado el día: si mañana vence
+       el plazo de adelantos, hay que avisarlo igual. */
+    const bloqueCartelera = () => {
+      const cart = resumirCartelera(e.avisos, fecha);
+      const porDecir = cart.urgentes.concat(cart.proximos);
+      if (!porDecir.length) return [];
+      const B = ['PARA AVISAR EN LA TIENDA'];
+      porDecir.forEach(x => {
+        B.push(`   - ${x.estado.texto.toUpperCase()}. ${x.aviso.titulo}`);
+        if (x.estado.proximo && x.estado.proximo.contexto) {
+          B.push(`     ${x.estado.proximo.contexto}`);
+        }
+      });
+      B.push('');
+      return B;
+    };
+
     if (!calc.filas.length) {
       L.push('Todavía no hay ninguna sucursal cargada para este día.');
       L.push('');
+      L.push(...bloqueCartelera());
       L.push(...pie());
       return L.join('\n');
     }
@@ -1021,6 +1039,10 @@ const Reporte = (() => {
     L.push('5. ACCIONES PARA MAÑANA');
     accionesDiarias(calc).forEach((a, i) => L.push('   ' + (i + 1) + '. ' + a));
     L.push('');
+
+    /* Solo cuando vence algo en los próximos tres días: si entrara siempre,
+       en dos semanas nadie lo lee. */
+    L.push(...bloqueCartelera());
 
     if (dia && String(dia.notas || '').trim()) {
       L.push('NOTAS DEL COORDINADOR');

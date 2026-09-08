@@ -158,6 +158,24 @@ const App = (() => {
       <h1 class="titulo">${esc(e.config.area || 'Panel de la red')}</h1>
       <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
 
+      ${(() => {
+        /* Lo de la cartelera que vence hoy o mañana entra acá: si hay que
+           avisarlo en la tienda, tiene que verse sin ir a buscarlo. */
+        const r = resumirCartelera(e.avisos, hoyISO());
+        const urge = r.urgentes.concat(r.proximos);
+        if (!urge.length) return '';
+        return `<div class="aviso-caja${r.urgentes.length ? '' : ' info'}">
+          <strong>De la cartelera</strong>
+          <ul>${urge.slice(0, 5).map(x => {
+            const cat = CATEGORIAS_AVISO_POR_ID[x.aviso.categoria] || CATEGORIAS_AVISO_POR_ID.otros;
+            return `<li>${cat.icono} <strong>${esc(x.estado.texto)}.</strong> ${esc(x.aviso.titulo)}
+              ${x.estado.proximo && x.estado.proximo.contexto
+                ? `<br><span class="ayuda">${esc(x.estado.proximo.contexto)}</span>` : ''}</li>`;
+          }).join('')}</ul>
+          <a href="#/cartelera">Ver la cartelera</a>
+        </div>`;
+      })()}
+
       <div class="kpis">
         ${kpi('Sucursales a cargo', e.sucursales.length, `${visitadas} con visita registrada`)}
         ${kpi('Headcount', headcount || '—', 'personas en nómina')}
@@ -358,6 +376,139 @@ const App = (() => {
      salarial sin respuesta no se apaga solo. */
   let reclamoFiltro = 'abiertos';
   let reclamoAbierto = null;
+
+  /* ========================== VISTA: CARTELERA ==========================
+     Lo que le informan al coordinador y tiene que llegar a las tiendas. Casi
+     todo lo que llega por este canal tiene una fecha que vence, y el 13 a la
+     tarde lo único que importa es saber que vence mañana. */
+  let avisoAbierto = null;
+  let avisoFiltro = 'vigentes';
+
+  function vistaCartelera() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const hoy = hoyISO();
+    const todos = Store.avisosOrdenados(hoy);
+    const res = resumirCartelera(todos, hoy);
+
+    const lista = avisoFiltro === 'vigentes' ? todos.filter(a => !estadoAviso(a, hoy).vencido)
+                : avisoFiltro === 'vencidos' ? todos.filter(a => estadoAviso(a, hoy).vencido)
+                : todos;
+
+    return `
+      <h1 class="titulo">Cartelera</h1>
+      <p class="subtitulo">
+        Lo que te informan y tiene que llegar a las tiendas: fechas de pago, adelantos,
+        convenio, inventarios. Pegá el mensaje como te llegó y el panel le saca las fechas.
+      </p>
+
+      <div class="kpis">
+        ${kpi('Vence hoy o mañana', res.urgentes.length,
+              res.urgentes.length ? res.urgentes.map(x => x.aviso.titulo).slice(0, 2).join(' · ') : 'nada inmediato',
+              res.urgentes.length ? 'alerta' : 'ok')}
+        ${kpi('Esta semana', res.agenda.length, 'fechas en los próximos 7 días')}
+        ${kpi('Avisos vigentes', res.vigentes.length, `${res.vencidos.length} ya vencidos`)}
+      </div>
+
+      <section class="tarjeta">
+        <h2>Pegar un aviso</h2>
+        <p class="ayuda">
+          Copiá el mensaje tal como te llegó —con emojis, viñetas, lo que sea— y pegalo acá.
+          El panel le saca el título, la categoría y las fechas; después lo corregís si hace falta.
+        </p>
+        <textarea id="pegar-aviso" style="min-height:120px"
+          placeholder="📢 IMPORTANTE | FECHAS DE PAGO Y ADELANTOS&#10;&#10;💰 COMPENSACIÓN VARIABLE – OP&#10;Se abonará mañana, 9 de septiembre, a través de la cuenta NUBI.&#10;…"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="crear-aviso">Cargar el aviso</button>
+          <button class="b sec" data-accion="crear-aviso-vacio">Escribir uno a mano</button>
+        </div>
+        <div id="resultado-aviso"></div>
+      </section>
+
+      ${res.agenda.length ? `<section class="tarjeta">
+        <h2>Agenda de los próximos 7 días</h2>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Cuándo</th><th>Fecha</th><th>Qué</th><th>Aviso</th></tr></thead>
+          <tbody>
+            ${res.agenda.map(x => `<tr>
+              <td><span class="chip ${x.dias === 0 ? 'rojo' : x.dias <= 1 ? 'ambar' : 'azul'}">${
+                x.dias === 0 ? 'hoy' : x.dias === 1 ? 'mañana' : 'en ' + x.dias + ' días'}</span></td>
+              <td>${fmtFecha(x.hito.fecha)}</td>
+              <td><strong>${esc(x.hito.que)}</strong></td>
+              <td>${esc(x.aviso.titulo)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </section>` : ''}
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Avisos</h2>
+          <div class="acciones" style="margin:0">
+            ${[['vigentes', 'Vigentes'], ['vencidos', 'Vencidos'], ['todos', 'Todos']].map(([k, t]) =>
+              `<button class="b ${avisoFiltro === k ? '' : 'sec'} mini" data-accion="filtro-aviso" data-f="${k}">${t}</button>`).join('')}
+          </div>
+        </div>
+        ${lista.length ? lista.map(a => fichaAviso(a, hoy, e)).join('')
+          : '<p class="vacio">No hay avisos en este filtro.</p>'}
+      </section>`;
+  }
+
+  /** Un aviso de la cartelera, plegado hasta que se lo abre. */
+  function fichaAviso(a, hoy, e) {
+    const cat = CATEGORIAS_AVISO_POR_ID[a.categoria] || CATEGORIAS_AVISO_POR_ID.otros;
+    const est = estadoAviso(a, hoy);
+    const abierto = avisoAbierto === a.id;
+    const chip = { urgente: 'rojo', proximo: 'ambar', vigente: 'verde', vencido: '', sinFecha: 'azul' }[est.clase];
+
+    const cabecera = `<div class="aviso-fila ${abierto ? 'abierto' : ''}" data-accion="abrir-aviso" data-id="${a.id}">
+      <span class="aviso-icono">${cat.icono}</span>
+      <span class="aviso-titulo">${esc(a.titulo || 'Sin título')}
+        ${a.fijado ? '<span class="chip azul">fijado</span>' : ''}</span>
+      <span class="chip ${chip}">${esc(est.texto)}</span>
+      <span class="aviso-meta">${esc(cat.nombre)}${a.fuente ? ' · ' + esc(a.fuente) : ''}</span>
+    </div>`;
+
+    if (!abierto) return cabecera;
+
+    const hitos = (a.hitos || []).slice().sort((x, y) => x.fecha.localeCompare(y.fecha));
+    return cabecera + `<div class="aviso-cuerpo">
+      <div class="grid c3">
+        <label class="campo"><span>Título</span>
+          <input data-aviso="${a.id}|titulo" value="${esc(a.titulo || '')}"></label>
+        <label class="campo"><span>Categoría</span>
+          <select data-aviso="${a.id}|categoria">
+            ${CATEGORIAS_AVISO.map(c => `<option value="${c.id}"${a.categoria === c.id ? ' selected' : ''}>${c.icono} ${esc(c.nombre)}</option>`).join('')}
+          </select></label>
+        <label class="campo" title="De dónde vino: Compensaciones, Nómina, Operaciones…">
+          <span>Quién lo mandó</span>
+          <input data-aviso="${a.id}|fuente" value="${esc(a.fuente || '')}" placeholder="Compensaciones"></label>
+      </div>
+
+      <label class="campo"><span>Texto del aviso</span>
+        <textarea data-aviso="${a.id}|cuerpo" style="min-height:110px">${esc(a.cuerpo || '')}</textarea></label>
+
+      <h3>Fechas</h3>
+      ${hitos.length ? hitos.map((h, i) => `<div class="linea-item">
+        <input type="date" data-hito="${a.id}|${i}|fecha" value="${esc(h.fecha)}">
+        <input data-hito="${a.id}|${i}|que" value="${esc(h.que)}" class="nombre-item" placeholder="Qué pasa ese día">
+        <span class="ayuda" style="flex:1 1 100%;margin:0">${esc(h.contexto || '')}</span>
+        <button class="b peligro mini" data-accion="quitar-hito" data-id="${a.id}" data-i="${i}">Quitar</button>
+      </div>`).join('') : '<p class="vacio">Este aviso no tiene fechas: va a quedar siempre visible.</p>'}
+      <div class="acciones">
+        <button class="b sec mini" data-accion="agregar-hito" data-id="${a.id}">+ Agregar fecha</button>
+        <button class="b sec mini" data-accion="releer-fechas" data-id="${a.id}">Volver a leer las fechas del texto</button>
+      </div>
+
+      <div class="acciones" style="margin-top:16px">
+        <button class="b" data-accion="copiar-aviso" data-id="${a.id}">Copiar para mandar a las tiendas</button>
+        <button class="b sec" data-accion="fijar-aviso" data-id="${a.id}">${a.fijado ? 'Dejar de fijar' : 'Fijar arriba'}</button>
+        <button class="b peligro" data-accion="borrar-aviso" data-id="${a.id}">Borrar</button>
+      </div>
+    </div>`;
+  }
 
   /* ======================= VISTA: REPORTE DIARIO =======================
      La estadística mensual mide el mes que cerró; esto mide el día que pasó,
@@ -2575,7 +2726,8 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'diario')        { vistaActual = vistaDiario;    html = vistaDiario(); }
+    if (ruta[0] === 'cartelera')     { vistaActual = vistaCartelera; html = vistaCartelera(); }
+    else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'sucursal' && ruta[1]) {
@@ -2695,6 +2847,32 @@ const App = (() => {
       const d = Store.diarioSucursal(diarioFecha, sucId);
       return { d, i: Number(i), campo };
     }
+
+    /* Cartelera: el aviso se ubica por id, no por índice, para que reordenar
+       la lista —que se reordena sola por fecha— no pise otro aviso. */
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-aviso], [data-hito]');
+      if (!el) return;
+      if (el.dataset.aviso) {
+        const [id, campo] = el.dataset.aviso.split('|');
+        const av = Store.aviso(id);
+        if (av) av[campo] = el.value;
+      } else {
+        const [id, i, campo] = el.dataset.hito.split('|');
+        const av = Store.aviso(id);
+        if (av && av.hitos[Number(i)]) av.hitos[Number(i)][campo] = el.value;
+      }
+      guardarDiferido();
+    });
+
+    cont.addEventListener('change', ev => {
+      const el = ev.target.closest('[data-aviso], [data-hito]');
+      if (!el) return;
+      Store.save();
+      /* La categoría y las fechas cambian el orden y los chips: se redibuja.
+         El título y el cuerpo no, para no perder el foco mientras se escribe. */
+      if (/categoria$/.test(el.dataset.aviso || '') || el.dataset.hito) refrescar();
+    });
 
     cont.addEventListener('input', ev => {
       const el = ev.target.closest('[data-diario], [data-ausente], [data-novedad]');
@@ -2925,6 +3103,86 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- cartelera --- */
+      if (a === 'crear-aviso') {
+        const crudo = ($('#pegar-aviso') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero el mensaje.', 'error');
+        const nuevo = Store.avisoDesdeTexto(crudo);
+        avisoAbierto = nuevo.id;
+        const campo = $('#pegar-aviso');
+        if (campo) campo.value = '';
+        refrescar();
+        avisar(nuevo.hitos.length
+          ? `Aviso cargado con ${nuevo.hitos.length} fecha${nuevo.hitos.length === 1 ? '' : 's'}.`
+          : 'Aviso cargado. No se le encontraron fechas: agregalas a mano si tiene.');
+      }
+
+      if (a === 'crear-aviso-vacio') {
+        const nuevo = Store.agregarAviso({ titulo: 'Aviso nuevo' });
+        avisoAbierto = nuevo.id;
+        refrescar();
+      }
+
+      if (a === 'abrir-aviso') {
+        avisoAbierto = avisoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'filtro-aviso') { avisoFiltro = btn.dataset.f; refrescar(); }
+
+      if (a === 'agregar-hito') {
+        const av = Store.aviso(btn.dataset.id);
+        av.hitos.push({ fecha: hoyISO(), que: 'Fecha', contexto: '' });
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'quitar-hito') {
+        const av = Store.aviso(btn.dataset.id);
+        av.hitos.splice(Number(btn.dataset.i), 1);
+        Store.save();
+        refrescar();
+      }
+
+      /* Si se corrige el texto pegado, las fechas hay que volver a sacarlas:
+         no se recalculan solas para no pisar las que se editaron a mano. */
+      if (a === 'releer-fechas') {
+        const av = Store.aviso(btn.dataset.id);
+        const halladas = fechasDeTexto(`${av.titulo}\n${av.cuerpo}`, av.fecha);
+        if (!halladas.length) return avisar('No se encontró ninguna fecha en el texto.', 'error');
+        const ok = await confirmar('Volver a leer las fechas',
+          `Se encontraron ${halladas.length}: ${halladas.map(h => h.fecha).join(', ')}. ` +
+          'Reemplazan a las que están cargadas ahora.', 'Reemplazar');
+        if (!ok) return;
+        av.hitos = halladas;
+        Store.save();
+        refrescar();
+        avisar(`${halladas.length} fecha${halladas.length === 1 ? '' : 's'} cargada${halladas.length === 1 ? '' : 's'}.`);
+      }
+
+      if (a === 'fijar-aviso') {
+        const av = Store.aviso(btn.dataset.id);
+        av.fijado = !av.fijado;
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'copiar-aviso') {
+        const texto = textoParaTiendas(Store.aviso(btn.dataset.id), hoyISO());
+        try { await navigator.clipboard.writeText(texto); avisar('Aviso copiado, listo para reenviar.'); }
+        catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
+      }
+
+      if (a === 'borrar-aviso') {
+        const av = Store.aviso(btn.dataset.id);
+        const ok = await confirmar('Borrar el aviso', `Se borra “${av.titulo}” y sus fechas.`, 'Borrar');
+        if (!ok) return;
+        Store.eliminarAviso(av.id);
+        avisoAbierto = null;
+        refrescar();
+        avisar('Aviso borrado.');
+      }
 
       /* --- reporte diario --- */
       if (a === 'abrir-diario') {
