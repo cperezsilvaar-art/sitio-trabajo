@@ -36,9 +36,9 @@ y decir con cuál de estos criterios se alinea:
 ## Arquitectura
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
-  `talento`, `novedades`, `nomina`, `reclamos`, `cartelera`, `diario`, `acceso`,
+  `talento`, `novedades`, `nomina`, `reclamos`, `agenda`, `diario`, `acceso`,
   `store`, `reporte`, `app`. `build-pagina-unica.py` lee ese orden del HTML.
-- Ruteo por hash: `#/red`, `#/cartelera`, `#/diario`, `#/visitas`, `#/reclamos`,
+- Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
   `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
   `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
@@ -55,7 +55,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 | Escala | Pantalla | Pregunta |
 |---|---|---|
 | El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
-| Lo que vence | Cartelera | ¿Qué tengo que avisar en la tienda esta semana? |
+| Lo que llevo | Mi agenda | ¿Qué tengo que hacer y qué estoy esperando? |
 | La semana | Visitas (recorrida + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 

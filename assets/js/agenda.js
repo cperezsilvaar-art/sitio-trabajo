@@ -1,0 +1,331 @@
+/* ================================ AGENDA ================================
+ *
+ * La agenda de trabajo del coordinador: lo que tiene que hacer, lo que está
+ * esperando que le respondan, y lo que le informaron y no se puede olvidar.
+ *
+ * No es un tablón de anuncios ni una lista de tareas genérica. Lo que se anota
+ * acá casi siempre tiene una fecha —"los adelantos se piden hasta el 14",
+ * "llamar a Ana el jueves"— y a las cuatro de la tarde del 13 lo único que
+ * importa es saber qué vence mañana. Por eso el módulo está armado alrededor
+ * de las fechas: se escribe la línea como uno la diría y el panel le saca la
+ * fecha. Si hubiera que elegirla en un calendario, no se anotaría.
+ */
+
+/** En qué estado está cada cosa que se lleva. */
+const ESTADOS_AGENDA = [
+  { id: 'pendiente', nombre: 'Pendiente',  icono: '○', ayuda: 'Es mío y todavía no lo hice.' },
+  { id: 'esperando', nombre: 'Esperando',  icono: '⏳', ayuda: 'Ya lo pedí; la pelota está del otro lado.' },
+  { id: 'hecho',     nombre: 'Hecho',      icono: '✓', ayuda: 'Cerrado.', cerrado: true }
+];
+
+const ESTADOS_AGENDA_POR_ID = ESTADOS_AGENDA.reduce((a, e) => (a[e.id] = e, a), {});
+
+/** De qué es. Sirve para filtrar y para saber a quién reclamarle. */
+const TEMAS_AGENDA = [
+  { id: 'pagos',     nombre: 'Pagos y beneficios', icono: '💰' },
+  { id: 'convenio',  nombre: 'Convenio y normativa', icono: '📋' },
+  { id: 'operacion', nombre: 'Operación de tienda', icono: '🏪' },
+  { id: 'gente',     nombre: 'Gente', icono: '👥' },
+  { id: 'formacion', nombre: 'Formación', icono: '🎓' },
+  { id: 'seguimiento', nombre: 'Seguimiento de visita', icono: '📍' },
+  { id: 'otros',     nombre: 'Otros', icono: '📌' }
+];
+
+const TEMAS_AGENDA_POR_ID = TEMAS_AGENDA.reduce((a, t) => (a[t.id] = t, a), {});
+
+const MESES_ES = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+  julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10,
+  noviembre: 11, diciembre: 12
+};
+
+const DIAS_ES = {
+  domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6
+};
+
+/** Sin tildes y en minúscula, para poder buscar palabras clave. */
+function _sinTildes(s) {
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function _iso(anio, mes, dia) {
+  const d = new Date(Date.UTC(anio, mes - 1, dia));
+  if (d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) return null;
+  return d.toISOString().slice(0, 10);
+}
+
+function _sumarDias(iso, n) {
+  return new Date(new Date(iso).getTime() + n * 864e5).toISOString().slice(0, 10);
+}
+
+/**
+ * Palabras que suelen acompañar a una fecha y dicen qué pasa ese día. Se usan
+ * para etiquetar el hito sin que haya que escribirlo.
+ */
+const PISTAS_HITO = [
+  { re: /hasta el|plazo|fecha limite|ultimo dia|vence|cierre de/, que: 'Último día' },
+  { re: /se abonar|se pagar|se acredit|sera abonad|seran abonad|se liquidar|pago el|abonad/, que: 'Pago' },
+  { re: /se proyecta liquidar|estimad|previst/, que: 'Pago estimado' },
+  { re: /a partir del|desde el|comienza|arranca|inicia/, que: 'Arranca' },
+  { re: /reunion|capacitacion|curso|taller|inventario|visita/, que: 'Evento' },
+  { re: /llamar|hablar|escribir|mandar|enviar|pedir|reclamar|responder|revisar|firmar|cargar|subir|armar|preparar|cerrar|coordinar|agendar|entregar|confirmar/, que: 'Hacer' }
+];
+
+/**
+ * Extrae las fechas de un texto escrito como uno lo diría.
+ *
+ * Reconoce "9 de septiembre", "14/09", "17-09-2026", "14 y 17 de septiembre",
+ * y las formas de todos los días: "hoy", "mañana", "el lunes", "el lunes que
+ * viene", "en 3 días".
+ *
+ * Cuando no hay año —que es lo habitual— usa el de la fecha de referencia, y si
+ * eso deja la fecha más de tres meses en el pasado la pasa al año siguiente: un
+ * apunte de diciembre que dice "5 de enero" habla del enero que viene.
+ */
+function fechasDeTexto(texto, refISO) {
+  const crudo = String(texto || '');
+  const plano = _sinTildes(crudo);
+  const ref = refISO || new Date().toISOString().slice(0, 10);
+  const anioRef = Number(ref.slice(0, 4));
+  const hallazgos = [];
+
+  /* Separadores de cláusula. Hacen falta porque una sola línea puede llevar dos
+     fechas con sentidos opuestos: "las solicitudes se piden hasta el 14 y se
+     abonan el 17". Mirando la línea entera, el 17 quedaba como "último día". */
+  const CORTE = /[,;:]|\sy\s|\spero\s|\smientras\s/g;
+
+  const registrar = (iso, inicio, fin) => {
+    if (!iso) return;
+    const desde = Math.max(0, plano.lastIndexOf('\n', inicio) + 1);
+    const cierre = plano.indexOf('\n', fin);
+    const hastaLinea = cierre === -1 ? crudo.length : cierre;
+    const linea = crudo.slice(desde, hastaLinea).trim();
+
+    let iniClausula = desde, finClausula = hastaLinea;
+    CORTE.lastIndex = desde;
+    let c;
+    while ((c = CORTE.exec(plano)) !== null && c.index < hastaLinea) {
+      if (c.index + c[0].length <= inicio) iniClausula = c.index + c[0].length;
+      else if (c.index >= fin) { finClausula = c.index; break; }
+    }
+    const clausula = _sinTildes(crudo.slice(iniClausula, finClausula));
+    const pista = PISTAS_HITO.find(p => p.re.test(clausula)) ||
+                  PISTAS_HITO.find(p => p.re.test(_sinTildes(linea)));
+    const que = pista ? pista.que : 'Fecha';
+
+    /* La misma fecha puede ser dos cosas distintas —el 14 es el último día para
+       pedir adelantos y también el pago de la variable de Dermo—, así que se
+       repite por concepto y no solo por día. */
+    if (hallazgos.some(h => h.fecha === iso && h.que === que)) return;
+    hallazgos.push({ fecha: iso, que, contexto: linea.replace(/\s+/g, ' ').slice(0, 160) });
+  };
+
+  const ajustarAnio = (mes, dia) => {
+    let iso = _iso(anioRef, mes, dia);
+    if (!iso) return null;
+    const limite = new Date(ref);
+    limite.setUTCMonth(limite.getUTCMonth() - 3);
+    if (new Date(iso) < limite) iso = _iso(anioRef + 1, mes, dia);
+    return iso;
+  };
+
+  /* "12 de agosto de 2026", "9 de septiembre" y "14 y 17 de septiembre" */
+  const nombreMes = Object.keys(MESES_ES).join('|');
+  const reTexto = new RegExp(
+    '(\\d{1,2})(?:\\s*(?:,|y|al|a)\\s*(\\d{1,2}))?\\s+de\\s+(' + nombreMes + ')' +
+    '(?:\\s+de(?:l)?\\s+(\\d{4}))?', 'g');
+  let m;
+  while ((m = reTexto.exec(plano)) !== null) {
+    const mes = MESES_ES[m[3]];
+    const anio = m[4] ? Number(m[4]) : null;
+    [m[1], m[2]].filter(Boolean).forEach(d => {
+      const dia = Number(d);
+      registrar(anio ? _iso(anio, mes, dia) : ajustarAnio(mes, dia), m.index, m.index + m[0].length);
+    });
+  }
+
+  /* "14/09", "17-09-2026", "17/09/26" */
+  const reNumero = /(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?/g;
+  while ((m = reNumero.exec(plano)) !== null) {
+    const dia = Number(m[1]), mes = Number(m[2]);
+    if (mes < 1 || mes > 12 || dia < 1 || dia > 31) continue;
+    let anio = m[3] ? Number(m[3]) : null;
+    if (anio !== null && anio < 100) anio += 2000;
+    registrar(anio ? _iso(anio, mes, dia) : ajustarAnio(mes, dia), m.index, m.index + m[0].length);
+  }
+
+  /* "hoy", "mañana", "pasado mañana" */
+  const relativos = [
+    { re: /\bhoy\b/g, dias: 0 },
+    { re: /\bpasado manana\b/g, dias: 2 },
+    { re: /\bmanana\b/g, dias: 1 }
+  ];
+  relativos.forEach(r => {
+    r.re.lastIndex = 0;
+    let x;
+    while ((x = r.re.exec(plano)) !== null) {
+      registrar(_sumarDias(ref, r.dias), x.index, x.index + x[0].length);
+    }
+  });
+
+  /* "en 3 días", "en dos semanas" */
+  const reEn = /\ben\s+(\d{1,3})\s+(dias?|semanas?)\b/g;
+  while ((m = reEn.exec(plano)) !== null) {
+    const n = Number(m[1]) * (/semana/.test(m[2]) ? 7 : 1);
+    registrar(_sumarDias(ref, n), m.index, m.index + m[0].length);
+  }
+
+  /* "el lunes", "el lunes que viene", "el próximo martes" */
+  const nombreDia = Object.keys(DIAS_ES).join('|');
+  const reDia = new RegExp(
+    '\\b(?:el\\s+|este\\s+|proximo\\s+)?(' + nombreDia + ')(\\s+que\\s+viene|\\s+proximo)?\\b', 'g');
+  while ((m = reDia.exec(plano)) !== null) {
+    const objetivo = DIAS_ES[m[1]];
+    const hoyDia = new Date(ref).getUTCDay();
+    /* "el lunes" dicho un lunes es el lunes que viene, no hoy. Y "el lunes que
+       viene" se toma como el mismo día: en el uso corriente son lo mismo, y
+       adelantar una fecha molesta menos que atrasarla. */
+    const delta = (objetivo - hoyDia + 7) % 7 || 7;
+    registrar(_sumarDias(ref, delta), m.index, m.index + m[0].length);
+  }
+
+  return hallazgos.sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+/** Tema probable, para no obligar a elegirlo en un menú. */
+function temaDeTexto(texto) {
+  const t = _sinTildes(texto);
+  if (/sueldo|pago|abonar|adelanto|comision|compensacion variable|bono|aguinaldo|liquidac|nubi|acredit|recibo/.test(t)) return 'pagos';
+  if (/paritaria|convenio|escala|licencia|ley |decreto|articulo|sindicat|gremio/.test(t)) return 'convenio';
+  if (/inventario|promocion|feriado|horario|apertura|cierre de tienda|campana|quiebre/.test(t)) return 'operacion';
+  if (/capacitacion|curso|taller|certificac|formacion|induccion|e-learning/.test(t)) return 'formacion';
+  if (/visita|recorrida|sucursal|tienda .*(visit|recorr)/.test(t)) return 'seguimiento';
+  if (/ingreso|egreso|renuncia|traslado|cumpleanos|reconocimiento|bienvenid|entrevista|busqueda/.test(t)) return 'gente';
+  return 'otros';
+}
+
+/** Estado probable: si la línea dice que se le pidió algo a alguien, se espera. */
+function estadoDeTexto(texto) {
+  const t = _sinTildes(texto);
+  return /\b(pedi|solicite|mande|escribi|consulte|reclame|espero|quedaron en|me van a|estan viendo)\b/.test(t)
+    ? 'esperando' : 'pendiente';
+}
+
+/** Título: la primera línea con texto, sin emojis ni viñetas. */
+function tituloDeTexto(texto) {
+  const linea = String(texto || '').split('\n')
+    .map(l => l.replace(/^[\s•\-*|]+/, '').trim())
+    .find(l => l.replace(/[^\p{L}\p{N}]/gu, '').length >= 4);
+  if (!linea) return '';
+  return linea
+    .replace(/[\p{Extended_Pictographic}️]/gu, '')
+    .replace(/\s*\|\s*/g, ' · ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 90);
+}
+
+/**
+ * Cuándo cae cada cosa respecto de hoy. Lo que ya está hecho no vence: se
+ * saca del camino aunque su fecha haya pasado.
+ */
+function estadoItem(item, hoyISO) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const dias = f => Math.round((new Date(f) - new Date(hoy)) / 864e5);
+
+  if ((ESTADOS_AGENDA_POR_ID[item.estado] || {}).cerrado) {
+    return { clase: 'hecho', texto: 'Hecho', proximo: null, dias: null, vencido: false };
+  }
+
+  const hitos = (item.hitos || []).slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (!hitos.length) {
+    return { clase: 'sinFecha', texto: 'Sin fecha', proximo: null, dias: null, vencido: false };
+  }
+
+  const futuros = hitos.filter(h => h.fecha >= hoy);
+  const proximo = futuros[0] || null;
+  if (!proximo) {
+    const ultimo = hitos[hitos.length - 1];
+    const d = dias(ultimo.fecha);
+    return {
+      clase: 'vencido',
+      texto: d === -1 ? 'Venció ayer' : `Venció hace ${Math.abs(d)} días`,
+      proximo: null, dias: d, vencido: true
+    };
+  }
+  const d = dias(proximo.fecha);
+  const texto = d === 0 ? `${proximo.que}: hoy`
+              : d === 1 ? `${proximo.que}: mañana`
+              : `${proximo.que}: en ${d} días`;
+  return {
+    clase: d <= 1 ? 'urgente' : d <= 7 ? 'semana' : 'adelante',
+    texto, proximo, dias: d, vencido: false
+  };
+}
+
+/** La agenda repartida en los cajones en que se la mira. */
+function repartirAgenda(items, hoyISO) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const con = (items || []).map(i => ({ item: i, estado: estadoItem(i, hoy) }));
+  const de = clase => con.filter(x => x.estado.clase === clase)
+    .sort((a, b) => (a.estado.dias ?? 0) - (b.estado.dias ?? 0));
+
+  return {
+    total: con.length,
+    vencidas: de('vencido'),
+    urgentes: de('urgente'),
+    semana: de('semana'),
+    adelante: de('adelante'),
+    sinFecha: de('sinFecha'),
+    hechas: de('hecho'),
+    abiertas: con.filter(x => x.estado.clase !== 'hecho'),
+    esperando: con.filter(x => x.item.estado === 'esperando' && x.estado.clase !== 'hecho'),
+    /* Las fechas —no los apuntes— de los próximos siete días: un apunte con
+       tres fechas ocupa tres renglones en la agenda de la semana. */
+    agenda: (items || [])
+      .filter(i => !(ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado)
+      .flatMap(i => (i.hitos || []).map(h => ({
+        item: i, hito: h,
+        dias: Math.round((new Date(h.fecha) - new Date(hoy)) / 864e5)
+      })))
+      .filter(x => x.dias >= -30 && x.dias <= 7)
+      .sort((a, b) => a.dias - b.dias)
+  };
+}
+
+/**
+ * El apunte listo para reenviar. Se manda por WhatsApp, así que va sin
+ * encabezado y con las fechas al final, que es lo que después preguntan.
+ */
+function textoParaTiendas(item, hoyISO) {
+  const tema = TEMAS_AGENDA_POR_ID[item.tema] || TEMAS_AGENDA_POR_ID.otros;
+  const L = [`${tema.icono} ${(item.titulo || tema.nombre).toUpperCase()}`, ''];
+  if (String(item.detalle || '').trim()) {
+    L.push(String(item.detalle).trim());
+    L.push('');
+  }
+  const hitos = (item.hitos || []).slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (hitos.length) {
+    L.push('Fechas:');
+    hitos.forEach(h => {
+      const p = h.fecha.split('-');
+      L.push(`  · ${p[2]}/${p[1]} — ${h.que}`);
+    });
+    L.push('');
+  }
+  const e = estadoItem(item, hoyISO);
+  if (e.clase === 'urgente' && e.proximo) {
+    const p = e.proximo.fecha.split('-');
+    L.push(e.dias === 0 ? `⚠ Es hoy (${p[2]}/${p[1]}).` : `⚠ Es mañana (${p[2]}/${p[1]}).`);
+  }
+  return L.join('\n').trim();
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    ESTADOS_AGENDA, ESTADOS_AGENDA_POR_ID, TEMAS_AGENDA, TEMAS_AGENDA_POR_ID,
+    fechasDeTexto, temaDeTexto, estadoDeTexto, tituloDeTexto,
+    estadoItem, repartirAgenda, textoParaTiendas
+  };
+}

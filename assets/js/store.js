@@ -96,7 +96,7 @@ const Store = (() => {
       informes: [],                       // envíos de la estadística mensual
       reclamos: [],                       // lo que plantea la gente en las visitas
       diarios: [],                        // reporte de operación de cada día
-      avisos: []                          // cartelera: lo que le informan al área
+      agenda: []                          // lo que el coordinador lleva pendiente
     };
   }
 
@@ -187,12 +187,33 @@ const Store = (() => {
       if (!Array.isArray(r.historial)) r.historial = [];
       if (!r.estado) r.estado = 'abierto';
     });
-    e.avisos = Array.isArray(e.avisos) ? e.avisos : [];
-    e.avisos.forEach(a => {
-      if (!a.id) a.id = uid();
-      if (!Array.isArray(a.hitos)) a.hitos = [];
-      if (!Array.isArray(a.sucursales)) a.sucursales = [];
-      if (!a.categoria) a.categoria = 'otros';
+    /* La cartelera fue el primer intento de esto y guardaba en `avisos`. Lo que
+       había cargado se conserva como apuntes pendientes. */
+    if (Array.isArray(e.avisos) && e.avisos.length && !Array.isArray(e.agenda)) {
+      e.agenda = e.avisos.map(a => ({
+        id: a.id || uid(),
+        titulo: a.titulo || '',
+        detalle: a.cuerpo || '',
+        tema: a.categoria || 'otros',
+        estado: 'pendiente',
+        quien: a.fuente || '',
+        sucursalId: '',
+        fecha: a.fecha || new Date().toISOString().slice(0, 10),
+        hitos: Array.isArray(a.hitos) ? a.hitos : [],
+        avisarEnTienda: true,
+        fijado: !!a.fijado,
+        creado: a.creado || new Date().toISOString()
+      }));
+    }
+    delete e.avisos;
+
+    e.agenda = Array.isArray(e.agenda) ? e.agenda : [];
+    e.agenda.forEach(i => {
+      if (!i.id) i.id = uid();
+      if (!Array.isArray(i.hitos)) i.hitos = [];
+      if (!i.tema) i.tema = 'otros';
+      if (!i.estado) i.estado = 'pendiente';
+      ['titulo', 'detalle', 'quien', 'sucursalId'].forEach(k => { if (i[k] === undefined) i[k] = ''; });
     });
     e.diarios = Array.isArray(e.diarios) ? e.diarios : [];
     e.diarios.forEach(d => {
@@ -436,71 +457,96 @@ const Store = (() => {
       return c;
     },
 
-    /* --------------------------- cartelera --------------------------- *
-       Lo que le informan al coordinador y tiene que llegar a las tiendas.
-       Vive en la raíz porque no pertenece a una sucursal ni a un período: un
-       aviso de pago del 14 sigue estando el 14 aunque el mes ya haya cerrado. */
-    agregarAviso(datos) {
+    /* ---------------------------- agenda ---------------------------- *
+       Lo que el coordinador lleva: lo suyo, lo que espera de otros, y lo que
+       le informaron y no se puede olvidar. Vive en la raíz porque no pertenece
+       a una sucursal ni a un período: algo que vence el 14 sigue venciendo el
+       14 aunque el mes ya haya cerrado. */
+    agregarItem(datos) {
       const e = this.get();
-      const a = Object.assign({
+      const i = Object.assign({
         id: uid(),
         titulo: '',
-        cuerpo: '',
-        categoria: 'otros',
-        fuente: '',
+        detalle: '',
+        tema: 'otros',
+        estado: 'pendiente',
+        quien: '',                // con quién es: Compensaciones, un gerente…
+        sucursalId: '',
         fecha: new Date().toISOString().slice(0, 10),
         hitos: [],
-        sucursales: [],          // vacío = para toda el área
+        avisarEnTienda: false,    // solo esto viaja al reporte diario
         fijado: false,
         creado: new Date().toISOString()
       }, datos || {});
-      e.avisos.unshift(a);
+      e.agenda.unshift(i);
       guardar();
-      return a;
+      return i;
     },
 
-    aviso(id) { return this.get().avisos.find(a => a.id === id) || null; },
+    item(id) { return this.get().agenda.find(i => i.id === id) || null; },
 
-    eliminarAviso(id) {
+    eliminarItem(id) {
       const e = this.get();
-      e.avisos = e.avisos.filter(a => a.id !== id);
+      e.agenda = e.agenda.filter(i => i.id !== id);
       guardar();
     },
 
     /**
-     * Crea un aviso a partir del mensaje pegado tal como llegó: saca el
-     * título, la categoría probable y las fechas. Todo se puede corregir
-     * después; la idea es que cargar un aviso cueste un pegado.
+     * Anota una línea escrita como uno la diría: "llamar a Ana el jueves".
+     * Saca la fecha, el tema y si es algo propio o algo que se está esperando.
      */
-    avisoDesdeTexto(texto, fechaRef) {
+    anotar(linea, fechaRef) {
+      const texto = String(linea || '').trim();
+      if (!texto) return null;
+      const ref = fechaRef || new Date().toISOString().slice(0, 10);
+      return this.agregarItem({
+        titulo: texto.slice(0, 140),
+        tema: temaDeTexto(texto),
+        estado: estadoDeTexto(texto),
+        fecha: ref,
+        hitos: fechasDeTexto(texto, ref)
+      });
+    },
+
+    /**
+     * Anota algo largo pegado tal como llegó —un mensaje de Compensaciones,
+     * una minuta—: separa el título del cuerpo y saca todas las fechas.
+     */
+    anotarTexto(texto, fechaRef) {
       const crudo = String(texto || '').trim();
+      if (!crudo) return null;
       const ref = fechaRef || new Date().toISOString().slice(0, 10);
       const titulo = tituloDeTexto(crudo);
 
       /* Si la primera línea se usó de título, no se repite en el cuerpo. */
       const lineas = crudo.split('\n');
       const iTitulo = lineas.findIndex(l => tituloDeTexto(l) === titulo && titulo);
-      const cuerpo = (iTitulo >= 0 ? lineas.slice(iTitulo + 1) : lineas).join('\n').trim();
+      const detalle = (iTitulo >= 0 ? lineas.slice(iTitulo + 1) : lineas).join('\n').trim();
 
-      return this.agregarAviso({
-        titulo: titulo || 'Aviso sin título',
-        cuerpo,
-        categoria: categoriaDeTexto(crudo),
+      return this.agregarItem({
+        titulo: titulo || 'Apunte sin título',
+        detalle,
+        tema: temaDeTexto(crudo),
+        estado: estadoDeTexto(crudo),
         fecha: ref,
         hitos: fechasDeTexto(crudo, ref)
       });
     },
 
-    /** Avisos ordenados por lo que viene primero, con los fijados arriba. */
-    avisosOrdenados(hoyISO) {
-      const hoy = hoyISO || new Date().toISOString().slice(0, 10);
-      return this.get().avisos.slice().sort((x, y) => {
-        if (!!y.fijado !== !!x.fijado) return y.fijado ? 1 : -1;
-        const ex = estadoAviso(x, hoy), ey = estadoAviso(y, hoy);
-        if (ex.vencido !== ey.vencido) return ex.vencido ? 1 : -1;
-        if (ex.dias !== null && ey.dias !== null && ex.dias !== ey.dias) return ex.dias - ey.dias;
-        return String(y.fecha).localeCompare(String(x.fecha));
-      });
+    /** Marca hecho o vuelve a abrir, dejando la fecha de cierre. */
+    marcarHecho(id, hecho) {
+      const i = this.item(id);
+      if (!i) return null;
+      i.estado = hecho ? 'hecho' : 'pendiente';
+      i.fechaHecho = hecho ? new Date().toISOString().slice(0, 10) : '';
+      guardar();
+      return i;
+    },
+
+    /** Lo que hay que llevar a la tienda, para el reporte del día. */
+    itemsParaTienda(hoyISO) {
+      return this.get().agenda.filter(i => i.avisarEnTienda &&
+        !(ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado);
     },
 
     /* ------------------------ reporte diario ------------------------ *

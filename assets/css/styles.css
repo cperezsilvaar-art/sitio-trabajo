@@ -516,3 +516,20 @@ footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; pad
   padding: 14px 16px; margin-bottom: 8px;
 }
 .aviso-cuerpo h3 { margin: 16px 0 8px; }
+
+/* La agenda: el círculo de la izquierda marca hecho sin abrir el apunte. */
+.aviso-fila .marcar {
+  border: 1px solid var(--borde); border-radius: 50%; background: transparent;
+  width: 22px; height: 22px; line-height: 1; padding: 0; cursor: pointer;
+  color: var(--texto-suave); font-size: 13px; flex: 0 0 auto;
+}
+.aviso-fila .marcar:hover { border-color: var(--verde); color: var(--verde); }
+.aviso-fila .aviso-titulo { cursor: pointer; }
+.aviso-fila.hecho { opacity: .6; }
+.aviso-fila.hecho .aviso-titulo { text-decoration: line-through; }
+.aviso-fila.hecho .marcar { color: var(--verde); border-color: var(--verde); }
+.marca-check {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px;
+  font-size: 13.5px; cursor: pointer;
+}
+.marca-check input { width: auto; margin: 0; }

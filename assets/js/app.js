@@ -159,20 +159,18 @@ const App = (() => {
       <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
 
       ${(() => {
-        /* Lo de la cartelera que vence hoy o mañana entra acá: si hay que
-           avisarlo en la tienda, tiene que verse sin ir a buscarlo. */
-        const r = resumirCartelera(e.avisos, hoyISO());
-        const urge = r.urgentes.concat(r.proximos);
+        /* Lo vencido y lo de hoy y mañana entra acá: la agenda sirve si te
+           encuentra, no si hay que ir a buscarla. */
+        const r = repartirAgenda(e.agenda, hoyISO());
+        const urge = r.vencidas.concat(r.urgentes);
         if (!urge.length) return '';
-        return `<div class="aviso-caja${r.urgentes.length ? '' : ' info'}">
-          <strong>De la cartelera</strong>
-          <ul>${urge.slice(0, 5).map(x => {
-            const cat = CATEGORIAS_AVISO_POR_ID[x.aviso.categoria] || CATEGORIAS_AVISO_POR_ID.otros;
-            return `<li>${cat.icono} <strong>${esc(x.estado.texto)}.</strong> ${esc(x.aviso.titulo)}
-              ${x.estado.proximo && x.estado.proximo.contexto
-                ? `<br><span class="ayuda">${esc(x.estado.proximo.contexto)}</span>` : ''}</li>`;
+        return `<div class="aviso-caja${r.vencidas.length ? '' : ' info'}">
+          <strong>De tu agenda</strong>
+          <ul>${urge.slice(0, 6).map(x => {
+            const tema = TEMAS_AGENDA_POR_ID[x.item.tema] || TEMAS_AGENDA_POR_ID.otros;
+            return `<li>${tema.icono} <strong>${esc(x.estado.texto)}.</strong> ${esc(x.item.titulo)}</li>`;
           }).join('')}</ul>
-          <a href="#/cartelera">Ver la cartelera</a>
+          <a href="#/agenda">Ver la agenda</a>
         </div>`;
       })()}
 
@@ -377,135 +375,162 @@ const App = (() => {
   let reclamoFiltro = 'abiertos';
   let reclamoAbierto = null;
 
-  /* ========================== VISTA: CARTELERA ==========================
-     Lo que le informan al coordinador y tiene que llegar a las tiendas. Casi
-     todo lo que llega por este canal tiene una fecha que vence, y el 13 a la
-     tarde lo único que importa es saber que vence mañana. */
-  let avisoAbierto = null;
-  let avisoFiltro = 'vigentes';
+  /* =========================== VISTA: MI AGENDA ===========================
+     Lo que el coordinador lleva: lo suyo, lo que espera de otros y lo que le
+     informaron. Se anota escribiendo la línea como uno la diría —"llamar a Ana
+     el jueves"— porque si hubiera que elegir la fecha en un calendario, no se
+     anotaría. */
+  let itemAbierto = null;
+  let verHechas = false;
 
-  function vistaCartelera() {
+  function vistaAgenda() {
     const e = Store.get();
     contexto = e;
     visitaEnCurso = null;
 
     const hoy = hoyISO();
-    const todos = Store.avisosOrdenados(hoy);
-    const res = resumirCartelera(todos, hoy);
+    const r = repartirAgenda(e.agenda, hoy);
 
-    const lista = avisoFiltro === 'vigentes' ? todos.filter(a => !estadoAviso(a, hoy).vencido)
-                : avisoFiltro === 'vencidos' ? todos.filter(a => estadoAviso(a, hoy).vencido)
-                : todos;
+    const cajon = (titulo, lista, nota) => !lista.length ? '' : `
+      <section class="tarjeta">
+        <div class="cabecera-suc"><h2>${esc(titulo)}</h2>
+          <span class="chip">${lista.length}</span></div>
+        ${nota ? `<p class="ayuda">${esc(nota)}</p>` : ''}
+        ${lista.map(x => fichaItem(x, hoy, e)).join('')}
+      </section>`;
 
     return `
-      <h1 class="titulo">Cartelera</h1>
+      <h1 class="titulo">Mi agenda</h1>
       <p class="subtitulo">
-        Lo que te informan y tiene que llegar a las tiendas: fechas de pago, adelantos,
-        convenio, inventarios. Pegá el mensaje como te llegó y el panel le saca las fechas.
+        Lo que llevás: lo tuyo, lo que estás esperando que te respondan y lo que te
+        informaron. Escribilo como lo dirías y el panel le saca la fecha.
       </p>
 
-      <div class="kpis">
-        ${kpi('Vence hoy o mañana', res.urgentes.length,
-              res.urgentes.length ? res.urgentes.map(x => x.aviso.titulo).slice(0, 2).join(' · ') : 'nada inmediato',
-              res.urgentes.length ? 'alerta' : 'ok')}
-        ${kpi('Esta semana', res.agenda.length, 'fechas en los próximos 7 días')}
-        ${kpi('Avisos vigentes', res.vigentes.length, `${res.vencidos.length} ya vencidos`)}
-      </div>
-
       <section class="tarjeta">
-        <h2>Pegar un aviso</h2>
-        <p class="ayuda">
-          Copiá el mensaje tal como te llegó —con emojis, viñetas, lo que sea— y pegalo acá.
-          El panel le saca el título, la categoría y las fechas; después lo corregís si hace falta.
-        </p>
-        <textarea id="pegar-aviso" style="min-height:120px"
-          placeholder="📢 IMPORTANTE | FECHAS DE PAGO Y ADELANTOS&#10;&#10;💰 COMPENSACIÓN VARIABLE – OP&#10;Se abonará mañana, 9 de septiembre, a través de la cuenta NUBI.&#10;…"></textarea>
-        <div class="acciones">
-          <button class="b" data-accion="crear-aviso">Cargar el aviso</button>
-          <button class="b sec" data-accion="crear-aviso-vacio">Escribir uno a mano</button>
+        <div class="acciones" style="align-items:flex-end">
+          <label class="campo" style="flex:1 1 420px">
+            <span>Anotar</span>
+            <input id="anotar-agenda" autocomplete="off"
+              placeholder="Llamar a Ana de Botánico el jueves">
+          </label>
+          <button class="b" data-accion="anotar">Anotar</button>
+          <button class="b sec" data-accion="pegar-largo">Pegar algo largo</button>
         </div>
-        <div id="resultado-aviso"></div>
+        <p class="ayuda">
+          Entiende <em>hoy</em>, <em>mañana</em>, <em>el jueves</em>, <em>en 2 semanas</em>,
+          <em>17/09</em> y <em>14 de octubre</em>. Si decís que ya lo pediste, queda como
+          <em>esperando</em>.
+        </p>
+        <div id="caja-largo" hidden>
+          <textarea id="pegar-agenda" style="min-height:120px"
+            placeholder="Pegá el mensaje o la minuta tal como te llegó."></textarea>
+          <div class="acciones">
+            <button class="b" data-accion="anotar-largo">Anotar lo pegado</button>
+          </div>
+        </div>
       </section>
 
-      ${res.agenda.length ? `<section class="tarjeta">
-        <h2>Agenda de los próximos 7 días</h2>
-        <div class="tabla-scroll"><table>
-          <thead><tr><th>Cuándo</th><th>Fecha</th><th>Qué</th><th>Aviso</th></tr></thead>
-          <tbody>
-            ${res.agenda.map(x => `<tr>
-              <td><span class="chip ${x.dias === 0 ? 'rojo' : x.dias <= 1 ? 'ambar' : 'azul'}">${
-                x.dias === 0 ? 'hoy' : x.dias === 1 ? 'mañana' : 'en ' + x.dias + ' días'}</span></td>
-              <td>${fmtFecha(x.hito.fecha)}</td>
-              <td><strong>${esc(x.hito.que)}</strong></td>
-              <td>${esc(x.aviso.titulo)}</td>
-            </tr>`).join('')}
-          </tbody>
-        </table></div>
-      </section>` : ''}
+      <div class="kpis">
+        ${kpi('Vencidas', r.vencidas.length,
+              r.vencidas.length ? 'se te pasaron' : 'ninguna atrasada',
+              r.vencidas.length ? 'alerta' : 'ok')}
+        ${kpi('Hoy y mañana', r.urgentes.length, r.urgentes.length ? 'para resolver ya' : 'nada inmediato',
+              r.urgentes.length ? 'aviso' : 'ok')}
+        ${kpi('Esta semana', r.semana.length, 'en los próximos 7 días')}
+        ${kpi('Esperando respuesta', r.esperando.length,
+              r.esperando.length ? 'la pelota está del otro lado' : 'nada delegado')}
+        ${kpi('Abiertas', r.abiertas.length, `${r.hechas.length} cerradas`)}
+      </div>
+
+      ${cajon('Vencidas', r.vencidas, 'Ya pasó la fecha y siguen abiertas.')}
+      ${cajon('Hoy y mañana', r.urgentes)}
+      ${cajon('Esta semana', r.semana)}
+      ${cajon('Más adelante', r.adelante)}
+      ${cajon('Sin fecha', r.sinFecha, 'No vencen, pero tampoco se van solas.')}
 
       <section class="tarjeta">
         <div class="cabecera-suc">
-          <h2>Avisos</h2>
-          <div class="acciones" style="margin:0">
-            ${[['vigentes', 'Vigentes'], ['vencidos', 'Vencidos'], ['todos', 'Todos']].map(([k, t]) =>
-              `<button class="b ${avisoFiltro === k ? '' : 'sec'} mini" data-accion="filtro-aviso" data-f="${k}">${t}</button>`).join('')}
-          </div>
+          <h2>Hechas</h2>
+          <button class="b sec mini" data-accion="ver-hechas">${verHechas ? 'Ocultar' : `Ver las ${r.hechas.length}`}</button>
         </div>
-        ${lista.length ? lista.map(a => fichaAviso(a, hoy, e)).join('')
-          : '<p class="vacio">No hay avisos en este filtro.</p>'}
+        ${verHechas
+          ? (r.hechas.length ? r.hechas.map(x => fichaItem(x, hoy, e)).join('')
+                             : '<p class="vacio">Todavía no cerraste nada.</p>')
+          : '<p class="ayuda">El historial de lo que ya resolviste.</p>'}
       </section>`;
   }
 
-  /** Un aviso de la cartelera, plegado hasta que se lo abre. */
-  function fichaAviso(a, hoy, e) {
-    const cat = CATEGORIAS_AVISO_POR_ID[a.categoria] || CATEGORIAS_AVISO_POR_ID.otros;
-    const est = estadoAviso(a, hoy);
-    const abierto = avisoAbierto === a.id;
-    const chip = { urgente: 'rojo', proximo: 'ambar', vigente: 'verde', vencido: '', sinFecha: 'azul' }[est.clase];
+  /** Una línea de la agenda, plegada hasta que se la abre. */
+  function fichaItem(x, hoy, e) {
+    const i = x.item, est = x.estado;
+    const tema = TEMAS_AGENDA_POR_ID[i.tema] || TEMAS_AGENDA_POR_ID.otros;
+    const abierto = itemAbierto === i.id;
+    const cerrado = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
+    const chip = { vencido: 'rojo', urgente: 'ambar', semana: 'azul',
+                   adelante: '', sinFecha: '', hecho: 'verde' }[est.clase];
+    const suc = i.sucursalId ? Store.sucursal(i.sucursalId) : null;
 
-    const cabecera = `<div class="aviso-fila ${abierto ? 'abierto' : ''}" data-accion="abrir-aviso" data-id="${a.id}">
-      <span class="aviso-icono">${cat.icono}</span>
-      <span class="aviso-titulo">${esc(a.titulo || 'Sin título')}
-        ${a.fijado ? '<span class="chip azul">fijado</span>' : ''}</span>
-      <span class="chip ${chip}">${esc(est.texto)}</span>
-      <span class="aviso-meta">${esc(cat.nombre)}${a.fuente ? ' · ' + esc(a.fuente) : ''}</span>
+    const cabecera = `<div class="aviso-fila ${abierto ? 'abierto' : ''}${cerrado ? ' hecho' : ''}">
+      <button class="marcar" data-accion="marcar-hecho" data-id="${i.id}"
+        title="${cerrado ? 'Volver a abrir' : 'Marcar como hecha'}">${cerrado ? '✓' : '○'}</button>
+      <span class="aviso-icono">${tema.icono}</span>
+      <span class="aviso-titulo" data-accion="abrir-item" data-id="${i.id}">${esc(i.titulo || 'Sin título')}</span>
+      ${i.estado === 'esperando' ? '<span class="chip ambar">⏳ esperando</span>' : ''}
+      ${est.clase !== 'sinFecha' && est.clase !== 'hecho' ? `<span class="chip ${chip}">${esc(est.texto)}</span>` : ''}
+      <span class="aviso-meta">${esc(tema.nombre)}${i.quien ? ' · ' + esc(i.quien) : ''}${suc ? ' · ' + esc(suc.nombre || suc.codigo) : ''}</span>
     </div>`;
 
     if (!abierto) return cabecera;
 
-    const hitos = (a.hitos || []).slice().sort((x, y) => x.fecha.localeCompare(y.fecha));
+    const hitos = (i.hitos || []).slice().sort((a, b) => a.fecha.localeCompare(b.fecha));
     return cabecera + `<div class="aviso-cuerpo">
-      <div class="grid c3">
-        <label class="campo"><span>Título</span>
-          <input data-aviso="${a.id}|titulo" value="${esc(a.titulo || '')}"></label>
-        <label class="campo"><span>Categoría</span>
-          <select data-aviso="${a.id}|categoria">
-            ${CATEGORIAS_AVISO.map(c => `<option value="${c.id}"${a.categoria === c.id ? ' selected' : ''}>${c.icono} ${esc(c.nombre)}</option>`).join('')}
+      <label class="campo"><span>Qué es</span>
+        <input data-item="${i.id}|titulo" value="${esc(i.titulo || '')}"></label>
+
+      <div class="grid c4">
+        <label class="campo"><span>Estado</span>
+          <select data-item="${i.id}|estado">
+            ${ESTADOS_AGENDA.map(x2 => `<option value="${x2.id}"${i.estado === x2.id ? ' selected' : ''}>${x2.icono} ${esc(x2.nombre)}</option>`).join('')}
           </select></label>
-        <label class="campo" title="De dónde vino: Compensaciones, Nómina, Operaciones…">
-          <span>Quién lo mandó</span>
-          <input data-aviso="${a.id}|fuente" value="${esc(a.fuente || '')}" placeholder="Compensaciones"></label>
+        <label class="campo"><span>Tema</span>
+          <select data-item="${i.id}|tema">
+            ${TEMAS_AGENDA.map(t => `<option value="${t.id}"${i.tema === t.id ? ' selected' : ''}>${t.icono} ${esc(t.nombre)}</option>`).join('')}
+          </select></label>
+        <label class="campo" title="Con quién es: Compensaciones, un gerente, un colaborador…">
+          <span>Con quién</span>
+          <input data-item="${i.id}|quien" value="${esc(i.quien || '')}" placeholder="Compensaciones"></label>
+        <label class="campo"><span>Sucursal</span>
+          <select data-item="${i.id}|sucursalId">
+            <option value="">— ninguna en particular —</option>
+            ${e.sucursales.map(su => `<option value="${su.id}"${i.sucursalId === su.id ? ' selected' : ''}>${esc(su.nombre || su.codigo)}</option>`).join('')}
+          </select></label>
       </div>
 
-      <label class="campo"><span>Texto del aviso</span>
-        <textarea data-aviso="${a.id}|cuerpo" style="min-height:110px">${esc(a.cuerpo || '')}</textarea></label>
+      <label class="campo"><span>Detalle</span>
+        <textarea data-item="${i.id}|detalle" style="min-height:90px"
+          placeholder="Lo que haga falta recordar: el mensaje original, con quién hablaste, qué quedó.">${esc(i.detalle || '')}</textarea></label>
 
       <h3>Fechas</h3>
-      ${hitos.length ? hitos.map((h, i) => `<div class="linea-item">
-        <input type="date" data-hito="${a.id}|${i}|fecha" value="${esc(h.fecha)}">
-        <input data-hito="${a.id}|${i}|que" value="${esc(h.que)}" class="nombre-item" placeholder="Qué pasa ese día">
-        <span class="ayuda" style="flex:1 1 100%;margin:0">${esc(h.contexto || '')}</span>
-        <button class="b peligro mini" data-accion="quitar-hito" data-id="${a.id}" data-i="${i}">Quitar</button>
-      </div>`).join('') : '<p class="vacio">Este aviso no tiene fechas: va a quedar siempre visible.</p>'}
+      ${hitos.length ? hitos.map((h, n) => `<div class="linea-item">
+        <input type="date" data-hito="${i.id}|${n}|fecha" value="${esc(h.fecha)}">
+        <input data-hito="${i.id}|${n}|que" value="${esc(h.que)}" class="nombre-item" placeholder="Qué pasa ese día">
+        ${h.contexto ? `<span class="ayuda" style="flex:1 1 100%;margin:0">${esc(h.contexto)}</span>` : ''}
+        <button class="b peligro mini" data-accion="quitar-hito" data-id="${i.id}" data-i="${n}">Quitar</button>
+      </div>`).join('') : '<p class="vacio">Sin fecha: no vence, pero queda en la lista.</p>'}
       <div class="acciones">
-        <button class="b sec mini" data-accion="agregar-hito" data-id="${a.id}">+ Agregar fecha</button>
-        <button class="b sec mini" data-accion="releer-fechas" data-id="${a.id}">Volver a leer las fechas del texto</button>
+        <button class="b sec mini" data-accion="agregar-hito" data-id="${i.id}">+ Agregar fecha</button>
+        <button class="b sec mini" data-accion="releer-fechas" data-id="${i.id}">Leer las fechas del texto</button>
       </div>
 
+      <label class="marca-check"
+        title="Lo que marques acá sale en el reporte diario cuando falten tres días o menos">
+        <input type="checkbox" data-item-check="${i.id}|avisarEnTienda"${i.avisarEnTienda ? ' checked' : ''}>
+        Hay que avisarlo en la tienda
+      </label>
+
       <div class="acciones" style="margin-top:16px">
-        <button class="b" data-accion="copiar-aviso" data-id="${a.id}">Copiar para mandar a las tiendas</button>
-        <button class="b sec" data-accion="fijar-aviso" data-id="${a.id}">${a.fijado ? 'Dejar de fijar' : 'Fijar arriba'}</button>
-        <button class="b peligro" data-accion="borrar-aviso" data-id="${a.id}">Borrar</button>
+        <button class="b sec" data-accion="copiar-item" data-id="${i.id}">Copiar para mandar</button>
+        <button class="b peligro" data-accion="borrar-item" data-id="${i.id}">Borrar</button>
       </div>
     </div>`;
   }
@@ -2726,7 +2751,7 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'cartelera')     { vistaActual = vistaCartelera; html = vistaCartelera(); }
+    if (ruta[0] === 'agenda')        { vistaActual = vistaAgenda;    html = vistaAgenda(); }
     else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
@@ -2848,30 +2873,46 @@ const App = (() => {
       return { d, i: Number(i), campo };
     }
 
-    /* Cartelera: el aviso se ubica por id, no por índice, para que reordenar
-       la lista —que se reordena sola por fecha— no pise otro aviso. */
+    /* Agenda: el apunte se ubica por id, no por índice, para que reordenar la
+       lista —que se reordena sola por fecha— no pise otro apunte. */
     cont.addEventListener('input', ev => {
-      const el = ev.target.closest('[data-aviso], [data-hito]');
+      const el = ev.target.closest('[data-item], [data-hito]');
       if (!el) return;
-      if (el.dataset.aviso) {
-        const [id, campo] = el.dataset.aviso.split('|');
-        const av = Store.aviso(id);
-        if (av) av[campo] = el.value;
+      if (el.dataset.item) {
+        const [id, campo] = el.dataset.item.split('|');
+        const it = Store.item(id);
+        if (it) it[campo] = el.value;
       } else {
         const [id, i, campo] = el.dataset.hito.split('|');
-        const av = Store.aviso(id);
-        if (av && av.hitos[Number(i)]) av.hitos[Number(i)][campo] = el.value;
+        const it = Store.item(id);
+        if (it && it.hitos[Number(i)]) it.hitos[Number(i)][campo] = el.value;
       }
       guardarDiferido();
     });
 
     cont.addEventListener('change', ev => {
-      const el = ev.target.closest('[data-aviso], [data-hito]');
+      const chk = ev.target.closest('[data-item-check]');
+      if (chk) {
+        const [id, campo] = chk.dataset.itemCheck.split('|');
+        const it = Store.item(id);
+        if (it) { it[campo] = chk.checked; Store.save(); }
+        return;
+      }
+      const el = ev.target.closest('[data-item], [data-hito]');
       if (!el) return;
       Store.save();
-      /* La categoría y las fechas cambian el orden y los chips: se redibuja.
-         El título y el cuerpo no, para no perder el foco mientras se escribe. */
-      if (/categoria$/.test(el.dataset.aviso || '') || el.dataset.hito) refrescar();
+      /* El estado, el tema y las fechas cambian el cajón donde cae el apunte:
+         se redibuja. El título y el detalle no, para no perder el foco. */
+      if (el.dataset.hito || /\|(estado|tema|sucursalId)$/.test(el.dataset.item || '')) refrescar();
+    });
+
+    /* Enter en el campo de alta rápida: anotar sin sacar la mano del teclado. */
+    cont.addEventListener('keydown', ev => {
+      if (ev.target.id === 'anotar-agenda' && ev.key === 'Enter') {
+        ev.preventDefault();
+        const b = document.querySelector('[data-accion="anotar"]');
+        if (b) b.click();
+      }
     });
 
     cont.addEventListener('input', ev => {
@@ -3104,87 +3145,98 @@ const App = (() => {
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
 
-      /* --- cartelera --- */
-      if (a === 'crear-aviso') {
-        const crudo = ($('#pegar-aviso') || {}).value || '';
-        if (!crudo.trim()) return avisar('Pegá primero el mensaje.', 'error');
-        const nuevo = Store.avisoDesdeTexto(crudo);
-        avisoAbierto = nuevo.id;
-        const campo = $('#pegar-aviso');
+      /* --- agenda --- */
+      if (a === 'anotar') {
+        const campo = $('#anotar-agenda');
+        const linea = (campo || {}).value || '';
+        if (!linea.trim()) return avisar('Escribí qué querés anotar.', 'error');
+        const nuevo = Store.anotar(linea);
         if (campo) campo.value = '';
         refrescar();
+        const f = nuevo.hitos[0];
+        avisar(f ? `Anotado para el ${fmtFecha(f.fecha)}.` : 'Anotado, sin fecha.');
+        const otro = $('#anotar-agenda');
+        if (otro) otro.focus();
+      }
+
+      if (a === 'pegar-largo') {
+        const caja = $('#caja-largo');
+        if (caja) { caja.hidden = !caja.hidden; if (!caja.hidden) $('#pegar-agenda').focus(); }
+      }
+
+      if (a === 'anotar-largo') {
+        const crudo = ($('#pegar-agenda') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero el texto.', 'error');
+        const nuevo = Store.anotarTexto(crudo);
+        itemAbierto = nuevo.id;
+        refrescar();
         avisar(nuevo.hitos.length
-          ? `Aviso cargado con ${nuevo.hitos.length} fecha${nuevo.hitos.length === 1 ? '' : 's'}.`
-          : 'Aviso cargado. No se le encontraron fechas: agregalas a mano si tiene.');
+          ? `Anotado con ${nuevo.hitos.length} fecha${nuevo.hitos.length === 1 ? '' : 's'}.`
+          : 'Anotado. No se le encontraron fechas: agregalas a mano si tiene.');
       }
 
-      if (a === 'crear-aviso-vacio') {
-        const nuevo = Store.agregarAviso({ titulo: 'Aviso nuevo' });
-        avisoAbierto = nuevo.id;
+      if (a === 'abrir-item') {
+        itemAbierto = itemAbierto === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
       }
 
-      if (a === 'abrir-aviso') {
-        avisoAbierto = avisoAbierto === btn.dataset.id ? null : btn.dataset.id;
+      if (a === 'marcar-hecho') {
+        const i = Store.item(btn.dataset.id);
+        const cerrado = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
+        Store.marcarHecho(i.id, !cerrado);
         refrescar();
+        avisar(cerrado ? 'Vuelta a abrir.' : 'Hecha.');
       }
 
-      if (a === 'filtro-aviso') { avisoFiltro = btn.dataset.f; refrescar(); }
+      if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
 
       if (a === 'agregar-hito') {
-        const av = Store.aviso(btn.dataset.id);
-        av.hitos.push({ fecha: hoyISO(), que: 'Fecha', contexto: '' });
+        const i = Store.item(btn.dataset.id);
+        i.hitos.push({ fecha: hoyISO(), que: 'Hacer', contexto: '' });
         Store.save();
         refrescar();
       }
 
       if (a === 'quitar-hito') {
-        const av = Store.aviso(btn.dataset.id);
-        av.hitos.splice(Number(btn.dataset.i), 1);
+        const i = Store.item(btn.dataset.id);
+        i.hitos.splice(Number(btn.dataset.i), 1);
         Store.save();
         refrescar();
       }
 
-      /* Si se corrige el texto pegado, las fechas hay que volver a sacarlas:
-         no se recalculan solas para no pisar las que se editaron a mano. */
+      /* Si se corrige el texto, las fechas hay que volver a sacarlas: no se
+         recalculan solas para no pisar las que se editaron a mano. */
       if (a === 'releer-fechas') {
-        const av = Store.aviso(btn.dataset.id);
-        const halladas = fechasDeTexto(`${av.titulo}\n${av.cuerpo}`, av.fecha);
+        const i = Store.item(btn.dataset.id);
+        const halladas = fechasDeTexto(`${i.titulo}\n${i.detalle}`, i.fecha);
         if (!halladas.length) return avisar('No se encontró ninguna fecha en el texto.', 'error');
-        const ok = await confirmar('Volver a leer las fechas',
-          `Se encontraron ${halladas.length}: ${halladas.map(h => h.fecha).join(', ')}. ` +
+        const ok = await confirmar('Leer las fechas del texto',
+          `Se encontraron ${halladas.length}: ${halladas.map(h => fmtFecha(h.fecha)).join(', ')}. ` +
           'Reemplazan a las que están cargadas ahora.', 'Reemplazar');
         if (!ok) return;
-        av.hitos = halladas;
+        i.hitos = halladas;
         Store.save();
         refrescar();
         avisar(`${halladas.length} fecha${halladas.length === 1 ? '' : 's'} cargada${halladas.length === 1 ? '' : 's'}.`);
       }
 
-      if (a === 'fijar-aviso') {
-        const av = Store.aviso(btn.dataset.id);
-        av.fijado = !av.fijado;
-        Store.save();
-        refrescar();
-      }
-
-      if (a === 'copiar-aviso') {
-        const texto = textoParaTiendas(Store.aviso(btn.dataset.id), hoyISO());
-        try { await navigator.clipboard.writeText(texto); avisar('Aviso copiado, listo para reenviar.'); }
+      if (a === 'copiar-item') {
+        const texto = textoParaTiendas(Store.item(btn.dataset.id), hoyISO());
+        try { await navigator.clipboard.writeText(texto); avisar('Copiado, listo para reenviar.'); }
         catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
       }
 
-      if (a === 'borrar-aviso') {
-        const av = Store.aviso(btn.dataset.id);
-        const ok = await confirmar('Borrar el aviso', `Se borra “${av.titulo}” y sus fechas.`, 'Borrar');
+      if (a === 'borrar-item') {
+        const i = Store.item(btn.dataset.id);
+        const ok = await confirmar('Borrar de la agenda', `Se borra “${i.titulo}” y sus fechas.`, 'Borrar');
         if (!ok) return;
-        Store.eliminarAviso(av.id);
-        avisoAbierto = null;
+        Store.eliminarItem(i.id);
+        itemAbierto = null;
         refrescar();
-        avisar('Aviso borrado.');
+        avisar('Borrado.');
       }
 
-      /* --- reporte diario --- */
+      /* --- reporte diario --- */      /* --- reporte diario --- */
       if (a === 'abrir-diario') {
         diarioAbierta = diarioAbierta === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
