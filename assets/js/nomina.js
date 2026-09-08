@@ -73,6 +73,14 @@ const CAMPOS_SENSIBLES = ['banco', 'cbu'];
 /* La planilla usa estos marcadores de Excel para "sin dato". */
 const VACIOS_EXCEL = ['#N/A', '#REF!', '#VALUE!', '#¡REF!', '#N/D', 'NULL'];
 
+/* Un aviso con 139 nombres adentro esconde a los otros avisos, que son los que
+   hay que leer. Se muestran los primeros y se dice cuántos faltan. */
+function listaCorta(nombres, tope) {
+  const n = tope || 8;
+  if (nombres.length <= n) return nombres.join(', ');
+  return nombres.slice(0, n).join(', ') + ` y ${nombres.length - n} más`;
+}
+
 const _normNom = t => String(t == null ? '' : t)
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -164,6 +172,17 @@ function interpretarNomina(crudo) {
   });
   if (col.cuil === undefined) return { filas: [], avisos: ['La nómina no trae la columna CUIL.'] };
 
+  /* Sin la columna de sucursal no hay a dónde poner a nadie: la importación
+     leería las 139 filas y no guardaría ninguna. Pasa cuando se selecciona
+     media planilla, y antes fallaba en silencio. */
+  if (col.tienda === undefined) {
+    return { filas: [], avisos: [
+      'No se encontró la columna de sucursal (NOMBRE DE SUCURSAL o TIENDA DONDE ESTÁ). ' +
+      'Suele pasar cuando se copia solo una parte de la planilla: seleccioná desde la columna ' +
+      'CUIL hasta la última de la derecha, incluyendo la fila de encabezados.'
+    ] };
+  }
+
   const filas = [];
   const avisos = [];
   const sinCargo = [];
@@ -212,10 +231,14 @@ function interpretarNomina(crudo) {
     filas.push(fila);
   });
 
+  if (col.cargo === undefined) {
+    avisos.push('La planilla no trae la columna CARGO: se importa igual, pero el organigrama ' +
+                'no va a poder ordenar a nadie por puesto.');
+  }
   if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
   cbuDudoso.forEach(x => avisos.push(`CBU de ${x.nombre}: ${x.motivo}`));
   if (sinIngresoFtd.length) {
-    avisos.push('Sin fecha de ingreso a Farmatodo: ' + sinIngresoFtd.join(', ') + '.');
+    avisos.push('Sin fecha de ingreso a Farmatodo: ' + listaCorta(sinIngresoFtd) + '.');
   }
   if (cuilDudoso.length) {
     avisos.push('CUIL con una cantidad de dígitos rara, se importaron igual pero conviene corregirlos en la nómina: ' +
@@ -223,7 +246,7 @@ function interpretarNomina(crudo) {
   }
   if (sinCargo.length) {
     const únicos = sinCargo.filter((x, i) => sinCargo.indexOf(x) === i);
-    avisos.push('Cargos que no se reconocen y quedan sin posición asignada: ' + únicos.join(', ') + '.');
+    avisos.push('Cargos que no se reconocen y quedan sin posición asignada: ' + listaCorta(únicos) + '.');
   }
   if (!filas.length) avisos.push('No se reconoció ninguna persona.');
 

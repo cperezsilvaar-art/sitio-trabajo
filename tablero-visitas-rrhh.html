@@ -2105,6 +2105,14 @@ const CAMPOS_SENSIBLES = ['banco', 'cbu'];
 /* La planilla usa estos marcadores de Excel para "sin dato". */
 const VACIOS_EXCEL = ['#N/A', '#REF!', '#VALUE!', '#¡REF!', '#N/D', 'NULL'];
 
+/* Un aviso con 139 nombres adentro esconde a los otros avisos, que son los que
+   hay que leer. Se muestran los primeros y se dice cuántos faltan. */
+function listaCorta(nombres, tope) {
+  const n = tope || 8;
+  if (nombres.length <= n) return nombres.join(', ');
+  return nombres.slice(0, n).join(', ') + ` y ${nombres.length - n} más`;
+}
+
 const _normNom = t => String(t == null ? '' : t)
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -2196,6 +2204,17 @@ function interpretarNomina(crudo) {
   });
   if (col.cuil === undefined) return { filas: [], avisos: ['La nómina no trae la columna CUIL.'] };
 
+  /* Sin la columna de sucursal no hay a dónde poner a nadie: la importación
+     leería las 139 filas y no guardaría ninguna. Pasa cuando se selecciona
+     media planilla, y antes fallaba en silencio. */
+  if (col.tienda === undefined) {
+    return { filas: [], avisos: [
+      'No se encontró la columna de sucursal (NOMBRE DE SUCURSAL o TIENDA DONDE ESTÁ). ' +
+      'Suele pasar cuando se copia solo una parte de la planilla: seleccioná desde la columna ' +
+      'CUIL hasta la última de la derecha, incluyendo la fila de encabezados.'
+    ] };
+  }
+
   const filas = [];
   const avisos = [];
   const sinCargo = [];
@@ -2244,10 +2263,14 @@ function interpretarNomina(crudo) {
     filas.push(fila);
   });
 
+  if (col.cargo === undefined) {
+    avisos.push('La planilla no trae la columna CARGO: se importa igual, pero el organigrama ' +
+                'no va a poder ordenar a nadie por puesto.');
+  }
   if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
   cbuDudoso.forEach(x => avisos.push(`CBU de ${x.nombre}: ${x.motivo}`));
   if (sinIngresoFtd.length) {
-    avisos.push('Sin fecha de ingreso a Farmatodo: ' + sinIngresoFtd.join(', ') + '.');
+    avisos.push('Sin fecha de ingreso a Farmatodo: ' + listaCorta(sinIngresoFtd) + '.');
   }
   if (cuilDudoso.length) {
     avisos.push('CUIL con una cantidad de dígitos rara, se importaron igual pero conviene corregirlos en la nómina: ' +
@@ -2255,7 +2278,7 @@ function interpretarNomina(crudo) {
   }
   if (sinCargo.length) {
     const únicos = sinCargo.filter((x, i) => sinCargo.indexOf(x) === i);
-    avisos.push('Cargos que no se reconocen y quedan sin posición asignada: ' + únicos.join(', ') + '.');
+    avisos.push('Cargos que no se reconocen y quedan sin posición asignada: ' + listaCorta(únicos) + '.');
   }
   if (!filas.length) avisos.push('No se reconoció ninguna persona.');
 
@@ -9752,7 +9775,32 @@ const App = (() => {
         if (!crudo.trim()) return avisar('Pegá primero la nómina.', 'error');
 
         const leido = interpretarNomina(crudo);
-        if (!leido.filas.length) return avisar(leido.avisos[0] || 'No se pudo leer la nómina.', 'error');
+        if (!leido.filas.length) {
+          /* El motivo puede ser largo —explica qué seleccionar— así que va en la
+             caja de resultado y no en el aviso flotante, que se va solo. */
+          const caja0 = $('#resultado-nomina');
+          if (caja0) {
+            caja0.innerHTML = `<div class="aviso-caja" style="margin-top:12px">
+              <strong>No se importó nada.</strong> ${esc(leido.avisos[0] || 'No se pudo leer la nómina.')}
+            </div>`;
+          }
+          return avisar('No se pudo leer la nómina. Mirá el detalle debajo del campo.', 'error');
+        }
+
+        /* Que la planilla se lea no quiere decir que sirva: sin sucursal en las
+           filas no se guarda nadie, y hasta ahora eso se descubría después. */
+        const conTienda = leido.filas.filter(f => String(f.tienda || '').trim()).length;
+        if (!conTienda) {
+          const caja0 = $('#resultado-nomina');
+          if (caja0) {
+            caja0.innerHTML = `<div class="aviso-caja" style="margin-top:12px">
+              <strong>Se leyeron ${leido.filas.length} personas pero ninguna trae sucursal.</strong>
+              Sin eso no hay dónde ubicarlas y no se guardaría nada. Volvé a copiar desde la
+              columna CUIL hasta la última de la derecha, con la fila de encabezados incluida.
+            </div>`;
+          }
+          return avisar('Ninguna fila trae sucursal: no se importó nada.', 'error');
+        }
 
         const res = resumirNomina(leido.filas);
         const tiendas = Object.keys(res.porTienda).length;
@@ -9773,7 +9821,8 @@ const App = (() => {
             ${r.nuevos} nueva${r.nuevos === 1 ? '' : 's'}, ${r.actualizados} actualizada${r.actualizados === 1 ? '' : 's'}${r.movidos ? `, ${r.movidos} que cambiaron de tienda` : ''}.
             ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
               <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
-            ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${r.sinTienda.length ? `<br><strong>${r.sinTienda.length} sin sucursal en la planilla, quedaron afuera:</strong>
+              ${esc(r.sinTienda.slice(0, 8).join(', '))}${r.sinTienda.length > 8 ? ` y ${r.sinTienda.length - 8} más` : ''}.` : ''}
             ${r.discrepancias.length ? `<br><strong>${r.discrepancias.length} persona${r.discrepancias.length === 1 ? ' llega' : 's llegan'} con un CUIL
               distinto del que ya estaba guardado.</strong> Se mantiene el guardado; conviene ver cuál es el correcto
               y corregirlo en el archivo de origen, porque con el CUIL mal esa persona no cruza con el resto de las planillas.

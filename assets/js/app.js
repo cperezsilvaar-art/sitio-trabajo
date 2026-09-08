@@ -3722,7 +3722,32 @@ const App = (() => {
         if (!crudo.trim()) return avisar('Pegá primero la nómina.', 'error');
 
         const leido = interpretarNomina(crudo);
-        if (!leido.filas.length) return avisar(leido.avisos[0] || 'No se pudo leer la nómina.', 'error');
+        if (!leido.filas.length) {
+          /* El motivo puede ser largo —explica qué seleccionar— así que va en la
+             caja de resultado y no en el aviso flotante, que se va solo. */
+          const caja0 = $('#resultado-nomina');
+          if (caja0) {
+            caja0.innerHTML = `<div class="aviso-caja" style="margin-top:12px">
+              <strong>No se importó nada.</strong> ${esc(leido.avisos[0] || 'No se pudo leer la nómina.')}
+            </div>`;
+          }
+          return avisar('No se pudo leer la nómina. Mirá el detalle debajo del campo.', 'error');
+        }
+
+        /* Que la planilla se lea no quiere decir que sirva: sin sucursal en las
+           filas no se guarda nadie, y hasta ahora eso se descubría después. */
+        const conTienda = leido.filas.filter(f => String(f.tienda || '').trim()).length;
+        if (!conTienda) {
+          const caja0 = $('#resultado-nomina');
+          if (caja0) {
+            caja0.innerHTML = `<div class="aviso-caja" style="margin-top:12px">
+              <strong>Se leyeron ${leido.filas.length} personas pero ninguna trae sucursal.</strong>
+              Sin eso no hay dónde ubicarlas y no se guardaría nada. Volvé a copiar desde la
+              columna CUIL hasta la última de la derecha, con la fila de encabezados incluida.
+            </div>`;
+          }
+          return avisar('Ninguna fila trae sucursal: no se importó nada.', 'error');
+        }
 
         const res = resumirNomina(leido.filas);
         const tiendas = Object.keys(res.porTienda).length;
@@ -3743,7 +3768,8 @@ const App = (() => {
             ${r.nuevos} nueva${r.nuevos === 1 ? '' : 's'}, ${r.actualizados} actualizada${r.actualizados === 1 ? '' : 's'}${r.movidos ? `, ${r.movidos} que cambiaron de tienda` : ''}.
             ${r.sucursalesNuevas.length ? `<br>Se crearon estas tiendas porque no estaban en el padrón:
               <strong>${esc(r.sucursalesNuevas.join(', '))}</strong>.` : ''}
-            ${r.sinTienda.length ? `<br>${r.sinTienda.length} sin tienda asignada, quedaron afuera.` : ''}
+            ${r.sinTienda.length ? `<br><strong>${r.sinTienda.length} sin sucursal en la planilla, quedaron afuera:</strong>
+              ${esc(r.sinTienda.slice(0, 8).join(', '))}${r.sinTienda.length > 8 ? ` y ${r.sinTienda.length - 8} más` : ''}.` : ''}
             ${r.discrepancias.length ? `<br><strong>${r.discrepancias.length} persona${r.discrepancias.length === 1 ? ' llega' : 's llegan'} con un CUIL
               distinto del que ya estaba guardado.</strong> Se mantiene el guardado; conviene ver cuál es el correcto
               y corregirlo en el archivo de origen, porque con el CUIL mal esa persona no cruza con el resto de las planillas.
