@@ -22,6 +22,12 @@ y decir con cuál de estos criterios se alinea:
   headcount; compensación y equidad como principal driver de permanencia;
   frecuencia de feedback.
 
+El marco normativo del área es el **CCT 414/05 (ADEF)**, farmacias de CABA y
+conurbano. Lo que el panel guarda de él está en `assets/js/convenio.js` y
+documentado en `docs/convenio-414.md`: categorías, escalafón por antigüedad,
+vacaciones y los topes de licencias del art. 25. **El panel no liquida sueldos
+ni guarda la escala salarial**, que la fijan las paritarias.
+
 ## Reglas de escritura
 
 - Todo el texto de la interfaz y de los reportes va en **castellano rioplatense**
@@ -36,7 +42,8 @@ y decir con cuál de estos criterios se alinea:
 ## Arquitectura
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
-  `talento`, `novedades`, `nomina`, `reclamos`, `agenda`, `diario`, `acceso`,
+  `talento`, `novedades`, `nomina`, `convenio`, `reclamos`, `agenda`, `diario`,
+  `acceso`,
   `store`, `reporte`, `app`. `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
   `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,

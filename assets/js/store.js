@@ -173,6 +173,10 @@ const Store = (() => {
         if (c.activo === undefined) c.activo = true;
         if (!c.novedades || typeof c.novedades !== 'object') c.novedades = {};
         if (!c.talles || typeof c.talles !== 'object') c.talles = {};
+        /* Licencias especiales del art. 25 y sanciones, en la ficha de la
+           persona: los topes son por año y por persona, no por período. */
+        if (!Array.isArray(c.licencias)) c.licencias = [];
+        if (!Array.isArray(c.sanciones)) c.sanciones = [];
         ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
          'razonSocialContrato', 'fechaNacimiento', 'fechaIngresoFTD', 'email',
@@ -446,6 +450,8 @@ const Store = (() => {
         /* Ropa de trabajo: la nómina no la trae, se carga a mano */
         talles: {},
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
+        licencias: [],                    // art. 25, con su tope anual
+        sanciones: [],                    // el legajo disciplinario de la persona
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
         interesDesarrollo: '', aspiracion: '', movilidad: '',
@@ -455,6 +461,87 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* ------------------- ficha del colaborador ------------------- *
+       Licencias especiales y sanciones viven en la persona y no en la visita
+       ni en el período: el tope de días de estudio es anual y por persona, y
+       una sanción del año pasado sigue contando para la progresividad. */
+    /* Busca en toda el área. Distinto de colaborador(sucursalId, colabId), que
+       pide saber en qué tienda está: la ficha se abre desde el organigrama y
+       desde la visita, y ahí solo se tiene el id de la persona. */
+    colaboradorPorId(id) {
+      let hallado = null;
+      this.get().sucursales.forEach(s =>
+        (s.colaboradores || []).forEach(c => { if (c.id === id) hallado = c; }));
+      return hallado;
+    },
+
+    agregarLicencia(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      const l = Object.assign({
+        id: uid(),
+        tipo: LICENCIAS_CCT[0].id,
+        desde: new Date().toISOString().slice(0, 10),
+        hasta: '',
+        dias: '',
+        motivo: '',
+        comprobante: false,
+        nota: ''
+      }, datos || {});
+      c.licencias.push(l);
+      guardar();
+      return l;
+    },
+
+    quitarLicencia(colaboradorId, licenciaId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return;
+      c.licencias = c.licencias.filter(l => l.id !== licenciaId);
+      guardar();
+    },
+
+    agregarSancionColaborador(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      const x = Object.assign({
+        id: uid(),
+        fecha: new Date().toISOString().slice(0, 10),
+        tipo: 'Apercibimiento',
+        motivo: '',
+        dias: '',
+        notificada: false,
+        nota: ''
+      }, datos || {});
+      c.sanciones.push(x);
+      guardar();
+      return x;
+    },
+
+    quitarSancionColaborador(colaboradorId, sancionId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return;
+      c.sanciones = c.sanciones.filter(x => x.id !== sancionId);
+      guardar();
+    },
+
+    /**
+     * Sanciones que se cargaron en la estadística mensual a nombre de esta
+     * persona. Se muestran en su ficha para que el legajo esté completo, pero
+     * se editan donde se cargaron: duplicarlas sería peor que no tenerlas.
+     */
+    sancionesDeEstadistica(nombre) {
+      const clave = x => String(x || '').toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z]/g, '');
+      const k = clave(nombre);
+      if (!k) return [];
+      const out = [];
+      this.get().visitas.forEach(v =>
+        (v.sanciones || []).forEach(x => {
+          if (clave(x.nombre) === k) out.push(Object.assign({ periodo: v.periodo, visitaId: v.id }, x));
+        }));
+      return out.sort((a, b) => String(b.fecha || b.periodo || '').localeCompare(String(a.fecha || a.periodo || '')));
     },
 
     /* ---------------------------- agenda ---------------------------- *

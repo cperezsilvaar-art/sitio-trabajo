@@ -382,6 +382,7 @@ const App = (() => {
      anotaría. */
   let itemAbierto = null;
   let verHechas = false;
+  let licenciaAnio = null;   // año que se está mirando en la ficha de licencias
 
   function vistaAgenda() {
     const e = Store.get();
@@ -1241,24 +1242,200 @@ const App = (() => {
 
         ${talentCard(c, s, { sinCabecera: true })}
 
-        ${periodos.length ? `<h4>Novedades de liquidación</h4>
-        <div class="tabla-scroll"><table>
-          <thead><tr><th>Período</th><th class="num">Hs. extras</th><th class="num">Nocturnas</th>
-            <th class="num">Enfermedad</th><th class="num">Vacaciones</th><th class="num">Sin aviso</th><th>Observaciones</th></tr></thead>
-          <tbody>${periodos.map(pp => {
-            const n = c.novedades[pp];
-            return `<tr>
-              <td><strong>${esc(pp)}</strong></td>
-              <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
-              <td class="num">${fmtNum(+n.nocturnas || 0, 0)}</td>
-              <td class="num">${fmtNum(+n.enfermedad || 0, 0)}</td>
-              <td class="num">${fmtNum(+n.vacaciones || 0, 0)}</td>
-              <td class="num">${fmtNum(+n.noJustificada || 0, 0)}</td>
-              <td>${esc(n.obs || '')}</td>
-            </tr>`;
-          }).join('')}</tbody>
-        </table></div>` : ''}
+        ${fichaConvenio(c, anios)}
+        ${fichaLicencias(c)}
+        ${fichaSanciones(c)}
+        ${fichaAusencias(c, periodos)}
       </section>`;
+  }
+
+  /* ------------------ Encuadre en el convenio 414/05 ------------------ */
+  function fichaConvenio(c, anios) {
+    const cat = categoriaCct(c.categoriaConvenio || c.cargo);
+    const esc2 = escalafonDe(anios);
+    const vac = vacacionesDe(anios);
+
+    return `<h4>Encuadre — ${esc(CCT.nombre)}</h4>
+      <div class="grid c4">
+        ${dato('Categoría del convenio', cat ? `${cat.nombre} (art. ${cat.articulo || '—'})` : (c.categoriaConvenio || ''))}
+        ${dato('Antigüedad', anios ? `${anios} año${anios === 1 ? '' : 's'}` : '')}
+        ${dato('Escalafón por antigüedad (art. 13)', esc2.pct ? fmtPct(esc2.pct, 0) : 'todavía sin escalafón')}
+        ${dato('Vacaciones que le corresponden (art. 24)', `${vac.dias} días corridos`)}
+      </div>
+      ${cat && cat.detalle ? `<p class="ayuda">${esc(cat.detalle)}</p>` : ''}
+      ${esc2.proximo ? `<p class="ayuda">Pasa al ${fmtPct(esc2.proximo.pct, 0)} de escalafón
+        ${esc2.faltanAnios === 0 ? 'este año' : `en ${esc2.faltanAnios} año${esc2.faltanAnios === 1 ? '' : 's'}`}.
+        ${vac.proximo ? `Las vacaciones suben a ${vac.proximo.dias} días
+          ${vac.faltanAnios <= 0 ? 'este año' : `en ${vac.faltanAnios} año${vac.faltanAnios === 1 ? '' : 's'}`}.` : ''}</p>` : ''}`;
+  }
+
+  /* ----------------- Licencias especiales y sus topes -----------------
+     La razón de esta ficha: la licencia por estudio son dos días por examen
+     hasta diez al año. Sin registro de lo que se fue tomando, nadie sabe
+     cuánto le queda, y la pregunta aparece en el mostrador. */
+  function fichaLicencias(c) {
+    const anio = licenciaAnio || String(new Date().getFullYear());
+    const saldo = saldoLicencias(c, anio);
+    const alertas = alertasLicencias(c, anio);
+    const propias = (c.licencias || [])
+      .filter(l => String(l.desde || '').slice(0, 4) === anio)
+      .sort((a, b) => String(b.desde).localeCompare(String(a.desde)));
+
+    /* Los años con algo cargado, más el corriente. */
+    const anios = Array.from(new Set(
+      (c.licencias || []).map(l => String(l.desde || '').slice(0, 4))
+        .concat(Object.keys(c.novedades || {}).map(p => p.slice(0, 4)))
+        .concat([String(new Date().getFullYear())])
+    )).filter(Boolean).sort().reverse();
+
+    return `<h4>Licencias especiales del art. 25 · año
+        <select id="licencia-anio" style="width:auto;display:inline-block;margin-left:6px">
+          ${anios.map(a => `<option value="${a}"${a === anio ? ' selected' : ''}>${a}</option>`).join('')}
+        </select></h4>
+
+      ${alertas.length ? `<div class="aviso-caja${alertas.some(a => a.nivel === 'alerta') ? '' : ' info'}">
+        <ul>${alertas.map(a => `<li>${esc(a.texto)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <div class="tabla-scroll"><table>
+        <thead><tr>
+          <th>Licencia</th><th>Art.</th>
+          <th class="num" title="Días que trajo el libro de novedades de liquidación">De liquidación</th>
+          <th class="num" title="Días cargados a mano en esta ficha">A mano</th>
+          <th class="num">Usados</th><th class="num">Tope del año</th><th class="num">Le quedan</th>
+        </tr></thead>
+        <tbody>
+          ${saldo.map(x => `<tr${x.excedido ? ' class="fila-alerta"' : ''}>
+            <td><strong>${esc(x.licencia.nombre)}</strong>
+              ${x.licencia.porEvento ? `<br><span class="nota" style="font-size:11.5px;color:var(--texto-suave)">${x.licencia.porEvento} ${esc(x.licencia.unidad)} por vez</span>` : ''}</td>
+            <td>${esc(x.licencia.articulo)}</td>
+            <td class="num">${x.deLiquidacion || '—'}${x.periodos.length ? `<br><span class="nota" style="font-size:11px;color:var(--texto-suave)">${esc(x.periodos.join(' · '))}</span>` : ''}</td>
+            <td class="num">${x.aMano || '—'}</td>
+            <td class="num"><strong>${x.usados || '—'}</strong></td>
+            <td class="num">${x.tope === null ? 'por evento' : x.tope}</td>
+            <td class="num">${x.tope === null ? '—'
+              : `<span class="chip ${x.restante === 0 ? 'rojo' : x.restante <= 2 ? 'ambar' : 'verde'}">${x.restante}</span>`}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table></div>
+
+      <p class="ayuda">
+        Lo que trae la liquidación se cuenta solo. Cargá a mano únicamente lo que la
+        liquidación todavía no muestra: una licencia de este mes se liquida el mes que
+        viene, y la pregunta del colaborador es hoy.
+      </p>
+
+      ${propias.length ? `<div class="tabla-scroll"><table>
+        <thead><tr><th>Desde</th><th>Licencia</th><th class="num">Días</th><th>Motivo</th><th class="num">Comprobante</th><th></th></tr></thead>
+        <tbody>${propias.map(l => `<tr>
+          <td><input type="date" data-lic="${c.id}|${l.id}|desde" value="${esc(l.desde || '')}"></td>
+          <td><select data-lic="${c.id}|${l.id}|tipo">
+            ${LICENCIAS_CCT.map(x => `<option value="${x.id}"${l.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></td>
+          <td class="num"><input class="num" type="number" min="0" step="1" style="width:70px"
+            data-lic="${c.id}|${l.id}|dias" value="${esc(l.dias ?? '')}"></td>
+          <td><input data-lic="${c.id}|${l.id}|motivo" value="${esc(l.motivo || '')}"
+            placeholder="${esc((LICENCIAS_CCT_POR_ID[l.tipo] || {}).comprobante || 'Detalle')}"></td>
+          <td class="num"><input type="checkbox" data-lic-check="${c.id}|${l.id}|comprobante"${l.comprobante ? ' checked' : ''}></td>
+          <td class="num"><button class="b peligro mini" data-accion="quitar-licencia" data-id="${c.id}" data-lic="${l.id}">Quitar</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : ''}
+
+      <div class="acciones">
+        <button class="b sec mini" data-accion="agregar-licencia" data-id="${c.id}">+ Registrar una licencia</button>
+      </div>`;
+  }
+
+  /* --------------------- Sanciones disciplinarias --------------------- */
+  function fichaSanciones(c) {
+    const propias = (c.sanciones || [])
+      .slice().sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+    const deEstadistica = Store.sancionesDeEstadistica(c.nombre);
+    const ultimos12 = propias.filter(x => {
+      const d = (new Date() - new Date(x.fecha)) / 864e5;
+      return d >= 0 && d <= 365;
+    });
+
+    return `<h4>Sanciones disciplinarias</h4>
+      ${ultimos12.length >= 2 ? `<div class="aviso-caja">
+        <strong>${ultimos12.length} sanciones en los últimos 12 meses.</strong>
+        La progresividad se mide sobre este período: revisá que la graduación tenga
+        secuencia antes de aplicar una nueva.
+      </div>` : ''}
+
+      ${propias.length ? `<div class="tabla-scroll"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Motivo</th><th class="num">Días</th><th class="num">Notificada</th><th>Nota</th><th></th></tr></thead>
+        <tbody>${propias.map(x => `<tr>
+          <td><input type="date" data-san="${c.id}|${x.id}|fecha" value="${esc(x.fecha || '')}"></td>
+          <td><select data-san="${c.id}|${x.id}|tipo">
+            ${TIPOS_SANCION.map(t => `<option value="${esc(t)}"${x.tipo === t ? ' selected' : ''}>${esc(t)}</option>`).join('')}
+          </select></td>
+          <td><select data-san="${c.id}|${x.id}|motivo">
+            <option value="">—</option>
+            ${MOTIVOS_SANCION.map(m => `<option value="${esc(m)}"${x.motivo === m ? ' selected' : ''}>${esc(m)}</option>`).join('')}
+          </select></td>
+          <td class="num"><input class="num" type="number" min="0" step="1" style="width:60px"
+            data-san="${c.id}|${x.id}|dias" value="${esc(x.dias ?? '')}"
+            title="Días de suspensión, si corresponde"></td>
+          <td class="num"><input type="checkbox" data-san-check="${c.id}|${x.id}|notificada"${x.notificada ? ' checked' : ''}></td>
+          <td><input data-san="${c.id}|${x.id}|nota" value="${esc(x.nota || '')}" placeholder="Qué pasó"></td>
+          <td class="num"><button class="b peligro mini" data-accion="quitar-sancion-colab" data-id="${c.id}" data-san="${x.id}">Quitar</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>` : '<p class="vacio">Sin sanciones registradas.</p>'}
+
+      <div class="acciones">
+        <button class="b sec mini" data-accion="agregar-sancion-colab" data-id="${c.id}">+ Registrar una sanción</button>
+      </div>
+
+      ${deEstadistica.length ? `<div class="aviso-caja info" style="margin-top:12px">
+        <strong>Además figura en la estadística mensual:</strong>
+        <ul>${deEstadistica.map(x => `<li>${esc(x.periodo || '')} · ${esc(x.tipo || '')}
+          ${x.motivo ? '· ' + esc(x.motivo) : ''}</li>`).join('')}</ul>
+        Eso se carga y se corrige en la estadística del período; acá se muestra
+        para que el legajo esté completo.
+      </div>` : ''}`;
+  }
+
+  /* ------------- Historial de ausencias mes a mes ------------- */
+  function fichaAusencias(c, periodos) {
+    if (!periodos.length) {
+      return `<h4>Ausencias mes a mes</h4>
+        <p class="vacio">Todavía no se importaron novedades de liquidación de esta persona.</p>`;
+    }
+    const col = [
+      ['enfermedad', 'Enfermedad'], ['vacaciones', 'Vacaciones'],
+      ['noJustificada', 'Sin aviso'], ['examen', 'Examen'],
+      ['fallecimiento', 'Fallec.'], ['mudanza', 'Mudanza'], ['gremio', 'Gremial']
+    ];
+    const tot = {};
+    col.forEach(([k]) => { tot[k] = periodos.reduce((s, p) => s + (+c.novedades[p][k] || 0), 0); });
+    const totHe = periodos.reduce((s, p) => s + (+c.novedades[p].he50 || 0) + (+c.novedades[p].he100 || 0), 0);
+
+    return `<h4>Ausencias mes a mes</h4>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Período</th>${col.map(([, t]) => `<th class="num">${t}</th>`).join('')}
+          <th class="num">Total</th><th class="num">Hs. extras</th><th>Observaciones</th></tr></thead>
+        <tbody>${periodos.map(pp => {
+          const n = c.novedades[pp];
+          const total = col.reduce((s, [k]) => s + (+n[k] || 0), 0);
+          return `<tr>
+            <td><strong>${esc(pp)}</strong></td>
+            ${col.map(([k]) => `<td class="num">${(+n[k] || 0) || '—'}</td>`).join('')}
+            <td class="num"><strong>${total || '—'}</strong></td>
+            <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
+            <td>${esc(n.obs || '')}</td>
+          </tr>`;
+        }).join('')}</tbody>
+        <tfoot><tr class="total"><td><strong>Total</strong></td>
+          ${col.map(([k]) => `<td class="num">${tot[k] || '—'}</td>`).join('')}
+          <td class="num"><strong>${col.reduce((s, [k]) => s + tot[k], 0) || '—'}</strong></td>
+          <td class="num">${fmtNum(totHe, 1)}</td><td></td></tr></tfoot>
+      </table></div>
+      <p class="ayuda">
+        Sale del libro de novedades de liquidación que se importa en la estadística
+        mensual. Examen, fallecimiento, mudanza y gremial alimentan además el contador
+        de topes del convenio de acá arriba.
+      </p>`;
   }
 
   const dato = (etiqueta, valor) => `<div class="campo-lectura">
@@ -2873,6 +3050,49 @@ const App = (() => {
       return { d, i: Number(i), campo };
     }
 
+    /* Licencias y sanciones de la ficha: la persona y el registro se ubican por
+       id porque la lista se reordena sola por fecha. */
+    function registroDe(ref, coleccion) {
+      const [colabId, regId, campo] = String(ref).split('|');
+      const c = Store.colaboradorPorId(colabId);
+      if (!c) return null;
+      const reg = (c[coleccion] || []).find(x => x.id === regId);
+      return reg ? { reg, campo } : null;
+    }
+
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-lic], [data-san]');
+      if (!el) return;
+      const r = el.dataset.lic
+        ? registroDe(el.dataset.lic, 'licencias')
+        : registroDe(el.dataset.san, 'sanciones');
+      if (!r) return;
+      r.reg[r.campo] = el.value;
+      guardarDiferido();
+    });
+
+    cont.addEventListener('change', ev => {
+      const chk = ev.target.closest('[data-lic-check], [data-san-check]');
+      if (chk) {
+        const r = chk.dataset.licCheck
+          ? registroDe(chk.dataset.licCheck, 'licencias')
+          : registroDe(chk.dataset.sanCheck, 'sanciones');
+        if (r) { r.reg[r.campo] = chk.checked; Store.save(); }
+        return;
+      }
+      if (ev.target.id === 'licencia-anio') {
+        licenciaAnio = ev.target.value;
+        refrescar();
+        return;
+      }
+      const el = ev.target.closest('[data-lic], [data-san]');
+      if (!el) return;
+      Store.save();
+      /* Los días, el tipo y la fecha cambian el saldo contra el tope: se
+         redibuja para que el contador diga la verdad. */
+      refrescar();
+    });
+
     /* Agenda: el apunte se ubica por id, no por índice, para que reordenar la
        lista —que se reordena sola por fecha— no pise otro apunte. */
     cont.addEventListener('input', ev => {
@@ -3144,6 +3364,35 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- ficha del colaborador: licencias y sanciones --- */
+      if (a === 'agregar-licencia') {
+        Store.agregarLicencia(btn.dataset.id, {
+          desde: (licenciaAnio && licenciaAnio !== String(new Date().getFullYear()))
+            ? `${licenciaAnio}-01-01` : hoyISO()
+        });
+        refrescar();
+      }
+
+      if (a === 'quitar-licencia') {
+        Store.quitarLicencia(btn.dataset.id, btn.dataset.lic);
+        refrescar();
+      }
+
+      if (a === 'agregar-sancion-colab') {
+        Store.agregarSancionColaborador(btn.dataset.id);
+        refrescar();
+      }
+
+      if (a === 'quitar-sancion-colab') {
+        const c = Store.colaboradorPorId(btn.dataset.id);
+        const ok = await confirmar('Quitar la sanción',
+          `Se borra del legajo de ${c ? c.nombre : 'la persona'}. La progresividad se mide sobre lo que quede registrado.`,
+          'Quitar');
+        if (!ok) return;
+        Store.quitarSancionColaborador(btn.dataset.id, btn.dataset.san);
+        refrescar();
+      }
 
       /* --- agenda --- */
       if (a === 'anotar') {

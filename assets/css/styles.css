@@ -533,3 +533,4 @@ footer.app { text-align: center; color: var(--texto-suave); font-size: 12px; pad
   font-size: 13.5px; cursor: pointer;
 }
 .marca-check input { width: auto; margin: 0; }
+tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, transparent); }
