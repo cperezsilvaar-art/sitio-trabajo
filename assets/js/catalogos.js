@@ -234,8 +234,45 @@ const PARAMETROS_DEFECTO = {
   ticketsHoraObjetivo: 6,   // 6 tickets por hora cada 6 horas trabajadas
   umbralAusentismo: 0.05,   // 5% de ausentismo total como alerta
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
+  horasJornada: 8,          // jornada de referencia, para el FTE del día
+  coberturaMinima: 0.90,    // por debajo de este % de cobertura, la tienda opera en riesgo
   moneda: '$'
 };
+
+/* ===================== REPORTE DIARIO DE OPERACIÓN =====================
+   El mes cerrado se mide con la matriz de FTE. El día se mide acá: la
+   tienda abre o no abre, y con cuánta gente. Son dos preguntas distintas y
+   se responden con datos distintos. */
+
+/** Por qué faltó alguien hoy. Corto a propósito: en el día no hay legajo a
+    mano, hay un llamado a las siete de la mañana. La clasificación fina
+    contra los códigos de liquidación se hace al cierre del mes. */
+const MOTIVOS_AUSENCIA_DIA = [
+  { id: 'enfermedad',   nombre: 'Enfermedad / parte médico', grupo: 'incontrolable' },
+  { id: 'accidente',    nombre: 'Accidente de trabajo',      grupo: 'incontrolable' },
+  { id: 'licencia',     nombre: 'Licencia legal',            grupo: 'incontrolable' },
+  { id: 'vacaciones',   nombre: 'Vacaciones',                grupo: 'incontrolable' },
+  { id: 'injustificada', nombre: 'Falta sin aviso',          grupo: 'controlable' },
+  { id: 'aviso',        nombre: 'Faltó con aviso, sin justificar', grupo: 'controlable' },
+  { id: 'permiso',      nombre: 'Permiso personal',          grupo: 'controlable' },
+  { id: 'tarde',        nombre: 'Llegada tarde que no cubrió el turno', grupo: 'controlable' }
+];
+
+/** Los cuatro motivos que justifican una hora extra en la tienda. */
+const MOTIVOS_EXTRAS = [
+  { id: 'afluencia',  nombre: 'Afluencia de público' },
+  { id: 'ausencia',   nombre: 'Cubrir una ausencia' },
+  { id: 'bancaria',   nombre: 'Promoción bancaria' },
+  { id: 'inventario', nombre: 'Inventario' }
+];
+
+/** Novedades del día que dejan una vacante que hay que cubrir. */
+const TIPOS_NOVEDAD_DIA = [
+  { id: 'renuncia',  nombre: 'Renuncia' },
+  { id: 'despido',   nombre: 'Desvinculación' },
+  { id: 'abandono',  nombre: 'Abandono de puesto' },
+  { id: 'licenciaLarga', nombre: 'Licencia prolongada (más de 10 días)' }
+];
 
 /**
  * Lectura del costo laboral sobre la venta, contra la banda de referencia de la

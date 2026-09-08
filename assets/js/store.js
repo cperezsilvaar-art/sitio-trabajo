@@ -92,7 +92,8 @@ const Store = (() => {
       sucursales,
       visitas: [],
       informes: [],                       // envíos de la estadística mensual
-      reclamos: []                        // lo que plantea la gente en las visitas
+      reclamos: [],                       // lo que plantea la gente en las visitas
+      diarios: []                         // reporte de operación de cada día
     };
   }
 
@@ -182,6 +183,16 @@ const Store = (() => {
       if (!r.id) r.id = uid();
       if (!Array.isArray(r.historial)) r.historial = [];
       if (!r.estado) r.estado = 'abierto';
+    });
+    e.diarios = Array.isArray(e.diarios) ? e.diarios : [];
+    e.diarios.forEach(d => {
+      if (!d.sucursales || typeof d.sucursales !== 'object') d.sucursales = {};
+      if (!d.venta || typeof d.venta !== 'object') d.venta = {};
+      Object.keys(d.sucursales).forEach(k => {
+        const x = d.sucursales[k];
+        if (!Array.isArray(x.ausentes)) x.ausentes = [];
+        if (!Array.isArray(x.novedades)) x.novedades = [];
+      });
     });
     e.informes = Array.isArray(e.informes) ? e.informes : [];
     e.informes.forEach(i => {
@@ -413,6 +424,110 @@ const Store = (() => {
       s.colaboradores.push(c);
       guardar();
       return c;
+    },
+
+    /* ------------------------ reporte diario ------------------------ *
+       Un registro por día, con la carga de cada sucursal adentro. Se guarda
+       por fecha y no por sucursal porque la pregunta del día es del área
+       entera: cómo abrió la zona, no cómo abrió una tienda. */
+    diarioDe(fecha) {
+      return this.get().diarios.find(d => d.fecha === fecha) || null;
+    },
+
+    asegurarDiario(fecha) {
+      const e = this.get();
+      let d = e.diarios.find(x => x.fecha === fecha);
+      if (!d) {
+        d = { id: uid(), fecha, sucursales: {}, venta: {}, notas: '', creado: new Date().toISOString() };
+        e.diarios.push(d);
+        e.diarios.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+        guardar();
+      }
+      return d;
+    },
+
+    /** Carga de una sucursal dentro de un día, creándola si hace falta. */
+    diarioSucursal(fecha, sucursalId) {
+      const d = this.asegurarDiario(fecha);
+      if (!d.sucursales[sucursalId]) {
+        d.sucursales[sucursalId] = {
+          planificados: '', presentes: '', minimo: '',
+          horasOrdinarias: '', horasExtras: '', motivoExtras: '',
+          ausentes: [], novedades: [], nota: ''
+        };
+        guardar();
+      }
+      return d.sucursales[sucursalId];
+    },
+
+    eliminarDiario(fecha) {
+      const e = this.get();
+      e.diarios = e.diarios.filter(d => d.fecha !== fecha);
+      guardar();
+    },
+
+    /** Fechas cargadas, de la más nueva a la más vieja. */
+    fechasDiarias() {
+      return this.get().diarios.map(d => d.fecha)
+        .sort((a, b) => String(b).localeCompare(String(a)));
+    },
+
+    /**
+     * Prellena la dotación planificada del día con la del padrón del período,
+     * para no tipear doce veces un número que el panel ya tiene. Solo completa
+     * lo que está vacío: nunca pisa lo que se cargó a mano.
+     */
+    prellenarDiario(fecha) {
+      const e = this.get();
+      const d = this.asegurarDiario(fecha);
+      const periodo = String(fecha).slice(0, 7);
+      const p = e.config.parametros;
+      let completadas = 0;
+
+      e.sucursales.forEach(s => {
+        const padron = this.dotacionDelPadron(s.id, periodo);
+        const heads = padron ? padron.personas : (s.colaboradores || []).filter(c => c.activo !== false).length;
+        if (!heads) return;
+        const x = this.diarioSucursal(fecha, s.id);
+        let toco = false;
+        if (String(x.planificados || '').trim() === '') { x.planificados = heads; toco = true; }
+        if (String(x.minimo || '').trim() === '') {
+          x.minimo = Math.max(1, Math.round(heads * p.coberturaMinima * 0.75));
+          toco = true;
+        }
+        if (toco) completadas++;
+      });
+      guardar();
+      return { completadas, total: e.sucursales.length };
+    },
+
+    /**
+     * Importa el Reporte Diario de Ventas. Cruza cada fila contra el padrón y
+     * devuelve lo que no pudo ubicar, en lugar de descartarlo en silencio.
+     */
+    importarRDV(fecha, texto) {
+      const e = this.get();
+      const area = String(e.config.area || '').replace(/[^0-9]/g, '');
+      const r = interpretarRDV(texto, area || null);
+      if (r.error) return { error: r.error, cargadas: 0, sinUbicar: [] };
+
+      const d = this.asegurarDiario(fecha);
+      const sinUbicar = [];
+      let cargadas = 0;
+
+      r.filas.forEach(f => {
+        const s = sucursalDeRDV(f, e.sucursales);
+        if (!s) { sinUbicar.push(f.tienda); return; }
+        d.venta[s.id] = {
+          tienda: f.tienda, ayer: f.ayer, semana: f.semana, mes: f.mes,
+          requerido: f.requerido, index: f.index, metaHoy: f.metaHoy,
+          transAyer: f.transAyer, transMes: f.transMes
+        };
+        cargadas++;
+      });
+
+      guardar();
+      return { error: null, cargadas, sinUbicar, leidas: r.filas.length };
     },
 
     /* -------------------------- reclamos -------------------------- *

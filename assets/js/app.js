@@ -359,6 +359,244 @@ const App = (() => {
   let reclamoFiltro = 'abiertos';
   let reclamoAbierto = null;
 
+  /* ======================= VISTA: REPORTE DIARIO =======================
+     La estadística mensual mide el mes que cerró; esto mide el día que pasó,
+     que es la única escala donde todavía se puede hacer algo. Se carga a la
+     mañana con el dato de ayer y se manda antes de que abran las tiendas. */
+  let diarioFecha = null;      // día que se está mirando
+  let diarioAbierta = null;    // sucursal con el detalle desplegado
+
+  const ayerISO = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
+
+  function vistaDiario() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const fechas = Store.fechasDiarias();
+    if (!diarioFecha) diarioFecha = fechas[0] || ayerISO();
+    const dia = Store.diarioDe(diarioFecha);
+    const calc = calcularDiario(dia, e.sucursales, e.config.parametros);
+    const t = calc.total;
+    const alertas = alertasDiarias(calc);
+    const p = e.config.parametros;
+
+    const opcionesFecha = Array.from(new Set(fechas.concat([diarioFecha])))
+      .sort((a, b) => String(b).localeCompare(String(a)));
+
+    return `
+      <h1 class="titulo">Reportes a diario</h1>
+      <p class="subtitulo">
+        Cómo abrió el área. Se carga con el dato del día anterior y se manda a Operaciones
+        antes de la apertura: acá todavía se puede mover gente, en la estadística del mes ya no.
+      </p>
+
+      <section class="tarjeta">
+        <div class="acciones" style="align-items:flex-end;flex-wrap:wrap">
+          <label class="campo" style="max-width:200px">
+            <span>Día reportado</span>
+            <input type="date" id="diario-fecha" value="${esc(diarioFecha)}">
+          </label>
+          ${opcionesFecha.length > 1 ? `<label class="campo" style="max-width:220px">
+            <span>Días cargados</span>
+            <select id="diario-historico">
+              ${opcionesFecha.map(f => `<option value="${esc(f)}"${f === diarioFecha ? ' selected' : ''}>${fmtFecha(f)}</option>`).join('')}
+            </select>
+          </label>` : ''}
+          <button class="b sec" data-accion="prellenar-diario">Traer la dotación del padrón</button>
+          ${dia ? `<button class="b peligro" data-accion="borrar-diario">Borrar este día</button>` : ''}
+        </div>
+      </section>
+
+      <div class="kpis">
+        ${kpi('Ausentismo del día', t.pctAusentismo === null ? '—' : fmtPct(t.pctAusentismo, 1),
+              `${t.ausentes} de ${t.planificados} planificadas`,
+              t.pctAusentismo !== null && t.pctAusentismo > p.umbralAusentismo ? 'alerta' : 'ok')}
+        ${kpi('Cobertura de turnos', t.cobertura === null ? '—' : fmtPct(t.cobertura, 0),
+              t.minimo ? `${t.presentes} presentes sobre un mínimo de ${t.minimo}` : 'falta cargar el mínimo por sucursal',
+              t.cobertura !== null && t.cobertura < 1 ? 'alerta' : 'ok')}
+        ${kpi('Horas extras', t.horasExtras ? fmtNum(t.horasExtras, 0) + ' hs' : '—',
+              t.pctExtras === null ? 'sin horas ordinarias cargadas'
+                : `${fmtPct(t.pctExtras, 1)} de las ordinarias · ${fmtNum(t.horasExtras / p.horasJornada, 1)} jornadas`,
+              t.pctExtras !== null && t.pctExtras > p.umbralHorasExtras ? 'alerta' : 'ok')}
+        ${kpi('FTE real del día', t.fteReal === null ? '—' : fmtNum(t.fteReal, 1),
+              `planificados ${t.planificados} − ausentes ${t.ausentes} + extras`)}
+        ${kpi('Novedades y bajas', t.novedades, t.novedades ? 'vacantes a cubrir' : 'ninguna en el día',
+              t.novedades ? 'alerta' : 'ok')}
+      </div>
+
+      ${alertas.length ? `<div class="aviso-caja${alertas.some(a => a.nivel === 'critico') ? '' : ' info'}">
+        <strong>Alertas del día</strong>
+        <ul>${alertas.slice(0, 8).map(a =>
+          `<li><strong>${esc(a.titulo)}.</strong> ${esc(a.texto)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <section class="tarjeta">
+        <h2>Carga del día</h2>
+        <p class="ayuda">
+          Una fila por sucursal. Cargá la dotación planificada, el mínimo con el que la tienda
+          puede abrir y las horas extras; los ausentes se agregan con nombre y motivo desde
+          <em>Ver</em>. Los presentes se deducen solos salvo que los escribas.
+        </p>
+        <div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Sucursal</th>
+            <th class="num" title="Personas que tenían que trabajar hoy según la grilla">Planificados</th>
+            <th class="num" title="Se deduce como planificados − ausentes. Escribilo solo si no coincide">Presentes</th>
+            <th class="num" title="Con cuánta gente la tienda puede abrir en condiciones">Mínimo</th>
+            <th class="num">Ausentes</th>
+            <th class="num">Hs. extras</th>
+            <th>Motivo de las extras</th>
+            <th class="num">Cobertura</th>
+            <th class="num">Novedades</th>
+            <th></th>
+          </tr></thead>
+          <tbody>
+            ${e.sucursales.map(s => filaDiario(s, dia, p)).join('')}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Reporte Diario de Ventas (RDV)</h2>
+        <p class="ayuda">
+          Pegá la hoja <strong>RDV Operaciones</strong> del reporte de ventas del día:
+          abrila en Excel, seleccioná desde la fila de encabezados —la que dice
+          <em>Área … Tienda … Ayer … Mes</em>— hasta la última tienda, copiá y pegá.
+          Solo se toman las filas del ${esc(e.config.area || 'área')}. La venta no cambia
+          ningún indicador de RRHH: sirve para leer la cobertura contra el volumen que
+          efectivamente hubo que atender.
+        </p>
+        <textarea id="pegar-rdv" style="min-height:100px"
+          placeholder="Área  #Global  #País  Ciudad  #Ciudad  Formato  Capa  Tienda  Ayer  Semana  Mes  Requerido  Index  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-rdv">Importar la venta del ${fmtFecha(diarioFecha)}</button>
+        </div>
+        <div id="resultado-rdv"></div>
+        ${calc.venta.conDato ? `<div class="tabla-scroll" style="margin-top:16px"><table>
+          <thead><tr><th>Sucursal</th>
+            <th class="num">Venta de ayer</th>
+            <th class="num" title="Objetivo de venta para ese día">Meta del día</th>
+            <th class="num" title="Venta de ayer contra la meta de ese día">Índice del día</th>
+            <th class="num" title="Acumulado del mes contra lo requerido">Índice del mes</th>
+            <th class="num" title="Transacciones del día">Tickets</th>
+            <th class="num" title="Venta del día dividida por la gente que efectivamente estuvo">Venta por persona presente</th>
+          </tr></thead>
+          <tbody>
+            ${calc.filas.filter(f => f.venta).map(f => {
+              const chipIdx = v => (v === null || v === undefined) ? '—'
+                : `<span class="chip ${v >= 0 ? 'verde' : 'rojo'}">${v >= 0 ? '+' : ''}${fmtPct(v, 1)}</span>`;
+              const idxDia = f.venta.metaHoy ? f.venta.ayer / f.venta.metaHoy - 1 : null;
+              return `<tr>
+              <td><strong>${esc(Store.etiquetaSucursal(f.sucursal))}</strong></td>
+              <td class="num">${dinero(f.venta.ayer)}</td>
+              <td class="num">${f.venta.metaHoy ? dinero(f.venta.metaHoy) : '—'}</td>
+              <td class="num">${chipIdx(idxDia)}</td>
+              <td class="num">${chipIdx(f.venta.index)}</td>
+              <td class="num">${f.venta.transAyer ? fmtNum(f.venta.transAyer, 0) : '—'}</td>
+              <td class="num">${f.k.presentes && f.venta.ayer ? dinero(f.venta.ayer / f.k.presentes) : '—'}</td>
+            </tr>`; }).join('')}
+          </tbody>
+        </table></div>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <h2>Notas y envío</h2>
+        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
+          <textarea id="diario-notas" style="min-height:70px"
+            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
+        </label>
+        <div class="acciones">
+          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
+          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
+          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Vista previa</h2>
+        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
+      </section>`;
+  }
+
+  /** Una fila de la grilla del día, con su detalle desplegable. */
+  function filaDiario(s, dia, p) {
+    const d = (dia && dia.sucursales && dia.sucursales[s.id]) || null;
+    const k = calcularDiarioSucursal(d || {}, p);
+    const abierta = diarioAbierta === s.id;
+    const campoNum = (campo, ancho, titulo) =>
+      `<input class="num" type="number" min="0" step="any" data-diario="${s.id}|${campo}" ` +
+      `value="${esc(d ? (d[campo] ?? '') : '')}" style="width:${ancho}px"${titulo ? ` title="${esc(titulo)}"` : ''}>`;
+
+    const principal = `<tr>
+      <td><strong>${esc(Store.etiquetaSucursal(s))}</strong></td>
+      <td class="num">${campoNum('planificados', 70)}</td>
+      <td class="num">${campoNum('presentes', 70, 'Vacío = planificados menos ausentes')}</td>
+      <td class="num">${campoNum('minimo', 70, 'Con cuánta gente la tienda abre en condiciones')}</td>
+      <td class="num">${k.ausentes || '—'}${k.controlables ? ` <span class="chip ambar" title="Ausencias evitables">${k.controlables} ev.</span>` : ''}</td>
+      <td class="num">${campoNum('horasExtras', 70)}</td>
+      <td>
+        <select data-diario="${s.id}|motivoExtras">
+          <option value="">—</option>
+          ${MOTIVOS_EXTRAS.map(m => `<option value="${m.id}"${d && d.motivoExtras === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
+        </select>
+      </td>
+      <td class="num">${k.cobertura === null ? '—'
+        : `<span class="chip ${k.cobertura < 1 ? 'rojo' : k.cobertura < 1.1 ? 'ambar' : 'verde'}">${fmtPct(k.cobertura, 0)}</span>`}</td>
+      <td class="num">${k.novedades || '—'}</td>
+      <td class="num"><button class="b sec mini" data-accion="abrir-diario" data-id="${s.id}">${abierta ? 'Cerrar' : 'Ver'}</button></td>
+    </tr>`;
+
+    if (!abierta) return principal;
+
+    const ausentes = (d && d.ausentes) || [];
+    const novedades = (d && d.novedades) || [];
+    const plantel = (s.colaboradores || []).filter(c => c.activo !== false);
+    const listaPersonas = plantel.map(c => `<option value="${esc(c.nombre)}"></option>`).join('');
+
+    return principal + `<tr class="detalle"><td colspan="10">
+      <div class="grid c2">
+        <div>
+          <h3>Quién faltó</h3>
+          ${ausentes.length ? ausentes.map((a, i) => `<div class="acciones" style="margin-bottom:6px">
+            <input list="plantel-${s.id}" data-ausente="${s.id}|${i}|nombre" value="${esc(a.nombre || '')}"
+              placeholder="Nombre" style="flex:1;min-width:150px">
+            <select data-ausente="${s.id}|${i}|motivo">
+              ${MOTIVOS_AUSENCIA_DIA.map(m => `<option value="${m.id}"${a.motivo === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
+            </select>
+            <button class="b peligro mini" data-accion="quitar-ausente" data-id="${s.id}" data-i="${i}">Quitar</button>
+          </div>`).join('') : '<p class="vacio">Nadie faltó.</p>'}
+          <datalist id="plantel-${s.id}">${listaPersonas}</datalist>
+          <div class="acciones">
+            <button class="b sec mini" data-accion="agregar-ausente" data-id="${s.id}">+ Agregar ausente</button>
+          </div>
+        </div>
+        <div>
+          <h3>Novedades del día</h3>
+          ${novedades.length ? novedades.map((n, i) => `<div class="acciones" style="margin-bottom:6px">
+            <input list="plantel-${s.id}" data-novedad="${s.id}|${i}|nombre" value="${esc(n.nombre || '')}"
+              placeholder="Nombre" style="flex:1;min-width:150px">
+            <select data-novedad="${s.id}|${i}|tipo">
+              ${TIPOS_NOVEDAD_DIA.map(x => `<option value="${x.id}"${n.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+            </select>
+            <button class="b peligro mini" data-accion="quitar-novedad" data-id="${s.id}" data-i="${i}">Quitar</button>
+          </div>`).join('') : '<p class="vacio">Sin renuncias, desvinculaciones ni licencias largas.</p>'}
+          <div class="acciones">
+            <button class="b sec mini" data-accion="agregar-novedad" data-id="${s.id}">+ Agregar novedad</button>
+          </div>
+        </div>
+      </div>
+      <label class="campo" style="margin-top:12px"><span>Horas ordinarias planificadas (vacío = ${(d && d.planificados) || 0} × ${p.horasJornada} hs)</span>
+        <input class="num" type="number" min="0" step="any" data-diario="${s.id}|horasOrdinarias"
+          value="${esc(d ? (d.horasOrdinarias ?? '') : '')}" style="width:110px">
+      </label>
+      <label class="campo"><span>Nota de la sucursal</span>
+        <input data-diario="${s.id}|nota" value="${esc((d && d.nota) || '')}"
+          placeholder="Lo que hay que saber de esta tienda hoy.">
+      </label>
+    </td></tr>`;
+  }
+
   function vistaReclamos() {
     const e = Store.get();
     contexto = e;
@@ -2261,7 +2499,8 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'visitas')       { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    if (ruta[0] === 'diario')        { vistaActual = vistaDiario;    html = vistaDiario(); }
+    else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'sucursal' && ruta[1]) {
       const id = ruta[1];
@@ -2364,6 +2603,52 @@ const App = (() => {
                 evaluadoCon: (s ? s.gerente : '') || '',
                 motivo: 'Ajuste desde el perfil' });
         Store.save(); refrescar();
+      }
+    });
+
+    /* Carga del reporte diario. Se resuelve por sucursal y campo en vez de por
+       ruta, porque la clave del día es un id que no puede viajar en un
+       data-path (setPath parte por el punto y armaría objetos anidados). */
+    function campoDiario(ref) {
+      const [sucId, campo] = String(ref).split('|');
+      return { d: Store.diarioSucursal(diarioFecha, sucId), campo };
+    }
+
+    function itemDiario(ref) {
+      const [sucId, i, campo] = String(ref).split('|');
+      const d = Store.diarioSucursal(diarioFecha, sucId);
+      return { d, i: Number(i), campo };
+    }
+
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-diario], [data-ausente], [data-novedad]');
+      if (el) {
+        if (el.dataset.diario) {
+          const { d, campo } = campoDiario(el.dataset.diario);
+          d[campo] = el.value;
+        } else if (el.dataset.ausente) {
+          const { d, i, campo } = itemDiario(el.dataset.ausente);
+          if (d.ausentes[i]) d.ausentes[i][campo] = el.value;
+        } else {
+          const { d, i, campo } = itemDiario(el.dataset.novedad);
+          if (d.novedades[i]) d.novedades[i][campo] = el.value;
+        }
+        guardarDiferido();
+        return;
+      }
+      if (ev.target.id === 'diario-notas') {
+        Store.asegurarDiario(diarioFecha).notas = ev.target.value;
+        guardarDiferido();
+      }
+    });
+
+    cont.addEventListener('change', ev => {
+      const el = ev.target.closest('[data-diario], [data-ausente], [data-novedad]');
+      if (el) { Store.save(); refrescar(); return; }
+      if (ev.target.id === 'diario-fecha' || ev.target.id === 'diario-historico') {
+        diarioFecha = ev.target.value || ayerISO();
+        diarioAbierta = null;
+        refrescar();
       }
     });
 
@@ -2558,6 +2843,94 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- reporte diario --- */
+      if (a === 'abrir-diario') {
+        diarioAbierta = diarioAbierta === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'prellenar-diario') {
+        const r = Store.prellenarDiario(diarioFecha);
+        refrescar();
+        avisar(r.completadas
+          ? `Dotación traída del padrón en ${r.completadas} sucursal${r.completadas === 1 ? '' : 'es'}.`
+          : 'No había nada que completar: ya estaba todo cargado o el padrón está vacío.',
+          r.completadas ? '' : 'error');
+      }
+
+      if (a === 'borrar-diario') {
+        const ok = await confirmar('Borrar el día',
+          `Se borra toda la carga del ${fmtFecha(diarioFecha)}, incluida la venta importada.`,
+          'Borrar');
+        if (!ok) return;
+        Store.eliminarDiario(diarioFecha);
+        diarioAbierta = null;
+        refrescar();
+        avisar('Día borrado.');
+      }
+
+      if (a === 'agregar-ausente') {
+        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
+        d.ausentes.push({ nombre: '', motivo: MOTIVOS_AUSENCIA_DIA[0].id });
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'quitar-ausente') {
+        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
+        d.ausentes.splice(Number(btn.dataset.i), 1);
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'agregar-novedad') {
+        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
+        d.novedades.push({ nombre: '', tipo: TIPOS_NOVEDAD_DIA[0].id });
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'quitar-novedad') {
+        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
+        d.novedades.splice(Number(btn.dataset.i), 1);
+        Store.save();
+        refrescar();
+      }
+
+      if (a === 'importar-rdv') {
+        const crudo = ($('#pegar-rdv') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero la hoja del RDV.', 'error');
+
+        const r = Store.importarRDV(diarioFecha, crudo);
+        if (r.error) return avisar(r.error, 'error');
+        refrescar();
+
+        const caja = $('#resultado-rdv');
+        if (caja) {
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.cargadas} tienda${r.cargadas === 1 ? '' : 's'} del área</strong>
+            cargada${r.cargadas === 1 ? '' : 's'} en el ${fmtFecha(diarioFecha)}.
+            ${r.sinUbicar.length ? `<br>No se pudieron ubicar en el padrón:
+              <strong>${esc(r.sinUbicar.join(', '))}</strong>.
+              Revisá que el nombre de la tienda coincida con el del panel.` : ''}
+          </div>`;
+        }
+        avisar(r.cargadas ? `Venta importada en ${r.cargadas} sucursal${r.cargadas === 1 ? '' : 'es'}.`
+                          : 'No se pudo cruzar ninguna tienda con el padrón.',
+               r.cargadas ? '' : 'error');
+      }
+
+      if (a === 'copiar-diario') {
+        const texto = Reporte.textoDiario(diarioFecha, Store.get().config);
+        try { await navigator.clipboard.writeText(texto); avisar('Reporte copiado.'); }
+        catch (_) { avisar('No se pudo copiar: seleccioná el texto de la vista previa.', 'error'); }
+      }
+
+      if (a === 'descargar-diario') {
+        guardarArchivo(`reporte-diario-${diarioFecha}.txt`,
+                       Reporte.textoDiario(diarioFecha, Store.get().config));
+      }
 
       /* --- nómina del área --- */
       if (a === 'importar-nomina') {

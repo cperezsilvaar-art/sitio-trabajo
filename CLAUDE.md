@@ -1,0 +1,74 @@
+# Panel de Control de RRHH — Área 3, Farmatodo Argentina
+
+Sitio estático en JavaScript sin build, sin dependencias externas y sin backend.
+Tiene que abrir desde `file://` y funcionar sin conexión.
+
+## Marco conceptual
+
+Las decisiones de producto de este panel se apoyan en cuatro fuentes que el
+usuario incorporó al proyecto. **Antes de agregar o cambiar un indicador, una
+pantalla o un texto que va a leer un gerente, revisar `docs/marco-conceptual.md`**
+y decir con cuál de estos criterios se alinea:
+
+- **Ulrich, _The HR Value Proposition_** — el valor lo define quien recibe, no
+  quien entrega. Todo entregable del panel se juzga por si le sirve al Gerente de
+  Operaciones, al Gerente de Tienda o al colaborador; no por lo completo que sea.
+- **Vosburgh, _La evolución de los RR.HH._** — RRHH como organización de
+  consultoría interna. Lo transaccional se resuelve rápido para liberar tiempo a
+  lo transformacional.
+- **Deloitte, _2026 Global Human Capital Trends_** — orquestación en tiempo real
+  por encima de la asignación fija de recursos.
+- **McKinsey, _HR Monitor 2026_** — planificación de capacidades, no solo de
+  headcount; compensación y equidad como principal driver de permanencia;
+  frecuencia de feedback.
+
+## Reglas de escritura
+
+- Todo el texto de la interfaz y de los reportes va en **castellano rioplatense**
+  (voseo), sin jerga de RRHH que un gerente de tienda no use.
+- Los números se formatean en **es-AR** (coma decimal, punto de miles). Nunca
+  `toFixed()` en texto visible: usar `_n`, `_pct`, `_pctDia`, `fmtNum`, `fmtPct`.
+- Los comentarios del código explican **por qué**, no qué. Si un comentario
+  parafrasea la línea siguiente, sobra.
+- Cada indicador que se muestra tiene que poder explicarse en una oración a
+  alguien que no es de RRHH. Si no se puede, no va.
+
+## Arquitectura
+
+- Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
+  `talento`, `novedades`, `nomina`, `reclamos`, `diario`, `acceso`, `store`,
+  `reporte`, `app`. `build-pagina-unica.py` lee ese orden del propio HTML.
+- Ruteo por hash: `#/red`, `#/diario`, `#/visitas`, `#/reclamos`, `#/sucursales`,
+  `#/sucursal/<id>`, `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
+- Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
+- **Trampa conocida:** `setPath` parte la ruta por el punto. Cualquier clave
+  compuesta que lleve un punto crea objetos anidados en vez de una clave plana.
+  Usar `_` como separador (`piso_clima`) o un binding propio (`data-diario`).
+- `confirm()` y `alert()` no funcionan dentro del visor de artifacts: usar
+  `confirmar()` y `avisar()`.
+
+## Separación de escalas
+
+Tres escalas de tiempo, tres pantallas, sin mezclarlas:
+
+| Escala | Pantalla | Pregunta |
+|---|---|---|
+| El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
+| La semana | Visitas (recorrida + talento) | ¿Qué está pasando en esta tienda? |
+| El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
+
+## Verificación antes de commitear
+
+```
+for f in assets/js/*.js; do node --check "$f"; done
+python3 build-pagina-unica.py
+```
+Más las pruebas e2e con Playwright (`/opt/node22/lib/node_modules/playwright`)
+y Chromium headless, que viven en el directorio de trabajo temporal de la sesión.
+
+## Privacidad
+
+Los datos bancarios y el CBU de la nómina **no se importan**. El resto de los
+datos personales vive solo en el navegador del usuario. El respaldo que se
+exporta desde Configuración **no está cifrado**. El cifrado no tiene recuperación
+por diseño.
