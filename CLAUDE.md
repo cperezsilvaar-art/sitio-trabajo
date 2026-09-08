@@ -28,6 +28,11 @@ documentado en `docs/convenio-414.md`: categorías, escalafón por antigüedad,
 vacaciones y los topes de licencias del art. 25. **El panel no liquida sueldos
 ni guarda la escala salarial**, que la fijan las paritarias.
 
+Quien tiene **bloqueo de título o figura como no presencial** presta la
+habilitación profesional pero no cubre turno: `esNoPresencial()` lo separa de
+toda cuenta operativa —dotación, cobertura, prellenado del día— y lo deja
+visible aparte. Nunca contarlo en la dotación de piso.
+
 ## Reglas de escritura
 
 - Todo el texto de la interfaz y de los reportes va en **castellano rioplatense**

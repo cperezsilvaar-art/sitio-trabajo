@@ -757,7 +757,10 @@ const App = (() => {
 
     const ausentes = (d && d.ausentes) || [];
     const novedades = (d && d.novedades) || [];
-    const plantel = (s.colaboradores || []).filter(c => c.activo !== false);
+    /* Solo los que cubren turno: al que tiene bloqueo de título no se lo marca
+       ausente porque nunca estuvo previsto en el piso. */
+    const plantel = (s.colaboradores || [])
+      .filter(c => c.activo !== false && !esNoPresencial(c).noPresencial);
     const siguiente = proximaSinCargar(dia, s.id);
 
     return `<section class="tarjeta">
@@ -1044,7 +1047,12 @@ const App = (() => {
     if (!s) return `<h1 class="titulo">Sucursal</h1>
       <section class="tarjeta"><p class="vacio">Esa sucursal ya no existe.</p></section>`;
 
-    const plantel = (s.colaboradores || []).filter(c => c.activo !== false);
+    /* El bloqueo de título y los no presenciales se cuentan aparte: están en la
+       nómina y cuestan, pero no cubren un turno. Sumarlos a la dotación hace
+       ver una tienda completa donde falta gente para atender. */
+    const activos = (s.colaboradores || []).filter(c => c.activo !== false);
+    const noPresenciales = activos.filter(c => esNoPresencial(c).noPresencial);
+    const plantel = activos.filter(c => !esNoPresencial(c).noPresencial);
     const visitas = Store.visitasDe(s.id);
     const ultima = visitas[0] || null;
     const periodo = (ultima && ultima.periodo) || hoyISO().slice(0, 7);
@@ -1069,8 +1077,9 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación', plantel.length || '—',
+          return kpi('Dotación en el piso', plantel.length || '—',
             !plantel.length ? 'sin plantel cargado'
+              : noPresenciales.length ? `+ ${noPresenciales.length} que no cubren turno`
               : sinPos ? `${sinPos} sin posición asignada`
               : `${Object.keys(porPosicion).length} posiciones`,
             sinPos ? 'aviso' : '');
@@ -1123,12 +1132,28 @@ const App = (() => {
       <section class="tarjeta">
         <h2>Organigrama</h2>
         <p class="ayuda">
-          El plantel activo ordenado por posición. Las tarjetas se abren para ver el perfil completo.
+          El plantel que está en el piso, ordenado por posición. Las tarjetas se abren para ver
+          el perfil completo.
         </p>
         ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
+
+        ${noPresenciales.length ? `<h3 style="margin-top:22px">Fuera de la dotación de piso</h3>
+          <p class="ayuda">
+            Prestan la habilitación profesional que la farmacia necesita para abrir, pero no
+            cubren un turno ni reemplazan una ausencia. Están en la nómina y cuestan; no cuentan
+            para la cobertura.
+          </p>
+          <div class="org-grupo">
+            ${noPresenciales.map(c => `<button class="org-persona no-presencial${perfilAbierto === c.id ? ' abierta' : ''}"
+              data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
+              <strong>${esc(c.nombre)}</strong>
+              <span>${esc(c.cargo || c.posicion || '')}</span>
+              <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
+            </button>`).join('')}
+          </div>` : ''}
       </section>
 
-      ${perfilAbierto ? perfilColaborador(s, plantel.find(c => c.id === perfilAbierto)) : ''}
+      ${perfilAbierto ? perfilColaborador(s, activos.find(c => c.id === perfilAbierto)) : ''}
 
       <section class="tarjeta">
         <h2>Visitas registradas</h2>
@@ -1174,6 +1199,8 @@ const App = (() => {
               ${c.categoriaConvenio ? ` · convenio ${esc(c.categoriaConvenio)}` : ''}</span>
           </div>
           <div style="display:flex;gap:8px;align-items:center">
+            ${esNoPresencial(c).noPresencial
+              ? `<span class="chip ambar" title="No cubre turno: no cuenta para la dotación de piso">${esc(esNoPresencial(c).motivo)}</span>` : ''}
             ${q ? `<span class="chip azul">${esc(q.nombre)}</span>` : ''}
             ${c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO' ? `<span class="chip ambar">${esc(c.estatus)}</span>` : ''}
             <button class="mini" data-accion="cerrar-perfil">Cerrar</button>
@@ -1281,7 +1308,7 @@ const App = (() => {
     return `<h4>Encuadre — ${esc(CCT.nombre)}</h4>
       <div class="grid c4">
         ${dato('Categoría del convenio', cat ? `${cat.nombre} (art. ${cat.articulo || '—'})` : (c.categoriaConvenio || ''))}
-        ${dato('Antigüedad', anios ? `${anios} año${anios === 1 ? '' : 's'}` : '')}
+        ${dato('Antigüedad', anios ? `${fmtNum(anios, 1)} años` : '')}
         ${dato('Escalafón por antigüedad (art. 13)', esc2.pct ? fmtPct(esc2.pct, 0) : 'todavía sin escalafón')}
         ${dato('Vacaciones que le corresponden (art. 24)', `${vac.dias} días corridos`)}
       </div>
@@ -1685,8 +1712,17 @@ const App = (() => {
               : '<tr><td colspan="4" class="vacio">Todavía nadie tiene posición asignada.</td></tr>'}
               ${d.sinPosicion.length ? `<tr><td><em>Sin posición</em></td>
                 <td class="num">${d.sinPosicion.length}</td><td class="num">—</td><td class="num">—</td></tr>` : ''}
+              ${d.noPresenciales.length ? `<tr><td><em>Bloqueo de título / no presencial</em></td>
+                <td class="num">${d.noPresenciales.length}</td><td class="num">—</td><td class="num">—</td></tr>` : ''}
             </tbody>
           </table></div>
+          ${d.noPresenciales.length ? `<div class="aviso-caja info">
+            <strong>${d.noPresenciales.length} persona${d.noPresenciales.length === 1 ? '' : 's'} fuera de la dotación de piso.</strong>
+            Prestan la habilitación profesional pero no cubren turno, así que no entran en la
+            matriz de FTE ni en la cobertura. Si querés su costo en el mes, cargalo a mano en la
+            fila que corresponda.
+            <br>${d.noPresenciales.map(x => `${esc(x.nombre)} (${esc(x.motivo.toLowerCase())})`).join(' · ')}
+          </div>` : ''}
           ${d.sinPosicion.length ? `<div class="aviso-caja">
             <strong>${d.sinPosicion.length} persona${d.sinPosicion.length === 1 ? '' : 's'} sin posición asignada.</strong>
             La planilla de liquidación no trae el puesto: asignalo una vez en el perfil
@@ -1812,10 +1848,15 @@ const App = (() => {
         ${(() => {
           const con = e.sucursales.filter(x => (x.colaboradores || []).length);
           if (!con.length) return '';
-          const total = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false).length, 0);
-          const sinPos = con.reduce((a, x) => a + x.colaboradores.filter(c => c.activo !== false && !c.posicion).length, 0);
+          const activos = x => (x.colaboradores || []).filter(c => c.activo !== false);
+          const total = con.reduce((a, x) => a + activos(x).length, 0);
+          const noPres = con.reduce((a, x) => a + activos(x).filter(c => esNoPresencial(c).noPresencial).length, 0);
+          const sinPos = con.reduce((a, x) => a + activos(x).filter(c => !c.posicion).length, 0);
           return `<div class="aviso-caja info" style="margin-top:12px">
-            <strong>${total} persona${total === 1 ? '' : 's'}</strong> en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
+            <strong>${total - noPres} persona${total - noPres === 1 ? '' : 's'} en el piso</strong>
+            en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
+            ${noPres ? `Otras ${noPres} están en la nómina con bloqueo de título o como no
+              presenciales: cuestan, pero no cubren turno.` : ''}
             ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
           </div>`;
         })()}
@@ -3539,7 +3580,8 @@ const App = (() => {
           const padron = Store.dotacionDelPadron(suc.id, diarioFecha.slice(0, 7));
           const heads = padron && padron.personas
             ? padron.personas
-            : (suc.colaboradores || []).filter(c => c.activo !== false).length;
+            : (suc.colaboradores || [])
+                .filter(c => c.activo !== false && !esNoPresencial(c).noPresencial).length;
           if (!heads) {
             return avisar('No hay plantel cargado en esta sucursal: escribí a mano cuántos tenían que trabajar.', 'error');
           }

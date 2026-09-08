@@ -703,7 +703,8 @@ const Store = (() => {
            novedades de liquidación. Hasta entonces vale el plantel cargado. */
         const heads = (padron && padron.personas)
           ? padron.personas
-          : (s.colaboradores || []).filter(c => c.activo !== false).length;
+          : (s.colaboradores || [])
+              .filter(c => c.activo !== false && !esNoPresencial(c).noPresencial).length;
         if (!heads) return;
         const x = this.diarioSucursal(fecha, s.id);
         let toco = false;
@@ -995,10 +996,19 @@ const Store = (() => {
       const sinPosicion = [];
       let personas = 0;
       const detalle = {};
+      /* El bloqueo de título y los no presenciales cuentan para el costo pero
+         no para la cobertura: no cubren un turno ni reemplazan una ausencia. */
+      const noPresenciales = [];
 
       (s.colaboradores || []).forEach(c => {
         const nov = (c.novedades || {})[periodo];
         if (!nov) return;
+
+        const np = esNoPresencial(c);
+        if (np.noPresencial) {
+          noPresenciales.push({ nombre: c.nombre, motivo: np.motivo, cargo: c.cargo });
+          return;
+        }
         personas++;
 
         const porCod = ausenciasPorCodigo(nov);
@@ -1012,7 +1022,9 @@ const Store = (() => {
         p.diasAusentes += MAPA_AUSENCIAS.reduce((a, m) => a + numeroNovedad(nov[m.campo]), 0);
       });
 
-      return { porPosicion, sinPosicion, personas, detalle, periodo };
+      return { porPosicion, sinPosicion, personas, noPresenciales, detalle, periodo,
+               /* Lo que hay que mirar cuando la pregunta es el costo. */
+               personasConNoPresenciales: personas + noPresenciales.length };
     },
 
     /** Vuelca esa dotación en la matriz de FTE y en el ausentismo de la visita. */

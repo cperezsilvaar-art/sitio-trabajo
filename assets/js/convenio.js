@@ -79,6 +79,31 @@ function categoriaCct(texto) {
   return null;
 }
 
+/* ---------------- Bloqueo de título y no presenciales ----------------
+ *
+ * El farmacéutico que ejerce la Dirección Técnica con bloqueo de título
+ * (art. 18 b) y el auxiliar con bloqueo (art. 18 c) prestan la habilitación
+ * profesional que la farmacia necesita para abrir. Están en la nómina, cobran
+ * y cuestan, pero no están en el piso: no cubren un turno ni reemplazan una
+ * ausencia.
+ *
+ * Contarlos en la dotación de la tienda infla la cobertura y hace ver una
+ * sucursal completa donde falta gente para atender. Por eso el panel los cuenta
+ * aparte en todo lo operativo, y los sigue contando en el costo, que es donde
+ * sí pesan.
+ */
+function esNoPresencial(colaborador) {
+  const c = colaborador || {};
+  const texto = _normCct([c.categoriaConvenio, c.cargo, c.nivelCargo].join(' '));
+  if (/NOPRESENCIAL/.test(texto)) {
+    return { noPresencial: true, motivo: 'No presencial' };
+  }
+  if (/BLOQUE/.test(texto)) {
+    return { noPresencial: true, motivo: 'Bloqueo de título' };
+  }
+  return { noPresencial: false, motivo: '' };
+}
+
 /* ---------------- Escalafón por antigüedad (art. 13) ---------------- */
 const ESCALAFON_ANTIGUEDAD = [
   { anios: 25, pct: 0.50 },
@@ -291,7 +316,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CCT, CATEGORIAS_CCT, CATEGORIAS_CCT_POR_ID, MAPA_CATEGORIA_CCT, categoriaCct,
     NOVEDAD_A_LICENCIA,
-    ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
+    esNoPresencial, ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
     LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT
   };
 }

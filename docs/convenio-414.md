@@ -91,6 +91,40 @@ mes que viene y la pregunta del colaborador es hoy.
   el convenio da dos.
 - **Le quedan dos días o menos** — para avisarlo antes de que pida el tercero.
 
+## Bloqueo de título y no presenciales
+
+El farmacéutico que ejerce la Dirección Técnica **con bloqueo de título**
+(art. 18 b) y el auxiliar con bloqueo (art. 18 c) prestan la habilitación
+profesional que la farmacia necesita para abrir. Están en la nómina, cobran y
+cuestan, **pero no están en el piso**: no cubren un turno ni reemplazan una
+ausencia.
+
+Contarlos en la dotación de la tienda infla la cobertura y hace ver una sucursal
+completa donde falta gente para atender. El panel los separa de todo lo
+operativo:
+
+| Dónde | Qué hace |
+|---|---|
+| KPI de la sucursal | Dice **Dotación en el piso** y aclara *“+ N que no cubren turno”* |
+| Organigrama | Bloque aparte, **Fuera de la dotación de piso**, con borde punteado |
+| Padrón del período | `personas` cuenta solo a los del piso; `noPresenciales` va aparte |
+| Reporte diario | El prellenado de *tenían que trabajar* los excluye |
+| Ausentes del día | No aparecen en la lista: nunca estuvieron previstos |
+| Ficha | Chip ámbar con el motivo |
+
+Se detectan por las palabras **BLOQUE** o **NO PRESENCIAL** en la categoría de
+convenio, el cargo o el nivel de cargo. En el Área 3 son 6 de 139: cuatro
+directores técnicos y dos auxiliares de farmacia.
+
+Los directores técnicos **sin** bloqueo siguen contando normalmente: son seis y
+sí están en el piso.
+
+### Lo que no cambia
+
+Siguen en la nómina y en el costo. Si hace falta su costo en la matriz de FTE
+del mes, se carga a mano en la fila que corresponda: el panel avisa quiénes
+quedaron afuera y por qué, en vez de descontarlos en silencio.
+
 ## Sanciones disciplinarias
 
 Cada persona tiene su registro: fecha, tipo (llamado de atención,
