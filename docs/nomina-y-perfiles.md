@@ -144,3 +144,40 @@ cifrar, así que conviene tratarlo como lo que es.
 
 Los datos bancarios de la nómina —banco y CBU— **no se importan**: no hacen
 falta para nada de lo que hace el panel.
+
+
+---
+
+## Nómina de septiembre de 2026
+
+La planilla cambió dos encabezados y sumó cinco campos. El importador acepta las
+dos versiones, así que un archivo viejo sigue entrando.
+
+| Antes | Ahora |
+|---|---|
+| `TIENDA DONDE ESTÁ` | `NOMBRE DE SUCURSAL` |
+| `Fecha de Ingreso a FTD` | `Fecha de Ingreso Farmatodo Ingreso a FTD` |
+| `VP` | `DIRECCIÓN` |
+
+Campos nuevos: **estado civil**, **nacionalidad**, **obra social / prepaga**,
+**banco** y **CBU**.
+
+### El banco y el CBU
+
+Se importan desde esta versión, a pedido del coordinador. En la ficha aparecen
+**plegados** bajo *Datos bancarios* y no salen en ningún reporte. La pantalla de
+Configuración avisa que el respaldo exportado no está cifrado y los lleva
+adentro.
+
+### Los CBU que Excel rompe
+
+Un CBU son 22 dígitos. Si la columna no está formateada como texto, Excel lo
+guarda como número y lo escribe `7.00276300040573e+19`: se pierden los últimos
+siete dígitos y **eso no se puede reconstruir**.
+
+El importador los detecta y los marca en vez de guardarlos como si fueran
+válidos, porque un CBU corrupto que parece correcto no lo vuelve a mirar nadie.
+En el archivo de septiembre había dos así.
+
+La solución está en el origen: formatear la columna CBU como texto antes de
+exportar.

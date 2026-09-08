@@ -24,12 +24,20 @@ const COLUMNAS_NOMINA = {
   AREA: 'area',
   RAZONSOCIALCONTRATADOA: 'razonSocialContrato',
   TIENDADONDEESTA: 'tienda',
+  NOMBREDESUCURSAL: 'tienda',          // así la llama la nómina de septiembre
   CATEGORIACONVENIO: 'categoriaConvenio',
   CARGO: 'cargo',
   NIVELDECARGO: 'nivelCargo',
   FECHADENACIMIENTO: 'fechaNacimiento',
   FECHADEINGRESO: 'fechaIngreso',
   FECHADEINGRESOAFTD: 'fechaIngresoFTD',
+  FECHADEINGRESOFARMATODOINGRESOAFTD: 'fechaIngresoFTD',
+  DIRECCION: 'direccionArea',          // el nivel de la organización, no el domicilio
+  VP: 'direccionArea',
+  ESTADOCIVIL: 'estadoCivil',
+  NACIONALIDAD: 'nacionalidad',
+  BANCO: 'banco',
+  CBU: 'cbu',
   MAILCOORPORATIVOOPERSONAL: 'email',
   MAILCORPORATIVO: 'emailCorporativo',
   TELEFONO: 'telefono',
@@ -52,9 +60,15 @@ const ALIAS_TIENDA = { SINTIENDA: TIENDA_FLOTANTES, FLOTANTES: TIENDA_FLOTANTES 
 
 /* Campos de texto que se copian tal cual al perfil. */
 const CAMPOS_NOMINA = ['dni', 'legajo', 'sexo', 'estatus', 'unidadNegocio', 'razonSocialContrato',
-                       'categoriaConvenio', 'cargo', 'nivelCargo', 'fechaNacimiento',
-                       'fechaIngreso', 'fechaIngresoFTD', 'email', 'emailCorporativo',
-                       'telefono', 'domicilio', 'localidad', 'obraSocial'];
+                       'direccionArea', 'categoriaConvenio', 'cargo', 'nivelCargo',
+                       'fechaNacimiento', 'fechaIngreso', 'fechaIngresoFTD',
+                       'email', 'emailCorporativo', 'telefono', 'domicilio', 'localidad',
+                       'obraSocial', 'estadoCivil', 'nacionalidad', 'banco', 'cbu'];
+
+/* Los datos bancarios entran porque la nómina los trae y el coordinador los
+   pidió, pero se muestran plegados y se avisa que el respaldo que se exporta
+   desde Configuración no está cifrado. */
+const CAMPOS_SENSIBLES = ['banco', 'cbu'];
 
 /* La planilla usa estos marcadores de Excel para "sin dato". */
 const VACIOS_EXCEL = ['#N/A', '#REF!', '#VALUE!', '#¡REF!', '#N/D', 'NULL'];
@@ -66,6 +80,28 @@ const _normNom = t => String(t == null ? '' : t)
 function textoNomina(v) {
   const t = String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
   return VACIOS_EXCEL.indexOf(t.toUpperCase()) >= 0 ? '' : t;
+}
+
+/**
+ * CBU tal como sale de la planilla.
+ *
+ * Un CBU son 22 dígitos y Excel los trata como número: si la celda no está
+ * formateada como texto, guarda 7.00276300040573e+19 y se pierden los últimos
+ * siete dígitos para siempre. Eso no se puede reconstruir, así que se marca
+ * como dudoso en vez de guardar un número que parece válido y no lo es.
+ */
+function cbuNomina(v) {
+  const t = textoNomina(v);
+  if (!t) return { valor: '', dudoso: false, motivo: '' };
+  if (/e\+/i.test(t)) {
+    return { valor: t, dudoso: true,
+      motivo: 'Excel lo guardó como número y le comió dígitos. Formateá la columna como texto y volvé a exportar.' };
+  }
+  const digitos = t.replace(/\D/g, '');
+  if (digitos.length !== 22) {
+    return { valor: t, dudoso: true, motivo: `Tiene ${digitos.length} dígitos y un CBU tiene 22.` };
+  }
+  return { valor: digitos, dudoso: false, motivo: '' };
 }
 
 /** Fecha a ISO. Acepta 1978-04-26, 26/04/1978 y el "1978-04-26 00:00:00" de Excel. */
@@ -131,6 +167,8 @@ function interpretarNomina(crudo) {
   const avisos = [];
   const sinCargo = [];
   const cuilDudoso = [];
+  const cbuDudoso = [];
+  const sinIngresoFtd = [];
   let sinCuil = 0;
 
   lineas.slice(iEnc + 1).forEach(l => {
@@ -144,6 +182,15 @@ function interpretarNomina(crudo) {
     const fila = { cuil };
     CAMPOS_NOMINA.forEach(k => { fila[k] = t(k); });
     ['fechaNacimiento', 'fechaIngreso', 'fechaIngresoFTD'].forEach(k => { fila[k] = fechaNomina(fila[k]); });
+
+    /* El CBU se valida aparte: guardar un número corrupto que parece un CBU es
+       peor que no tenerlo, porque nadie lo vuelve a mirar. */
+    const cbu = cbuNomina(fila.cbu);
+    fila.cbu = cbu.valor;
+    fila.cbuDudoso = cbu.dudoso;
+    if (cbu.dudoso) cbuDudoso.push({ nombre: t('nombreCompleto') || t('apellido'), motivo: cbu.motivo });
+
+    if (!fila.fechaIngresoFTD) sinIngresoFtd.push(t('nombreCompleto') || t('apellido'));
 
     fila.cuilDudoso = cuil.length !== 11;
     if (fila.cuilDudoso) cuilDudoso.push(`${textoNomina(c[col.apellido])} (${cuil})`);
@@ -165,6 +212,10 @@ function interpretarNomina(crudo) {
   });
 
   if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
+  cbuDudoso.forEach(x => avisos.push(`CBU de ${x.nombre}: ${x.motivo}`));
+  if (sinIngresoFtd.length) {
+    avisos.push('Sin fecha de ingreso a Farmatodo: ' + sinIngresoFtd.join(', ') + '.');
+  }
   if (cuilDudoso.length) {
     avisos.push('CUIL con una cantidad de dígitos rara, se importaron igual pero conviene corregirlos en la nómina: ' +
                 cuilDudoso.join(', ') + '.');

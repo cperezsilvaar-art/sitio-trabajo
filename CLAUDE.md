@@ -77,7 +77,11 @@ y Chromium headless, que viven en el directorio de trabajo temporal de la sesió
 
 ## Privacidad
 
-Los datos bancarios y el CBU de la nómina **no se importan**. El resto de los
-datos personales vive solo en el navegador del usuario. El respaldo que se
-exporta desde Configuración **no está cifrado**. El cifrado no tiene recuperación
-por diseño.
+Todos los datos personales del padrón viven **solo en el navegador del
+usuario**, cifrables con clave. El banco y el CBU se importan desde septiembre
+de 2026, a pedido del coordinador: se muestran plegados en la ficha y no
+aparecen en ningún reporte.
+
+El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
+datos adentro; la pantalla de Configuración lo advierte cuando hay alguno
+cargado. El cifrado no tiene recuperación por diseño.

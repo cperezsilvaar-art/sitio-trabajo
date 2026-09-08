@@ -179,8 +179,9 @@ const Store = (() => {
         if (!Array.isArray(c.sanciones)) c.sanciones = [];
         ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
-         'razonSocialContrato', 'fechaNacimiento', 'fechaIngresoFTD', 'email',
-         'emailCorporativo', 'telefono', 'domicilio', 'localidad', 'obraSocial']
+         'razonSocialContrato', 'direccionArea', 'fechaNacimiento', 'fechaIngresoFTD',
+         'email', 'emailCorporativo', 'telefono', 'domicilio', 'localidad',
+         'obraSocial', 'estadoCivil', 'nacionalidad', 'banco', 'cbu']
           .forEach(k => { if (c[k] === undefined) c[k] = ''; });
       });
     });
@@ -443,10 +444,13 @@ const Store = (() => {
         /* Datos que llegan de la nómina */
         dni: '', nroPersonal: '', sexo: '', estatus: '',
         cargo: '', nivelCargo: '', categoriaConvenio: '',
-        unidadNegocio: '', razonSocialContrato: '',
+        unidadNegocio: '', razonSocialContrato: '', direccionArea: '',
         fechaNacimiento: '', fechaIngresoFTD: '',
         email: '', emailCorporativo: '', telefono: '',
         domicilio: '', localidad: '', obraSocial: '',
+        estadoCivil: '', nacionalidad: '',
+        /* Datos bancarios: solo se muestran plegados en la ficha. */
+        banco: '', cbu: '',
         /* Ropa de trabajo: la nómina no la trae, se carga a mano */
         talles: {},
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }

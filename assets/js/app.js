@@ -383,6 +383,7 @@ const App = (() => {
   let itemAbierto = null;
   let verHechas = false;
   let licenciaAnio = null;   // año que se está mirando en la ficha de licencias
+  let bancoVisible = null;   // ficha cuyo bloque bancario está desplegado
 
   function vistaAgenda() {
     const e = Store.get();
@@ -1187,7 +1188,9 @@ const App = (() => {
           ${dato('DNI', c.dni)}
           ${dato('Sexo', c.sexo)}
           ${dato('Fecha de nacimiento', c.fechaNacimiento ? `${fmtFecha(c.fechaNacimiento)}${edad !== null ? ` · ${Math.floor(edad)} años` : ''}` : '')}
-          ${dato('Obra social', c.obraSocial)}
+          ${dato('Nacionalidad', c.nacionalidad)}
+          ${dato('Estado civil', c.estadoCivil)}
+          ${dato('Obra social / prepaga', c.obraSocial)}
           ${dato('Estatus', c.estatus)}
         </div>
 
@@ -1195,8 +1198,9 @@ const App = (() => {
         <div class="grid c4">
           ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : '')}
           ${dato('Ingreso a Farmatodo', c.fechaIngresoFTD ? fmtFecha(c.fechaIngresoFTD) : '')}
-          ${dato('Razón social', c.razonSocialContrato)}
+          ${dato('Razón social del contrato', c.razonSocialContrato)}
           ${dato('Unidad de negocio', c.unidadNegocio)}
+          ${dato('Dirección', c.direccionArea)}
         </div>
 
         <h4>Contacto</h4>
@@ -1205,8 +1209,27 @@ const App = (() => {
           ${dato('Mail corporativo', c.emailCorporativo)}
           ${dato('Mail personal', c.email)}
           ${dato('Domicilio', c.domicilio)}
-          ${dato('Localidad', c.localidad)}
+          ${dato('Localidad y CP', c.localidad)}
         </div>
+
+        ${(c.banco || c.cbu) ? `<h4>Datos bancarios
+          <button class="b sec mini" data-accion="ver-banco" data-id="${c.id}" style="margin-left:8px">
+            ${bancoVisible === c.id ? 'Ocultar' : 'Mostrar'}</button></h4>
+        ${bancoVisible === c.id
+          ? `<div class="grid c3">
+              ${dato('Banco', c.banco)}
+              ${dato('CBU', c.cbu)}
+            </div>
+            ${c.cbu && !/^\d{22}$/.test(c.cbu) ? `<div class="aviso-caja">
+              <strong>Este CBU no sirve como está.</strong>
+              ${/e\+/i.test(c.cbu)
+                ? 'Excel lo guardó como número y le comió los últimos dígitos: eso no se puede reconstruir.'
+                : `Tiene ${String(c.cbu).replace(/\D/g, '').length} dígitos y un CBU tiene 22.`}
+              Formateá la columna como texto en la nómina y volvé a importar.
+            </div>` : ''}
+            <p class="ayuda">El respaldo que se exporta desde Configuración no está cifrado:
+              si lo mandás por mail o lo dejás en un pendrive, esto viaja adentro.</p>`
+          : '<p class="ayuda">Cargados desde la nómina. Se muestran solo cuando hacen falta.</p>'}` : ''}
 
         <h4>Ropa de trabajo</h4>
         <p class="ayuda" style="margin:-2px 0 10px">
@@ -1873,6 +1896,15 @@ const App = (() => {
         <h2>Respaldo de datos</h2>
         <p class="ayuda">La información se guarda solo en este navegador. Exportá un respaldo para llevarla a otro equipo o para archivarla.
           Los datos de ejemplo sirven para recorrer el tablero antes de cargar información real: reemplazan todo el contenido y se limpian con “Borrar todo”.</p>
+        ${(() => {
+          const conBanco = e.sucursales.reduce((n, s) =>
+            n + (s.colaboradores || []).filter(c => c.cbu || c.banco).length, 0);
+          return conBanco ? `<div class="aviso-caja">
+            <strong>El respaldo no está cifrado.</strong> Adentro viajan los datos personales del
+            padrón, incluidos el banco y el CBU de ${conBanco} persona${conBanco === 1 ? '' : 's'}.
+            Guardalo donde guardarías la nómina, no en un mail ni en un pendrive compartido.
+          </div>` : '';
+        })()}
         <div class="acciones">
           <button class="b sec" data-accion="ejemplo">Cargar datos de ejemplo</button>
           <button class="b sec" data-accion="exportar">Exportar respaldo (.json)</button>
@@ -3364,6 +3396,11 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      if (a === 'ver-banco') {
+        bancoVisible = bancoVisible === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
 
       /* --- ficha del colaborador: licencias y sanciones --- */
       if (a === 'agregar-licencia') {
