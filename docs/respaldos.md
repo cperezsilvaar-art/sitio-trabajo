@@ -50,3 +50,22 @@ Si al abrir hay contenido guardado que no se entiende y no hay clave puesta, el
 panel **no lo pisa**: lo aparta en `…​.ilegible` y arranca vacío. El caso típico
 es contenido cifrado abierto sin la clave. Configuración lo muestra y ofrece
 descartarlo, pero conviene primero volver a entrar con la clave.
+
+## Qué hay guardado en este navegador
+
+Cuando alguien dice “se borró todo”, lo primero es distinguir tres situaciones
+que se ven igual en pantalla pero se arreglan distinto:
+
+1. **El navegador quedó vacío.** No hay contenido guardado. El panel muestra las
+   12 sucursales del padrón con su nombre y su razón social porque las trae el
+   código, no porque estén guardadas: eso *parece* que sobrevivió algo, y no.
+2. **El contenido está pero no se lee.** Hay contenido guardado, cifrado o roto.
+   Nada se perdió todavía.
+3. **Se reemplazó el contenido.** Hay contenido guardado, en claro, pero con
+   menos adentro de lo que había.
+
+**Configuración → Qué hay guardado en este navegador** contesta esas tres de una
+sola mirada: si hay contenido y de qué tamaño, si está en claro o cifrado,
+cuántas sucursales y personas tiene, y qué direcciones del navegador está usando
+el panel. La tabla de copias, además, dice qué tiene adentro cada copia antes de
+restaurarla.

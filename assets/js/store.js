@@ -1267,6 +1267,79 @@ const Store = (() => {
       try { localStorage.removeItem(CLAVE_ILEGIBLE); } catch (err) { /* nada que hacer */ }
     },
 
+    /* --------------------- qué hay guardado ----------------------- */
+
+    /**
+     * Cuenta lo que tiene adentro un estado ya parseado. Sirve para mirar una
+     * copia sin restaurarla y para describir lo que hay guardado ahora.
+     */
+    censo(e) {
+      const est = e || this.get() || {};
+      const sucs = Array.isArray(est.sucursales) ? est.sucursales : [];
+      return {
+        sucursales: sucs.length,
+        conNombre: sucs.filter(x => String(x.nombre || '').trim()).length,
+        conRazonSocial: sucs.filter(x => String(x.razonSocial || '').trim()).length,
+        colaboradores: sucs.reduce((n, x) => n + ((x.colaboradores || []).length), 0),
+        visitas: (est.visitas || []).length,
+        reclamos: (est.reclamos || []).length,
+        agenda: (est.agenda || []).length,
+        diarios: (est.diarios || []).length
+      };
+    },
+
+    /**
+     * Radiografía del almacenamiento de este navegador, sin tocar nada. Es lo
+     * primero que hay que mirar cuando alguien dice que se le borró todo:
+     * distingue “el navegador quedó vacío” de “el contenido está pero no se
+     * está leyendo”.
+     */
+    estadoDelAlmacen() {
+      const leer = k => {
+        try { return localStorage.getItem(k); } catch (err) { return null; }
+      };
+      const principal = leer(CLAVE_ALMACEN);
+      const parece = t => {
+        if (!t) return 'vacío';
+        try {
+          const o = JSON.parse(t);
+          return (o && Array.isArray(o.sucursales)) ? 'en claro' : 'ilegible';
+        } catch (err) { return 'cifrado o ilegible'; }
+      };
+      let claves = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf('farmatodo.') === 0) {
+            claves.push({ clave: k, tam: (localStorage.getItem(k) || '').length });
+          }
+        }
+      } catch (err) { /* algunos navegadores lo bloquean */ }
+      return {
+        clave: CLAVE_ALMACEN,
+        hay: !!principal,
+        tam: principal ? principal.length : 0,
+        forma: parece(principal),
+        cifradoActivo: !!cifrador,
+        resguardos: leerResguardos().length,
+        ilegible: (leer(CLAVE_ILEGIBLE) || '').length,
+        claves,
+        censo: this.censo()
+      };
+    },
+
+    /** Qué tiene adentro una copia, sin restaurarla. */
+    async censoResguardo(id) {
+      const r = leerResguardos().find(x => x.id === id);
+      if (!r) return null;
+      try {
+        const plano = r.cifrado ? await cifrador.descifrar(r.datos) : r.datos;
+        return this.censo(JSON.parse(plano));
+      } catch (err) {
+        return null;                       // cifrada con otra clave
+      }
+    },
+
     /* Datos de ejemplo para recorrer el tablero antes de cargar información
        real. Reemplaza todo el contenido, así nunca se mezcla con datos de
        verdad; “Borrar todo” lo deja limpio de nuevo. */

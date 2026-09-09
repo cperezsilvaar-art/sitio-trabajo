@@ -5331,6 +5331,79 @@ const Store = (() => {
       try { localStorage.removeItem(CLAVE_ILEGIBLE); } catch (err) { /* nada que hacer */ }
     },
 
+    /* --------------------- qué hay guardado ----------------------- */
+
+    /**
+     * Cuenta lo que tiene adentro un estado ya parseado. Sirve para mirar una
+     * copia sin restaurarla y para describir lo que hay guardado ahora.
+     */
+    censo(e) {
+      const est = e || this.get() || {};
+      const sucs = Array.isArray(est.sucursales) ? est.sucursales : [];
+      return {
+        sucursales: sucs.length,
+        conNombre: sucs.filter(x => String(x.nombre || '').trim()).length,
+        conRazonSocial: sucs.filter(x => String(x.razonSocial || '').trim()).length,
+        colaboradores: sucs.reduce((n, x) => n + ((x.colaboradores || []).length), 0),
+        visitas: (est.visitas || []).length,
+        reclamos: (est.reclamos || []).length,
+        agenda: (est.agenda || []).length,
+        diarios: (est.diarios || []).length
+      };
+    },
+
+    /**
+     * Radiografía del almacenamiento de este navegador, sin tocar nada. Es lo
+     * primero que hay que mirar cuando alguien dice que se le borró todo:
+     * distingue “el navegador quedó vacío” de “el contenido está pero no se
+     * está leyendo”.
+     */
+    estadoDelAlmacen() {
+      const leer = k => {
+        try { return localStorage.getItem(k); } catch (err) { return null; }
+      };
+      const principal = leer(CLAVE_ALMACEN);
+      const parece = t => {
+        if (!t) return 'vacío';
+        try {
+          const o = JSON.parse(t);
+          return (o && Array.isArray(o.sucursales)) ? 'en claro' : 'ilegible';
+        } catch (err) { return 'cifrado o ilegible'; }
+      };
+      let claves = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.indexOf('farmatodo.') === 0) {
+            claves.push({ clave: k, tam: (localStorage.getItem(k) || '').length });
+          }
+        }
+      } catch (err) { /* algunos navegadores lo bloquean */ }
+      return {
+        clave: CLAVE_ALMACEN,
+        hay: !!principal,
+        tam: principal ? principal.length : 0,
+        forma: parece(principal),
+        cifradoActivo: !!cifrador,
+        resguardos: leerResguardos().length,
+        ilegible: (leer(CLAVE_ILEGIBLE) || '').length,
+        claves,
+        censo: this.censo()
+      };
+    },
+
+    /** Qué tiene adentro una copia, sin restaurarla. */
+    async censoResguardo(id) {
+      const r = leerResguardos().find(x => x.id === id);
+      if (!r) return null;
+      try {
+        const plano = r.cifrado ? await cifrador.descifrar(r.datos) : r.datos;
+        return this.censo(JSON.parse(plano));
+      } catch (err) {
+        return null;                       // cifrada con otra clave
+      }
+    },
+
     /* Datos de ejemplo para recorrer el tablero antes de cargar información
        real. Reemplaza todo el contenido, así nunca se mezcla con datos de
        verdad; “Borrar todo” lo deja limpio de nuevo. */
@@ -8747,7 +8820,31 @@ const App = (() => {
   function panelResguardos() {
     const lista = Store.resguardos();
     const ilegible = Store.contenidoIlegible();
+    const est = Store.estadoDelAlmacen();
+    const c = est.censo;
     return `
+      <section class="tarjeta">
+        <h2>Qué hay guardado en este navegador</h2>
+        <p class="ayuda">Lo que el panel encuentra ahora mismo, sin tocar nada. Si acá figura
+          contenido y en las pantallas no aparece, el problema es de lectura, no de borrado.</p>
+        <div class="tabla-scroll"><table>
+          <tbody>
+            <tr><th>Contenido guardado</th><td>${est.hay
+              ? `sí · ${fmtNum(Math.max(1, Math.round(est.tam / 1024)), 0)} KB · ${esc(est.forma)}`
+              : '<strong>no hay nada guardado en este navegador</strong>'}</td></tr>
+            <tr><th>Clave de acceso</th><td>${est.cifradoActivo ? 'puesta (el contenido se guarda cifrado)' : 'sin clave'}</td></tr>
+            <tr><th>Sucursales</th><td>${fmtNum(c.sucursales, 0)} · ${fmtNum(c.conNombre, 0)} con nombre · ${fmtNum(c.conRazonSocial, 0)} con razón social</td></tr>
+            <tr><th>Personas en el plantel</th><td>${fmtNum(c.colaboradores, 0)}</td></tr>
+            <tr><th>Visitas · reclamos · agenda · días</th><td>${fmtNum(c.visitas, 0)} · ${fmtNum(c.reclamos, 0)} · ${fmtNum(c.agenda, 0)} · ${fmtNum(c.diarios, 0)}</td></tr>
+            <tr><th>Copias automáticas</th><td>${fmtNum(est.resguardos, 0)}</td></tr>
+            ${est.ilegible ? `<tr><th>Contenido apartado</th><td>${fmtNum(Math.max(1, Math.round(est.ilegible / 1024)), 0)} KB que no se pudieron leer</td></tr>` : ''}
+            <tr><th>Direcciones del navegador en uso</th><td class="tipo">${est.claves.length
+              ? est.claves.map(k => `${esc(k.clave)} (${fmtNum(Math.max(1, Math.round(k.tam / 1024)), 0)} KB)`).join('<br>')
+              : 'ninguna'}</td></tr>
+          </tbody>
+        </table></div>
+      </section>
+
       <section class="tarjeta">
         <h2>Copias automáticas de este navegador</h2>
         <p class="ayuda">El tablero se guarda una copia por día al abrir, y otra antes de cada
@@ -8761,12 +8858,13 @@ const App = (() => {
           <div class="acciones"><button class="b sec" data-accion="descartar-ilegible">Descartar ese contenido</button></div>
         </div>` : ''}
         ${lista.length ? `<div class="tabla-scroll"><table>
-          <thead><tr><th>Cuándo</th><th>Motivo</th><th class="num">Tamaño</th><th></th></tr></thead>
+          <thead><tr><th>Cuándo</th><th>Motivo</th><th class="num">Tamaño</th><th>Qué tiene adentro</th><th></th></tr></thead>
           <tbody>
             ${lista.map(r => `<tr>
               <td class="tipo">${esc(fechaHoraLegible(r.fecha))}</td>
               <td>${esc(r.motivo)}${r.cifrado ? ' <span class="chip azul">cifrada</span>' : ''}</td>
               <td class="num">${fmtNum(Math.max(1, Math.round(r.tam / 1024)), 0)} KB</td>
+              <td class="tipo" data-censo="${r.id}">…</td>
               <td class="tipo">
                 <button class="mini" data-accion="restaurar-resguardo" data-id="${r.id}">Restaurar</button>
                 <button class="mini" data-accion="borrar-resguardo" data-id="${r.id}">Borrar</button>
@@ -10052,6 +10150,7 @@ const App = (() => {
       sel.innerHTML = '<option value="">Ir a una sucursal…</option>' +
         e.sucursales.map(s => `<option value="${s.id}">${esc(Store.etiquetaSucursal(s))}</option>`).join('');
     }
+    completarCensoResguardos();
   }
 
   /* Mantiene viva la vista previa del reporte sin re-renderizar toda la vista
@@ -10063,7 +10162,24 @@ const App = (() => {
     pre.textContent = Reporte.textoVisita(contexto, s, Store.get().config);
   }
 
-  function refrescar() { if (vistaActual) { const y = window.scrollY; $('#contenido').innerHTML = vistaActual(); window.scrollTo(0, y); } }
+  function refrescar() {
+    if (!vistaActual) return;
+    const y = window.scrollY;
+    $('#contenido').innerHTML = vistaActual();
+    window.scrollTo(0, y);
+    completarCensoResguardos();
+  }
+
+  /* Abrir cada copia es descifrarla: se hace después de pintar la pantalla para
+     no demorar el resto de Configuración. */
+  function completarCensoResguardos() {
+    document.querySelectorAll('[data-censo]').forEach(async td => {
+      const c = await Store.censoResguardo(td.dataset.censo);
+      td.textContent = c
+        ? `${fmtNum(c.sucursales, 0)} sucursales · ${fmtNum(c.colaboradores, 0)} personas · ${fmtNum(c.visitas, 0)} visitas`
+        : 'no se puede abrir con esta clave';
+    });
+  }
 
   /* ============================ EVENTOS ============================ */
   function conectar() {
