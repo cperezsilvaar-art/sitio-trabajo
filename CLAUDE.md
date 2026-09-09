@@ -47,9 +47,9 @@ visible aparte. Nunca contarlo en la dotación de piso.
 ## Arquitectura
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
-  `talento`, `novedades`, `nomina`, `convenio`, `reclamos`, `agenda`, `diario`,
-  `acceso`,
-  `store`, `reporte`, `app`. `build-pagina-unica.py` lee ese orden del HTML.
+  `talento`, `novedades`, `nomina`, `convenio`, `checklist`, `reclamos`,
+  `agenda`, `diario`, `acceso`, `store`, `reporte`, `app`.
+  `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
   `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
   `#/visita/<id>/<tab>`, `#/config`.
@@ -73,8 +73,16 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 |---|---|---|
 | El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
 | Lo que llevo | Mi agenda | ¿Qué tengo que hacer y qué estoy esperando? |
-| La semana | Visitas (recorrida + talento) | ¿Qué está pasando en esta tienda? |
+| La semana | Visitas (check list + HRBP + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
+
+La navegación está agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
+*Cierre del mes*— y no por módulo. Una solapa nueva va adentro del grupo que le
+corresponde, no al final de la fila.
+
+El instrumento formal de la visita es el **check list de RRHH Operaciones**
+(`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
+con criterio de aprobación. La recorrida del HRBP lo acompaña, no lo reemplaza.
 
 ## Verificación antes de commitear
 

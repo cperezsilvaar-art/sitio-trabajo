@@ -109,7 +109,15 @@ const Store = (() => {
       fecha: hoy.toISOString().slice(0, 10),
       periodo,
       coordinador: estado.config.coordinador || '',
-      recorrida: { checks: {}, notas: {} },   // { checks: {piso.clima:'ok'}, notas: {...} }
+      recorrida: { checks: {}, notas: {} },   // { checks: {piso_clima:'ok'}, notas: {...} }
+      /* El check list corporativo de RRHH Operaciones: 30 puntos con criterio
+         de aprobación. Es el instrumento formal; la recorrida de arriba es la
+         mirada del HRBP, que no lo reemplaza. */
+      checklist: {
+        supervisor: '', cargoSupervisor: '',
+        checks: {}, obs: {}, consideraciones: {},
+        relevantes: '', compromisos: ''
+      },
       minutaGerente: { participante: '', puntos: '', acuerdos: '' },
       minutaColaborador: { nombre: '', posicion: '', feedback: '' },
       posiciones: POSICIONES.map(p => ({
@@ -251,6 +259,13 @@ const Store = (() => {
           Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
 
       v.recorrida = Object.assign({ checks: {}, notas: {} }, v.recorrida || {});
+      v.checklist = Object.assign({
+        supervisor: '', cargoSupervisor: '', checks: {}, obs: {},
+        consideraciones: {}, relevantes: '', compromisos: ''
+      }, v.checklist || {});
+      ['checks', 'obs', 'consideraciones'].forEach(k => {
+        if (!v.checklist[k] || typeof v.checklist[k] !== 'object') v.checklist[k] = {};
+      });
       if (!v.recorrida.checks || typeof v.recorrida.checks !== 'object') v.recorrida.checks = {};
       if (!v.recorrida.notas || typeof v.recorrida.notas !== 'object') v.recorrida.notas = {};
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});

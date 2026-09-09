@@ -114,6 +114,22 @@ nav.tabs a {
 nav.tabs a:hover { color: var(--texto); }
 nav.tabs a.activo { color: var(--azul); border-bottom-color: var(--rojo); font-weight: 600; }
 
+/* La etiqueta del grupo separa sin ocupar lugar: dice de qué es lo que sigue,
+   que es lo que faltaba cuando eran ocho solapas seguidas. */
+nav.tabs.principal .grupo {
+  align-self: center; margin: 0 4px 0 16px; padding-left: 16px;
+  border-left: 1px solid var(--borde);
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--texto-suave); opacity: .8; white-space: nowrap;
+}
+nav.tabs.principal .grupo:first-of-type { }
+nav.tabs.principal a.al-final { margin-left: auto; }
+@media (max-width: 900px) {
+  /* En el teléfono la barra ya scrollea: las etiquetas de grupo solo estorban. */
+  nav.tabs.principal .grupo { display: none; }
+  nav.tabs.principal a.al-final { margin-left: 0; }
+}
+
 main { padding: 22px; max-width: 1280px; margin: 0 auto; }
 
 /* ------------------------------ Bloques -------------------------------- */
@@ -545,6 +561,36 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
 }
 .org-persona em { font-style: italic; opacity: .7; }
 
+/* ---- Check list de RRHH Operaciones ----
+   Una fila por punto, con los tres estados como botones: marcar tiene que ser
+   un click, no abrir un menú y elegir. */
+.check-punto { border-bottom: 1px solid var(--borde); padding: 8px 0; }
+.check-punto:last-child { border-bottom: 0; }
+.check-punto.marcado { background: var(--panel-alt); }
+.check-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.check-n {
+  flex: 0 0 26px; text-align: center; font-size: 11.5px; font-weight: 700;
+  color: var(--texto-suave);
+}
+.check-titulo {
+  flex: 1 1 260px; text-align: left; background: none; border: 0; padding: 0;
+  font: inherit; font-weight: 600; color: inherit; cursor: pointer;
+}
+.check-titulo:hover { color: var(--azul-claro); text-decoration: underline; }
+.check-estados { display: flex; gap: 4px; flex: 0 0 auto; }
+.check-op {
+  border: 1px solid var(--borde); background: transparent; border-radius: 7px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--texto-suave);
+}
+.check-op:hover { border-color: var(--azul); color: inherit; }
+.check-op.activo { font-weight: 700; color: #fff; }
+.check-op.activo.verde { background: var(--verde); border-color: var(--verde); }
+.check-op.activo.rojo  { background: var(--rojo); border-color: var(--rojo); }
+.check-op.activo.azul  { background: var(--azul); border-color: var(--azul); }
+.check-detalle { padding: 10px 0 4px 36px; }
+.check-detalle p { margin: 0 0 8px; font-size: 13px; }
+.check-detalle .criterio { color: var(--texto-suave); }
+
 </style>
 
 <header class="app">
@@ -558,15 +604,25 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
     <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
   </header>
 
+  <!-- Agrupada por ritmo de trabajo, no por módulo: lo de hoy, lo de la
+       tienda y lo del mes cerrado. Antes eran ocho solapas en fila y no se
+       veía cuál era cuál. -->
   <nav class="tabs principal">
-    <a href="#/red">Panel de la red</a>
+    <a href="#/red">Panel</a>
+
+    <span class="grupo">Cada día</span>
+    <a href="#/diario">Reporte del día</a>
     <a href="#/agenda">Mi agenda</a>
-    <a href="#/diario">Reportes a diario</a>
+
+    <span class="grupo">En la tienda</span>
+    <a href="#/sucursales">Sucursales</a>
     <a href="#/visitas">Visitas</a>
     <a href="#/reclamos">Reclamos</a>
-    <a href="#/sucursales">Sucursales</a>
-    <a href="#/estadistica">Estadística mensual</a>
-    <a href="#/config">Configuración</a>
+
+    <span class="grupo">Cierre del mes</span>
+    <a href="#/estadistica">Estadística</a>
+
+    <a href="#/config" class="al-final" title="Configuración">Configuración</a>
   </nav>
 
   <main id="contenido"></main>
@@ -2620,6 +2676,224 @@ if (typeof module !== 'undefined' && module.exports) {
   };
 }
 
+/* ============ CHECK LIST DE RRHH OPERACIONES — FARMATODO ============
+ *
+ * El instrumento corporativo con el que se audita una tienda: 30 puntos en
+ * cuatro categorías, cada uno con su criterio de aprobación explícito.
+ *
+ * El criterio importa tanto como el punto. "Uniformes" no se aprueba con
+ * buena voluntad: se aprueba si el 98% de la gente observada cumple. Tenerlo
+ * a la vista al marcar es lo que hace que dos personas evalúen igual.
+ *
+ * Los puntos marcados "No aplica" salen del numerador y del denominador, para
+ * no castigar a una tienda por algo que no le corresponde.
+ */
+
+const ESTADOS_CHECKLIST = [
+  { id: '',           nombre: 'Sin evaluar', chip: '' },
+  { id: 'aprobado',   nombre: 'Aprobado',    chip: 'verde',  puntua: true,  suma: true },
+  { id: 'noAprobado', nombre: 'No aprobado', chip: 'rojo',   puntua: true,  suma: false },
+  { id: 'noAplica',   nombre: 'No aplica',   chip: 'azul',   puntua: false, suma: false }
+];
+
+const ESTADOS_CHECKLIST_POR_ID = ESTADOS_CHECKLIST.reduce((a, e) => (a[e.id] = e, a), {});
+
+const CHECKLIST_RRHH = [
+  { id: 'gente', nombre: 'Compromiso con Nuestra Gente', subs: [
+    { id: 'imagenCorporativaEInterna', nombre: 'Imagen Corporativa e Interna', puntos: [
+      { n: 1, id: 'p1', titulo: 'Uniformes según nivel de cargo',
+        detalle: 'Completos, limpios, zapatos negros, cinturón (negra, marrón o azul marino), batas blancas, limpias y planchadas (según imagen corporativa y código de vestimenta).',
+        criterio: 'De la población observada el 98% debe cumplir con el requerimiento; de no ser así el punto es NO APROBADO.' },
+      { n: 2, id: 'p2', titulo: 'Uso de carnets, portacarnets, tiras e identificadores',
+        detalle: 'Dotación, correcto uso y buen estado.',
+        criterio: 'De la población observada el 98% debe cumplir con el requerimiento; de no ser así el punto es NO APROBADO. En caso de faltar carnet y tiras y no haber sido reportado de manera inmediata al notificarlo el colaborador, el punto será NO APROBADO.' },
+      { n: 3, id: 'p3', titulo: 'Oficinas de supervisores',
+        detalle: 'Estado de la mesada y mobiliario, sillas en buen estado y limpias, carpetas en buen estado, mantener imagen corporativa (orden y limpieza). Botiquín de primeros auxilios (en buen estado y con los suministros necesarios).',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 4, id: 'p4', titulo: 'Casilleros',
+        detalle: 'Suficientes, limpios, ordenados, identificados con la imagen corporativa (estandarizada) y en buen estado.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 5, id: 'p5', titulo: 'Áreas comunes',
+        detalle: 'Cuarto de limpieza (carrito, coleto, cepillo y palas limpios y en buen estado, espacio despejado), escaleras internas (pintura y condición de peldaños, pasamanos limpios y en buen estado), paredes de áreas comunes limpias y en buen estado, cuarto de cestas y suministros (limpio y ordenado). Iluminación interna adecuada.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 6, id: 'p6', titulo: 'Comedor',
+        detalle: 'Electrodomésticos completos, utensilios de cocina limpios y en buen estado (TV, nevera, microondas, cafetera, filtro de agua y otros). Iluminación adecuada.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 7, id: 'p7', titulo: 'Baños (internos y externos) y vestuario',
+        detalle: 'Limpios (piezas sanitarias sin manchas y en buen estado), ordenados, duchas despejadas, cortinas de baño en buen estado, perchero de baño, jabón líquido, papel higiénico, papel secante, espejos y puertas limpias. Griferías y cerraduras en buen estado (sin goteras). Iluminación adecuada.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 8, id: 'p8', titulo: 'Carteleras corporativas',
+        detalle: 'Contenido actualizado y en buen estado.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+      { n: 9, id: 'p9', titulo: 'Imagen',
+        detalle: 'Validar que el material de ambientación de imágenes corporativas se encuentre en buen estado y actualizado (valores, misión/visión y conductas de servicio).',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO.' },
+    ] },
+    { id: 'climaLaboral', nombre: 'Clima Laboral', puntos: [
+      { n: 11, id: 'p11', titulo: 'Plan de acción de clima',
+        detalle: 'Contar con el plan que responda a las necesidades de los colaboradores (con vigencia del año en curso), discutido con supervisores y colaboradores. Ubicado en la carpeta de Clima y Desarrollo, junto a evidencias de ejecución.',
+        criterio: 'Plan diseñado y en ejecución, publicado en la carpeta de Clima y Desarrollo. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 12, id: 'p12', titulo: 'Actividades de integración',
+        detalle: 'Incluye cumpleaños del mes, aniversario de tienda, actividades deportivas y recreativas, cine foro, festividades y eventos, etc. (mínimo 70% de la plantilla).',
+        criterio: 'Registro en cartelera y en carpeta de Clima y Desarrollo, lista de asistencia y fotos con fecha de ejecución. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 13, id: 'p13', titulo: 'Soy el Mejor',
+        detalle: '100% ejecutado el programa según la metodología indicada, cartelera actualizada al cierre del primer mes del trimestre siguiente (foto del ganador).',
+        criterio: 'Foto del ganador y matriz de evaluación. De no cumplirse, el punto es NO APROBADO.' },
+    ] },
+  ] },
+  { id: 'desarrollo', nombre: 'Desarrollo Organizacional', subs: [
+    { id: 'desarrolloYCapacitacion', nombre: 'Desarrollo y Capacitación', puntos: [
+      { n: 14, id: 'p14', titulo: 'Gestión de Desarrollo y Desempeño (GDDD)',
+        detalle: 'Sesiones realizadas según cada fase, garantizando feedback de calibración con el equipo supervisorio. En la herramienta de GDDD deben estar las competencias a trabajar de cada supervisor y el documento anexo (al finalizar la fase de planificación).',
+        criterio: 'Sesiones de GDDD según la fase desarrollada, publicadas en la carpeta de Clima y Desarrollo (cumplir de acuerdo al mes que corresponda: octubre/febrero/agosto), verificado a través de indagación con el supervisor. De no cumplirse, el punto es NO APROBADO. Revisión de acuerdo al avance de este proceso en operaciones.' },
+      { n: 15, id: 'p15', titulo: 'Plan de Desarrollo Individual (PDI)',
+        detalle: 'Garantizar la elaboración, discusión y ejecución del plan dirigido al personal en desarrollo y de alto potencial.',
+        criterio: 'PDI plasmado y discutido con el colaborador (verificado a través de indagación con el colaborador), publicado en la carpeta de Clima y Desarrollo. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 16, id: 'p16', titulo: 'Plan de inducción',
+        detalle: 'Cumplimiento del programa (Inicio 2.0, Farmacia Escuela y Plan de Entrenamiento) de nuevos ingresos y promociones. Cumplimiento al 100%.',
+        criterio: 'Revisión de la data del plan de inducción, con un margen de 10 días para cerrar cada proceso. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 17, id: 'p17', titulo: 'Cumplimiento de plan de formación al cargo, Escuela de Servicio, Escuela de Excelencia y Escuela Comercial',
+        detalle: 'Garantizar la participación de los colaboradores en las formaciones.',
+        criterio: 'Revisión del último estatus enviado a la fecha, con 90% de participación mínima. De no cumplirse, el punto es NO APROBADO.' },
+    ] },
+  ] },
+  { id: 'operativa', nombre: 'Excelencia Operativa', subs: [
+    { id: 'controlDeGastos', nombre: 'Control de Gastos', puntos: [
+      { n: 18, id: 'p18', titulo: 'Plantilla de la tienda',
+        detalle: 'Con base en el presupuesto establecido e identificado en la revisión del Headcount, comparar jornadas reales vs. estimadas. Cumplir con el presupuesto por cargo según el dimensionamiento e identificar cantidad de vacantes (menor al 5% de la plantilla).',
+        criterio: 'Revisión de diferencia entre pase o vacante por tienda, dimensionamiento de cargos de acuerdo a lo estimado y lo real. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 19, id: 'p19', titulo: 'Egreso de personal',
+        detalle: 'Mayor al 5% de la plantilla en los últimos 30 días (revisión del indicador de rotación de tiendas y culminación de contrato de eventuales).',
+        criterio: 'Revisión de egresos generados en el último período de 30 días. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 20, id: 'p20', titulo: 'Relación de Jornadas (RJ)',
+        detalle: 'Desarrollo y actualización de la herramienta. Entendimiento del impacto y accionar del lider de la farmacia.',
+        criterio: 'Actualizada y correcta la información a la fecha según criterio del supervisor de la farmacia y estrctura o dinámica de implementación. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 21, id: 'p21', titulo: 'Índice de Ausentismo (Justificado e Injustificado)',
+        detalle: 'Menor a 2 faltas (basado en los últimos 30 días).',
+        criterio: 'Revisión de faltas en el último período de 30 días. De no cumplirse, el punto es NO APROBADO.' },
+    ] },
+    { id: 'eficienciaOperativa', nombre: 'Eficiencia Operativa', puntos: [
+      { n: 22, id: 'p22', titulo: 'ADT',
+        detalle: 'Última versión, publicado y en funcionamiento (validar si efectivamente se cumple). Publicación de días libres de acuerdo a la rotación de la plantilla, jornada que corresponda por colaborador, hora de descanso de acuerdo a la LCT. Entrevista a los colaboradores para conocer el funcionamiento.',
+        criterio: 'Publicación en cartelera y, ante la indagación con el colaborador, no generar ninguna alerta. De no cumplirse, el punto es NO APROBADO.',
+        nota: 'Pendiente de definición operativa (ver conversación con RRHH).' },
+      { n: 23, id: 'p23', titulo: 'Reunión mensual con equipo de trabajo',
+        detalle: 'Minuta y lista de asistencia de la reunión del mes, con 70% de participación de la plantilla activa.',
+        criterio: 'Publicación de minuta y asistencia en la carpeta de Clima y Desarrollo. De no cumplirse, el punto es NO APROBADO.' },
+      { n: 24, id: 'p24', titulo: 'El personal de tienda cuenta con las herramientas de trabajo necesarias y en buen estado',
+        detalle: 'sillas, bancos de 2 peldaños, fajas de seguridad, escalera de depósito, PIN PAD, Hand Held, etiquetadora, EPP o cualquier otra herramienta requerida para su trabajo.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas, el punto es NO APROBADO. En caso de daño o falta de alguna herramienta no reportada de manera inmediata, el punto será NO APROBADO.',
+        nota: 'Pendiente de definición operativa (ver conversación con RRHH).' },
+      { n: 25, id: 'p25', titulo: 'Reunión diaria de piso de venta',
+        detalle: 'Verificar a través de la indagación y/o ejecución el cumplimiento de ambas actividades.',
+        criterio: 'Desarrollo hasta el día de la visita, actualizado en la herramienta digitalizada, verificado a través de indagación con el colaborador sobre su efectividad y desarrollo. De no haber 3 checklists en sistema, el punto es NO APROBADO.' },
+    ] },
+    { id: 'riesgo', nombre: 'Riesgo', puntos: [
+      { n: 26, id: 'p26', titulo: 'Carpeta de SHA',
+        detalle: 'Actualizada según el requerimiento y lo establecido por la compañía dentro del programa de seguridad e higiene laboral.',
+        criterio: 'De existir un artículo o valoración mencionada que no esté en condiciones óptimas y/o actualizado, el punto es NO APROBADO.',
+        nota: 'Pendiente de definición operativa (ver conversación con RRHH).' },
+      { n: 27, id: 'p27', titulo: 'Horario de Trabajo',
+        detalle: 'Actualizado, publicado y visible.',
+        criterio: 'Publicación del horario en el lugar dispuesto. De no estar publicado, el punto es NO APROBADO.' },
+      { n: 28, id: 'p28', titulo: 'Inspecciones',
+        detalle: 'Revisión de inspecciones previas a la visita; solicitar acta y validar los hallazgos encontrados y su solución en el tiempo estipulado (validar el reporte al área de apoyo).',
+        criterio: 'De contar con hallazgos no solucionados dentro del tiempo estipulado por el inspector, el punto queda NO APROBADO.' },
+    ] },
+    { id: 'controlDeAsistenciaWeb', nombre: 'Control de Asistencia Web', puntos: [
+      { n: 29, id: 'p29', titulo: 'Incidencias en nómina',
+        detalle: 'Registro oportuno de cierre de nómina, vacaciones y novedades. Corregir dirección. Carga de incidencias en tiempo y forma.',
+        criterio: 'Revisión de los registros indicados en el período de los últimos 30 días; de existir incidencias en los reportes mencionados, el punto es NO APROBADO.' },
+    ] },
+  ] },
+  { id: 'servicio', nombre: 'Cultura de Servicio', subs: [
+    { id: 'conductasDeServicio', nombre: 'Conductas de Servicio', puntos: [
+      { n: 30, id: 'p30', titulo: 'Carpeta de colaboradores',
+        detalle: '(Mínimo revisar 2 colaboradores por supervisor) Evaluación del checklist de 5 conductas de servicio y checklist de planogramas.',
+        criterio: 'Revisión de los últimos 30 días, donde ambos soportes estén actualizados, verificado a través de indagación con el colaborador sobre su efectividad y desarrollo. De no haber los soportes requeridos, el punto es NO APROBADO.' },
+      { n: 31, id: 'p31', titulo: 'Atención al cliente',
+        detalle: 'Durante la visita, indagar y observar el conocimiento y ejecución de las conductas de servicio.',
+        criterio: 'Ingreso a la herramienta junto al supervisor y revisión de los resultados del CSAT de tienda; si el resultado está por debajo de 90,5%, el punto es NO APROBADO.' },
+    ] },
+  ] },
+];
+
+
+const CHECKLIST_PUNTOS = CHECKLIST_RRHH.flatMap(c =>
+  c.subs.flatMap(s => s.puntos.map(p =>
+    Object.assign({ categoria: c.id, categoriaNombre: c.nombre,
+                    sub: s.id, subNombre: s.nombre }, p))));
+
+/* Lo que el checklist corporativo pide al cerrar la visita. */
+const CIERRE_CHECKLIST = [
+  { id: 'relevantes', nombre: 'Puntos relevantes de la visita',
+    ayuda: 'Lo que hay que contar de esta visita, más allá del puntaje.' },
+  { id: 'compromisos', nombre: 'Compromisos que asume el supervisor',
+    ayuda: 'Sobre las oportunidades detectadas. Cada uno debería terminar en el plan de acción.' }
+];
+
+/**
+ * Puntaje de la visita, con la misma regla de la planilla: el porcentaje se
+ * calcula solo sobre los puntos aprobados o no aprobados. Lo marcado "no
+ * aplica" sale del numerador y del denominador.
+ *
+ * @param checks  { p1: 'aprobado', p2: 'noAplica', … }
+ */
+function evaluarChecklist(checks) {
+  const marcas = checks || {};
+  const estado = p => marcas[p.id] || '';
+  const cuenta = puntos => {
+    const aplicables = puntos.filter(p => (ESTADOS_CHECKLIST_POR_ID[estado(p)] || {}).puntua);
+    const aprobados = aplicables.filter(p => estado(p) === 'aprobado');
+    return {
+      total: puntos.length,
+      aplicables: aplicables.length,
+      aprobados: aprobados.length,
+      noAprobados: aplicables.length - aprobados.length,
+      noAplica: puntos.filter(p => estado(p) === 'noAplica').length,
+      sinEvaluar: puntos.filter(p => !estado(p)).length,
+      pct: aplicables.length ? aprobados.length / aplicables.length : null
+    };
+  };
+
+  const porSub = [];
+  const porCategoria = CHECKLIST_RRHH.map(c => {
+    const subs = c.subs.map(s => {
+      const r = Object.assign({ id: s.id, nombre: s.nombre, categoria: c.id }, cuenta(s.puntos));
+      porSub.push(r);
+      return r;
+    });
+    return Object.assign({ id: c.id, nombre: c.nombre, subs },
+                         cuenta(c.subs.flatMap(s => s.puntos)));
+  });
+
+  const total = cuenta(CHECKLIST_PUNTOS);
+
+  /* Con qué quedarse: dónde duele y dónde se está firme. Solo entre lo que se
+     evaluó, para que una categoría sin tocar no aparezca como la peor. */
+  const conDato = xs => xs.filter(x => x.aplicables > 0);
+  const peor = xs => conDato(xs).sort((a, b) => a.pct - b.pct)[0] || null;
+  const mejor = xs => conDato(xs).sort((a, b) => b.pct - a.pct)[0] || null;
+
+  return {
+    total, porCategoria, porSub,
+    categoriaMasAfectada: peor(porCategoria),
+    categoriaMasPositiva: mejor(porCategoria),
+    subMasAfectada: peor(porSub),
+    subMasPositiva: mejor(porSub),
+    /* Lo que hay que arreglar, en el orden en que conviene mirarlo. */
+    noAprobados: CHECKLIST_PUNTOS.filter(p => estado(p) === 'noAprobado'),
+    sinEvaluar: CHECKLIST_PUNTOS.filter(p => !estado(p))
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    CHECKLIST_RRHH, CHECKLIST_PUNTOS, ESTADOS_CHECKLIST, ESTADOS_CHECKLIST_POR_ID,
+    CIERRE_CHECKLIST, evaluarChecklist
+  };
+}
+
 /*
  * reclamos.js — Registro de reclamos y consultas de los colaboradores.
  *
@@ -2885,8 +3159,19 @@ function fechasDeTexto(texto, refISO) {
        pedir adelantos y también el pago de la variable de Dermo—, así que se
        repite por concepto y no solo por día. */
     if (hallazgos.some(h => h.fecha === iso && h.que === que)) return;
-    hallazgos.push({ fecha: iso, que, contexto: linea.replace(/\s+/g, ' ').slice(0, 160) });
+    hallazgos.push({
+      fecha: iso, que,
+      contexto: linea.replace(/\s+/g, ' ').slice(0, 160),
+      /* Se recuerda de qué parte del texto salió, para no anotar dos veces el
+         mismo hecho cuando la frase lo dice de dos formas: "se abona mañana,
+         9 de septiembre" es una fecha, no dos. */
+      _desde: iniClausula, _hasta: finClausula
+    });
   };
+
+  /** ¿Esta parte del texto ya produjo una fecha? */
+  const clausulaYaUsada = (ini, fin) =>
+    hallazgos.some(h => h._desde < fin && ini < h._hasta);
 
   const ajustarAnio = (mes, dia) => {
     let iso = _iso(anioRef, mes, dia);
@@ -2928,17 +3213,29 @@ function fechasDeTexto(texto, refISO) {
     { re: /\bpasado manana\b/g, dias: 2 },
     { re: /\bmanana\b/g, dias: 1 }
   ];
+  /* "Se abonará mañana, 9 de septiembre" nombra una sola fecha de dos maneras.
+     Cuando el relativo viene pegado a una fecha explícita —eso es una
+     aposición, no dos hechos— se queda la explícita, que es la que después se
+     puede verificar contra el calendario. */
+  const nombreMesRe = Object.keys(MESES_ES).join('|');
+  const reAposicion = new RegExp(
+    '^[\\s,;:.\u2014-]*(?:\\d{1,2}\\s+de\\s+(?:' + nombreMesRe + ')|\\d{1,2}[/-]\\d{1,2})');
+
   relativos.forEach(r => {
     r.re.lastIndex = 0;
     let x;
     while ((x = r.re.exec(plano)) !== null) {
-      registrar(_sumarDias(ref, r.dias), x.index, x.index + x[0].length);
+      const fin = x.index + x[0].length;
+      if (reAposicion.test(plano.slice(fin, fin + 30))) continue;
+      if (clausulaYaUsada(x.index, fin)) continue;
+      registrar(_sumarDias(ref, r.dias), x.index, fin);
     }
   });
 
   /* "en 3 días", "en dos semanas" */
   const reEn = /\ben\s+(\d{1,3})\s+(dias?|semanas?)\b/g;
   while ((m = reEn.exec(plano)) !== null) {
+    if (clausulaYaUsada(m.index, m.index + m[0].length)) continue;
     const n = Number(m[1]) * (/semana/.test(m[2]) ? 7 : 1);
     registrar(_sumarDias(ref, n), m.index, m.index + m[0].length);
   }
@@ -2948,6 +3245,7 @@ function fechasDeTexto(texto, refISO) {
   const reDia = new RegExp(
     '\\b(?:el\\s+|este\\s+|proximo\\s+)?(' + nombreDia + ')(\\s+que\\s+viene|\\s+proximo)?\\b', 'g');
   while ((m = reDia.exec(plano)) !== null) {
+    if (clausulaYaUsada(m.index, m.index + m[0].length)) continue;
     const objetivo = DIAS_ES[m[1]];
     const hoyDia = new Date(ref).getUTCDay();
     /* "el lunes" dicho un lunes es el lunes que viene, no hoy. Y "el lunes que
@@ -2957,7 +3255,9 @@ function fechasDeTexto(texto, refISO) {
     registrar(_sumarDias(ref, delta), m.index, m.index + m[0].length);
   }
 
-  return hallazgos.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  return hallazgos
+    .map(h => ({ fecha: h.fecha, que: h.que, contexto: h.contexto }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
 /** Tema probable, para no obligar a elegirlo en un menú. */
@@ -3873,7 +4173,15 @@ const Store = (() => {
       fecha: hoy.toISOString().slice(0, 10),
       periodo,
       coordinador: estado.config.coordinador || '',
-      recorrida: { checks: {}, notas: {} },   // { checks: {piso.clima:'ok'}, notas: {...} }
+      recorrida: { checks: {}, notas: {} },   // { checks: {piso_clima:'ok'}, notas: {...} }
+      /* El check list corporativo de RRHH Operaciones: 30 puntos con criterio
+         de aprobación. Es el instrumento formal; la recorrida de arriba es la
+         mirada del HRBP, que no lo reemplaza. */
+      checklist: {
+        supervisor: '', cargoSupervisor: '',
+        checks: {}, obs: {}, consideraciones: {},
+        relevantes: '', compromisos: ''
+      },
       minutaGerente: { participante: '', puntos: '', acuerdos: '' },
       minutaColaborador: { nombre: '', posicion: '', feedback: '' },
       posiciones: POSICIONES.map(p => ({
@@ -4015,6 +4323,13 @@ const Store = (() => {
           Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
 
       v.recorrida = Object.assign({ checks: {}, notas: {} }, v.recorrida || {});
+      v.checklist = Object.assign({
+        supervisor: '', cargoSupervisor: '', checks: {}, obs: {},
+        consideraciones: {}, relevantes: '', compromisos: ''
+      }, v.checklist || {});
+      ['checks', 'obs', 'consideraciones'].forEach(k => {
+        if (!v.checklist[k] || typeof v.checklist[k] !== 'object') v.checklist[k] = {};
+      });
       if (!v.recorrida.checks || typeof v.recorrida.checks !== 'object') v.recorrida.checks = {};
       if (!v.recorrida.notas || typeof v.recorrida.notas !== 'object') v.recorrida.notas = {};
       v.minutaGerente = Object.assign({ participante: '', puntos: '', acuerdos: '' }, v.minutaGerente || {});
@@ -5129,10 +5444,49 @@ const Reporte = (() => {
 
     let n = 0;
 
-    /* 1. Recorrida */
+    /* 1. Check list corporativo. Va primero porque es el instrumento formal:
+       lo que se manda y lo que se compara entre tiendas. */
+    const cl = visita.checklist || { checks: {} };
+    const chk = evaluarChecklist(cl.checks);
+    if (chk.total.aplicables || chk.total.noAplica) {
+      L.push(++n + '. CHECK LIST DE RRHH OPERACIONES');
+      L.push(`- Cumplimiento: ${fmtPct(chk.total.pct, 1)} — ${chk.total.aprobados} aprobados ` +
+             `de ${chk.total.aplicables} aplicables.`);
+      if (chk.total.noAplica) L.push(`  ${chk.total.noAplica} punto/s marcados "no aplica", fuera del cálculo.`);
+      if (chk.total.sinEvaluar) L.push(`  ${chk.total.sinEvaluar} de ${chk.total.total} puntos quedaron sin evaluar.`);
+      if (cl.supervisor) {
+        L.push(`- Acompañó la visita: ${cl.supervisor}${cl.cargoSupervisor ? ' (' + cl.cargoSupervisor + ')' : ''}.`);
+      }
+      L.push('- Por categoría:');
+      chk.porCategoria.forEach(c => {
+        L.push(`  * ${c.nombre}: ${c.pct === null ? 'sin evaluar'
+          : `${c.aprobados}/${c.aplicables} (${fmtPct(c.pct, 0)})`}`);
+      });
+      if (chk.subMasAfectada) {
+        L.push(`- Lo más flojo: ${chk.subMasAfectada.nombre} (${fmtPct(chk.subMasAfectada.pct, 0)}).`);
+      }
+      if (chk.noAprobados.length) {
+        L.push('- Puntos no aprobados:');
+        chk.noAprobados.forEach(p => {
+          const obs = (cl.obs || {})[p.id];
+          L.push(`  * [${p.n}] ${p.titulo}${obs ? ' — ' + obs : ''}`);
+        });
+      }
+      if (String(cl.relevantes || '').trim()) {
+        L.push('- Puntos relevantes de la visita:');
+        String(cl.relevantes).split('\n').filter(x => x.trim()).forEach(x => L.push('  * ' + x.trim()));
+      }
+      if (String(cl.compromisos || '').trim()) {
+        L.push('- Compromisos que asume el supervisor:');
+        String(cl.compromisos).split('\n').filter(x => x.trim()).forEach(x => L.push('  * ' + x.trim()));
+      }
+      L.push('');
+    }
+
+    /* 2. La mirada del HRBP, que no reemplaza al check list ni lo repite. */
     const rec = evaluarRecorrida(visita.recorrida);
     if (rec.hechos || rec.sinHacer.length) {
-      L.push(++n + '. RECORRIDA DE LA SUCURSAL');
+      L.push(++n + '. MIRADA DEL HRBP EN LA RECORRIDA');
       L.push(`- Puntos cubiertos: ${rec.hechos} de ${rec.aplican} que aplicaban (${fmtPct(rec.pct, 0)}).`);
       rec.bloques.forEach(b => {
         const conNota = b.items.filter(i => (visita.recorrida.notas || {})[i.id]);
@@ -6273,7 +6627,7 @@ const App = (() => {
               <td>${c ? chipSemaforo(c.dotacion.semaforo) : '—'}</td>
               <td>${v ? (v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>') : '—'}</td>
               <td class="num">${v
-                  ? `<a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>`
+                  ? `<a class="chip azul" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a>`
                   : `<button class="mini" data-accion="nueva-visita" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">Registrar visita</button>`}</td>
             </tr>`;
           }).join('')}
@@ -6303,7 +6657,7 @@ const App = (() => {
             <td>${esc(v.coordinador || '—')}</td>
             <td>${v.envio.enviado ? `<span class="chip verde">${esc(v.envio.via)}</span>` : '<span class="chip ambar">pendiente</span>'}</td>
             <td class="num">
-              <a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>
+              <a class="chip azul" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a>
               <button class="mini" data-accion="borrar-visita" data-id="${v.id}">Borrar</button>
             </td>
           </tr>`;
@@ -6415,7 +6769,7 @@ const App = (() => {
               <td>${rr.pct === null ? '—' : fmtPct(rr.pct, 0)}</td>
               <td class="num">${plan || '—'}</td>
               <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
-              <td class="num"><a class="mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none;display:inline-block">Abrir</a></td>
+              <td class="num"><a class="mini" href="#/visita/${v.id}/checklist" style="text-decoration:none;display:inline-block">Abrir</a></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>` : '<p class="vacio">Todavía no registraste ninguna visita.</p>'}
@@ -7235,7 +7589,7 @@ const App = (() => {
               <td class="num">${c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</td>
               <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
-              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a></td>
+              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>` : '<p class="vacio">Sin visitas registradas todavía.</p>'}
@@ -8050,7 +8404,8 @@ const App = (() => {
   /* La visita es lo de todas las semanas: recorrer la tienda y mirar a la
      gente. Los números del período viven en Estadística mensual. */
   const PESTANAS = [
-    ['recorrida', 'Recorrida'],
+    ['checklist', 'Check list RRHH'],
+    ['recorrida', 'Mirada del HRBP'],
     ['talento',   'Talento y 9-box']
   ];
 
@@ -8064,9 +8419,10 @@ const App = (() => {
     const c = Reporte.calcular(v, s, e.config);
 
     const cuerpo = {
+      checklist: () => panelChecklist(v, s),
       recorrida: () => panelRecorrida(v, s),
       talento:   () => panelTalento(v, s)
-    }[pestana] || (() => panelRecorrida(v, s));
+    }[pestana] || (() => panelChecklist(v, s));
 
     return `
       <h1 class="titulo">${esc(Store.etiquetaSucursal(s))}</h1>
@@ -8090,6 +8446,145 @@ const App = (() => {
       </nav>
 
       ${cuerpo()}`;
+  }
+
+  /* ------------------- 0. Check list de RRHH Operaciones -------------------
+     El instrumento corporativo. Cada punto trae su criterio de aprobación a la
+     vista al marcar: sin eso, dos personas evalúan distinto la misma tienda. */
+  let checkAbierto = null;   // punto con el criterio y las observaciones desplegados
+
+  function panelChecklist(v, s) {
+    const cl = v.checklist;
+    const r = evaluarChecklist(cl.checks);
+    const t = r.total;
+    const pct = t.pct === null ? null : t.pct;
+
+    const chipEstado = e => (ESTADOS_CHECKLIST_POR_ID[e] || {}).chip || '';
+
+    const fila = (p) => {
+      const est = cl.checks[p.id] || '';
+      const abierto = checkAbierto === p.id;
+      const obs = cl.obs[p.id] || '';
+      return `<div class="check-punto ${est ? 'marcado' : ''}">
+        <div class="check-cab">
+          <span class="check-n">${p.n}</span>
+          <button class="check-titulo" data-accion="abrir-check" data-id="${p.id}"
+            title="Ver el criterio de aprobación">${esc(p.titulo)}</button>
+          <div class="check-estados">
+            ${ESTADOS_CHECKLIST.filter(e => e.id).map(e =>
+              `<button class="check-op ${est === e.id ? 'activo ' + e.chip : ''}"
+                data-accion="marcar-check" data-id="${p.id}" data-e="${e.id}">${esc(e.nombre)}</button>`).join('')}
+          </div>
+          ${obs ? '<span class="chip" title="Tiene observación">✎</span>' : ''}
+        </div>
+        ${abierto ? `<div class="check-detalle">
+          <p>${esc(p.detalle)}</p>
+          <p class="criterio"><strong>Criterio de aprobación:</strong> ${esc(p.criterio)}</p>
+          ${p.nota ? `<p class="ayuda">${esc(p.nota)}</p>` : ''}
+          <label class="campo"><span>Observación</span>
+            <input data-cl="${p.id}|obs" value="${esc(obs)}"
+              placeholder="Qué se vio, con qué evidencia."></label>
+          <label class="campo"><span>Otras consideraciones</span>
+            <input data-cl="${p.id}|consideraciones" value="${esc(cl.consideraciones[p.id] || '')}"
+              placeholder="Lo que haya que aclarar del punto."></label>
+        </div>` : ''}
+      </div>`;
+    };
+
+    return `
+      <section class="tarjeta">
+        <h2>Puntaje de la visita</h2>
+        <p class="ayuda">
+          El porcentaje se calcula solo sobre los puntos aprobados o no aprobados.
+          Lo marcado <em>No aplica</em> sale del numerador y del denominador, para no
+          castigar a la tienda por algo que no le corresponde.
+        </p>
+        <div class="kpis">
+          ${kpi('Cumplimiento', pct === null ? '—' : fmtPct(pct, 1),
+                `${t.aprobados} de ${t.aplicables} aplicables`,
+                pct === null ? '' : pct >= 0.9 ? 'ok' : pct >= 0.75 ? 'aviso' : 'alerta')}
+          ${kpi('No aprobados', t.noAprobados, t.noAprobados ? 'a corregir' : 'ninguno', t.noAprobados ? 'alerta' : 'ok')}
+          ${kpi('No aplica', t.noAplica, 'fuera del cálculo')}
+          ${kpi('Sin evaluar', t.sinEvaluar, t.sinEvaluar ? `de ${t.total} puntos` : 'checklist completo',
+                t.sinEvaluar ? 'aviso' : 'ok')}
+        </div>
+
+        ${r.categoriaMasAfectada && r.total.aplicables ? `<div class="aviso-caja${
+          r.categoriaMasAfectada.pct < 0.9 ? '' : ' info'}">
+          <strong>Lo más flojo:</strong> ${esc(r.subMasAfectada.nombre)}
+          (${fmtPct(r.subMasAfectada.pct, 0)}), dentro de ${esc(r.categoriaMasAfectada.nombre)}.
+          ${r.subMasPositiva && r.subMasPositiva.id !== r.subMasAfectada.id
+            ? `Lo más firme: ${esc(r.subMasPositiva.nombre)} (${fmtPct(r.subMasPositiva.pct, 0)}).` : ''}
+        </div>` : ''}
+
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Categoría</th><th class="num">Aplicables</th><th class="num">Aprobados</th>
+            <th class="num">No aprobados</th><th class="num">Cumplimiento</th></tr></thead>
+          <tbody>
+            ${r.porCategoria.map(c => `<tr>
+              <td><strong>${esc(c.nombre)}</strong></td>
+              <td class="num">${c.aplicables || '—'}</td>
+              <td class="num">${c.aprobados || '—'}</td>
+              <td class="num">${c.noAprobados || '—'}</td>
+              <td class="num">${c.pct === null ? '—'
+                : `<span class="chip ${c.pct >= 0.9 ? 'verde' : c.pct >= 0.75 ? 'ambar' : 'rojo'}">${fmtPct(c.pct, 0)}</span>`}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Quién acompañó la visita</h2>
+        <div class="grid c3">
+          <label class="campo"><span>Supervisor que acompañó</span>
+            <input data-cl="_|supervisor" value="${esc(cl.supervisor || '')}"
+              placeholder="Nombre y apellido"></label>
+          <label class="campo"><span>Cargo del supervisor</span>
+            <input data-cl="_|cargoSupervisor" value="${esc(cl.cargoSupervisor || '')}"
+              placeholder="Gerente de Tienda, Senior…"></label>
+        </div>
+      </section>
+
+      ${CHECKLIST_RRHH.map(c => `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>${esc(c.nombre)}</h2>
+          ${(() => {
+            const rc = r.porCategoria.find(x => x.id === c.id);
+            return rc.pct === null ? '<span class="chip">sin evaluar</span>'
+              : `<span class="chip ${rc.pct >= 0.9 ? 'verde' : rc.pct >= 0.75 ? 'ambar' : 'rojo'}">${fmtPct(rc.pct, 0)}</span>`;
+          })()}
+        </div>
+        ${c.subs.map(sub => `<h3>${esc(sub.nombre)}</h3>
+          ${sub.puntos.map(fila).join('')}`).join('')}
+      </section>`).join('')}
+
+      <section class="tarjeta">
+        <h2>Cierre y compromisos</h2>
+        <p class="ayuda">
+          Lo que pide el check list al final: qué hay que contar de la visita y qué se
+          compromete a mejorar el supervisor. Los compromisos con plazo van al plan de
+          acción, en la solapa de la estadística.
+        </p>
+        <label class="campo"><span>Puntos relevantes de la visita</span>
+          <textarea data-cl="_|relevantes" style="min-height:90px"
+            placeholder="Lo que hay que contar, más allá del puntaje.">${esc(cl.relevantes || '')}</textarea></label>
+        <label class="campo"><span>Compromisos que asume el supervisor</span>
+          <textarea data-cl="_|compromisos" style="min-height:90px"
+            placeholder="Sobre las oportunidades detectadas en la visita.">${esc(cl.compromisos || '')}</textarea></label>
+      </section>
+
+      ${r.noAprobados.length ? `<section class="tarjeta">
+        <h2>Lo que quedó no aprobado</h2>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th class="num">N°</th><th>Punto</th><th>Sección</th><th>Observación</th></tr></thead>
+          <tbody>${r.noAprobados.map(p => `<tr>
+            <td class="num">${p.n}</td>
+            <td><strong>${esc(p.titulo)}</strong></td>
+            <td>${esc(p.subNombre)}</td>
+            <td>${esc(cl.obs[p.id] || '')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>` : ''}`;
   }
 
   /* -------------------------- 0. Recorrida -------------------------- *
@@ -9213,6 +9708,18 @@ const App = (() => {
       return { d, i: Number(i), campo };
     }
 
+    /* Check list: el punto y el campo viajan en data-cl porque las claves son
+       ids de punto y setPath partiría por el punto de la ruta. */
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-cl]');
+      if (!el || !visitaEnCurso) return;
+      const [id, campo] = el.dataset.cl.split('|');
+      const cl = visitaEnCurso.checklist;
+      if (id === '_') cl[campo] = el.value;
+      else (cl[campo] || (cl[campo] = {}))[id] = el.value;
+      guardarDiferido();
+    });
+
     /* Licencias y sanciones de la ficha: la persona y el registro se ubican por
        id porque la lista se reordena sola por fecha. */
     function registroDe(ref, coleccion) {
@@ -9389,21 +9896,21 @@ const App = (() => {
       /* --- visitas --- */
       if (a === 'nueva-visita') {
         const v = Store.crearVisita(btn.dataset.id);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'nueva-visita-desde-selector') {
         const sel = $('#visita-sucursal');
         if (!sel || !sel.value) return avisar('Elegí primero a qué sucursal vas.', 'error');
         const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'nueva-visita-selector') {
         const sel = $('#selector-sucursal');
         if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'borrar-visita') {
@@ -9527,6 +10034,23 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- check list de RRHH --- */
+      if (a === 'abrir-check') {
+        checkAbierto = checkAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'marcar-check') {
+        const cl = visitaEnCurso && visitaEnCurso.checklist;
+        if (!cl) return;
+        const id = btn.dataset.id;
+        /* Volver a tocar el mismo estado lo desmarca: equivocarse no tiene que
+           costar abrir un menú. */
+        cl.checks[id] = cl.checks[id] === btn.dataset.e ? '' : btn.dataset.e;
+        Store.save();
+        refrescar();
+      }
 
       if (a === 'ver-banco') {
         bancoVisible = bancoVisible === btn.dataset.id ? null : btn.dataset.id;
@@ -10032,7 +10556,7 @@ const App = (() => {
         const v = Store.ultimaVisita(ev.target.value);
         const idSuc = ev.target.value;
         ev.target.value = '';
-        if (v) { location.hash = `#/visita/${v.id}/recorrida`; return; }
+        if (v) { location.hash = `#/visita/${v.id}/checklist`; return; }
         confirmar('Sin visitas registradas',
           `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
           'Registrar visita').then(ok => {

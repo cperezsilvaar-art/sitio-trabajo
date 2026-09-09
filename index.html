@@ -21,15 +21,25 @@
     <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
   </header>
 
+  <!-- Agrupada por ritmo de trabajo, no por módulo: lo de hoy, lo de la
+       tienda y lo del mes cerrado. Antes eran ocho solapas en fila y no se
+       veía cuál era cuál. -->
   <nav class="tabs principal">
-    <a href="#/red">Panel de la red</a>
+    <a href="#/red">Panel</a>
+
+    <span class="grupo">Cada día</span>
+    <a href="#/diario">Reporte del día</a>
     <a href="#/agenda">Mi agenda</a>
-    <a href="#/diario">Reportes a diario</a>
+
+    <span class="grupo">En la tienda</span>
+    <a href="#/sucursales">Sucursales</a>
     <a href="#/visitas">Visitas</a>
     <a href="#/reclamos">Reclamos</a>
-    <a href="#/sucursales">Sucursales</a>
-    <a href="#/estadistica">Estadística mensual</a>
-    <a href="#/config">Configuración</a>
+
+    <span class="grupo">Cierre del mes</span>
+    <a href="#/estadistica">Estadística</a>
+
+    <a href="#/config" class="al-final" title="Configuración">Configuración</a>
   </nav>
 
   <main id="contenido"></main>
@@ -45,6 +55,7 @@
   <script src="assets/js/novedades.js"></script>
   <script src="assets/js/nomina.js"></script>
   <script src="assets/js/convenio.js"></script>
+  <script src="assets/js/checklist.js"></script>
   <script src="assets/js/reclamos.js"></script>
   <script src="assets/js/agenda.js"></script>
   <script src="assets/js/diario.js"></script>

@@ -118,8 +118,19 @@ function fechasDeTexto(texto, refISO) {
        pedir adelantos y también el pago de la variable de Dermo—, así que se
        repite por concepto y no solo por día. */
     if (hallazgos.some(h => h.fecha === iso && h.que === que)) return;
-    hallazgos.push({ fecha: iso, que, contexto: linea.replace(/\s+/g, ' ').slice(0, 160) });
+    hallazgos.push({
+      fecha: iso, que,
+      contexto: linea.replace(/\s+/g, ' ').slice(0, 160),
+      /* Se recuerda de qué parte del texto salió, para no anotar dos veces el
+         mismo hecho cuando la frase lo dice de dos formas: "se abona mañana,
+         9 de septiembre" es una fecha, no dos. */
+      _desde: iniClausula, _hasta: finClausula
+    });
   };
+
+  /** ¿Esta parte del texto ya produjo una fecha? */
+  const clausulaYaUsada = (ini, fin) =>
+    hallazgos.some(h => h._desde < fin && ini < h._hasta);
 
   const ajustarAnio = (mes, dia) => {
     let iso = _iso(anioRef, mes, dia);
@@ -161,17 +172,29 @@ function fechasDeTexto(texto, refISO) {
     { re: /\bpasado manana\b/g, dias: 2 },
     { re: /\bmanana\b/g, dias: 1 }
   ];
+  /* "Se abonará mañana, 9 de septiembre" nombra una sola fecha de dos maneras.
+     Cuando el relativo viene pegado a una fecha explícita —eso es una
+     aposición, no dos hechos— se queda la explícita, que es la que después se
+     puede verificar contra el calendario. */
+  const nombreMesRe = Object.keys(MESES_ES).join('|');
+  const reAposicion = new RegExp(
+    '^[\\s,;:.\u2014-]*(?:\\d{1,2}\\s+de\\s+(?:' + nombreMesRe + ')|\\d{1,2}[/-]\\d{1,2})');
+
   relativos.forEach(r => {
     r.re.lastIndex = 0;
     let x;
     while ((x = r.re.exec(plano)) !== null) {
-      registrar(_sumarDias(ref, r.dias), x.index, x.index + x[0].length);
+      const fin = x.index + x[0].length;
+      if (reAposicion.test(plano.slice(fin, fin + 30))) continue;
+      if (clausulaYaUsada(x.index, fin)) continue;
+      registrar(_sumarDias(ref, r.dias), x.index, fin);
     }
   });
 
   /* "en 3 días", "en dos semanas" */
   const reEn = /\ben\s+(\d{1,3})\s+(dias?|semanas?)\b/g;
   while ((m = reEn.exec(plano)) !== null) {
+    if (clausulaYaUsada(m.index, m.index + m[0].length)) continue;
     const n = Number(m[1]) * (/semana/.test(m[2]) ? 7 : 1);
     registrar(_sumarDias(ref, n), m.index, m.index + m[0].length);
   }
@@ -181,6 +204,7 @@ function fechasDeTexto(texto, refISO) {
   const reDia = new RegExp(
     '\\b(?:el\\s+|este\\s+|proximo\\s+)?(' + nombreDia + ')(\\s+que\\s+viene|\\s+proximo)?\\b', 'g');
   while ((m = reDia.exec(plano)) !== null) {
+    if (clausulaYaUsada(m.index, m.index + m[0].length)) continue;
     const objetivo = DIAS_ES[m[1]];
     const hoyDia = new Date(ref).getUTCDay();
     /* "el lunes" dicho un lunes es el lunes que viene, no hoy. Y "el lunes que
@@ -190,7 +214,9 @@ function fechasDeTexto(texto, refISO) {
     registrar(_sumarDias(ref, delta), m.index, m.index + m[0].length);
   }
 
-  return hallazgos.sort((a, b) => a.fecha.localeCompare(b.fecha));
+  return hallazgos
+    .map(h => ({ fecha: h.fecha, que: h.que, contexto: h.contexto }))
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
 /** Tema probable, para no obligar a elegirlo en un menú. */

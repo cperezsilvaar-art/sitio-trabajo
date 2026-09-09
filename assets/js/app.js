@@ -220,7 +220,7 @@ const App = (() => {
               <td>${c ? chipSemaforo(c.dotacion.semaforo) : '—'}</td>
               <td>${v ? (v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>') : '—'}</td>
               <td class="num">${v
-                  ? `<a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>`
+                  ? `<a class="chip azul" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a>`
                   : `<button class="mini" data-accion="nueva-visita" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">Registrar visita</button>`}</td>
             </tr>`;
           }).join('')}
@@ -250,7 +250,7 @@ const App = (() => {
             <td>${esc(v.coordinador || '—')}</td>
             <td>${v.envio.enviado ? `<span class="chip verde">${esc(v.envio.via)}</span>` : '<span class="chip ambar">pendiente</span>'}</td>
             <td class="num">
-              <a class="chip azul" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a>
+              <a class="chip azul" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a>
               <button class="mini" data-accion="borrar-visita" data-id="${v.id}">Borrar</button>
             </td>
           </tr>`;
@@ -362,7 +362,7 @@ const App = (() => {
               <td>${rr.pct === null ? '—' : fmtPct(rr.pct, 0)}</td>
               <td class="num">${plan || '—'}</td>
               <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
-              <td class="num"><a class="mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none;display:inline-block">Abrir</a></td>
+              <td class="num"><a class="mini" href="#/visita/${v.id}/checklist" style="text-decoration:none;display:inline-block">Abrir</a></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>` : '<p class="vacio">Todavía no registraste ninguna visita.</p>'}
@@ -1182,7 +1182,7 @@ const App = (() => {
               <td class="num">${c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</td>
               <td>${v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>'}</td>
-              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/recorrida" style="text-decoration:none">Abrir</a></td>
+              <td class="num"><a class="b sec mini" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a></td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>` : '<p class="vacio">Sin visitas registradas todavía.</p>'}
@@ -1997,7 +1997,8 @@ const App = (() => {
   /* La visita es lo de todas las semanas: recorrer la tienda y mirar a la
      gente. Los números del período viven en Estadística mensual. */
   const PESTANAS = [
-    ['recorrida', 'Recorrida'],
+    ['checklist', 'Check list RRHH'],
+    ['recorrida', 'Mirada del HRBP'],
     ['talento',   'Talento y 9-box']
   ];
 
@@ -2011,9 +2012,10 @@ const App = (() => {
     const c = Reporte.calcular(v, s, e.config);
 
     const cuerpo = {
+      checklist: () => panelChecklist(v, s),
       recorrida: () => panelRecorrida(v, s),
       talento:   () => panelTalento(v, s)
-    }[pestana] || (() => panelRecorrida(v, s));
+    }[pestana] || (() => panelChecklist(v, s));
 
     return `
       <h1 class="titulo">${esc(Store.etiquetaSucursal(s))}</h1>
@@ -2037,6 +2039,145 @@ const App = (() => {
       </nav>
 
       ${cuerpo()}`;
+  }
+
+  /* ------------------- 0. Check list de RRHH Operaciones -------------------
+     El instrumento corporativo. Cada punto trae su criterio de aprobación a la
+     vista al marcar: sin eso, dos personas evalúan distinto la misma tienda. */
+  let checkAbierto = null;   // punto con el criterio y las observaciones desplegados
+
+  function panelChecklist(v, s) {
+    const cl = v.checklist;
+    const r = evaluarChecklist(cl.checks);
+    const t = r.total;
+    const pct = t.pct === null ? null : t.pct;
+
+    const chipEstado = e => (ESTADOS_CHECKLIST_POR_ID[e] || {}).chip || '';
+
+    const fila = (p) => {
+      const est = cl.checks[p.id] || '';
+      const abierto = checkAbierto === p.id;
+      const obs = cl.obs[p.id] || '';
+      return `<div class="check-punto ${est ? 'marcado' : ''}">
+        <div class="check-cab">
+          <span class="check-n">${p.n}</span>
+          <button class="check-titulo" data-accion="abrir-check" data-id="${p.id}"
+            title="Ver el criterio de aprobación">${esc(p.titulo)}</button>
+          <div class="check-estados">
+            ${ESTADOS_CHECKLIST.filter(e => e.id).map(e =>
+              `<button class="check-op ${est === e.id ? 'activo ' + e.chip : ''}"
+                data-accion="marcar-check" data-id="${p.id}" data-e="${e.id}">${esc(e.nombre)}</button>`).join('')}
+          </div>
+          ${obs ? '<span class="chip" title="Tiene observación">✎</span>' : ''}
+        </div>
+        ${abierto ? `<div class="check-detalle">
+          <p>${esc(p.detalle)}</p>
+          <p class="criterio"><strong>Criterio de aprobación:</strong> ${esc(p.criterio)}</p>
+          ${p.nota ? `<p class="ayuda">${esc(p.nota)}</p>` : ''}
+          <label class="campo"><span>Observación</span>
+            <input data-cl="${p.id}|obs" value="${esc(obs)}"
+              placeholder="Qué se vio, con qué evidencia."></label>
+          <label class="campo"><span>Otras consideraciones</span>
+            <input data-cl="${p.id}|consideraciones" value="${esc(cl.consideraciones[p.id] || '')}"
+              placeholder="Lo que haya que aclarar del punto."></label>
+        </div>` : ''}
+      </div>`;
+    };
+
+    return `
+      <section class="tarjeta">
+        <h2>Puntaje de la visita</h2>
+        <p class="ayuda">
+          El porcentaje se calcula solo sobre los puntos aprobados o no aprobados.
+          Lo marcado <em>No aplica</em> sale del numerador y del denominador, para no
+          castigar a la tienda por algo que no le corresponde.
+        </p>
+        <div class="kpis">
+          ${kpi('Cumplimiento', pct === null ? '—' : fmtPct(pct, 1),
+                `${t.aprobados} de ${t.aplicables} aplicables`,
+                pct === null ? '' : pct >= 0.9 ? 'ok' : pct >= 0.75 ? 'aviso' : 'alerta')}
+          ${kpi('No aprobados', t.noAprobados, t.noAprobados ? 'a corregir' : 'ninguno', t.noAprobados ? 'alerta' : 'ok')}
+          ${kpi('No aplica', t.noAplica, 'fuera del cálculo')}
+          ${kpi('Sin evaluar', t.sinEvaluar, t.sinEvaluar ? `de ${t.total} puntos` : 'checklist completo',
+                t.sinEvaluar ? 'aviso' : 'ok')}
+        </div>
+
+        ${r.categoriaMasAfectada && r.total.aplicables ? `<div class="aviso-caja${
+          r.categoriaMasAfectada.pct < 0.9 ? '' : ' info'}">
+          <strong>Lo más flojo:</strong> ${esc(r.subMasAfectada.nombre)}
+          (${fmtPct(r.subMasAfectada.pct, 0)}), dentro de ${esc(r.categoriaMasAfectada.nombre)}.
+          ${r.subMasPositiva && r.subMasPositiva.id !== r.subMasAfectada.id
+            ? `Lo más firme: ${esc(r.subMasPositiva.nombre)} (${fmtPct(r.subMasPositiva.pct, 0)}).` : ''}
+        </div>` : ''}
+
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Categoría</th><th class="num">Aplicables</th><th class="num">Aprobados</th>
+            <th class="num">No aprobados</th><th class="num">Cumplimiento</th></tr></thead>
+          <tbody>
+            ${r.porCategoria.map(c => `<tr>
+              <td><strong>${esc(c.nombre)}</strong></td>
+              <td class="num">${c.aplicables || '—'}</td>
+              <td class="num">${c.aprobados || '—'}</td>
+              <td class="num">${c.noAprobados || '—'}</td>
+              <td class="num">${c.pct === null ? '—'
+                : `<span class="chip ${c.pct >= 0.9 ? 'verde' : c.pct >= 0.75 ? 'ambar' : 'rojo'}">${fmtPct(c.pct, 0)}</span>`}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Quién acompañó la visita</h2>
+        <div class="grid c3">
+          <label class="campo"><span>Supervisor que acompañó</span>
+            <input data-cl="_|supervisor" value="${esc(cl.supervisor || '')}"
+              placeholder="Nombre y apellido"></label>
+          <label class="campo"><span>Cargo del supervisor</span>
+            <input data-cl="_|cargoSupervisor" value="${esc(cl.cargoSupervisor || '')}"
+              placeholder="Gerente de Tienda, Senior…"></label>
+        </div>
+      </section>
+
+      ${CHECKLIST_RRHH.map(c => `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>${esc(c.nombre)}</h2>
+          ${(() => {
+            const rc = r.porCategoria.find(x => x.id === c.id);
+            return rc.pct === null ? '<span class="chip">sin evaluar</span>'
+              : `<span class="chip ${rc.pct >= 0.9 ? 'verde' : rc.pct >= 0.75 ? 'ambar' : 'rojo'}">${fmtPct(rc.pct, 0)}</span>`;
+          })()}
+        </div>
+        ${c.subs.map(sub => `<h3>${esc(sub.nombre)}</h3>
+          ${sub.puntos.map(fila).join('')}`).join('')}
+      </section>`).join('')}
+
+      <section class="tarjeta">
+        <h2>Cierre y compromisos</h2>
+        <p class="ayuda">
+          Lo que pide el check list al final: qué hay que contar de la visita y qué se
+          compromete a mejorar el supervisor. Los compromisos con plazo van al plan de
+          acción, en la solapa de la estadística.
+        </p>
+        <label class="campo"><span>Puntos relevantes de la visita</span>
+          <textarea data-cl="_|relevantes" style="min-height:90px"
+            placeholder="Lo que hay que contar, más allá del puntaje.">${esc(cl.relevantes || '')}</textarea></label>
+        <label class="campo"><span>Compromisos que asume el supervisor</span>
+          <textarea data-cl="_|compromisos" style="min-height:90px"
+            placeholder="Sobre las oportunidades detectadas en la visita.">${esc(cl.compromisos || '')}</textarea></label>
+      </section>
+
+      ${r.noAprobados.length ? `<section class="tarjeta">
+        <h2>Lo que quedó no aprobado</h2>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th class="num">N°</th><th>Punto</th><th>Sección</th><th>Observación</th></tr></thead>
+          <tbody>${r.noAprobados.map(p => `<tr>
+            <td class="num">${p.n}</td>
+            <td><strong>${esc(p.titulo)}</strong></td>
+            <td>${esc(p.subNombre)}</td>
+            <td>${esc(cl.obs[p.id] || '')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>` : ''}`;
   }
 
   /* -------------------------- 0. Recorrida -------------------------- *
@@ -3160,6 +3301,18 @@ const App = (() => {
       return { d, i: Number(i), campo };
     }
 
+    /* Check list: el punto y el campo viajan en data-cl porque las claves son
+       ids de punto y setPath partiría por el punto de la ruta. */
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-cl]');
+      if (!el || !visitaEnCurso) return;
+      const [id, campo] = el.dataset.cl.split('|');
+      const cl = visitaEnCurso.checklist;
+      if (id === '_') cl[campo] = el.value;
+      else (cl[campo] || (cl[campo] = {}))[id] = el.value;
+      guardarDiferido();
+    });
+
     /* Licencias y sanciones de la ficha: la persona y el registro se ubican por
        id porque la lista se reordena sola por fecha. */
     function registroDe(ref, coleccion) {
@@ -3336,21 +3489,21 @@ const App = (() => {
       /* --- visitas --- */
       if (a === 'nueva-visita') {
         const v = Store.crearVisita(btn.dataset.id);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'nueva-visita-desde-selector') {
         const sel = $('#visita-sucursal');
         if (!sel || !sel.value) return avisar('Elegí primero a qué sucursal vas.', 'error');
         const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'nueva-visita-selector') {
         const sel = $('#selector-sucursal');
         if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/recorrida`;
+        location.hash = `#/visita/${v.id}/checklist`;
       }
 
       if (a === 'borrar-visita') {
@@ -3474,6 +3627,23 @@ const App = (() => {
         }
       }
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
+
+      /* --- check list de RRHH --- */
+      if (a === 'abrir-check') {
+        checkAbierto = checkAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'marcar-check') {
+        const cl = visitaEnCurso && visitaEnCurso.checklist;
+        if (!cl) return;
+        const id = btn.dataset.id;
+        /* Volver a tocar el mismo estado lo desmarca: equivocarse no tiene que
+           costar abrir un menú. */
+        cl.checks[id] = cl.checks[id] === btn.dataset.e ? '' : btn.dataset.e;
+        Store.save();
+        refrescar();
+      }
 
       if (a === 'ver-banco') {
         bancoVisible = bancoVisible === btn.dataset.id ? null : btn.dataset.id;
@@ -3979,7 +4149,7 @@ const App = (() => {
         const v = Store.ultimaVisita(ev.target.value);
         const idSuc = ev.target.value;
         ev.target.value = '';
-        if (v) { location.hash = `#/visita/${v.id}/recorrida`; return; }
+        if (v) { location.hash = `#/visita/${v.id}/checklist`; return; }
         confirmar('Sin visitas registradas',
           `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
           'Registrar visita').then(ok => {

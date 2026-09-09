@@ -158,10 +158,49 @@ const Reporte = (() => {
 
     let n = 0;
 
-    /* 1. Recorrida */
+    /* 1. Check list corporativo. Va primero porque es el instrumento formal:
+       lo que se manda y lo que se compara entre tiendas. */
+    const cl = visita.checklist || { checks: {} };
+    const chk = evaluarChecklist(cl.checks);
+    if (chk.total.aplicables || chk.total.noAplica) {
+      L.push(++n + '. CHECK LIST DE RRHH OPERACIONES');
+      L.push(`- Cumplimiento: ${fmtPct(chk.total.pct, 1)} — ${chk.total.aprobados} aprobados ` +
+             `de ${chk.total.aplicables} aplicables.`);
+      if (chk.total.noAplica) L.push(`  ${chk.total.noAplica} punto/s marcados "no aplica", fuera del cálculo.`);
+      if (chk.total.sinEvaluar) L.push(`  ${chk.total.sinEvaluar} de ${chk.total.total} puntos quedaron sin evaluar.`);
+      if (cl.supervisor) {
+        L.push(`- Acompañó la visita: ${cl.supervisor}${cl.cargoSupervisor ? ' (' + cl.cargoSupervisor + ')' : ''}.`);
+      }
+      L.push('- Por categoría:');
+      chk.porCategoria.forEach(c => {
+        L.push(`  * ${c.nombre}: ${c.pct === null ? 'sin evaluar'
+          : `${c.aprobados}/${c.aplicables} (${fmtPct(c.pct, 0)})`}`);
+      });
+      if (chk.subMasAfectada) {
+        L.push(`- Lo más flojo: ${chk.subMasAfectada.nombre} (${fmtPct(chk.subMasAfectada.pct, 0)}).`);
+      }
+      if (chk.noAprobados.length) {
+        L.push('- Puntos no aprobados:');
+        chk.noAprobados.forEach(p => {
+          const obs = (cl.obs || {})[p.id];
+          L.push(`  * [${p.n}] ${p.titulo}${obs ? ' — ' + obs : ''}`);
+        });
+      }
+      if (String(cl.relevantes || '').trim()) {
+        L.push('- Puntos relevantes de la visita:');
+        String(cl.relevantes).split('\n').filter(x => x.trim()).forEach(x => L.push('  * ' + x.trim()));
+      }
+      if (String(cl.compromisos || '').trim()) {
+        L.push('- Compromisos que asume el supervisor:');
+        String(cl.compromisos).split('\n').filter(x => x.trim()).forEach(x => L.push('  * ' + x.trim()));
+      }
+      L.push('');
+    }
+
+    /* 2. La mirada del HRBP, que no reemplaza al check list ni lo repite. */
     const rec = evaluarRecorrida(visita.recorrida);
     if (rec.hechos || rec.sinHacer.length) {
-      L.push(++n + '. RECORRIDA DE LA SUCURSAL');
+      L.push(++n + '. MIRADA DEL HRBP EN LA RECORRIDA');
       L.push(`- Puntos cubiertos: ${rec.hechos} de ${rec.aplican} que aplicaban (${fmtPct(rec.pct, 0)}).`);
       rec.bloques.forEach(b => {
         const conNota = b.items.filter(i => (visita.recorrida.notas || {})[i.id]);
