@@ -808,10 +808,17 @@ const Reporte = (() => {
    *  - mailto:  abre el cliente de correo con todo pre-cargado; el coordinador
    *    solo confirma el envío.
    */
-  async function despachar({ sucursal, config, asunto, cuerpo, payloadExtra, opciones }) {
+  async function despachar({ sucursal, config, asunto, cuerpo, payloadExtra, opciones, paraExtra }) {
     opciones = opciones || {};
     const dest = destinatario(sucursal, config);
-    const destino = dest.email;
+
+    /* Algunos documentos van dirigidos a más de una persona, no con copia: el
+       informe del check list se le manda al Gerente de Operaciones y al de la
+       tienda, porque los dos tienen que hacer algo con él. */
+    const para = [dest.email].concat(paraExtra || [])
+      .map(x => String(x || '').trim()).filter(Boolean)
+      .filter((x, i, xs) => xs.findIndex(y => y.toLowerCase() === x.toLowerCase()) === i);
+    const destino = para.join(',');
 
     if (!destino) {
       throw new Error(sucursal.gerenteOperaciones
@@ -819,11 +826,13 @@ const Reporte = (() => {
         : 'Falta cargar el email del Gerente de Operaciones en Configuración.');
     }
 
-    const cc = copias(sucursal, config);
+    /* Quien ya está entre los destinatarios no se repite en copia. */
+    const cc = copias(sucursal, config)
+      .filter(x => !para.some(y => y.toLowerCase() === x.toLowerCase()));
 
     if (config.webhook && String(config.webhook).trim() && !opciones.forzarMailto) {
       const payload = Object.assign({
-        para: destino, cc, asunto, cuerpo,
+        para: destino, destinatarios: para, cc, asunto, cuerpo,
         area: config.area || '',
         sucursal: { codigo: sucursal.codigo, nombre: sucursal.nombre, tipo: sucursal.tipo }
       }, payloadExtra || {});
@@ -859,6 +868,160 @@ const Reporte = (() => {
     if (!Array.isArray(registro.historial)) registro.historial = [];
     registro.historial.push({ fecha: sello, destinatario: r.destino, copias: r.copias, via: r.via });
     Store.save();
+  }
+
+  /* ============= INFORME DEL CHECK LIST DE RRHH OPERACIONES =============
+   *
+   * Documento propio, no un recorte del reporte de la visita: va dirigido al
+   * Gerente de Operaciones y al de la tienda, y lo que a ellos les sirve es el
+   * puntaje, qué quedó no aprobado y qué se comprometió el supervisor. La
+   * lectura de talento y el plan de acción viven en el reporte de la visita.
+   */
+  function textoChecklist(visita, sucursal, config) {
+    const cl = visita.checklist || { checks: {} };
+    const r = evaluarChecklist(cl.checks);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'INFORME DEL CHECK LIST DE RRHH OPERACIONES'];
+    if (config.area) L.push('Área: ' + String(config.area).replace(/^\s*[áa]rea\s+/i, ''));
+    L.push('Farmacia: ' + Store.etiquetaSucursal(sucursal) +
+           (sucursal.localidad ? ' · ' + sucursal.localidad : ''));
+    L.push('Fecha de la visita: ' + fmtFecha(visita.fecha));
+    L.push('Coordinador de RRHH: ' + oPendiente(visita.coordinador || config.coordinador));
+    L.push('Gerente de Tienda: ' + oPendiente(sucursal.gerente));
+    L.push('Acompañó la visita: ' + oPendiente(cl.supervisor) +
+           (cl.cargoSupervisor ? ` (${cl.cargoSupervisor})` : ''));
+    L.push(barra);
+    L.push('');
+
+    if (!r.total.aplicables && !r.total.noAplica) {
+      L.push('El check list todavía no tiene ningún punto evaluado.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    L.push('RESULTADO');
+    L.push(`  Cumplimiento: ${fmtPct(r.total.pct, 1)}`);
+    L.push(`  Aprobados: ${r.total.aprobados} · No aprobados: ${r.total.noAprobados} · ` +
+           `No aplica: ${r.total.noAplica}`);
+    L.push(`  Puntos aplicables: ${r.total.aplicables} de ${r.total.total}.`);
+    if (r.total.sinEvaluar) {
+      L.push(`  AVISO: ${r.total.sinEvaluar} punto/s quedaron sin evaluar y no entran en el cálculo.`);
+    }
+    L.push('  Los puntos marcados "no aplica" se excluyen del puntaje obtenido y del total');
+    L.push('  posible, para no penalizar lo que no corresponde a esta farmacia.');
+    L.push('');
+
+    L.push('CUMPLIMIENTO POR CATEGORÍA');
+    r.porCategoria.forEach(c => {
+      L.push(`  ${c.nombre}: ${c.pct === null ? 'sin evaluar'
+        : `${c.aprobados}/${c.aplicables} (${fmtPct(c.pct, 0)})`}`);
+      c.subs.forEach(sub => {
+        if (!sub.aplicables) return;
+        L.push(`     · ${sub.nombre}: ${sub.aprobados}/${sub.aplicables} (${fmtPct(sub.pct, 0)})`);
+      });
+    });
+    L.push('');
+
+    if (r.subMasAfectada) {
+      L.push(`Lo más afectado: ${r.subMasAfectada.nombre} (${fmtPct(r.subMasAfectada.pct, 0)}).`);
+      if (r.subMasPositiva && r.subMasPositiva.id !== r.subMasAfectada.id) {
+        L.push(`Lo más firme: ${r.subMasPositiva.nombre} (${fmtPct(r.subMasPositiva.pct, 0)}).`);
+      }
+      L.push('');
+    }
+
+    if (r.noAprobados.length) {
+      L.push('PUNTOS NO APROBADOS');
+      r.noAprobados.forEach(p => {
+        L.push(`  [${p.n}] ${p.titulo}  —  ${p.subNombre}`);
+        const obs = (cl.obs || {})[p.id];
+        if (obs) L.push(`        Observación: ${obs}`);
+        const otras = (cl.consideraciones || {})[p.id];
+        if (otras) L.push(`        Otras consideraciones: ${otras}`);
+        L.push(`        Criterio: ${p.criterio}`);
+      });
+      L.push('');
+    }
+
+    /* Lo aprobado con observación también se informa: es lo que está por
+       pasarse de la raya y conviene mirar antes de la próxima visita. */
+    const conObs = CHECKLIST_PUNTOS.filter(p =>
+      cl.checks[p.id] === 'aprobado' && String((cl.obs || {})[p.id] || '').trim());
+    if (conObs.length) {
+      L.push('APROBADOS CON OBSERVACIÓN');
+      conObs.forEach(p => L.push(`  [${p.n}] ${p.titulo}: ${cl.obs[p.id]}`));
+      L.push('');
+    }
+
+    if (r.total.noAplica) {
+      const na = CHECKLIST_PUNTOS.filter(p => cl.checks[p.id] === 'noAplica');
+      L.push('PUNTOS QUE NO APLICAN A ESTA FARMACIA');
+      na.forEach(p => L.push(`  [${p.n}] ${p.titulo}` +
+        ((cl.obs || {})[p.id] ? ` — ${cl.obs[p.id]}` : '')));
+      L.push('');
+    }
+
+    if (String(cl.relevantes || '').trim()) {
+      L.push('PUNTOS RELEVANTES DE LA VISITA');
+      String(cl.relevantes).split('\n').filter(x => x.trim()).forEach(x => L.push('  - ' + x.trim()));
+      L.push('');
+    }
+
+    if (String(cl.compromisos || '').trim()) {
+      L.push('COMPROMISOS QUE ASUME EL SUPERVISOR');
+      String(cl.compromisos).split('\n').filter(x => x.trim()).forEach(x => L.push('  - ' + x.trim()));
+      L.push('');
+    }
+
+    if (r.sinEvaluar.length && r.sinEvaluar.length <= 12) {
+      L.push('PUNTOS SIN EVALUAR');
+      r.sinEvaluar.forEach(p => L.push(`  [${p.n}] ${p.titulo}`));
+      L.push('');
+    }
+
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoChecklist(visita, sucursal, config) {
+    const cl = visita.checklist || { checks: {} };
+    const r = evaluarChecklist(cl.checks);
+    const area = config && config.area ? config.area + ' · ' : '';
+    const pct = r.total.pct === null ? 'sin evaluar' : fmtPct(r.total.pct, 1);
+    return `Check list RRHH · ${area}${Store.etiquetaSucursal(sucursal)} · ${fmtFecha(visita.fecha)} · ${pct}`;
+  }
+
+  /**
+   * Manda el informe del check list. A diferencia del reporte de la visita, el
+   * Gerente de Tienda va como destinatario y no en copia: el resultado es suyo
+   * tanto como del Gerente de Operaciones.
+   */
+  async function enviarChecklist(visita, sucursal, config, opciones) {
+    const cl = visita.checklist || { checks: {} };
+    const r = evaluarChecklist(cl.checks);
+    const res = await despachar({
+      sucursal, config, opciones,
+      paraExtra: [sucursal.emailGerente],
+      asunto: asuntoChecklist(visita, sucursal, config),
+      cuerpo: textoChecklist(visita, sucursal, config),
+      payloadExtra: {
+        tipo: 'checklist',
+        visita: { id: visita.id, fecha: visita.fecha, periodo: visita.periodo },
+        supervisor: cl.supervisor || '',
+        metricas: {
+          cumplimiento: r.total.pct,
+          aprobados: r.total.aprobados,
+          noAprobados: r.total.noAprobados,
+          noAplica: r.total.noAplica,
+          sinEvaluar: r.total.sinEvaluar,
+          porCategoria: r.porCategoria.map(c => ({ nombre: c.nombre, pct: c.pct }))
+        }
+      }
+    });
+    sellar(visita.envioChecklist, res);
+    return res;
   }
 
   /** Manda el reporte de la visita y lo deja registrado en la visita. */
@@ -1111,9 +1274,9 @@ const Reporte = (() => {
   return {
     calcular, datosMensuales,
     textoDiario, asuntoDiario,
-    textoVisita, textoMensual,
-    asuntoVisita, asuntoMensual,
-    enviarVisita, enviarMensual,
+    textoVisita, textoMensual, textoChecklist,
+    asuntoVisita, asuntoMensual, asuntoChecklist,
+    enviarVisita, enviarMensual, enviarChecklist,
     faltantesVisita, faltantesMensuales,
     tablaFteTexto, copias, destinatario, resumenOperaciones, lecturaFte
   };

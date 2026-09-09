@@ -66,11 +66,45 @@ Los compromisos con plazo y responsable siguen yendo al **plan de acción**, en
 la estadística mensual, que es donde se les hace seguimiento de una visita a la
 siguiente.
 
-## En el reporte
+## Generar el informe
 
-El check list encabeza el reporte de la visita: cumplimiento, quién acompañó,
-detalle por categoría, lo más flojo, los puntos no aprobados con su observación,
-y el cierre. La mirada del HRBP va después, como bloque aparte.
+**Generar informe y enviar** arma un documento propio del check list y lo manda
+**al Gerente de Operaciones y al Gerente de Tienda** —los dos como
+destinatarios, no uno en copia: el resultado es de los dos—. Las copias fijas de
+Configuración van en CC, y a quien ya está entre los destinatarios no se lo
+repite.
+
+Antes de mandar, el panel muestra el resultado y a quiénes va, para confirmar.
+Si no hay ningún punto marcado, no deja enviar. Si quedan puntos sin evaluar
+avisa, pero deja mandar: van listados al final del informe.
+
+El envío usa la misma vía que el resto del panel: automático si hay un endpoint
+configurado, o abriendo el cliente de correo con todo cargado. Queda registrado
+en la visita, aparte del envío del reporte: son documentos distintos.
+
+### Qué lleva el informe
+
+- Encabezado con la farmacia, la fecha, el coordinador, el Gerente de Tienda y
+  quién acompañó la visita.
+- **Resultado**: cumplimiento, aprobados, no aprobados, no aplica, y la
+  aclaración de por qué los "no aplica" no penalizan.
+- **Cumplimiento por categoría**, con el desglose por subcategoría.
+- Lo más afectado y lo más firme.
+- **Puntos no aprobados**, cada uno con su observación y **su criterio de
+  aprobación**: quien lo lee ve por qué no pasó, no solo que no pasó.
+- **Aprobados con observación** — lo que está por pasarse de la raya y conviene
+  mirar antes de la próxima visita.
+- Los puntos que no aplican a esa farmacia.
+- Puntos relevantes y compromisos del supervisor.
+- Los puntos sin evaluar, si son pocos.
+
+No lleva talento, 9-box ni plan de acción: eso vive en el reporte de la visita.
+
+## En el reporte de la visita
+
+El check list también encabeza el reporte de la visita, en versión resumida:
+cumplimiento, quién acompañó, detalle por categoría, lo más flojo, los puntos no
+aprobados y el cierre. La mirada del HRBP va después, como bloque aparte.
 
 ## Lo que este módulo no hace
 
@@ -78,6 +112,6 @@ y el cierre. La mirada del HRBP va después, como bloque aparte.
   una foto del cierre. El panel es un archivo estático sin servidor: guardar
   imágenes en el navegador lo haría pesar decenas de megas y no se podrían
   compartir. La observación escrita cumple la misma función de dejar rastro.
-- **No manda el resultado por correo automáticamente** a tienda, GA, CRH y GRH.
-  El envío sigue siendo el que ya tenía el panel: al Gerente de Operaciones, con
-  copia al Gerente de Tienda.
+- **No manda a GA, CRH y GRH.** El instrumento original tiene esa lista de
+  distribución; el panel manda al Gerente de Operaciones y al Gerente de Tienda.
+  Para sumar destinatarios fijos están las copias de Configuración.

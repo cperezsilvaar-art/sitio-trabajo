@@ -2166,6 +2166,58 @@ const App = (() => {
             placeholder="Sobre las oportunidades detectadas en la visita.">${esc(cl.compromisos || '')}</textarea></label>
       </section>
 
+      <section class="tarjeta">
+        <h2>Generar el informe</h2>
+        <p class="ayuda">
+          ${(() => {
+            const d = Reporte.destinatario(s, Store.get().config);
+            const partes = [];
+            partes.push(`<strong>${esc(d.nombre || 'Gerente de Operaciones sin cargar')}</strong> &lt;${esc(d.email || 'sin email')}&gt;`);
+            partes.push(s.emailGerente
+              ? `<strong>${esc(s.gerente || 'Gerente de Tienda')}</strong> &lt;${esc(s.emailGerente)}&gt;`
+              : '<span class="chip ambar">falta el email del Gerente de Tienda</span>');
+            return 'Va a ' + partes.join(' y a ') + '.';
+          })()}
+          ${(() => {
+            const cc = Reporte.copias(s, Store.get().config)
+              .filter(x => x.toLowerCase() !== String(s.emailGerente || '').toLowerCase());
+            return cc.length ? ` Con copia a ${esc(cc.join(', '))}.` : '';
+          })()}
+          · vía ${Store.get().config.webhook
+            ? '<span class="chip verde">envío automático</span>'
+            : '<span class="chip azul">cliente de correo</span>'}
+        </p>
+
+        ${t.sinEvaluar ? `<div class="aviso-caja">
+          <strong>Quedan ${t.sinEvaluar} de ${t.total} puntos sin evaluar.</strong>
+          El informe se puede mandar igual —van listados al final— pero el porcentaje
+          se calcula solo sobre lo que marcaste.
+        </div>` : ''}
+
+        ${!s.emailGerente ? `<div class="aviso-caja">
+          <strong>Falta el email del Gerente de Tienda.</strong> Sin eso el informe le llega
+          solo al Gerente de Operaciones. Cargalo en <a href="#/sucursales">Sucursales</a>.
+        </div>` : ''}
+
+        ${v.envioChecklist && v.envioChecklist.enviado ? `<div class="aviso-caja info">
+          Último envío: ${new Date(v.envioChecklist.fecha).toLocaleString('es-AR')}
+          a ${esc(v.envioChecklist.destinatario)} (${esc(v.envioChecklist.via)}).
+          ${v.envioChecklist.historial.length > 1 ? `Total de envíos: ${v.envioChecklist.historial.length}.` : ''}
+        </div>` : ''}
+
+        <div class="acciones">
+          <button class="b grande" data-accion="enviar-checklist" data-id="${v.id}">Generar informe y enviar</button>
+          <button class="b sec" data-accion="copiar-checklist" data-id="${v.id}">Copiar</button>
+          <button class="b sec" data-accion="descargar-checklist" data-id="${v.id}">Descargar .txt</button>
+          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Vista previa del informe</h2>
+        <pre class="reporte" id="vista-checklist">${esc(Reporte.textoChecklist(v, s, Store.get().config))}</pre>
+      </section>
+
       ${r.noAprobados.length ? `<section class="tarjeta">
         <h2>Lo que quedó no aprobado</h2>
         <div class="tabla-scroll"><table>
@@ -3629,6 +3681,46 @@ const App = (() => {
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
 
       /* --- check list de RRHH --- */
+      if (a === 'enviar-checklist' || a === 'copiar-checklist' || a === 'descargar-checklist') {
+        const vis = Store.visita(btn.dataset.id);
+        const suc = Store.sucursal(vis.sucursalId);
+        const texto = Reporte.textoChecklist(vis, suc, e.config);
+
+        if (a === 'copiar-checklist') {
+          try { await navigator.clipboard.writeText(texto); avisar('Informe copiado.'); }
+          catch (_) { avisar('No se pudo copiar: seleccioná el texto de la vista previa.', 'error'); }
+          return;
+        }
+        if (a === 'descargar-checklist') {
+          guardarArchivo(`checklist-${suc.codigo || 'sucursal'}-${vis.fecha}.txt`, texto);
+          return;
+        }
+
+        const chk = evaluarChecklist(vis.checklist.checks);
+        if (!chk.total.aplicables && !chk.total.noAplica) {
+          return avisar('Todavía no marcaste ningún punto del check list.', 'error');
+        }
+        const d = Reporte.destinatario(suc, e.config);
+        const ok = await confirmar('Enviar el informe del check list',
+          `Cumplimiento ${fmtPct(chk.total.pct, 1)} — ${chk.total.aprobados} aprobados de ` +
+          `${chk.total.aplicables} aplicables.\n\n` +
+          `Va a ${d.nombre || 'Gerente de Operaciones'} <${d.email || 'sin email'}>` +
+          (suc.emailGerente ? ` y a ${suc.gerente || 'Gerente de Tienda'} <${suc.emailGerente}>` : '') +
+          (chk.total.sinEvaluar ? `\n\nQuedan ${chk.total.sinEvaluar} puntos sin evaluar.` : ''),
+          'Enviar');
+        if (!ok) return;
+
+        try {
+          const res = await Reporte.enviarChecklist(vis, suc, e.config);
+          refrescar();
+          avisar(res.via === 'webhook'
+            ? `Informe enviado a ${res.destino}.`
+            : 'Se abrió tu cliente de correo con el informe cargado.');
+        } catch (err) {
+          avisar('No se pudo enviar: ' + err.message, 'error');
+        }
+      }
+
       if (a === 'abrir-check') {
         checkAbierto = checkAbierto === btn.dataset.id ? null : btn.dataset.id;
         refrescar();

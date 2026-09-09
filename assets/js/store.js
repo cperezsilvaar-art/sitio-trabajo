@@ -132,6 +132,9 @@ const Store = (() => {
       comercial: { venta: '', ventaRed: '', tickets: '', horasTrabajadas: '' },
       diagnostico: { hallazgos: '', impacto: '', plan: [] },
       envio: { enviado: false, fecha: null, destinatario: null, via: null, historial: [] },
+      /* El informe del check list se manda aparte del reporte de la visita:
+         son documentos distintos y con destinatarios distintos. */
+      envioChecklist: { enviado: false, fecha: null, destinatario: null, via: null, historial: [] },
       creada: hoy.toISOString()
     };
   }
@@ -259,6 +262,10 @@ const Store = (() => {
           Object.keys(f).some(k => k !== 'rol' && String(f[k] || '').trim())));
 
       v.recorrida = Object.assign({ checks: {}, notas: {} }, v.recorrida || {});
+      v.envioChecklist = Object.assign(
+        { enviado: false, fecha: null, destinatario: null, via: null, historial: [] },
+        v.envioChecklist || {});
+      if (!Array.isArray(v.envioChecklist.historial)) v.envioChecklist.historial = [];
       v.checklist = Object.assign({
         supervisor: '', cargoSupervisor: '', checks: {}, obs: {},
         consideraciones: {}, relevantes: '', compromisos: ''
