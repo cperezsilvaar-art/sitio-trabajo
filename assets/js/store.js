@@ -8,6 +8,15 @@
 
 const CLAVE_ALMACEN = 'farmatodo.rrhh.operativo.v1';
 
+/* Resguardos automáticos. Viven en una clave aparte para que “Borrar todo”,
+   “Cargar datos de ejemplo” o una importación equivocada no se los lleven
+   puestos: son justamente la red que atrapa esos tres errores. Guardan el
+   mismo texto que el almacén —cifrado si hay clave puesta—, así que no
+   aflojan la privacidad de lo que resguardan. */
+const CLAVE_RESGUARDOS = 'farmatodo.rrhh.operativo.resguardos';
+const CLAVE_ILEGIBLE = 'farmatodo.rrhh.operativo.ilegible';
+const MAX_RESGUARDOS = 4;
+
 /**
  * Entrega un archivo al usuario.
  *
@@ -89,6 +98,7 @@ const Store = (() => {
         gerentesOperaciones: GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g)),
         copias: '',
         webhook: '',
+        ultimoRespaldo: '',
         parametros: Object.assign({}, PARAMETROS_DEFECTO)
       },
       sucursales,
@@ -312,9 +322,14 @@ const Store = (() => {
     try {
       const plano = cifrador ? await cifrador.descifrar(crudo) : crudo;
       estado = normalizar(JSON.parse(plano));
+      resguardarPorDia();
       return estado;
     } catch (err) {
       if (!cifrador) {
+        /* Arrancar vacío acá significa que el primer guardado pisa para siempre
+           lo que había. Se lo aparta antes, aunque no se entienda: un texto
+           roto todavía se puede mirar a mano, un texto pisado no. */
+        try { localStorage.setItem(CLAVE_ILEGIBLE, crudo); } catch (e2) { /* no entró */ }
         console.warn('El contenido guardado no se pudo leer, se inicia vacío.', err);
         estado = estadoInicial();
         return estado;
@@ -352,6 +367,71 @@ const Store = (() => {
       }
     });
     suscriptores.forEach(fn => fn(estado));
+  }
+
+  /* ---------------------- resguardos automáticos ---------------------- */
+
+  function leerResguardos() {
+    try {
+      const crudo = localStorage.getItem(CLAVE_RESGUARDOS);
+      const lista = crudo ? JSON.parse(crudo) : [];
+      return Array.isArray(lista) ? lista : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function escribirResguardos(lista) {
+    /* Si no entra, se va soltando del más viejo antes que perder el más nuevo:
+       vale más un resguardo de hoy que cuatro de la semana pasada. */
+    let x = lista.slice();
+    while (x.length) {
+      try {
+        localStorage.setItem(CLAVE_RESGUARDOS, JSON.stringify(x));
+        return true;
+      } catch (err) {
+        x.shift();
+      }
+    }
+    try { localStorage.removeItem(CLAVE_RESGUARDOS); } catch (err) { /* nada que hacer */ }
+    return false;
+  }
+
+  /**
+   * Copia a un costado lo que hay guardado en este momento. Se llama antes de
+   * cada operación que reemplaza todo el contenido y una vez por día al abrir.
+   *
+   * @param {string} motivo texto que después se muestra en Configuración.
+   * @returns {boolean} true si quedó un resguardo nuevo.
+   */
+  function resguardar(motivo) {
+    let crudo = null;
+    try { crudo = localStorage.getItem(CLAVE_ALMACEN); } catch (err) { crudo = null; }
+    if (!crudo || crudo.length < 200) return false;      // tablero vacío: nada que resguardar
+
+    const lista = leerResguardos();
+    if (lista.length && lista[lista.length - 1].datos === crudo) return false;   // sin cambios
+
+    lista.push({
+      id: uid(),
+      fecha: new Date().toISOString(),
+      motivo: motivo || 'Copia del día',
+      cifrado: !!cifrador,
+      tam: crudo.length,
+      datos: crudo
+    });
+    while (lista.length > MAX_RESGUARDOS) lista.shift();
+    return escribirResguardos(lista);
+  }
+
+  /* Un resguardo por día alcanza para que un error de hoy no borre lo de ayer,
+     sin llenar el almacenamiento con copias de cada apertura. */
+  function resguardarPorDia() {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const lista = leerResguardos();
+    const ultimo = lista.length ? lista[lista.length - 1] : null;
+    if (ultimo && String(ultimo.fecha).slice(0, 10) === hoy) return false;
+    return resguardar('Copia del día');
   }
 
   return {
@@ -1106,30 +1186,92 @@ const Store = (() => {
     },
 
     /* ------------------------- respaldos -------------------------- */
-    exportar() {
-      return guardarArchivo(
+    async exportar() {
+      const ok = await guardarArchivo(
         `rrhh-farmatodo-${new Date().toISOString().slice(0, 10)}.json`,
         JSON.stringify(this.get(), null, 2),
         'application/json'
       );
+      if (ok) {
+        this.get().config.ultimoRespaldo = new Date().toISOString();
+        guardar();
+      }
+      return ok;
+    },
+
+    /** Días desde el último respaldo exportado, o null si nunca se exportó. */
+    diasSinRespaldo() {
+      const t = this.get().config.ultimoRespaldo;
+      if (!t) return null;
+      const ms = Date.now() - new Date(t).getTime();
+      return Math.floor(ms / 86400000);
     },
 
     importar(texto) {
       const datos = JSON.parse(texto);
+      resguardar('Antes de importar un respaldo');
       estado = normalizar(datos);
       guardar();
       return estado;
     },
 
     reiniciar() {
+      resguardar('Antes de borrar todo');
       estado = estadoInicial();
       guardar();
+    },
+
+    /* -------------------- resguardos automáticos ------------------- */
+
+    /** Copias guardadas, de la más nueva a la más vieja. */
+    resguardos() {
+      return leerResguardos()
+        .map(r => ({ id: r.id, fecha: r.fecha, motivo: r.motivo, cifrado: !!r.cifrado, tam: r.tam }))
+        .reverse();
+    },
+
+    /** Fuerza una copia ahora, aunque ya haya una de hoy. */
+    resguardarAhora(motivo) { return resguardar(motivo || 'Copia a mano'); },
+
+    /**
+     * Vuelve al contenido de una copia. Antes de pisar el estado actual deja
+     * una copia de él, así restaurar tampoco es un camino de ida.
+     * @throws si la copia está cifrada con otra clave o no se entiende.
+     */
+    async restaurarResguardo(id) {
+      const r = leerResguardos().find(x => x.id === id);
+      if (!r) throw new Error('No se encontró esa copia.');
+      let plano;
+      try {
+        plano = r.cifrado ? await cifrador.descifrar(r.datos) : r.datos;
+      } catch (err) {
+        throw new Error('La copia está cifrada con otra clave y no se puede abrir.');
+      }
+      const datos = JSON.parse(plano);
+      resguardar('Antes de restaurar una copia');
+      estado = normalizar(datos);
+      guardar();
+      return estado;
+    },
+
+    eliminarResguardo(id) {
+      escribirResguardos(leerResguardos().filter(x => x.id !== id));
+    },
+
+    /** Texto que no se pudo leer al abrir y quedó apartado, si lo hay. */
+    contenidoIlegible() {
+      try { return localStorage.getItem(CLAVE_ILEGIBLE) || ''; } catch (err) { return ''; }
+    },
+
+    descartarIlegible() {
+      try { localStorage.removeItem(CLAVE_ILEGIBLE); } catch (err) { /* nada que hacer */ }
     },
 
     /* Datos de ejemplo para recorrer el tablero antes de cargar información
        real. Reemplaza todo el contenido, así nunca se mezcla con datos de
        verdad; “Borrar todo” lo deja limpio de nuevo. */
     cargarEjemplo() {
+      resguardar('Antes de cargar datos de ejemplo');
       const e = estadoInicial();
       e.config.coordinador = estadoInicial().config.coordinador;
       e.config.gerenteOperaciones = { nombre: 'Gerencia de Operaciones', email: '' };

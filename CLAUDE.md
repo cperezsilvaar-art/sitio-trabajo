@@ -103,3 +103,10 @@ aparecen en ningún reporte.
 El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
 datos adentro; la pantalla de Configuración lo advierte cuando hay alguno
 cargado. El cifrado no tiene recuperación por diseño.
+
+El panel se guarda **copias automáticas** en el mismo navegador, en una clave
+aparte del almacén: una por día al abrir y una antes de cada acción que
+reemplaza todo el contenido. Están para el borrado por error, no para perder el
+equipo —para eso está el respaldo `.json`—. Están documentadas en
+`docs/respaldos.md`; **una acción nueva que reemplace todo el estado tiene que
+llamar a `resguardar()` antes**.

@@ -1983,12 +1983,80 @@ const App = (() => {
             Guardalo donde guardarías la nómina, no en un mail ni en un pendrive compartido.
           </div>` : '';
         })()}
+        ${(() => {
+          const dias = Store.diasSinRespaldo();
+          if (dias === null) {
+            return `<div class="aviso-caja">
+              <strong>Todavía no exportaste ningún respaldo.</strong> El archivo .json es lo único
+              que queda si este navegador borra los datos del sitio. Exportalo hoy y guardalo
+              donde guardás la nómina.
+            </div>`;
+          }
+          if (dias >= 7) {
+            return `<div class="aviso-caja">
+              <strong>Último respaldo: hace ${dias} día${dias === 1 ? '' : 's'}.</strong>
+              Todo lo cargado desde entonces existe únicamente en este navegador.
+            </div>`;
+          }
+          return `<p class="ayuda">Último respaldo exportado hace ${dias === 0 ? 'menos de un día' : dias + ' día' + (dias === 1 ? '' : 's')}.</p>`;
+        })()}
         <div class="acciones">
           <button class="b sec" data-accion="ejemplo">Cargar datos de ejemplo</button>
           <button class="b sec" data-accion="exportar">Exportar respaldo (.json)</button>
           <button class="b sec" data-accion="importar">Importar respaldo</button>
           <button class="b peligro" data-accion="reiniciar">Borrar todo</button>
           <input type="file" id="archivo-import" accept="application/json" hidden>
+        </div>
+      </section>
+
+      ${panelResguardos()}`;
+  }
+
+  /* Las copias se listan con hora porque en un mismo día puede haber varias:
+     la del día y las que dispara cada acción que reemplaza todo. */
+  const fechaHoraLegible = iso => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return String(iso || '');
+    return d.toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  };
+
+  /* Copias que el tablero se saca solo. Están para el día en que algo borra
+     todo: “Borrar todo”, los datos de ejemplo, una importación equivocada o
+     el navegador limpiando el sitio. */
+  function panelResguardos() {
+    const lista = Store.resguardos();
+    const ilegible = Store.contenidoIlegible();
+    return `
+      <section class="tarjeta">
+        <h2>Copias automáticas de este navegador</h2>
+        <p class="ayuda">El tablero se guarda una copia por día al abrir, y otra antes de cada
+          acción que reemplaza todo el contenido. Se conservan las cuatro últimas. Viven en este
+          mismo navegador: sirven contra un borrado por error, no contra perder el equipo. Para
+          eso está el respaldo .json de arriba.</p>
+        ${ilegible ? `<div class="aviso-caja">
+          <strong>Hay contenido que no se pudo leer al abrir.</strong> Quedó apartado sin pisarse
+          (${fmtNum(Math.round(ilegible.length / 1024), 0)} KB). Suele ser contenido cifrado
+          abierto sin la clave: si tenías clave puesta, ponela y volvé a entrar antes de tocar nada.
+          <div class="acciones"><button class="b sec" data-accion="descartar-ilegible">Descartar ese contenido</button></div>
+        </div>` : ''}
+        ${lista.length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Cuándo</th><th>Motivo</th><th class="num">Tamaño</th><th></th></tr></thead>
+          <tbody>
+            ${lista.map(r => `<tr>
+              <td class="tipo">${esc(fechaHoraLegible(r.fecha))}</td>
+              <td>${esc(r.motivo)}${r.cifrado ? ' <span class="chip azul">cifrada</span>' : ''}</td>
+              <td class="num">${fmtNum(Math.max(1, Math.round(r.tam / 1024)), 0)} KB</td>
+              <td class="tipo">
+                <button class="mini" data-accion="restaurar-resguardo" data-id="${r.id}">Restaurar</button>
+                <button class="mini" data-accion="borrar-resguardo" data-id="${r.id}">Borrar</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>` : `<p class="vacio">Todavía no hay copias. Se crea la primera cuando el tablero tenga datos cargados.</p>`}
+        <div class="acciones">
+          <button class="b sec" data-accion="resguardar">Sacar una copia ahora</button>
         </div>
       </section>`;
   }
@@ -4199,13 +4267,45 @@ const App = (() => {
           'Cargar ejemplo');
         if (ok) { Store.cargarEjemplo(); location.hash = '#/red'; render(); avisar('Datos de ejemplo cargados.'); }
       }
-      if (a === 'exportar') Store.exportar();
+      if (a === 'exportar') { if (await Store.exportar()) refrescar(); }
       if (a === 'importar') $('#archivo-import').click();
       if (a === 'reiniciar') {
         const ok = await confirmar('Borrar todo',
           'Se eliminan todas las sucursales y visitas guardadas en este navegador. No se puede deshacer.',
           'Borrar todo');
-        if (ok) { Store.reiniciar(); location.hash = '#/red'; render(); avisar('Tablero vacío.'); }
+        if (ok) { Store.reiniciar(); location.hash = '#/red'; render(); avisar('Tablero vacío. Quedó una copia en Configuración por si fue sin querer.'); }
+      }
+
+      if (a === 'resguardar') {
+        avisar(Store.resguardarAhora('Copia a mano')
+          ? 'Copia guardada en este navegador.'
+          : 'No hizo falta: la última copia ya tiene este mismo contenido.');
+        refrescar();
+      }
+      if (a === 'restaurar-resguardo') {
+        const ok = await confirmar('Restaurar la copia',
+          'Se reemplaza todo el contenido actual por el de esa copia. Antes de hacerlo se guarda una copia de lo que hay ahora, así también se puede volver.',
+          'Restaurar');
+        if (ok) {
+          try {
+            await Store.restaurarResguardo(btn.dataset.id);
+            location.hash = '#/red'; render();
+            avisar('Contenido restaurado.');
+          } catch (err) {
+            avisar('No se pudo restaurar: ' + err.message, 'error');
+          }
+        }
+      }
+      if (a === 'borrar-resguardo') {
+        const ok = await confirmar('Borrar la copia',
+          'Se elimina esa copia. Las demás quedan como están.', 'Borrar');
+        if (ok) { Store.eliminarResguardo(btn.dataset.id); refrescar(); }
+      }
+      if (a === 'descartar-ilegible') {
+        const ok = await confirmar('Descartar el contenido apartado',
+          'Se borra el texto que no se pudo leer al abrir. Si tenías clave puesta y todavía no la probaste, cancelá y probala primero.',
+          'Descartar');
+        if (ok) { Store.descartarIlegible(); refrescar(); }
       }
     });
 
