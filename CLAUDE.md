@@ -31,7 +31,16 @@ ni guarda la escala salarial**, que la fijan las paritarias.
 Quien tiene **bloqueo de título o figura como no presencial** presta la
 habilitación profesional pero no cubre turno: `esNoPresencial()` lo separa de
 toda cuenta operativa —dotación, cobertura, prellenado del día— y lo deja
-visible aparte. Nunca contarlo en la dotación de piso.
+visible aparte. Nunca contarlo en la dotación de piso. Lo mismo con los
+**flotantes del área** (tienda `FLOTANTES ÁREA 3`, que se importa como `staff`):
+suman al área, nunca a una sucursal.
+
+**La dotación se cuenta en FTE, no en cabezas.** `jornadaDeVinculo()`, en
+`convenio.js`, devuelve 1 para la jornada completa y 0,5 para el tiempo parcial,
+que la nómina escribe dentro del cargo (`TP`, `JORNADA PARCIAL`). Dos personas de
+media jornada cubren un puesto. `Store.dotacionPlantel(id)` y
+`Store.dotacionDelArea()` son la cuenta buena y no dependen de que haya una
+visita cargada.
 
 ## Reglas de escritura
 

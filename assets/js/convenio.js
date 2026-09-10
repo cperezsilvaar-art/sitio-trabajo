@@ -304,6 +304,37 @@ function alertasLicencias(colaborador, anio) {
 }
 
 /* ---------------------- Jornada y nocturnidad ---------------------- */
+/* La nómina no trae una columna de jornada: el tiempo parcial viene escrito
+   dentro del cargo o de la categoría —"DIRECTOR TECNICO TP", "FARMA AUX.
+   JORNADA PARCIAL"—. */
+const RE_PARCIAL = /(^| )(TP|PT)( |$)|JORNADA PARCIAL|TIEMPO PARCIAL|MEDIA JORNADA|PART TIME/;
+
+const _palabrasCct = t => String(t == null ? '' : t)
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+
+/**
+ * Cuánto de una jornada completa ocupa el vínculo de una persona: 1 el full
+ * time, 0,5 el tiempo parcial. Es la unidad con la que se suma la dotación,
+ * porque dos part time no son dos personas de piso, son una.
+ *
+ * @returns {{fte:number, parcial:boolean, texto:string}}
+ */
+function jornadaDeVinculo(colaborador) {
+  const c = colaborador || {};
+  /* Lo que el coordinador corrige a mano manda sobre lo que dice el cargo.
+     Llega como texto desde el formulario, así que se compara por número. */
+  const puesto = Number(c.jornada);
+  if (puesto === 0.5 || puesto === 1) {
+    return { fte: puesto, parcial: puesto < 1,
+             texto: puesto < 1 ? 'Tiempo parcial' : 'Jornada completa' };
+  }
+  const texto = _palabrasCct([c.categoriaConvenio, c.cargo, c.nivelCargo].join(' '));
+  return RE_PARCIAL.test(texto)
+    ? { fte: 0.5, parcial: true,  texto: 'Tiempo parcial' }
+    : { fte: 1,   parcial: false, texto: 'Jornada completa' };
+}
+
 const JORNADA_CCT = {
   diaria: 8, semanal: 45,                    // art. 14
   nocturnaDiaria: 7, nocturnaSemanal: 42,    // art. 16
@@ -317,6 +348,7 @@ if (typeof module !== 'undefined' && module.exports) {
     CCT, CATEGORIAS_CCT, CATEGORIAS_CCT_POR_ID, MAPA_CATEGORIA_CCT, categoriaCct,
     NOVEDAD_A_LICENCIA,
     esNoPresencial, ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
-    LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT
+    LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT,
+    jornadaDeVinculo
   };
 }

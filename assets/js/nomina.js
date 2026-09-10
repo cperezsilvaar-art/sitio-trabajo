@@ -112,10 +112,20 @@ function cbuNomina(v) {
   return { valor: digitos, dudoso: false, motivo: '' };
 }
 
-/** Fecha a ISO. Acepta 1978-04-26, 26/04/1978 y el "1978-04-26 00:00:00" de Excel. */
+/**
+ * Fecha a ISO. Acepta 1978-04-26, 26/04/1978, el "1978-04-26 00:00:00" de Excel
+ * y el número de serie que aparece cuando la columna se pegó sin formato de
+ * fecha (Excel cuenta días desde el 30/12/1899).
+ */
 function fechaNomina(v) {
   const t = textoNomina(v);
   if (!t) return '';
+  if (/^\d{5}$/.test(t)) {
+    const n = Number(t);
+    if (n > 10000 && n < 60000) {
+      return new Date(Date.UTC(1899, 11, 30) + n * 86400000).toISOString().slice(0, 10);
+    }
+  }
   let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = t.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
@@ -220,6 +230,10 @@ function interpretarNomina(crudo) {
     const tienda = t('tienda');
     fila.tienda = ALIAS_TIENDA[_normNom(tienda)] || tienda;
     fila.posicion = posicionDeCargo(fila.cargo);
+    /* La jornada no viene en una columna propia: sale de cómo está escrito el
+       cargo. Se resuelve acá para que el panel sume dotación en FTE y no en
+       cabezas. */
+    fila.jornada = jornadaDeVinculo(fila).fte;
     /* En la nómina completa el número de personal está a la izquierda del CUIL,
        con el encabezado roto. En el listado corto esa columna no existe: ahí lo
        que va a la izquierda es el encabezado, así que solo se toma si es un

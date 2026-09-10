@@ -142,7 +142,6 @@ const App = (() => {
 
     const conDatos = filas.filter(f => f.c);
     const sum = k => conDatos.reduce((a, f) => a + num(getPath(f.c, k)), 0);
-    const headcount = sum('matriz.total.heads');
     const fteVinculo = sum('matriz.total.fteVinculo');
     const fte = sum('matriz.total.fteReal');
     const costo = sum('matriz.total.costoTotal');
@@ -151,6 +150,7 @@ const App = (() => {
     const he = sum('matriz.total.horasExtras');
     const ventaRed = conDatos.reduce((a, f) => a + num(f.v.comercial.venta), 0);
     const pctAus = diasBase > 0 ? diasAus / diasBase : null;
+    const dot = Store.dotacionDelArea();
     const visitadas = filas.filter(f => f.v).length;
     const enviadas = filas.filter(f => f.v && f.v.envio.enviado).length;
 
@@ -175,8 +175,13 @@ const App = (() => {
       })()}
 
       <div class="kpis">
-        ${kpi('Sucursales a cargo', e.sucursales.length, `${visitadas} con visita registrada`)}
-        ${kpi('Headcount', headcount || '—', 'personas en nómina')}
+        ${kpi('Sucursales a cargo', dot.tiendas, `${visitadas} con visita registrada`)}
+        ${kpi('Dotación de piso', dot.personas || '—',
+              dot.personas ? `${fmtNum(dot.fte, 1)} FTE${dot.parciales ? ` · ${dot.parciales} de tiempo parcial` : ''}` : 'sin plantel cargado')}
+        ${kpi('No fijos en tienda', (dot.noPresenciales + dot.flotantes) || '—',
+              dot.noPresenciales + dot.flotantes
+                ? `${dot.noPresenciales} con bloqueo · ${dot.flotantes} flotantes`
+                : '')}
         ${kpi('FTE Real', fte ? fmtNum(fte) : '—', fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : '', fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
         ${kpi('Costo laboral', costo ? dinero(costo) : '—', fte ? `${dinero(costo / fte)} por FTE` : '')}
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
@@ -199,8 +204,9 @@ const App = (() => {
         <div class="tabla-scroll">
         <table>
           <thead><tr>
-            <th>Sucursal</th><th>Tipo</th><th>Última visita</th>
-            <th class="num">HC</th><th class="num">FTE Real</th><th class="num">Ausent.</th>
+            <th>Sucursal</th><th>Tipo</th><th class="num">Personas</th><th class="num">FTE</th>
+            <th class="num">No fijos</th><th>Última visita</th>
+            <th class="num">FTE Real</th><th class="num">Ausent.</th>
             <th class="num">Hs. Ext.</th><th class="num">Costo / FTE</th>
             <th>Dotación</th><th>Reporte</th><th></th>
           </tr></thead>
@@ -208,11 +214,14 @@ const App = (() => {
           ${e.sucursales.map(({ id }) => {
             const f = filas.find(x => x.s.id === id);
             const s = f.s, v = f.v, c = f.c;
+            const d = dot.porSucursal[s.id];
             return `<tr>
               <td><a href="#/sucursal/${s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(s))}</a>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
               <td class="tipo">${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
+              <td class="num">${d.personas || '—'}</td>
+              <td class="num">${d.personas ? fmtNum(d.fte, 1) : '—'}${d.parciales ? ` <span class="chip">${d.parciales} PT</span>` : ''}</td>
+              <td class="num">${d.noPresenciales.length || '—'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
-              <td class="num">${c ? (c.matriz.total.heads || '—') : '—'}</td>
               <td class="num">${c && c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c && c.ausentismo.pctTotal !== null ? fmtPct(c.ausentismo.pctTotal) : '—'}</td>
               <td class="num">${c && c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) : '—'}</td>
@@ -1058,6 +1067,7 @@ const App = (() => {
     const periodo = (ultima && ultima.periodo) || hoyISO().slice(0, 7);
     const calc = ultima ? Reporte.calcular(ultima, s, e.config) : null;
     const nov = Store.dotacionDelPadron(s.id, periodo);
+    const dp = Store.dotacionPlantel(s.id);
     const t9 = distribucion9Box(s.colaboradores);
 
     const porPosicion = {};
@@ -1077,13 +1087,17 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación en el piso', plantel.length || '—',
-            !plantel.length ? 'sin plantel cargado'
-              : noPresenciales.length ? `+ ${noPresenciales.length} que no cubren turno`
-              : sinPos ? `${sinPos} sin posición asignada`
-              : `${Object.keys(porPosicion).length} posiciones`,
+          return kpi('Dotación en el piso', dp.personas || '—',
+            !dp.personas ? 'sin plantel cargado'
+              : `${fmtNum(dp.fte, 1)} FTE${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
             sinPos ? 'aviso' : '');
         })()}
+        ${kpi('No cubren turno', (dp.noPresenciales.length + dp.sinActividad.length) || '—',
+              dp.noPresenciales.length || dp.sinActividad.length
+                ? [dp.noPresenciales.length ? `${dp.noPresenciales.length} con bloqueo` : '',
+                   dp.sinActividad.length ? `${dp.sinActividad.length} sin actividad` : ''].filter(Boolean).join(' · ')
+                : 'toda la nómina está en el piso',
+              (dp.noPresenciales.length + dp.sinActividad.length) ? 'aviso' : 'ok')}
         ${kpi('FTE Real', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
               ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'sin visitas registradas')}
         ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
@@ -1149,6 +1163,18 @@ const App = (() => {
             completan solas: no se duplica a nadie ni se pierde lo que ya cargaste a mano.
           </div>`;
         })()}
+        ${(() => {
+          /* Olivos tiene la tienda y el laboratorio en la misma dirección. Son
+             dos operaciones distintas y la dotación de piso no es la suma:
+             mostrarlo evita leer 26 personas donde el mostrador tiene 13. */
+          const u = Object.keys(dp.porUnidad);
+          if (u.length < 2) return '';
+          return `<div class="aviso-caja info">
+            <strong>Acá conviven ${u.length} unidades de negocio.</strong>
+            ${u.map(k => `${esc(k)}: ${fmtNum(dp.porUnidad[k], 1)} FTE`).join(' · ')}.
+            La dotación de piso de la tienda es la de farmacia; el resto opera aparte.
+          </div>`;
+        })()}
         ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
 
         ${noPresenciales.length ? `<h3 style="margin-top:22px">Fuera de la dotación de piso</h3>
@@ -1166,6 +1192,11 @@ const App = (() => {
               <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
             </button>`).join('')}
           </div>` : ''}
+
+        ${dp.sinActividad.length ? `<h3 style="margin-top:22px">Sin actividad este mes</h3>
+          <p class="ayuda">Siguen en la nómina y vuelven, pero mientras dure esto no hay con
+            quién contar en el piso.</p>
+          <ul>${dp.sinActividad.map(x => `<li><strong>${esc(x.nombre)}</strong> · ${esc(x.motivo)}</li>`).join('')}</ul>` : ''}
       </section>
 
       ${perfilAbierto ? perfilColaborador(s, activos.find(c => c.id === perfilAbierto)) : ''}
@@ -1318,6 +1349,7 @@ const App = (() => {
   /* ------------------ Encuadre en el convenio 414/05 ------------------ */
   function fichaConvenio(c, anios) {
     const cat = categoriaCct(c.categoriaConvenio || c.cargo);
+    const jor = jornadaDeVinculo(c);
     const esc2 = escalafonDe(anios);
     const vac = vacacionesDe(anios);
     const faltaNomina = !String(c.cargo || '').trim() && !String(c.categoriaConvenio || '').trim();
@@ -1332,11 +1364,19 @@ const App = (() => {
         ${dato('Cargo', c.cargo)}
         ${dato('Nivel de cargo', c.nivelCargo)}
         ${dato('Categoría de la nómina', c.categoriaConvenio)}
+        <label class="campo"><span>Jornada</span>
+          <select data-colab-campo="${c.id}|jornada">
+            ${[['1', 'Completa · 1 FTE'], ['0.5', 'Parcial · 0,5 FTE']].map(([v, t]) =>
+              `<option value="${v}"${String(jor.fte) === v ? ' selected' : ''}>${t}</option>`).join('')}
+          </select></label>
         ${dato('Categoría del convenio', cat ? `${cat.nombre} (art. ${cat.articulo || '—'})` : '')}
         ${dato('Antigüedad', anios ? `${fmtNum(anios, 1)} años` : '')}
         ${dato('Escalafón por antigüedad (art. 13)', esc2.pct ? fmtPct(esc2.pct, 0) : 'todavía sin escalafón')}
         ${dato('Vacaciones al año (art. 24)', `${vac.dias} días corridos`)}
       </div>
+      <p class="ayuda">${jor.parcial
+        ? 'Cuenta medio FTE en la dotación: dos personas de media jornada cubren un puesto.'
+        : 'Cuenta un FTE en la dotación de la tienda.'} Sale del cargo de la nómina; si está mal, corregilo acá.</p>
       ${cat && cat.detalle ? `<p class="ayuda">${esc(CCT.nombre)} · ${esc(cat.detalle)}</p>` : ''}
       ${esc2.proximo ? `<p class="ayuda">Pasa al ${fmtPct(esc2.proximo.pct, 0)} de escalafón
         ${esc2.faltanAnios === 0 ? 'este año' : `en ${esc2.faltanAnios} año${esc2.faltanAnios === 1 ? '' : 's'}`}.
@@ -1528,12 +1568,18 @@ const App = (() => {
       <strong>${esc(c.nombre || 'Sin nombre')}</strong>
       <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
       ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
+      ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
       ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
                     : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
     </button>`;
 
+    /* El título del grupo cuenta cabezas y FTE: con tiempo parcial no son lo
+       mismo, y la que decide la cobertura es la segunda. */
     const grupo = (nombre, gente) => `<div class="org-grupo">
-      <h4>${esc(nombre)} <span class="chip">${gente.length}</span></h4>
+      <h4>${esc(nombre)} <span class="chip">${gente.length}</span>${(() => {
+        const f = gente.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+        return f === gente.length ? '' : ` <span class="chip azul">${fmtNum(f, 1)} FTE</span>`;
+      })()}</h4>
       <div class="org-fila">${gente.map(tarjeta).join('')}</div>
     </div>`;
 

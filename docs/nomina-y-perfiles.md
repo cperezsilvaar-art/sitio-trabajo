@@ -204,3 +204,37 @@ Los tres importadores (nómina, novedades de liquidación y RDV) usan
 `filasPegadas()`, en `catalogos.js`, que respeta el entrecomillado, une la celda
 partida en una sola etiqueta y devuelve una fila por registro real. Con las 140
 líneas de esta planilla, el pegado son 145 líneas físicas y 140 filas.
+
+## La jornada: 1 FTE o medio
+
+La nómina no trae una columna de jornada. El tiempo parcial viene escrito dentro
+del cargo o de la categoría: `DIRECTOR TECNICO TP`, `FARMACEUTICO AUXILIAR TP`,
+`FARMA AUX. JORNADA PARCIAL`. `jornadaDeVinculo()`, en `convenio.js`, lo lee de
+ahí y devuelve **1** para la jornada completa y **0,5** para la parcial.
+
+Por eso la dotación se suma en FTE y no en cabezas: dos personas de media
+jornada cubren un puesto, no dos. La ficha de cada persona muestra la jornada y
+deja corregirla a mano cuando el cargo está mal escrito; lo que se corrige a
+mano manda sobre lo que dice la nómina.
+
+En la nómina de septiembre de 2026 son tres: Facundo Miglio (Devoto), Laura
+Kaplan (Scalabrini) y Marcelo Vassallo (SM Center). El área tiene 127 personas
+de piso y **125,5 FTE**.
+
+## Quién no cuenta en la dotación de piso
+
+Tres situaciones distintas, que el panel separa una por una:
+
+| Situación | Cómo se reconoce | Dónde aparece |
+|---|---|---|
+| **Bloqueo de título / no presencial** | El cargo o la categoría dicen `BLOQUEO` o `NO PRESENCIAL` | Aparte, en “Fuera de la dotación de piso” |
+| **Flotantes del área** | Su tienda es `FLOTANTES ÁREA 3` | Como staff, no como tienda: suman al área, no a una sucursal |
+| **Sin actividad** | Estatus `LICENCIA SIN GOCE DE SUELDO`, o dado de baja | Aparte, en “Sin actividad este mes” |
+
+En septiembre de 2026: 6 con bloqueo, 5 flotantes y 1 con licencia sin goce.
+139 personas en total, 127 en el piso de una tienda.
+
+Olivos es un caso propio: la tienda y el laboratorio comparten dirección y la
+nómina los pone en la misma fila de tienda. Son 13 FTE de farmacia y 13 de
+laboratorio, y la ficha lo dice arriba del organigrama para que nadie lea 26
+personas donde el mostrador tiene 13.

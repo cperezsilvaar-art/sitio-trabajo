@@ -941,14 +941,19 @@ const Store = (() => {
         let s = buscarSucursal(f.tienda);
         if (!s) {
           if (!f.tienda) { sinTienda.push(nombreDeNomina(f)); return; }
-          /* Tiendas que no están en el padrón del área: flotantes, o una
-             sucursal de otra área donde hay gente asignada. Se crean como
-             estructura para que la persona no desaparezca. */
+          /* Tiendas que no están en el padrón del área: el grupo de flotantes,
+             o una sucursal de otra área donde hay gente asignada. Se crean como
+             estructura para que la persona no desaparezca. Los flotantes no son
+             una tienda —no abren ni tienen cobertura propia— y por eso quedan
+             como staff; una sucursal ajena sí es una tienda. */
+          const flotante = /FLOTANTE/i.test(f.tienda);
           s = sucursalNueva({
             codigo: f.tienda.toUpperCase(),
             nombre: f.tienda.replace(/\b\w/g, c => c.toUpperCase()),
-            tipo: 'staff',
-            notas: 'Creada al importar la nómina: no figura en el padrón del Área 3.'
+            tipo: flotante ? 'staff' : 'venta',
+            notas: flotante
+              ? 'Gente del área que cubre donde hace falta: no es una tienda, no tiene cobertura propia.'
+              : 'Creada al importar la nómina: no figura en el padrón del Área 3.'
           });
           e.sucursales.push(s);
           sucursalesNuevas.push(s.nombre);
@@ -1014,6 +1019,7 @@ const Store = (() => {
             (!c.cuil || c.cuil.length !== 11)) c.cuil = f.cuil;
         c.nroPersonal = f.nroPersonal || c.nroPersonal;
         if (f.posicion) c.posicion = f.posicion;
+        if (f.jornada) c.jornada = f.jornada;
 
         /* Las fechas de ingreso también difieren entre archivos. Gana la más
            vieja: la antigüedad reconocida no se pierde porque una planilla
@@ -1091,6 +1097,81 @@ const Store = (() => {
      * Dotación del mes agrupada por posición, a partir del plantel y de las
      * novedades importadas. Es lo que llena la matriz de FTE sin recargar nada.
      */
+    /**
+     * Dotación de una sucursal tal como está cargado el plantel, sin depender
+     * de que se hayan importado las novedades del mes. Es la respuesta a “¿con
+     * cuánta gente cuento?”, que es lo primero que pregunta Operaciones.
+     *
+     * Suma en FTE, no en cabezas: dos personas de tiempo parcial son un FTE.
+     * Quien tiene bloqueo de título o figura como no presencial queda aparte,
+     * porque presta la habilitación pero no cubre turno.
+     */
+    dotacionPlantel(sucursalId) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return null;
+      const r = {
+        personas: 0, fte: 0, parciales: 0,
+        noPresenciales: [], fteNoPresencial: 0,
+        sinActividad: [],                  // licencia sin goce y bajas
+        porUnidad: {}, porPosicion: {}
+      };
+      (s.colaboradores || []).forEach(c => {
+        const j = jornadaDeVinculo(c);
+        const np = esNoPresencial(c);
+        if (np.noPresencial) {
+          r.noPresenciales.push({ id: c.id, nombre: c.nombre, cargo: c.cargo, motivo: np.motivo, fte: j.fte });
+          r.fteNoPresencial += j.fte;
+          return;
+        }
+        /* La licencia sin goce de sueldo no es una baja —la persona vuelve—
+           pero mientras dura no hay con quién contar en el piso. */
+        if (c.activo === false || /SINGOCE/.test(String(c.estatus || '')
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z]/g, ''))) {
+          r.sinActividad.push({ id: c.id, nombre: c.nombre, motivo: c.activo === false ? 'Baja' : 'Licencia sin goce de sueldo' });
+          return;
+        }
+        r.personas++;
+        r.fte += j.fte;
+        if (j.parcial) r.parciales++;
+        const u = c.unidadNegocio || 'Sin unidad';
+        r.porUnidad[u] = (r.porUnidad[u] || 0) + j.fte;
+        const pos = c.posicion || 'sinPosicion';
+        r.porPosicion[pos] = (r.porPosicion[pos] || 0) + j.fte;
+      });
+      return r;
+    },
+
+    /** La misma cuenta para toda el área, separando lo que no es una tienda. */
+    dotacionDelArea() {
+      const e = this.get();
+      const t = {
+        tiendas: 0, personas: 0, fte: 0, parciales: 0,
+        noPresenciales: 0, fteNoPresencial: 0, sinActividad: 0,
+        flotantes: 0, fteFlotante: 0,
+        sucursalesSinPlantel: [], porSucursal: {}
+      };
+      e.sucursales.forEach(s => {
+        const d = this.dotacionPlantel(s.id);
+        t.porSucursal[s.id] = d;
+        t.noPresenciales += d.noPresenciales.length;
+        t.fteNoPresencial += d.fteNoPresencial;
+        t.sinActividad += d.sinActividad.length;
+        /* Lo que la nómina llama “flotantes” no es una tienda: es gente del
+           área que cubre donde hace falta. Suma al área, no a una sucursal. */
+        if (s.tipo === 'staff') {
+          t.flotantes += d.personas;
+          t.fteFlotante += d.fte;
+          return;
+        }
+        t.tiendas++;
+        t.personas += d.personas;
+        t.fte += d.fte;
+        t.parciales += d.parciales;
+        if (!d.personas && !d.noPresenciales.length) t.sucursalesSinPlantel.push(s.nombre || s.codigo);
+      });
+      return t;
+    },
+
     dotacionDelPadron(sucursalId, periodo) {
       const s = this.sucursal(sucursalId);
       if (!s) return null;
