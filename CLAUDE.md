@@ -55,9 +55,10 @@ visita cargada.
 
 ## Arquitectura
 
-- Orden de carga en `index.html`: `catalogos`, `sucursales-area3`, `modelo`,
-  `talento`, `novedades`, `nomina`, `convenio`, `checklist`, `reclamos`,
-  `agenda`, `diario`, `acceso`, `store`, `reporte`, `app`.
+- Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
+  `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
+  `checklist`, `reclamos`, `agenda`, `diario`, `acceso`, `store`, `reporte`,
+  `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
   `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
@@ -104,8 +105,14 @@ y Chromium headless, que viven en el directorio de trabajo temporal de la sesió
 
 ## Privacidad
 
-Todos los datos personales del padrón viven **solo en el navegador del
-usuario**, cifrables con clave. El banco y el CBU se importan desde septiembre
+Los datos personales del padrón viven **solo en el navegador del usuario**,
+cifrables con clave, con una excepción acotada: `assets/js/plantel-area3.js`
+guarda en el proyecto lo **operativo** de las 139 personas del área —nombre,
+tienda, cargo, categoría, nivel, jornada, fechas de ingreso, estatus y unidad de
+negocio—, para que el panel no abra vacío cuando el navegador se limpia.
+**Ese archivo no lleva CUIL, DNI, fecha de nacimiento, teléfono, domicilio,
+mails, banco ni CBU**, y no hay que agregárselos: esos campos entran al pegar la
+nómina y se quedan en el navegador. El banco y el CBU se importan desde septiembre
 de 2026, a pedido del coordinador: se muestran plegados en la ficha y no
 aparecen en ningún reporte.
 

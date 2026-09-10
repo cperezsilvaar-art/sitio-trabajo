@@ -919,6 +919,35 @@ const Store = (() => {
        importador reparte por la columna TIENDA. A quien no cae en ninguna
        sucursal conocida se le arma una: los flotantes del área son personas
        reales que hay que poder ver. */
+    /**
+     * Repone el plantel del área desde el archivo del proyecto. Pasa por el
+     * mismo importador que la nómina pegada, así que no duplica a nadie: a
+     * quien ya está cargado le completa lo que falte y lo mueve si cambió de
+     * tienda.
+     *
+     * Trae lo operativo, no la identidad: el CUIL, el DNI, el teléfono, el
+     * domicilio y los mails entran solamente al pegar la nómina.
+     */
+    cargarPlantelArea3() {
+      const filas = PLANTEL_AREA3.map(x => ({
+        cuil: '',
+        apellido: x.ap || '',
+        nombre: x.no || '',
+        nombreCompleto: [x.no, x.ap].filter(Boolean).join(' '),
+        tienda: x.t || '',
+        categoriaConvenio: x.cat || '',
+        cargo: x.cargo || '',
+        nivelCargo: x.niv || '',
+        fechaIngreso: x.ing || '',
+        fechaIngresoFTD: x.ftd || '',
+        estatus: x.est || '',
+        unidadNegocio: x.uni || '',
+        posicion: posicionDeCargo(x.cargo || ''),
+        jornada: x.j || 1
+      }));
+      return this.importarNomina(filas);
+    },
+
     importarNomina(filas) {
       const e = this.get();
       const clave = t => String(t || '').trim().toUpperCase()

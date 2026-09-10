@@ -1914,7 +1914,13 @@ const App = (() => {
           placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
         <div class="acciones">
           <button class="b" data-accion="importar-nomina">Importar la nómina</button>
+          <button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>
         </div>
+        <p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
+          septiembre de 2026 con su tienda, su cargo, su categoría, su jornada y sus fechas de
+          ingreso, sin tener que pegar nada. No trae el CUIL, el DNI, el teléfono, el domicilio
+          ni los mails: eso vive solo en tu navegador y entra al pegar la planilla. Los dos
+          caminos se complementan y ninguno duplica a nadie.</p>
         <div id="resultado-nomina"></div>
 
         ${(() => {
@@ -3673,6 +3679,20 @@ const App = (() => {
       if (a === 'ficha-sucursal') {
         fichaSucursal = fichaSucursal === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
+      }
+
+      if (a === 'cargar-plantel') {
+        const r = Store.cargarPlantelArea3();
+        refrescar();
+        const caja = $('#resultado-nomina');
+        if (caja) {
+          caja.innerHTML = `<div class="aviso-caja info">
+            <strong>${r.nuevos} persona${r.nuevos === 1 ? '' : 's'} cargada${r.nuevos === 1 ? '' : 's'}</strong>${
+              r.actualizados ? ` y ${r.actualizados} actualizada${r.actualizados === 1 ? '' : 's'}` : ''}.
+            Falta completar CUIL, DNI, teléfono, domicilio y mails: eso entra pegando la planilla acá arriba.
+          </div>`;
+        }
+        avisar(`Plantel del área cargado: ${r.nuevos + r.actualizados} personas.`);
       }
 
       if (a === 'cargar-padron') {

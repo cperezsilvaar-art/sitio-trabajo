@@ -238,3 +238,22 @@ Olivos es un caso propio: la tienda y el laboratorio comparten dirección y la
 nómina los pone en la misma fila de tienda. Son 13 FTE de farmacia y 13 de
 laboratorio, y la ficha lo dice arriba del organigrama para que nadie lea 26
 personas donde el mostrador tiene 13.
+
+## Dos caminos para cargar el plantel
+
+**Cargar el plantel del área** (`Sucursales → Nómina del área`) repone las 139
+personas desde `assets/js/plantel-area3.js`, que es parte del proyecto. Es la
+respuesta a que el navegador se limpie: el padrón de sucursales vuelve solo y el
+plantel, hasta ahora, no.
+
+Ese archivo guarda únicamente lo operativo —nombre, tienda, cargo, categoría,
+nivel, jornada, fechas de ingreso, estatus y unidad de negocio—. **No guarda
+CUIL, DNI, fecha de nacimiento, teléfono, domicilio, mails, banco ni CBU.** Esos
+campos entran solo al pegar la planilla y viven solo en el navegador.
+
+Los dos caminos usan el mismo importador, así que se complementan y ninguno
+duplica a nadie: cargar el plantel y después pegar la nómina deja 139 personas,
+0 nuevas y 139 completadas.
+
+Cuando llegue una nómina nueva, el archivo se regenera desde el `.xlsx`; mientras
+tanto, pegar la planilla alcanza para actualizar lo que cambió.
