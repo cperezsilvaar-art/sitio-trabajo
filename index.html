@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gestión de Talento | Recursos Humanos</title>
+<meta name="description" content="Aplicación interna de gestión de talento. Acceso restringido.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>&#128274;</text></svg>">
+<link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+
+<!-- ============ PANTALLA DE BLOQUEO ============ -->
+<section id="lock" class="lock" aria-labelledby="lock-title">
+  <div class="lock-card">
+    <div class="lock-mark" aria-hidden="true">🔒</div>
+    <h1 id="lock-title">Gestión de Talento</h1>
+    <p class="lock-sub" id="lock-sub">Aplicación interna · acceso restringido</p>
+
+    <form id="lock-form" autocomplete="off">
+      <label class="field" for="pw">
+        <span id="pw-label">Clave de acceso</span>
+        <input type="password" id="pw" name="pw" required minlength="8"
+               autocomplete="current-password" spellcheck="false">
+      </label>
+
+      <label class="field" for="pw2" id="pw2-wrap" hidden>
+        <span>Repetir la clave</span>
+        <input type="password" id="pw2" name="pw2" autocomplete="new-password" spellcheck="false">
+      </label>
+
+      <p class="lock-warning" id="lock-warning" hidden>
+        Guarda esta clave en un lugar seguro. Cifra toda la información y
+        <strong>no puede recuperarse si la olvidas</strong>.
+      </p>
+
+      <p class="lock-error" id="lock-error" role="alert" hidden></p>
+
+      <button class="btn btn-primary btn-block" id="lock-submit" type="submit">Entrar</button>
+    </form>
+
+    <details class="lock-help">
+      <summary>¿Cómo funciona la seguridad?</summary>
+      <p>La clave nunca se guarda en ninguna parte. Se deriva de ella una llave de
+      cifrado (PBKDF2, 250.000 iteraciones) que cifra los datos con AES‑256‑GCM antes
+      de guardarlos en este navegador. Sin la clave, lo almacenado es ilegible.</p>
+      <p>Los datos no salen de este dispositivo: no hay servidor. Para usarla en otra
+      computadora, restaura un respaldo allí.</p>
+    </details>
+  </div>
+</section>
+
+<!-- ============ APLICACIÓN ============ -->
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">GT</span>
+      <span class="brand-text">
+        <strong>Gestión de Talento</strong>
+        <small id="org-name">Recursos Humanos</small>
+      </span>
+    </div>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost" data-action="respaldar" type="button">Respaldar</button>
+      <button class="btn btn-ghost" data-action="tema" type="button">Tema</button>
+      <button class="btn btn-lock" data-action="bloquear" type="button">Bloquear</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" aria-label="Secciones">
+      <button class="nav-item is-active" data-view="dashboard" type="button"><span aria-hidden="true">▦</span> Panel</button>
+      <button class="nav-item" data-view="colaboradores" type="button"><span aria-hidden="true">☰</span> Colaboradores</button>
+      <button class="nav-item" data-view="reclutamiento" type="button"><span aria-hidden="true">◎</span> Reclutamiento</button>
+      <button class="nav-item" data-view="desempeno" type="button"><span aria-hidden="true">★</span> Desempeño</button>
+      <button class="nav-item" data-view="capacitacion" type="button"><span aria-hidden="true">✎</span> Capacitación</button>
+      <button class="nav-item" data-view="datos" type="button"><span aria-hidden="true">⚙</span> Datos y ajustes</button>
+    </nav>
+
+    <main id="view" class="content" tabindex="-1"></main>
+  </div>
+</div>
+
+<dialog id="dlg" class="dialog">
+  <form id="dlg-form" method="dialog">
+    <h2 id="dlg-title">Formulario</h2>
+    <div id="dlg-fields" class="fields"></div>
+    <footer class="dialog-actions">
+      <button class="btn btn-ghost" value="cancel" type="submit" formnovalidate>Cancelar</button>
+      <button class="btn btn-primary" value="save" type="submit">Guardar</button>
+    </footer>
+  </form>
+</dialog>
+
+<input type="file" id="file-input" accept="application/json" hidden>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+<script src="assets/app.js"></script>
+</body>
+</html>
