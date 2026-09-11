@@ -17,8 +17,23 @@ muestra la ficha completa: sucursal, puesto, CUIL, fechas, antigüedad al irse,
 jornada, sanciones y movimientos aplicados. Es lo que se mira cuando alguien
 pregunta por una liquidación final o por qué se fue.
 
-Una baja cargada por error se deshace con **Deshacer**, y la persona vuelve a su
-plantel.
+Una baja cargada por error se deshace desde dos lugares, porque el error se
+descubre en cualquiera de los dos: en el **Listado de bajas** y en la propia
+**sucursal**, que muestra sus bajas en una tabla abajo del organigrama con el
+botón al lado. La persona vuelve a su plantel y el FTE vuelve al número que
+tenía.
+
+## El FTE se mueve solo
+
+Dar de baja a alguien baja la **dotación de piso** de su tienda y la del área en
+el momento, sin pasar por ninguna otra pantalla. Si la persona era de media
+jornada, baja medio punto: Devoto pasa de 10,5 a 10,0 FTE cuando se va el
+farmacéutico auxiliar de jornada parcial, y vuelve a 10,5 al deshacer la baja.
+
+Ese número es el KPI **Dotación de piso**, que muestra el FTE adelante y las
+personas abajo. No confundirlo con **FTE del mes cerrado**, que sale de la
+estadística mensual y queda en `—` hasta que haya una visita cargada: son dos
+preguntas distintas —con cuánta gente cuento hoy, y cuánta usé el mes pasado—.
 
 ## Cesión de contrato
 

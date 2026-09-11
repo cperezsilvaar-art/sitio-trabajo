@@ -5442,7 +5442,8 @@ const Store = (() => {
       const r = {
         personas: 0, fte: 0, parciales: 0,
         noPresenciales: [], fteNoPresencial: 0,
-        sinActividad: [],                  // licencia sin goce y bajas
+        sinActividad: [],                  // licencia sin goce: vuelve, pero hoy no está
+        bajas: [],                         // se fue: ya no es de la tienda
         porUnidad: {}, porPosicion: {}
       };
       (s.colaboradores || []).forEach(c => {
@@ -5453,11 +5454,17 @@ const Store = (() => {
           r.fteNoPresencial += j.fte;
           return;
         }
-        /* La licencia sin goce de sueldo no es una baja —la persona vuelve—
-           pero mientras dura no hay con quién contar en el piso. */
-        if (c.activo === false || /SINGOCE/.test(String(c.estatus || '')
+        /* Una baja y una licencia sin goce vacían el puesto igual, pero no son
+           lo mismo: de la licencia se vuelve. Van separadas porque la baja se
+           corrige desde el listado y la licencia se espera. */
+        if (c.activo === false) {
+          r.bajas.push({ id: c.id, nombre: c.nombre, cargo: c.cargo,
+                         fecha: (c.baja || {}).fecha || '', motivo: (c.baja || {}).motivo || '' });
+          return;
+        }
+        if (/SINGOCE/.test(String(c.estatus || '')
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z]/g, ''))) {
-          r.sinActividad.push({ id: c.id, nombre: c.nombre, motivo: c.activo === false ? 'Baja' : 'Licencia sin goce de sueldo' });
+          r.sinActividad.push({ id: c.id, nombre: c.nombre, motivo: 'Licencia sin goce de sueldo' });
           return;
         }
         r.personas++;
@@ -5476,7 +5483,7 @@ const Store = (() => {
       const e = this.get();
       const t = {
         tiendas: 0, personas: 0, fte: 0, parciales: 0,
-        noPresenciales: 0, fteNoPresencial: 0, sinActividad: 0,
+        noPresenciales: 0, fteNoPresencial: 0, sinActividad: 0, bajas: 0,
         flotantes: 0, fteFlotante: 0,
         sucursalesSinPlantel: [], porSucursal: {}
       };
@@ -5486,6 +5493,7 @@ const Store = (() => {
         t.noPresenciales += d.noPresenciales.length;
         t.fteNoPresencial += d.fteNoPresencial;
         t.sinActividad += d.sinActividad.length;
+        t.bajas += d.bajas.length;
         /* Lo que la nómina llama “flotantes” no es una tienda: es gente del
            área que cubre donde hace falta. Suma al área, no a una sucursal. */
         if (s.tipo === 'staff') {
@@ -7482,13 +7490,15 @@ const App = (() => {
 
       <div class="kpis">
         ${kpi('Sucursales a cargo', dot.tiendas, `${visitadas} con visita registrada`)}
-        ${kpi('Dotación de piso', dot.personas || '—',
-              dot.personas ? `${fmtNum(dot.fte, 1)} FTE${dot.parciales ? ` · ${dot.parciales} de tiempo parcial` : ''}` : 'sin plantel cargado')}
+        ${kpi('Dotación de piso', dot.personas ? fmtNum(dot.fte, 1) + ' FTE' : '—',
+              dot.personas ? `${dot.personas} personas${dot.parciales ? ` · ${dot.parciales} de tiempo parcial` : ''}` : 'sin plantel cargado')}
         ${kpi('No fijos en tienda', (dot.noPresenciales + dot.flotantes) || '—',
               dot.noPresenciales + dot.flotantes
                 ? `${dot.noPresenciales} con bloqueo · ${dot.flotantes} flotantes`
                 : '')}
-        ${kpi('FTE Real', fte ? fmtNum(fte) : '—', fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : '', fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
+        ${kpi('FTE del mes cerrado', fte ? fmtNum(fte) : '—',
+              fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : 'se calcula con la estadística del mes',
+              fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
         ${kpi('Costo laboral', costo ? dinero(costo) : '—', fte ? `${dinero(costo / fte)} por FTE` : '')}
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', he ? fmtNum(he, 0) + ' hs' : '—', he ? `${fmtNum(he / e.config.parametros.horasMes)} FTE equivalentes` : '')}
@@ -7511,7 +7521,7 @@ const App = (() => {
         <table>
           <thead><tr>
             <th>Sucursal</th><th>Tipo</th><th class="num">Personas</th><th class="num">FTE</th>
-            <th class="num">No fijos</th><th>Última visita</th>
+            <th class="num">No fijos</th><th class="num">Bajas</th><th>Última visita</th>
             <th class="num">FTE Real</th><th class="num">Ausent.</th>
             <th class="num">Hs. Ext.</th><th class="num">Costo / FTE</th>
             <th>Dotación</th><th>Reporte</th><th></th>
@@ -7527,6 +7537,7 @@ const App = (() => {
               <td class="num">${d.personas || '—'}</td>
               <td class="num">${d.personas ? fmtNum(d.fte, 1) : '—'}${d.parciales ? ` <span class="chip">${d.parciales} PT</span>` : ''}</td>
               <td class="num">${d.noPresenciales.length || '—'}</td>
+              <td class="num">${d.bajas.length ? `<a href="#/movimientos/bajas" style="color:var(--azul)">${d.bajas.length}</a>` : '—'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
               <td class="num">${c && c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c && c.ausentismo.pctTotal !== null ? fmtPct(c.ausentismo.pctTotal) : '—'}</td>
@@ -8541,9 +8552,9 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación en el piso', dp.personas || '—',
+          return kpi('Dotación de piso', dp.personas ? fmtNum(dp.fte, 1) + ' FTE' : '—',
             !dp.personas ? 'sin plantel cargado'
-              : `${fmtNum(dp.fte, 1)} FTE${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
+              : `${dp.personas} persona${dp.personas === 1 ? '' : 's'}${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
             sinPos ? 'aviso' : '');
         })()}
         ${kpi('No cubren turno', (dp.noPresenciales.length + dp.sinActividad.length) || '—',
@@ -8552,8 +8563,10 @@ const App = (() => {
                    dp.sinActividad.length ? `${dp.sinActividad.length} sin actividad` : ''].filter(Boolean).join(' · ')
                 : 'toda la nómina está en el piso',
               (dp.noPresenciales.length + dp.sinActividad.length) ? 'aviso' : 'ok')}
-        ${kpi('FTE Real', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
-              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'sin visitas registradas')}
+        ${kpi('Bajas registradas', dp.bajas.length || '—',
+              dp.bajas.length ? 'ya no cuentan en la dotación' : 'ninguna')}
+        ${kpi('FTE del mes cerrado', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
+              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'se calcula con la estadística del mes')}
         ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
               calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : '',
               calc && calc.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
@@ -8646,6 +8659,21 @@ const App = (() => {
               <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
             </button>`).join('')}
           </div>` : ''}
+
+        ${dp.bajas.length ? `<h3 style="margin-top:22px">Bajas registradas</h3>
+          <p class="ayuda">Ya salieron de la dotación y del FTE de la tienda. Si cargaste alguna
+            por error, se deshace acá mismo. El detalle completo está en
+            <a href="#/movimientos/bajas">Cesiones y bajas</a>.</p>
+          <div class="tabla-scroll"><table>
+            <thead><tr><th>Baja</th><th>Persona</th><th>Puesto</th><th>Motivo</th><th></th></tr></thead>
+            <tbody>${dp.bajas.map(x => `<tr>
+              <td class="tipo">${x.fecha ? fmtFecha(x.fecha) : '—'}</td>
+              <td><strong>${esc(x.nombre)}</strong></td>
+              <td class="tipo">${esc(x.cargo || '—')}</td>
+              <td>${esc(x.motivo || '—')}</td>
+              <td class="tipo"><button class="mini" data-accion="revertir-baja" data-id="${x.id}">Deshacer la baja</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : ''}
 
         ${dp.sinActividad.length ? `<h3 style="margin-top:22px">Sin actividad este mes</h3>
           <p class="ayuda">Siguen en la nómina y vuelven, pero mientras dure esto no hay con

@@ -1146,7 +1146,8 @@ const Store = (() => {
       const r = {
         personas: 0, fte: 0, parciales: 0,
         noPresenciales: [], fteNoPresencial: 0,
-        sinActividad: [],                  // licencia sin goce y bajas
+        sinActividad: [],                  // licencia sin goce: vuelve, pero hoy no está
+        bajas: [],                         // se fue: ya no es de la tienda
         porUnidad: {}, porPosicion: {}
       };
       (s.colaboradores || []).forEach(c => {
@@ -1157,11 +1158,17 @@ const Store = (() => {
           r.fteNoPresencial += j.fte;
           return;
         }
-        /* La licencia sin goce de sueldo no es una baja —la persona vuelve—
-           pero mientras dura no hay con quién contar en el piso. */
-        if (c.activo === false || /SINGOCE/.test(String(c.estatus || '')
+        /* Una baja y una licencia sin goce vacían el puesto igual, pero no son
+           lo mismo: de la licencia se vuelve. Van separadas porque la baja se
+           corrige desde el listado y la licencia se espera. */
+        if (c.activo === false) {
+          r.bajas.push({ id: c.id, nombre: c.nombre, cargo: c.cargo,
+                         fecha: (c.baja || {}).fecha || '', motivo: (c.baja || {}).motivo || '' });
+          return;
+        }
+        if (/SINGOCE/.test(String(c.estatus || '')
               .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z]/g, ''))) {
-          r.sinActividad.push({ id: c.id, nombre: c.nombre, motivo: c.activo === false ? 'Baja' : 'Licencia sin goce de sueldo' });
+          r.sinActividad.push({ id: c.id, nombre: c.nombre, motivo: 'Licencia sin goce de sueldo' });
           return;
         }
         r.personas++;
@@ -1180,7 +1187,7 @@ const Store = (() => {
       const e = this.get();
       const t = {
         tiendas: 0, personas: 0, fte: 0, parciales: 0,
-        noPresenciales: 0, fteNoPresencial: 0, sinActividad: 0,
+        noPresenciales: 0, fteNoPresencial: 0, sinActividad: 0, bajas: 0,
         flotantes: 0, fteFlotante: 0,
         sucursalesSinPlantel: [], porSucursal: {}
       };
@@ -1190,6 +1197,7 @@ const Store = (() => {
         t.noPresenciales += d.noPresenciales.length;
         t.fteNoPresencial += d.fteNoPresencial;
         t.sinActividad += d.sinActividad.length;
+        t.bajas += d.bajas.length;
         /* Lo que la nómina llama “flotantes” no es una tienda: es gente del
            área que cubre donde hace falta. Suma al área, no a una sucursal. */
         if (s.tipo === 'staff') {

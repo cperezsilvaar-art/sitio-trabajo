@@ -177,13 +177,15 @@ const App = (() => {
 
       <div class="kpis">
         ${kpi('Sucursales a cargo', dot.tiendas, `${visitadas} con visita registrada`)}
-        ${kpi('Dotación de piso', dot.personas || '—',
-              dot.personas ? `${fmtNum(dot.fte, 1)} FTE${dot.parciales ? ` · ${dot.parciales} de tiempo parcial` : ''}` : 'sin plantel cargado')}
+        ${kpi('Dotación de piso', dot.personas ? fmtNum(dot.fte, 1) + ' FTE' : '—',
+              dot.personas ? `${dot.personas} personas${dot.parciales ? ` · ${dot.parciales} de tiempo parcial` : ''}` : 'sin plantel cargado')}
         ${kpi('No fijos en tienda', (dot.noPresenciales + dot.flotantes) || '—',
               dot.noPresenciales + dot.flotantes
                 ? `${dot.noPresenciales} con bloqueo · ${dot.flotantes} flotantes`
                 : '')}
-        ${kpi('FTE Real', fte ? fmtNum(fte) : '—', fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : '', fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
+        ${kpi('FTE del mes cerrado', fte ? fmtNum(fte) : '—',
+              fteVinculo ? `brecha ${fmtNum(fte - fteVinculo)} FTE` : 'se calcula con la estadística del mes',
+              fte && fte < fteVinculo - 0.5 ? 'aviso' : '')}
         ${kpi('Costo laboral', costo ? dinero(costo) : '—', fte ? `${dinero(costo / fte)} por FTE` : '')}
         ${kpi('Ausentismo', pctAus === null ? '—' : fmtPct(pctAus), `${diasAus} días`, pctAus !== null && pctAus > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', he ? fmtNum(he, 0) + ' hs' : '—', he ? `${fmtNum(he / e.config.parametros.horasMes)} FTE equivalentes` : '')}
@@ -206,7 +208,7 @@ const App = (() => {
         <table>
           <thead><tr>
             <th>Sucursal</th><th>Tipo</th><th class="num">Personas</th><th class="num">FTE</th>
-            <th class="num">No fijos</th><th>Última visita</th>
+            <th class="num">No fijos</th><th class="num">Bajas</th><th>Última visita</th>
             <th class="num">FTE Real</th><th class="num">Ausent.</th>
             <th class="num">Hs. Ext.</th><th class="num">Costo / FTE</th>
             <th>Dotación</th><th>Reporte</th><th></th>
@@ -222,6 +224,7 @@ const App = (() => {
               <td class="num">${d.personas || '—'}</td>
               <td class="num">${d.personas ? fmtNum(d.fte, 1) : '—'}${d.parciales ? ` <span class="chip">${d.parciales} PT</span>` : ''}</td>
               <td class="num">${d.noPresenciales.length || '—'}</td>
+              <td class="num">${d.bajas.length ? `<a href="#/movimientos/bajas" style="color:var(--azul)">${d.bajas.length}</a>` : '—'}</td>
               <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
               <td class="num">${c && c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
               <td class="num">${c && c.ausentismo.pctTotal !== null ? fmtPct(c.ausentismo.pctTotal) : '—'}</td>
@@ -1236,9 +1239,9 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación en el piso', dp.personas || '—',
+          return kpi('Dotación de piso', dp.personas ? fmtNum(dp.fte, 1) + ' FTE' : '—',
             !dp.personas ? 'sin plantel cargado'
-              : `${fmtNum(dp.fte, 1)} FTE${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
+              : `${dp.personas} persona${dp.personas === 1 ? '' : 's'}${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
             sinPos ? 'aviso' : '');
         })()}
         ${kpi('No cubren turno', (dp.noPresenciales.length + dp.sinActividad.length) || '—',
@@ -1247,8 +1250,10 @@ const App = (() => {
                    dp.sinActividad.length ? `${dp.sinActividad.length} sin actividad` : ''].filter(Boolean).join(' · ')
                 : 'toda la nómina está en el piso',
               (dp.noPresenciales.length + dp.sinActividad.length) ? 'aviso' : 'ok')}
-        ${kpi('FTE Real', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
-              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'sin visitas registradas')}
+        ${kpi('Bajas registradas', dp.bajas.length || '—',
+              dp.bajas.length ? 'ya no cuentan en la dotación' : 'ninguna')}
+        ${kpi('FTE del mes cerrado', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
+              ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'se calcula con la estadística del mes')}
         ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
               calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : '',
               calc && calc.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
@@ -1341,6 +1346,21 @@ const App = (() => {
               <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
             </button>`).join('')}
           </div>` : ''}
+
+        ${dp.bajas.length ? `<h3 style="margin-top:22px">Bajas registradas</h3>
+          <p class="ayuda">Ya salieron de la dotación y del FTE de la tienda. Si cargaste alguna
+            por error, se deshace acá mismo. El detalle completo está en
+            <a href="#/movimientos/bajas">Cesiones y bajas</a>.</p>
+          <div class="tabla-scroll"><table>
+            <thead><tr><th>Baja</th><th>Persona</th><th>Puesto</th><th>Motivo</th><th></th></tr></thead>
+            <tbody>${dp.bajas.map(x => `<tr>
+              <td class="tipo">${x.fecha ? fmtFecha(x.fecha) : '—'}</td>
+              <td><strong>${esc(x.nombre)}</strong></td>
+              <td class="tipo">${esc(x.cargo || '—')}</td>
+              <td>${esc(x.motivo || '—')}</td>
+              <td class="tipo"><button class="mini" data-accion="revertir-baja" data-id="${x.id}">Deshacer la baja</button></td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : ''}
 
         ${dp.sinActividad.length ? `<h3 style="margin-top:22px">Sin actividad este mes</h3>
           <p class="ayuda">Siguen en la nómina y vuelven, pero mientras dure esto no hay con
