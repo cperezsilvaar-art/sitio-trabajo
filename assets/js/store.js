@@ -1004,6 +1004,10 @@ const Store = (() => {
       const sucursalesNuevas = [];
       const sinTienda = [];
       const discrepancias = [];
+      /* Para poder decir después quién estaba cargado y no vino en la planilla:
+         casi siempre es alguien que se fue y quedó figurando en el piso. */
+      const tocadas = {};
+      const vistos = {};
 
       (filas || []).forEach(f => {
         let s = buscarSucursal(f.tienda);
@@ -1103,10 +1107,23 @@ const Store = (() => {
            con licencia sin goce siguen siendo gente de la tienda: lo que los
            distingue es el estatus, que se muestra, no que desaparezcan. */
         c.activo = true;
+        tocadas[s.id] = true;
+        vistos[c.id] = true;
+      });
+
+      /* Solo se mira en las tiendas que la planilla trae: si se pegó una parte,
+         el resto del área no tiene por qué aparecer como faltante. */
+      const noFiguran = [];
+      e.sucursales.forEach(s => {
+        if (!tocadas[s.id]) return;
+        (s.colaboradores || []).forEach(c => {
+          if (vistos[c.id] || c.activo === false) return;
+          noFiguran.push({ id: c.id, nombre: c.nombre, sucursal: s.nombre || s.codigo });
+        });
       });
 
       guardar();
-      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda, discrepancias,
+      return { nuevos, actualizados, movidos, sucursalesNuevas, sinTienda, discrepancias, noFiguran,
                total: (filas || []).length };
     },
 

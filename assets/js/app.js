@@ -4648,6 +4648,10 @@ const App = (() => {
               distinto del que ya estaba guardado.</strong> Se mantiene el guardado; conviene ver cuál es el correcto
               y corregirlo en el archivo de origen, porque con el CUIL mal esa persona no cruza con el resto de las planillas.
               <ul>${r.discrepancias.map(x => `<li>${esc(x.nombre)}: <code>${esc(x.guardado)}</code> vs <code>${esc(x.entrante)}</code>${x.porNombre ? ' — se reconoció por el nombre' : ''}</li>`).join('')}</ul>` : ''}
+            ${(r.noFiguran || []).length ? `<br><strong>${r.noFiguran.length} persona${r.noFiguran.length === 1 ? ' estaba' : 's estaban'} cargada${r.noFiguran.length === 1 ? '' : 's'} y ${r.noFiguran.length === 1 ? 'no vino' : 'no vinieron'} en esta planilla.</strong>
+              Siguen contando en la dotación hasta que las des de baja. Casi siempre es gente que se fue:
+              revisalas y, si corresponde, cargales la baja desde su ficha.
+              <ul>${r.noFiguran.map(x => `<li>${esc(x.nombre)} — ${esc(x.sucursal)}</li>`).join('')}</ul>` : ''}
             ${leido.avisos.length ? `<ul>${leido.avisos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
           </div>`;
         }

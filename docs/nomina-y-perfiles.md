@@ -257,3 +257,14 @@ duplica a nadie: cargar el plantel y después pegar la nómina deja 139 personas
 
 Cuando llegue una nómina nueva, el archivo se regenera desde el `.xlsx`; mientras
 tanto, pegar la planilla alcanza para actualizar lo que cambió.
+
+## Quién queda cargado y no vino en la planilla
+
+Al importar, el panel compara contra lo que ya había **en las tiendas que la
+planilla trae** —si se pegó una parte, el resto del área no tiene por qué
+aparecer como faltante— y avisa quién estaba cargado y no vino.
+
+No los borra: casi siempre es gente que se fue, y hasta que se les cargue la
+baja siguen contando en la dotación de piso. El aviso es para ir a su ficha y
+cargarla. Pegando la nómina de septiembre sobre el listado corto de agosto
+aparecen dos: Diaz Romero y Herrero, las dos de Olivos.
