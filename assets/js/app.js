@@ -2883,6 +2883,15 @@ const App = (() => {
   /* Se separa en dos tablas: la de dotación es la que se completa in situ
      durante la visita, y la de costos la que se cruza después con nómina.
      Juntas no entran en pantalla sin scroll horizontal. */
+  /* Al lado del número de días, a cuánto FTE equivalen. Es la traducción que
+     el coordinador hace de cabeza y donde se le escapa el doble conteo: 15 días
+     de ingreso son medio puesto, no uno más. */
+  const equivFte = (dias, p) => {
+    const d = num(dias);
+    if (!d) return '';
+    return `<br><small style="font-weight:400;color:var(--texto-suave)">${fmtNum(d / p.diasMes)} FTE</small>`;
+  };
+
   function panelFte(v, c) {
     const p = Store.get().config.parametros;
     const inp = (i, campo, ancho, titulo) =>
@@ -2896,8 +2905,8 @@ const App = (() => {
       return `<tr>
         <td><strong>${esc(f.rol)}</strong></td>
         <td class="num">${inp(i, 'heads', 70, 'Solo las personas que estuvieron los ' + p.diasMes + ' días. Quien entró o se fue durante el mes NO va acá: va en Ingresos o Egresos con sus días.')}</td>
-        <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}</td>
-        <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}</td>
+        <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}${equivFte(f.diasAltas, p)}</td>
+        <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}${equivFte(f.diasBajas, p)}</td>
         <td class="num">${inp(i, 'diasAusentes', 70, 'Días de ausencia y vacaciones')}</td>
         <td class="num">${inp(i, 'horasExtras', 80)}</td>
         <td class="num">${fmtNum(k.diasTrabajados, 0)}</td>
@@ -3046,10 +3055,10 @@ const App = (() => {
       /* Si el padrón dice cuántas personas hay en esa posición, contarlas de más
          en "Todo el mes" es justo lo que después se intenta arreglar restando. */
       if (padron && padron.personas) {
-        const enPadron = (padron.porPosicion[f.rol] || {}).heads;
-        if (enPadron !== undefined && f.heads > enPadron) {
+        const pp = padron.porPosicion[f.rol] || {};
+        if (pp.heads !== undefined && f.heads > pp.heads) {
           problemas.push(`<strong>${esc(f.rol)}</strong>: cargaste ${f.heads} personas de mes completo pero el padrón ` +
-            `de ${esc(v.periodo)} tiene ${enPadron}. Si alguna entró o se fue en el mes, va en Ingresos o Egresos con sus días, no acá.`);
+            `de ${esc(v.periodo)} tiene ${pp.heads} con vínculo todo el mes. Si alguna entró o se fue, va en Ingresos o Egresos con sus días, no acá.`);
         }
       }
     });
@@ -3068,9 +3077,19 @@ const App = (() => {
           `(${fmtNum(f.diasTrabajados, 0)}). El FTE queda negativo.`);
       }
     });
-    if (!problemas.length) return '';
-    return `<div class="aviso-caja"><strong>Revisá esta carga.</strong><ul>` +
-      problemas.map(x => `<li>${x}</li>`).join('') + `</ul></div>`;
+    const movimientos = padron
+      ? (padron.altas || []).map(x => `${x.nombre} entró y trabajó ${x.dias} días`)
+          .concat((padron.bajas || []).map(x => `${x.nombre} se fue habiendo trabajado ${x.dias} días`))
+      : [];
+
+    if (!problemas.length && !movimientos.length) return '';
+    return `${movimientos.length ? `<div class="aviso-caja info">
+        <strong>Movimientos de ${esc(v.periodo)} según el padrón.</strong> Ya vienen cargados en
+        Ingresos y Egresos con sus días; no los cuentes además en “Mes completo”.
+        <ul>${movimientos.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+      </div>` : ''}` +
+      (problemas.length ? `<div class="aviso-caja"><strong>Revisá esta carga.</strong><ul>` +
+        problemas.map(x => `<li>${x}</li>`).join('') + `</ul></div>` : '');
   }
 
   /* -------------------------- 3. Ausentismo ------------------------- */

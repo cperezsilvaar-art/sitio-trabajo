@@ -103,3 +103,22 @@ que ya viene escrito en estos términos. Debajo, la lectura de cada uno:
   del mes cerrado.
 - No proyecta: describe el mes que pasó.
 - No decide dotación: da el rango y la brecha; la decisión es de Operaciones.
+
+## El prellenado separa a quien entró o se fue
+
+`dotacionDelPadron()` ya no manda a todo el mundo a “Mes completo”. Mira la fecha
+de ingreso y la fecha de baja de cada persona contra el período:
+
+- si el vínculo empezó dentro del mes, va a **Ingresos** con los días que alcanzó
+  a trabajar (entrar el 16 de un mes de 30 son 15 días);
+- si terminó dentro del mes, va a **Egresos** con los días trabajados (irse el 25
+  son 25 días);
+- el resto son **Mes completo**.
+
+Antes el prellenado los contaba a todos como dotación estable, y al agregar los
+días de ingreso la persona quedaba contada dos veces: 6 cabezas + 15 días daban
+6,5 FTE donde correspondían 5,5. El error se inducía desde el propio panel.
+
+La matriz muestra ahora, debajo de cada número de días, a cuánto FTE equivale
+—15 días → *0,50 FTE*—, y arriba de la tabla lista los movimientos del mes con
+nombre y días, para que se vea de dónde salen.

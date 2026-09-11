@@ -90,6 +90,27 @@ const Store = (() => {
     }, datos || {});
   }
 
+  /**
+   * Si el vínculo empezó o terminó dentro del período, cuántos días alcanzó a
+   * durar. La escala es la del modelo de FTE: un mes son `diasMes` días, así
+   * que entrar el 16 de un mes de 30 son 15 días, e irse el 25 son 25.
+   *
+   * @returns {{tipo:'estable'|'alta'|'baja', dias:number}}
+   */
+  function movimientoDelMes(colaborador, periodo, diasMes) {
+    const c = colaborador || {};
+    const dm = diasMes || PARAMETROS_DEFECTO.diasMes;
+    const diaDe = f => {
+      const t = String(f || '');
+      return t.slice(0, 7) === periodo ? Math.min(dm, Math.max(1, Number(t.slice(8, 10)))) : 0;
+    };
+    const salida = diaDe((c.baja || {}).fecha);
+    if (salida) return { tipo: 'baja', dias: salida };
+    const entrada = diaDe(c.fechaIngreso) || diaDe(c.fechaIngresoFTD);
+    if (entrada) return { tipo: 'alta', dias: dm - entrada + 1 };
+    return { tipo: 'estable', dias: dm };
+  }
+
   function estadoInicial() {
     const sucursales = SUCURSALES_AREA3.map(x => sucursalNueva(x));
     return {
@@ -1275,6 +1296,9 @@ const Store = (() => {
       /* El bloqueo de título y los no presenciales cuentan para el costo pero
          no para la cobertura: no cubren un turno ni reemplazan una ausencia. */
       const noPresenciales = [];
+      const altas = [], bajas = [];
+      const diasMes = (this.get().config.parametros || PARAMETROS_DEFECTO).diasMes ||
+                      PARAMETROS_DEFECTO.diasMes;
 
       (s.colaboradores || []).forEach(c => {
         const nov = (c.novedades || {})[periodo];
@@ -1292,13 +1316,22 @@ const Store = (() => {
 
         if (!c.posicion) { sinPosicion.push(c.nombre); return; }
         const p = porPosicion[c.posicion] || (porPosicion[c.posicion] =
-          { heads: 0, diasAusentes: 0, horasExtras: 0 });
-        p.heads++;
+          { heads: 0, diasAltas: 0, diasBajas: 0, diasAusentes: 0, horasExtras: 0 });
+
+        /* Quien entró o se fue durante el mes no tuvo vínculo los 30 días: va
+           con los días que alcanzó a trabajar, no como dotación estable. Ponerlo
+           en las dos partes es el error que infla el FTE, y hasta ahora el
+           prellenado lo inducía. */
+        const mov = movimientoDelMes(c, periodo, diasMes);
+        if (mov.tipo === 'alta') { p.diasAltas += mov.dias; altas.push({ nombre: c.nombre, dias: mov.dias }); }
+        else if (mov.tipo === 'baja') { p.diasBajas += mov.dias; bajas.push({ nombre: c.nombre, dias: mov.dias }); }
+        else p.heads++;
+
         p.horasExtras += numeroNovedad(nov.he50) + numeroNovedad(nov.he100);
         p.diasAusentes += MAPA_AUSENCIAS.reduce((a, m) => a + numeroNovedad(nov[m.campo]), 0);
       });
 
-      return { porPosicion, sinPosicion, personas, noPresenciales, detalle, periodo,
+      return { porPosicion, sinPosicion, personas, noPresenciales, detalle, periodo, altas, bajas,
                /* Lo que hay que mirar cuando la pregunta es el costo. */
                personasConNoPresenciales: personas + noPresenciales.length };
     },
@@ -1313,6 +1346,8 @@ const Store = (() => {
       v.posiciones.forEach(fila => {
         const p = d.porPosicion[fila.rol];
         fila.heads = p ? p.heads : '';
+        fila.diasAltas = p && p.diasAltas ? p.diasAltas : '';
+        fila.diasBajas = p && p.diasBajas ? p.diasBajas : '';
         fila.diasAusentes = p && p.diasAusentes ? p.diasAusentes : '';
         fila.horasExtras = p && p.horasExtras ? p.horasExtras : '';
       });
