@@ -44,12 +44,30 @@ se guardaría la nómina.
 La pantalla de Configuración avisa cuando nunca se exportó uno, y cuando pasaron
 más de siete días desde el último.
 
+## Cuando el tablero abre vacío
+
+Dos redes se tienden solas:
+
+- El **panel general** avisa cuando no hay plantel cargado pero sí hay copias en
+  el navegador, dice cuántas personas tiene la más reciente y ofrece
+  restaurarla ahí mismo. Antes había que ir a buscarla a Configuración sabiendo
+  que existía.
+- Un guardado que no entra **ya no se traga en silencio**. `guardar()` suelta las
+  copias para hacer lugar y reintenta; si igual no entra, deja el aviso y el
+  panel general lo muestra arriba de todo. Un guardado que falla callado es la
+  peor forma de perder trabajo: se sigue usando el panel una hora y el vacío
+  aparece recién al recargar.
+
 ## Contenido que no se pudo leer
 
 Si al abrir hay contenido guardado que no se entiende y no hay clave puesta, el
 panel **no lo pisa**: lo aparta en `…​.ilegible` y arranca vacío. El caso típico
-es contenido cifrado abierto sin la clave. Configuración lo muestra y ofrece
-descartarlo, pero conviene primero volver a entrar con la clave.
+es contenido cifrado abierto sin la clave.
+
+Configuración lo muestra y, si resulta que **sí se puede abrir**, dice cuántas
+personas tiene y ofrece **recuperarlo**: ahí adentro está el trabajo de verdad y
+descartarlo sería perderlo por segunda vez. Si no se puede abrir, queda la opción
+de descartarlo, pero conviene primero volver a entrar con la clave.
 
 ## Qué hay guardado en este navegador
 

@@ -159,6 +159,25 @@ const App = (() => {
       <h1 class="titulo">${esc(e.config.area || 'Panel de la red')}</h1>
       <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
 
+      ${Store.falloAlGuardar() ? `<div class="aviso-caja">
+        <strong>Ojo: lo que cargues no se está guardando.</strong>
+        ${esc(Store.falloAlGuardar())}
+      </div>` : ''}
+
+      ${(() => {
+        /* El tablero sin plantel y con copias guardadas es, casi siempre, algo
+           que se borró. Ofrecer la copia acá evita que se rehaga a mano un
+           trabajo que está a un clic. */
+        if (dot.personas || dot.flotantes) return '';
+        const copias = Store.resguardos();
+        if (!copias.length) return '';
+        return `<div class="aviso-caja" id="rescate-copias">
+          <strong>El tablero no tiene plantel cargado y hay ${copias.length}
+          copia${copias.length === 1 ? '' : 's'} guardada${copias.length === 1 ? '' : 's'} en este navegador.</strong>
+          <div data-rescate="${copias[0].id}">Viendo qué tiene adentro la más reciente…</div>
+        </div>`;
+      })()}
+
       ${(() => {
         /* Lo vencido y lo de hoy y mañana entra acá: la agenda sirve si te
            encuentra, no si hay que ir a buscarla. */
@@ -2426,12 +2445,21 @@ const App = (() => {
           acción que reemplaza todo el contenido. Se conservan las cuatro últimas. Viven en este
           mismo navegador: sirven contra un borrado por error, no contra perder el equipo. Para
           eso está el respaldo .json de arriba.</p>
-        ${ilegible ? `<div class="aviso-caja">
-          <strong>Hay contenido que no se pudo leer al abrir.</strong> Quedó apartado sin pisarse
-          (${fmtNum(Math.round(ilegible.length / 1024), 0)} KB). Suele ser contenido cifrado
-          abierto sin la clave: si tenías clave puesta, ponela y volvé a entrar antes de tocar nada.
-          <div class="acciones"><button class="b sec" data-accion="descartar-ilegible">Descartar ese contenido</button></div>
-        </div>` : ''}
+        ${(() => {
+          if (!ilegible) return '';
+          const c = Store.censoIlegible();
+          return `<div class="aviso-caja">
+            <strong>Hay contenido que no se pudo leer al abrir.</strong> Quedó apartado sin pisarse
+            (${fmtNum(Math.max(1, Math.round(ilegible.length / 1024)), 0)} KB).
+            ${c ? `Se puede abrir y tiene <strong>${fmtNum(c.colaboradores, 0)} personas</strong> en
+              ${fmtNum(c.sucursales, 0)} sucursales: es trabajo tuyo y conviene recuperarlo.`
+                : 'Suele ser contenido cifrado abierto sin la clave: si tenías clave puesta, ponela y volvé a entrar antes de tocar nada.'}
+            <div class="acciones">
+              ${c ? '<button class="b" data-accion="recuperar-ilegible">Recuperar ese contenido</button>' : ''}
+              <button class="b sec" data-accion="descartar-ilegible">Descartar ese contenido</button>
+            </div>
+          </div>`;
+        })()}
         ${lista.length ? `<div class="tabla-scroll"><table>
           <thead><tr><th>Cuándo</th><th>Motivo</th><th class="num">Tamaño</th><th>Qué tiene adentro</th><th></th></tr></thead>
           <tbody>
@@ -3759,6 +3787,22 @@ const App = (() => {
         ? `${fmtNum(c.sucursales, 0)} sucursales · ${fmtNum(c.colaboradores, 0)} personas · ${fmtNum(c.visitas, 0)} visitas`
         : 'no se puede abrir con esta clave';
     });
+
+    document.querySelectorAll('[data-rescate]').forEach(async div => {
+      const id = div.dataset.rescate;
+      const c = await Store.censoResguardo(id);
+      if (!c || !c.colaboradores) {
+        div.innerHTML = 'La más reciente tampoco tiene plantel. Mirá el resto en ' +
+                        '<a href="#/config">Configuración</a>.';
+        return;
+      }
+      div.innerHTML = `La más reciente tiene <strong>${fmtNum(c.colaboradores, 0)} personas</strong> en
+        ${fmtNum(c.sucursales, 0)} sucursales.
+        <div class="acciones">
+          <button class="b" data-accion="restaurar-resguardo" data-id="${id}">Restaurar esa copia</button>
+          <a class="b sec" href="#/config" style="text-decoration:none">Ver todas las copias</a>
+        </div>`;
+    });
   }
 
   /* ============================ EVENTOS ============================ */
@@ -4800,6 +4844,18 @@ const App = (() => {
         const ok = await confirmar('Borrar la copia',
           'Se elimina esa copia. Las demás quedan como están.', 'Borrar');
         if (ok) { Store.eliminarResguardo(btn.dataset.id); refrescar(); }
+      }
+      if (a === 'recuperar-ilegible') {
+        const ok = await confirmar('Recuperar el contenido apartado',
+          'Se reemplaza lo que hay ahora por ese contenido. Antes se guarda una copia de lo actual, así también se puede volver.',
+          'Recuperar');
+        if (ok) {
+          try {
+            Store.recuperarIlegible();
+            location.hash = '#/red'; render();
+            avisar('Contenido recuperado.');
+          } catch (err) { avisar('No se pudo recuperar: ' + err.message, 'error'); }
+        }
       }
       if (a === 'descartar-ilegible') {
         const ok = await confirmar('Descartar el contenido apartado',

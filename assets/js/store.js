@@ -64,6 +64,9 @@ const Store = (() => {
   let estado = null;
   let cifrador = null;          // null = guardar en claro
   let colaDeGuardado = Promise.resolve();
+  /* Un guardado que falla en silencio es la peor forma de perder trabajo: se
+     sigue usando el panel una hora y recién al recargar aparece el vacío. */
+  let falloAlGuardar = '';
   const suscriptores = [];
 
   const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -323,11 +326,11 @@ const Store = (() => {
     }
     if (!crudo) { estado = estadoInicial(); return estado; }
 
+    let leido = false;
     try {
       const plano = cifrador ? await cifrador.descifrar(crudo) : crudo;
       estado = normalizar(JSON.parse(plano));
-      resguardarPorDia();
-      return estado;
+      leido = true;
     } catch (err) {
       if (!cifrador) {
         /* Arrancar vacío acá significa que el primer guardado pisa para siempre
@@ -338,6 +341,14 @@ const Store = (() => {
         estado = estadoInicial();
         return estado;
       }
+    }
+
+    /* La copia del día va acá afuera a propósito. Adentro del try, cualquier
+       error suyo se leía como “no se pudo leer lo guardado” y el tablero
+       arrancaba vacío: el resguardo tirando abajo justo lo que protege. */
+    if (leido) {
+      try { resguardarPorDia(); } catch (err) { console.warn('No se pudo guardar la copia del día.', err); }
+      return estado;
     }
 
     /* Con cifrador y sin poder descifrar hay dos casos. Puede ser contenido en
@@ -363,11 +374,32 @@ const Store = (() => {
   function guardar() {
     const instantanea = JSON.stringify(estado);
     colaDeGuardado = colaDeGuardado.then(async () => {
+      let aGuardar;
       try {
-        const aGuardar = cifrador ? await cifrador.cifrar(instantanea) : instantanea;
-        localStorage.setItem(CLAVE_ALMACEN, aGuardar);
+        aGuardar = cifrador ? await cifrador.cifrar(instantanea) : instantanea;
       } catch (err) {
-        console.warn('No se pudo guardar en el almacenamiento local.', err);
+        falloAlGuardar = 'No se pudo cifrar el contenido para guardarlo.';
+        console.error(falloAlGuardar, err);
+        return;
+      }
+      try {
+        localStorage.setItem(CLAVE_ALMACEN, aGuardar);
+        falloAlGuardar = '';
+        return;
+      } catch (err) {
+        /* Lo más probable es que no entre porque las copias llenaron el
+           almacenamiento. Vale más lo que se está guardando ahora que una copia
+           vieja, así que se sueltan y se reintenta. */
+        console.warn('No entró en el almacenamiento local, se liberan copias.', err);
+      }
+      try { localStorage.removeItem(CLAVE_RESGUARDOS); } catch (e) { /* nada que hacer */ }
+      try {
+        localStorage.setItem(CLAVE_ALMACEN, aGuardar);
+        falloAlGuardar = '';
+      } catch (err) {
+        falloAlGuardar = 'El navegador no está guardando los cambios: no hay lugar o el sitio ' +
+                         'tiene bloqueado el almacenamiento. Exportá un respaldo antes de cerrar.';
+        console.error(falloAlGuardar, err);
       }
     });
     suscriptores.forEach(fn => fn(estado));
@@ -442,6 +474,8 @@ const Store = (() => {
     uid,
     init: cargar,
     cifrado: () => !!cifrador,
+    /** Texto del último guardado que falló, o '' si todo se está guardando. */
+    falloAlGuardar: () => falloAlGuardar,
     get: () => estado,
     save: guardar,
     onChange: fn => suscriptores.push(fn),
@@ -1554,6 +1588,32 @@ const Store = (() => {
 
     descartarIlegible() {
       try { localStorage.removeItem(CLAVE_ILEGIBLE); } catch (err) { /* nada que hacer */ }
+    },
+
+    /** Qué tiene adentro lo apartado, si resulta que se puede leer después de todo. */
+    censoIlegible() {
+      const t = this.contenidoIlegible();
+      if (!t) return null;
+      try { return this.censo(JSON.parse(t)); } catch (err) { return null; }
+    },
+
+    /**
+     * Devuelve al tablero el contenido que quedó apartado. Tiene sentido cuando
+     * lo que falló fue la lectura y no el contenido: ahí adentro está el trabajo
+     * de verdad, y descartarlo sería perderlo por segunda vez.
+     */
+    recuperarIlegible() {
+      const t = this.contenidoIlegible();
+      if (!t) throw new Error('No hay contenido apartado.');
+      const datos = JSON.parse(t);
+      if (!datos || !Array.isArray(datos.sucursales)) {
+        throw new Error('Lo apartado no tiene la forma del tablero.');
+      }
+      resguardar('Antes de recuperar el contenido apartado');
+      estado = normalizar(datos);
+      guardar();
+      this.descartarIlegible();
+      return estado;
     },
 
     /* --------------------- qué hay guardado ----------------------- */
