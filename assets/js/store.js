@@ -155,7 +155,7 @@ const Store = (() => {
       minutaGerente: { participante: '', puntos: '', acuerdos: '' },
       minutaColaborador: { nombre: '', posicion: '', feedback: '' },
       posiciones: POSICIONES.map(p => ({
-        rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+        rol: p.nombre, heads: '', headsAltas: '', diasAltas: '', diasBajas: '', diasAusentes: '',
         horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
       })),
       ausentismo: { detalle: {} },
@@ -290,7 +290,7 @@ const Store = (() => {
       v.posiciones = Array.isArray(v.posiciones) ? v.posiciones : [];
       v.posiciones = POSICIONES.map(p =>
         v.posiciones.find(f => f.rol === p.nombre) || {
-          rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+          rol: p.nombre, heads: '', headsAltas: '', diasAltas: '', diasBajas: '', diasAusentes: '',
           horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
         })
         /* Las filas de un catálogo viejo que ya no existe se conservan al final
@@ -1316,14 +1316,14 @@ const Store = (() => {
 
         if (!c.posicion) { sinPosicion.push(c.nombre); return; }
         const p = porPosicion[c.posicion] || (porPosicion[c.posicion] =
-          { heads: 0, diasAltas: 0, diasBajas: 0, diasAusentes: 0, horasExtras: 0 });
+          { heads: 0, headsAltas: 0, diasAltas: 0, diasBajas: 0, diasAusentes: 0, horasExtras: 0 });
 
         /* Quien entró o se fue durante el mes no tuvo vínculo los 30 días: va
            con los días que alcanzó a trabajar, no como dotación estable. Ponerlo
            en las dos partes es el error que infla el FTE, y hasta ahora el
            prellenado lo inducía. */
         const mov = movimientoDelMes(c, periodo, diasMes);
-        if (mov.tipo === 'alta') { p.diasAltas += mov.dias; altas.push({ nombre: c.nombre, dias: mov.dias }); }
+        if (mov.tipo === 'alta') { p.diasAltas += mov.dias; p.headsAltas++; altas.push({ nombre: c.nombre, dias: mov.dias }); }
         else if (mov.tipo === 'baja') { p.diasBajas += mov.dias; bajas.push({ nombre: c.nombre, dias: mov.dias }); }
         else p.heads++;
 
@@ -1346,6 +1346,7 @@ const Store = (() => {
       v.posiciones.forEach(fila => {
         const p = d.porPosicion[fila.rol];
         fila.heads = p ? p.heads : '';
+        fila.headsAltas = p && p.headsAltas ? p.headsAltas : '';
         fila.diasAltas = p && p.diasAltas ? p.diasAltas : '';
         fila.diasBajas = p && p.diasBajas ? p.diasBajas : '';
         fila.diasAusentes = p && p.diasAusentes ? p.diasAusentes : '';
@@ -1763,7 +1764,7 @@ const Store = (() => {
           rot: ['8','0','0','0','0'], venta: '205000000', tickets: '26000', horas: '3900' }
       ];
 
-      const campos = ['heads', 'diasAltas', 'diasBajas', 'diasAusentes', 'horasExtras',
+      const campos = ['heads', 'headsAltas', 'diasAltas', 'diasBajas', 'diasAusentes', 'horasExtras',
                       'sueldoBruto', 'costoHE', 'bonos'];
       const rotCampos = ['dotacionAnterior', 'altasExternas', 'altasInternas', 'bajasExternas', 'bajasInternas'];
 

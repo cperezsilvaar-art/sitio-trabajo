@@ -103,6 +103,15 @@ acompaña cuando se muda de tienda. Se cargan en su ficha y se leen juntas en
 tiempo**: `aplicarMovimientosVencidos()` corre al abrir el panel. Documentado en
 `docs/cesiones-y-bajas.md`.
 
+La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
+y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box.
+
+La matriz de FTE de la estadística usa el **cabezal de dos niveles de la planilla
+TD01**: *Heads* (todo el mes · ingreso · total) y *F.T.U.* (todo el mes · egreso ·
+ingreso · total días · hs. extras · ausent + vaca · total). Las cabezas y los
+días son preguntas distintas —a cuánta gente le doy turno, y cuánto trabajo se
+prestó— y por eso van en grupos separados.
+
 El instrumento formal de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
 con criterio de aprobación. La recorrida del HRBP lo acompaña, no lo reemplaza.

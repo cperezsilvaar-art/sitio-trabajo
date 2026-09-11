@@ -591,6 +591,21 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
 .check-detalle p { margin: 0 0 8px; font-size: 13px; }
 .check-detalle .criterio { color: var(--texto-suave); }
 
+/* Matriz de FTE con el cabezal de dos niveles de la planilla TD01: los dos
+   grupos —Heads y F.T.U.— se distinguen por color para no perderse de columna
+   al cargar a mano. */
+.matriz-td01 thead th { vertical-align: middle; }
+.matriz-td01 th.grupo-heads { background: var(--panel-alt); }
+.matriz-td01 th.grupo-ftu   { background: var(--panel); }
+.matriz-td01 thead tr:first-child th.grupo-heads,
+.matriz-td01 thead tr:first-child th.grupo-ftu {
+  text-align: center; letter-spacing: .1em; font-size: 13px;
+}
+/* La línea separa los dos grupos: con diez columnas de números, perder de
+   vista dónde terminan las cabezas y empiezan los días es cuestión de un
+   parpadeo. */
+.matriz-td01 .fin-heads { border-right: 2px solid var(--borde-fuerte); }
+
 </style>
 
 <header class="app">
@@ -1461,6 +1476,12 @@ function calcularPosicion(fila, par) {
   const diasBajas = num(fila.diasBajas);
   const diasTrabajados = diasEstables + diasAltas + diasBajas;
 
+  /* Cabezas: el que ingresó suma a la dotación de cierre aunque no haya estado
+     el mes entero; el que se fue ya no está. Es otra pregunta que el FTE —a
+     cuánta gente le tengo que dar turno el mes que viene— y por eso va aparte. */
+  const headsAltas = num(fila.headsAltas);
+  const headsTotal = heads + headsAltas;
+
   const diasAusentes = num(fila.diasAusentes);
   const horasExtras = num(fila.horasExtras);
 
@@ -1489,7 +1510,7 @@ function calcularPosicion(fila, par) {
 
   return {
     rol: fila.rol,
-    heads,
+    heads, headsAltas, headsTotal, diasEstables,
     diasAltas, diasBajas, diasTrabajados,
     diasAusentes, horasExtras,
     fteVinculo, fteAusencias, fteExtras, fteReal,
@@ -1510,6 +1531,9 @@ function calcularMatriz(posiciones, par) {
   const total = {
     rol: 'TOTAL',
     heads: acc('heads'),
+    headsAltas: acc('headsAltas'),
+    headsTotal: acc('headsTotal'),
+    diasEstables: acc('diasEstables'),
     diasAltas: acc('diasAltas'),
     diasBajas: acc('diasBajas'),
     diasTrabajados: acc('diasTrabajados'),
@@ -4463,7 +4487,7 @@ const Store = (() => {
       minutaGerente: { participante: '', puntos: '', acuerdos: '' },
       minutaColaborador: { nombre: '', posicion: '', feedback: '' },
       posiciones: POSICIONES.map(p => ({
-        rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+        rol: p.nombre, heads: '', headsAltas: '', diasAltas: '', diasBajas: '', diasAusentes: '',
         horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
       })),
       ausentismo: { detalle: {} },
@@ -4598,7 +4622,7 @@ const Store = (() => {
       v.posiciones = Array.isArray(v.posiciones) ? v.posiciones : [];
       v.posiciones = POSICIONES.map(p =>
         v.posiciones.find(f => f.rol === p.nombre) || {
-          rol: p.nombre, heads: '', diasAltas: '', diasBajas: '', diasAusentes: '',
+          rol: p.nombre, heads: '', headsAltas: '', diasAltas: '', diasBajas: '', diasAusentes: '',
           horasExtras: '', sueldoBruto: '', costoHE: '', bonos: '', cargasManual: ''
         })
         /* Las filas de un catálogo viejo que ya no existe se conservan al final
@@ -5624,14 +5648,14 @@ const Store = (() => {
 
         if (!c.posicion) { sinPosicion.push(c.nombre); return; }
         const p = porPosicion[c.posicion] || (porPosicion[c.posicion] =
-          { heads: 0, diasAltas: 0, diasBajas: 0, diasAusentes: 0, horasExtras: 0 });
+          { heads: 0, headsAltas: 0, diasAltas: 0, diasBajas: 0, diasAusentes: 0, horasExtras: 0 });
 
         /* Quien entró o se fue durante el mes no tuvo vínculo los 30 días: va
            con los días que alcanzó a trabajar, no como dotación estable. Ponerlo
            en las dos partes es el error que infla el FTE, y hasta ahora el
            prellenado lo inducía. */
         const mov = movimientoDelMes(c, periodo, diasMes);
-        if (mov.tipo === 'alta') { p.diasAltas += mov.dias; altas.push({ nombre: c.nombre, dias: mov.dias }); }
+        if (mov.tipo === 'alta') { p.diasAltas += mov.dias; p.headsAltas++; altas.push({ nombre: c.nombre, dias: mov.dias }); }
         else if (mov.tipo === 'baja') { p.diasBajas += mov.dias; bajas.push({ nombre: c.nombre, dias: mov.dias }); }
         else p.heads++;
 
@@ -5654,6 +5678,7 @@ const Store = (() => {
       v.posiciones.forEach(fila => {
         const p = d.porPosicion[fila.rol];
         fila.heads = p ? p.heads : '';
+        fila.headsAltas = p && p.headsAltas ? p.headsAltas : '';
         fila.diasAltas = p && p.diasAltas ? p.diasAltas : '';
         fila.diasBajas = p && p.diasBajas ? p.diasBajas : '';
         fila.diasAusentes = p && p.diasAusentes ? p.diasAusentes : '';
@@ -6071,7 +6096,7 @@ const Store = (() => {
           rot: ['8','0','0','0','0'], venta: '205000000', tickets: '26000', horas: '3900' }
       ];
 
-      const campos = ['heads', 'diasAltas', 'diasBajas', 'diasAusentes', 'horasExtras',
+      const campos = ['heads', 'headsAltas', 'diasAltas', 'diasBajas', 'diasAusentes', 'horasExtras',
                       'sueldoBruto', 'costoHE', 'bonos'];
       const rotCampos = ['dotacionAnterior', 'altasExternas', 'altasInternas', 'bajasExternas', 'bajasInternas'];
 
@@ -7254,8 +7279,11 @@ const Reporte = (() => {
        adelantos, hay que avisarlo igual. */
     const bloqueAgenda = () => {
       const rep = repartirAgenda(Store.itemsParaTienda(), fecha);
+      /* Lo que no tiene fecha entra igual: si el coordinador marcó “avisarlo en
+         la tienda”, quiso que se avise, no que espere a tener plazo. Antes la
+         marca no hacía nada y no había forma de darse cuenta. */
       const porDecir = rep.vencidas.concat(rep.urgentes,
-        rep.semana.filter(x => x.estado.dias <= 3));
+        rep.semana.filter(x => x.estado.dias <= 3), rep.sinFecha);
       if (!porDecir.length) return [];
       const B = ['PARA AVISAR EN LA TIENDA'];
       porDecir.forEach(x => {
@@ -9377,7 +9405,6 @@ const App = (() => {
     ['ausentismo', 'Ausentismo'],
     ['rotacion',   'Rotación y Bajas'],
     ['sanciones',  'Sanciones'],
-    ['sucesion',   'Sucesión'],
     ['dotacion',   'Dotación vs. Venta'],
     ['reporte',    'Reporte y Envío']
   ];
@@ -9464,7 +9491,6 @@ const App = (() => {
       ausentismo: () => panelAusentismo(v, c),
       rotacion:   () => panelRotacion(v, c),
       sanciones:  () => panelSanciones(v),
-      sucesion:   () => panelSucesion(v, c),
       dotacion:   () => panelDotacion(v, s, c),
       reporte:    () => panelReporte(v, s, e.config, c)
     }[pestana] || (() => estadResumen(s, e, d, c, faltantes, registro, dest, cc));
@@ -9939,7 +9965,9 @@ const App = (() => {
     const cuerpo = {
       checklist: () => panelChecklist(v, s),
       recorrida: () => panelRecorrida(v, s),
-      talento:   () => panelTalento(v, s)
+      /* La sucesión es una conversación sobre gente, no un número del mes
+         cerrado: se hace mirando el 9-box con el Gerente de Tienda. */
+      talento:   () => panelTalento(v, s) + panelSucesion(v, c)
     }[pestana] || (() => panelChecklist(v, s));
 
     return `
@@ -10341,15 +10369,16 @@ const App = (() => {
       const k = c.matriz.filas[i];
       return `<tr>
         <td><strong>${esc(f.rol)}</strong></td>
-        <td class="num">${inp(i, 'heads', 70, 'Solo las personas que estuvieron los ' + p.diasMes + ' días. Quien entró o se fue durante el mes NO va acá: va en Ingresos o Egresos con sus días.')}</td>
-        <td class="num">${inp(i, 'diasAltas', 70, 'Días que alcanzó a trabajar quien ingresó durante el mes')}${equivFte(f.diasAltas, p)}</td>
-        <td class="num">${inp(i, 'diasBajas', 70, 'Días que alcanzó a trabajar quien egresó durante el mes')}${equivFte(f.diasBajas, p)}</td>
-        <td class="num">${inp(i, 'diasAusentes', 70, 'Días de ausencia y vacaciones')}</td>
-        <td class="num">${inp(i, 'horasExtras', 80)}</td>
+        <td class="num">${inp(i, 'heads', 64, 'Solo las personas que estuvieron los ' + p.diasMes + ' días. Quien entró o se fue durante el mes NO va acá: va en Ingreso o Egreso con sus días.')}</td>
+        <td class="num">${inp(i, 'headsAltas', 64, 'Cuántas personas ingresaron durante el mes')}</td>
+        <td class="num fin-heads"><strong>${k.headsTotal || '—'}</strong></td>
+        <td class="num">${fmtNum(k.diasEstables, 0)}</td>
+        <td class="num">${inp(i, 'diasBajas', 64, 'Días que alcanzó a trabajar quien egresó durante el mes')}${equivFte(f.diasBajas, p)}</td>
+        <td class="num">${inp(i, 'diasAltas', 64, 'Días que alcanzó a trabajar quien ingresó durante el mes')}${equivFte(f.diasAltas, p)}</td>
         <td class="num">${fmtNum(k.diasTrabajados, 0)}</td>
-        <td class="num">${fmtNum(k.fteVinculo)}</td>
+        <td class="num">${inp(i, 'horasExtras', 72)}</td>
+        <td class="num">${inp(i, 'diasAusentes', 72, 'Días de ausencia y de vacaciones')}</td>
         <td class="num"><strong>${fmtNum(k.fteReal)}</strong></td>
-        <td class="num">${k.diasTrabajados ? fmtNum(k.brechaFte) : '—'}</td>
       </tr>`;
     };
 
@@ -10406,31 +10435,43 @@ const App = (() => {
             </div>
           </div>`;
         })()}
-        <div class="tabla-scroll"><table>
-          <thead><tr>
-            <th>Posición</th>
-            <th class="num">Todo el mes<br><small style="font-weight:400;text-transform:none">personas que no entraron ni salieron</small></th>
-            <th class="num">Ingresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
-            <th class="num">Egresos<br><small style="font-weight:400;text-transform:none">días que alcanzó a trabajar</small></th>
-            <th class="num">Ausencias<br><small style="font-weight:400;text-transform:none">días</small></th>
-            <th class="num">Hs. extras</th>
-            <th class="num">Días de vínculo</th><th class="num">Personas equiv.</th><th class="num">FTE Real</th>
-            <th class="num" title="FTE Real menos personas equivalentes: lo que se pierde por ausencias, neto de lo que se recupera con horas extras.">Brecha de cobertura</th>
-          </tr></thead>
+        <div class="tabla-scroll"><table class="matriz-td01">
+          <thead>
+            <tr>
+              <th rowspan="2">Posición</th>
+              <th class="num grupo-heads fin-heads" colspan="3">Heads</th>
+              <th class="num grupo-ftu" colspan="7">F. T. U.</th>
+            </tr>
+            <tr>
+              <th class="num grupo-heads" title="Personas con vínculo durante todo el mes">Todo el mes</th>
+              <th class="num grupo-heads" title="Cuántas personas ingresaron durante el mes">Ingreso</th>
+              <th class="num grupo-heads fin-heads" title="Dotación al cierre del mes: las que estuvieron todo el mes más las que ingresaron">Total</th>
+              <th class="num grupo-ftu" title="Días de vínculo de la dotación estable: personas × ${p.diasMes}">Todo el mes</th>
+              <th class="num grupo-ftu" title="Días que alcanzó a trabajar quien egresó durante el mes">Egreso</th>
+              <th class="num grupo-ftu" title="Días que alcanzó a trabajar quien ingresó durante el mes">Ingreso</th>
+              <th class="num grupo-ftu" title="Suma de los tres anteriores">Total días</th>
+              <th class="num grupo-ftu">Hs. Extras</th>
+              <th class="num grupo-ftu" title="Días de ausencia y de vacaciones">Ausent + Vaca</th>
+              <th class="num grupo-ftu" title="FTE real: días de vínculo ÷ ${p.diasMes} − ausencias ÷ ${p.diasMes} + horas extras ÷ ${p.horasMes}">total</th>
+            </tr>
+          </thead>
           <tbody>${v.posiciones.map(filaDotacion).join('')}</tbody>
           <tfoot><tr class="total">
             <td>TOTAL</td>
             <td class="num">${t.heads || '—'}</td>
-            <td class="num">${fmtNum(t.diasAltas, 0)}</td>
+            <td class="num">${t.headsAltas || '—'}</td>
+            <td class="num fin-heads">${t.headsTotal || '—'}</td>
+            <td class="num">${fmtNum(t.diasEstables, 0)}</td>
             <td class="num">${fmtNum(t.diasBajas, 0)}</td>
-            <td class="num">${fmtNum(t.diasAusentes, 0)}</td>
-            <td class="num">${fmtNum(t.horasExtras, 0)}</td>
+            <td class="num">${fmtNum(t.diasAltas, 0)}</td>
             <td class="num">${fmtNum(t.diasTrabajados, 0)}</td>
-            <td class="num">${fmtNum(t.diasTrabajados / p.diasMes)}</td>
+            <td class="num">${fmtNum(t.horasExtras, 0)}</td>
+            <td class="num">${fmtNum(t.diasAusentes, 0)}</td>
             <td class="num">${fmtNum(t.fteReal)}</td>
-            <td class="num">${t.diasTrabajados ? fmtNum(t.brechaFte) : '—'}</td>
           </tr></tfoot>
         </table></div>
+        <p class="ayuda">Personas equivalentes por vínculo: <strong>${fmtNum(t.diasTrabajados / p.diasMes)}</strong>${
+          t.diasTrabajados ? ` · brecha de cobertura ${fmtNum(t.brechaFte)} FTE` : ''}.</p>
 
         <div class="aviso-caja info">
           Descomposición del FTE total: vínculo ${fmtNum(t.diasTrabajados / p.diasMes)}
@@ -10741,7 +10782,7 @@ const App = (() => {
 
     return `
       <section class="tarjeta">
-        <h2>6. Evaluación de desempeño y potencial</h2>
+        <h2>Evaluación de desempeño y potencial</h2>
         <p class="ayuda">
           Evaluación hecha en conjunto con el Gerente de Tienda. Vive en la sucursal, no en esta visita:
           cuando el gerente aporte algo nuevo, cambiás el valor acá o arrastrás a la persona en la matriz
@@ -10936,7 +10977,7 @@ const App = (() => {
 
     return `
       <section class="tarjeta">
-        <h2>6. Posiciones críticas y plan de sucesión</h2>
+        <h2>Posiciones críticas y plan de sucesión</h2>
         <p class="ayuda">Criticidad y escasez en escala 1 a 3, como en el toolkit de sucesión. Una posición se considera crítica con criticidad ≥ 2,5, o ≥ 2 combinada con escasez alta.</p>
         <div class="tabla-scroll"><table>
           <thead><tr><th>Posición</th><th>Titular</th><th class="num">Criticidad</th><th class="num">Escasez</th><th>Se requiere</th><th>Candidatos</th><th></th></tr></thead>
@@ -11024,7 +11065,7 @@ const App = (() => {
     const d = c.dotacion, p = Store.get().config.parametros;
     return `
       <section class="tarjeta">
-        <h2>7. Dotación óptima según venta</h2>
+        <h2>6. Dotación óptima según venta</h2>
         <p class="ayuda">
           El costo laboral sobre la venta se lee contra dos umbrales: hasta ${fmtPct(p.benchmarkCostoVenta, 0)} es el objetivo,
           y ${fmtPct(p.alertaCostoVenta, 0)} es el techo de alerta de la actividad.
@@ -11068,7 +11109,7 @@ const App = (() => {
     const plan = v.diagnostico.plan || [];
     return `
       <section class="tarjeta">
-        <h2>8. Diagnóstico y plan de seguimiento</h2>
+        <h2>7. Diagnóstico y plan de seguimiento</h2>
         <p class="ayuda">Si dejás vacíos los hallazgos, el reporte usa el diagnóstico automático que figura abajo.</p>
         <div class="grid c2">
           ${campo('Hallazgos sobre ausentismo y horas extras', 'diagnostico.hallazgos', { tipo: 'textarea', alto: 150 })}

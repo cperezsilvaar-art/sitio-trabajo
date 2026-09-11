@@ -1101,8 +1101,11 @@ const Reporte = (() => {
        adelantos, hay que avisarlo igual. */
     const bloqueAgenda = () => {
       const rep = repartirAgenda(Store.itemsParaTienda(), fecha);
+      /* Lo que no tiene fecha entra igual: si el coordinador marcó “avisarlo en
+         la tienda”, quiso que se avise, no que espere a tener plazo. Antes la
+         marca no hacía nada y no había forma de darse cuenta. */
       const porDecir = rep.vencidas.concat(rep.urgentes,
-        rep.semana.filter(x => x.estado.dias <= 3));
+        rep.semana.filter(x => x.estado.dias <= 3), rep.sinFecha);
       if (!porDecir.length) return [];
       const B = ['PARA AVISAR EN LA TIENDA'];
       porDecir.forEach(x => {

@@ -39,6 +39,12 @@ function calcularPosicion(fila, par) {
   const diasBajas = num(fila.diasBajas);
   const diasTrabajados = diasEstables + diasAltas + diasBajas;
 
+  /* Cabezas: el que ingresó suma a la dotación de cierre aunque no haya estado
+     el mes entero; el que se fue ya no está. Es otra pregunta que el FTE —a
+     cuánta gente le tengo que dar turno el mes que viene— y por eso va aparte. */
+  const headsAltas = num(fila.headsAltas);
+  const headsTotal = heads + headsAltas;
+
   const diasAusentes = num(fila.diasAusentes);
   const horasExtras = num(fila.horasExtras);
 
@@ -67,7 +73,7 @@ function calcularPosicion(fila, par) {
 
   return {
     rol: fila.rol,
-    heads,
+    heads, headsAltas, headsTotal, diasEstables,
     diasAltas, diasBajas, diasTrabajados,
     diasAusentes, horasExtras,
     fteVinculo, fteAusencias, fteExtras, fteReal,
@@ -88,6 +94,9 @@ function calcularMatriz(posiciones, par) {
   const total = {
     rol: 'TOTAL',
     heads: acc('heads'),
+    headsAltas: acc('headsAltas'),
+    headsTotal: acc('headsTotal'),
+    diasEstables: acc('diasEstables'),
     diasAltas: acc('diasAltas'),
     diasBajas: acc('diasBajas'),
     diasTrabajados: acc('diasTrabajados'),

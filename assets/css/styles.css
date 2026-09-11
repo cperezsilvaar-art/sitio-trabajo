@@ -588,3 +588,18 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
 .check-detalle { padding: 10px 0 4px 36px; }
 .check-detalle p { margin: 0 0 8px; font-size: 13px; }
 .check-detalle .criterio { color: var(--texto-suave); }
+
+/* Matriz de FTE con el cabezal de dos niveles de la planilla TD01: los dos
+   grupos —Heads y F.T.U.— se distinguen por color para no perderse de columna
+   al cargar a mano. */
+.matriz-td01 thead th { vertical-align: middle; }
+.matriz-td01 th.grupo-heads { background: var(--panel-alt); }
+.matriz-td01 th.grupo-ftu   { background: var(--panel); }
+.matriz-td01 thead tr:first-child th.grupo-heads,
+.matriz-td01 thead tr:first-child th.grupo-ftu {
+  text-align: center; letter-spacing: .1em; font-size: 13px;
+}
+/* La línea separa los dos grupos: con diez columnas de números, perder de
+   vista dónde terminan las cabezas y empiezan los días es cuestión de un
+   parpadeo. */
+.matriz-td01 .fin-heads { border-right: 2px solid var(--borde-fuerte); }
