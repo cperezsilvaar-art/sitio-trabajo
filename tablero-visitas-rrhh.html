@@ -9512,13 +9512,15 @@ const App = (() => {
           placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
         <div class="acciones">
           <button class="b" data-accion="importar-nomina">Importar la nómina</button>
-          <button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>
+          ${PLANTEL_AREA3.length
+            ? `<button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>`
+            : ''}
         </div>
-        <p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
+        ${PLANTEL_AREA3.length ? `<p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
           septiembre de 2026 con su tienda, su cargo, su categoría, su jornada y sus fechas de
           ingreso, sin tener que pegar nada. No trae el CUIL, el DNI, el teléfono, el domicilio
           ni los mails: eso vive solo en tu navegador y entra al pegar la planilla. Los dos
-          caminos se complementan y ninguno duplica a nadie.</p>
+          caminos se complementan y ninguno duplica a nadie.</p>` : ''}
         <div id="resultado-nomina"></div>
 
         ${(() => {
