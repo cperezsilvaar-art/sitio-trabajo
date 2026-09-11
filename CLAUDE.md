@@ -61,8 +61,8 @@ visita cargada.
   `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
-  `#/sucursales`, `#/sucursal/<id>`, `#/estadistica[/<tab>]`,
-  `#/visita/<id>/<tab>`, `#/config`.
+  `#/movimientos[/cesiones|/bajas]`, `#/sucursales`, `#/sucursal/<id>`,
+  `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
 - **Trampa conocida:** todo lo que entra al panel se pega desde Excel, y Excel
   entrecomilla las celdas que tienen un salto de línea adentro —los encabezados
@@ -89,6 +89,13 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 La navegación está agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
 *Cierre del mes*— y no por módulo. Una solapa nueva va adentro del grupo que le
 corresponde, no al final de la fila.
+
+La baja, la cesión de contrato y la modificación de puesto cuelgan de la
+**persona** (`c.baja`, `c.movimientos[]`), no de la sucursal, así el historial la
+acompaña cuando se muda de tienda. Se cargan en su ficha y se leen juntas en
+`#/movimientos`. Lo autorizado con vigencia futura **no se aplica antes de
+tiempo**: `aplicarMovimientosVencidos()` corre al abrir el panel. Documentado en
+`docs/cesiones-y-bajas.md`.
 
 El instrumento formal de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos

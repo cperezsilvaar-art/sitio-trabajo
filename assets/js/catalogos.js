@@ -165,6 +165,30 @@ const MOTIVOS_BAJA = [
   }
 ];
 
+/* Tipos de movimiento que el coordinador registra sobre una persona. */
+const TIPOS_MOVIMIENTO = [
+  { id: 'cesion',       nombre: 'Cesión de contrato', detalle: 'Pasa a otra sucursal' },
+  { id: 'modificacion', nombre: 'Modificación',       detalle: 'Cambia de puesto o de jornada' }
+];
+
+const ESTADOS_MOVIMIENTO = {
+  pendiente:  { nombre: 'Pendiente de autorizar', chip: 'ambar' },
+  autorizada: { nombre: 'Autorizada',             chip: 'azul' },
+  aplicada:   { nombre: 'Aplicada',               chip: 'verde' },
+  anulada:    { nombre: 'Anulada',                chip: '' }
+};
+
+/**
+ * Qué tienda absorbe el costo del mes en una transferencia. Del procedimiento
+ * de Empleos: del 1 al 15 lo paga la tienda de destino, del 16 en adelante la
+ * de origen. Es la pregunta que aparece cuando se cierra el mes.
+ */
+function tiendaQueAbsorbeElCosto(vigencia) {
+  const d = Number(String(vigencia || '').slice(8, 10));
+  if (!d) return '';
+  return d <= 15 ? 'destino' : 'origen';
+}
+
 /* Causas de rotación — TD01, ESTADÍSTICA (8), tabla 18 */
 const CAUSAS_ROTACION = [
   { cod: 'A-1', nombre: 'Sueldo / progreso / beneficios',              grupo: 'Renuncias' },

@@ -16,6 +16,7 @@ const App = (() => {
 
   /* --------------------------- utilidades --------------------------- */
   const $ = sel => document.querySelector(sel);
+  const valorDe = sel => { const el = $(sel); return el ? el.value.trim() : ''; };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -863,6 +864,153 @@ const App = (() => {
     }) || null;
   }
 
+  /* ===================== VISTA: CESIONES Y BAJAS ====================
+     Dos listas que el coordinador necesita mirar completas y no tienda por
+     tienda: a quién está moviendo y a quién perdió. */
+  let movTab = 'cesiones';
+  let bajaAbierta = null;     // fila del listado de bajas con la ficha desplegada
+
+  function vistaMovimientos(tab) {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+    movTab = tab === 'bajas' ? 'bajas' : 'cesiones';
+
+    const movs = Store.movimientos().filter(x => x.mov.estado !== 'anulada');
+    const bajas = Store.bajas();
+    const pendientes = movs.filter(x => x.mov.estado === 'pendiente');
+    const porAplicar = movs.filter(x => x.mov.estado === 'autorizada');
+    const anio = hoyISO().slice(0, 4);
+    const bajasDelAnio = bajas.filter(x => String(x.baja.fecha || '').slice(0, 4) === anio);
+
+    return `
+      <h1 class="titulo">Cesiones y bajas</h1>
+      <p class="subtitulo">Lo que le pasa a la gente además de trabajar: quién se mueve de tienda,
+        a quién le cambia el puesto y quién se fue.</p>
+
+      <div class="kpis">
+        ${kpi('Pendientes de autorizar', pendientes.length || '—',
+              pendientes.length ? 'esperando tu visto bueno' : 'nada esperando', pendientes.length ? 'aviso' : 'ok')}
+        ${kpi('Autorizadas sin aplicar', porAplicar.length || '—',
+              porAplicar.length ? 'con vigencia más adelante' : 'todo aplicado')}
+        ${kpi('Movimientos registrados', movs.length || '—', 'cesiones y modificaciones')}
+        ${kpi(`Bajas ${anio}`, bajasDelAnio.length || '—',
+              bajas.length > bajasDelAnio.length ? `${bajas.length} en total` : 'en el listado')}
+      </div>
+
+      <nav class="tabs">
+        <a href="#/movimientos/cesiones" class="${movTab === 'cesiones' ? 'activo' : ''}">Cesiones y modificaciones</a>
+        <a href="#/movimientos/bajas" class="${movTab === 'bajas' ? 'activo' : ''}">Listado de bajas</a>
+      </nav>
+
+      ${movTab === 'cesiones' ? panelCesiones(movs) : panelBajas(bajas)}`;
+  }
+
+  function panelCesiones(movs) {
+    if (!movs.length) {
+      return `<section class="tarjeta"><p class="vacio">Todavía no registraste ninguna cesión ni
+        modificación. Se cargan desde la ficha de cada persona, en la sucursal.</p></section>`;
+    }
+    return `<section class="tarjeta">
+      <h2>Cesiones y modificaciones</h2>
+      <p class="ayuda">La cesión mueve a la persona de tienda cuando se autoriza. Del 1 al 15 el
+        costo del mes lo absorbe la tienda de destino; del 16 en adelante, la de origen.</p>
+      <div class="tabla-scroll"><table>
+        <thead><tr>
+          <th>Persona</th><th>Qué</th><th>Detalle</th><th>Vigencia</th><th>Estado</th><th></th>
+        </tr></thead>
+        <tbody>${movs.map(({ colaborador: c, sucursal: s, mov: m }) => {
+          const est = ESTADOS_MOVIMIENTO[m.estado] || ESTADOS_MOVIMIENTO.pendiente;
+          return `<tr>
+            <td><a href="#/sucursal/${s.id}" style="font-weight:700;color:var(--azul)">${esc(c.nombre)}</a>
+              <br><span style="font-size:12px;color:var(--texto-suave)">${esc(c.cargo || c.posicion || '')}</span></td>
+            <td class="tipo">${esc((TIPOS_MOVIMIENTO.find(t => t.id === m.tipo) || {}).nombre || m.tipo)}</td>
+            <td>${esc(detalleMovimiento(m))}</td>
+            <td class="tipo">${m.vigencia ? fmtFecha(m.vigencia) : '—'}</td>
+            <td><span class="chip ${est.chip}">${esc(est.nombre)}</span></td>
+            <td class="tipo">
+              ${m.estado === 'pendiente' ? `<button class="mini" data-accion="autorizar-mov" data-id="${c.id}" data-mov="${m.id}">Autorizar</button>
+                <button class="mini" data-accion="anular-mov" data-id="${c.id}" data-mov="${m.id}">Anular</button>` : ''}
+              ${m.estado === 'autorizada' ? `<button class="mini" data-accion="aplicar-mov" data-id="${c.id}" data-mov="${m.id}">Aplicar ahora</button>` : ''}
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  function panelBajas(bajas) {
+    if (!bajas.length) {
+      return `<section class="tarjeta"><p class="vacio">No hay bajas registradas. Se cargan desde
+        la ficha de cada persona, con el botón <strong>Baja</strong>.</p></section>`;
+    }
+    /* El motivo agrupado es lo que después se lleva a la estadística del mes. */
+    const porGrupo = {};
+    bajas.forEach(x => { const g = x.baja.grupo || 'Sin clasificar'; porGrupo[g] = (porGrupo[g] || 0) + 1; });
+
+    return `<section class="tarjeta">
+      <h2>Listado de bajas</h2>
+      <p class="ayuda">${Object.keys(porGrupo).map(g => `${esc(g)}: ${porGrupo[g]}`).join(' · ')}.
+        Quien está acá no cuenta en la dotación de piso de ninguna tienda.</p>
+      <div class="tabla-scroll"><table>
+        <thead><tr>
+          <th>Baja</th><th>Persona</th><th>Sucursal</th><th>Puesto</th>
+          <th>Tipo</th><th>Motivo</th><th class="num">Antigüedad</th><th></th>
+        </tr></thead>
+        <tbody>${bajas.map(({ colaborador: c, sucursal: s, baja: b }) => {
+          const anios = antiguedadAnios(c.fechaIngreso);
+          return `<tr>
+            <td class="tipo"><strong>${fmtFecha(b.fecha)}</strong></td>
+            <td><button class="mini" data-accion="ver-baja" data-id="${c.id}"
+                  style="color:var(--azul);border-color:var(--azul)">${esc(c.nombre)}</button></td>
+            <td>${esc(s.nombre || s.codigo)}</td>
+            <td class="tipo">${esc(c.cargo || c.posicion || '—')}</td>
+            <td class="tipo">${esc(b.grupo || '—')}</td>
+            <td>${esc(b.motivo || '—')}</td>
+            <td class="num">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</td>
+            <td class="tipo"><button class="mini" data-accion="revertir-baja" data-id="${c.id}">Deshacer</button></td>
+          </tr>
+          ${bajaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="8">${detalleBaja(c, s, b)}</td></tr>` : ''}`;
+        }).join('')}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  /* La ficha completa de quien se fue: es la que se mira cuando alguien
+     pregunta por una liquidación final o por qué se fue. */
+  function detalleBaja(c, s, b) {
+    const anios = antiguedadAnios(c.fechaIngreso);
+    const jor = jornadaDeVinculo(c);
+    return `<div class="talent-card">
+      <div class="tc-cab">
+        <div><strong>${esc(c.nombre)}</strong>
+          <span>${esc(c.cargo || 'sin cargo')}${c.categoriaConvenio ? ` · ${esc(c.categoriaConvenio)}` : ''}</span></div>
+        <span class="chip ambar">baja el ${fmtFecha(b.fecha)}</span>
+      </div>
+      <div class="grid c4">
+        ${dato('Sucursal', s.nombre || s.codigo)}
+        ${dato('N° de personal', c.nroPersonal)}
+        ${dato('CUIL', c.cuil)}
+        ${dato('DNI', c.dni)}
+        ${dato('Ingreso', c.fechaIngreso ? fmtFecha(c.fechaIngreso) : '')}
+        ${dato('Ingreso a Farmatodo', c.fechaIngresoFTD ? fmtFecha(c.fechaIngresoFTD) : '')}
+        ${dato('Antigüedad al irse', anios === null ? '' : `${fmtNum(anios, 1)} años`)}
+        ${dato('Jornada', jor.texto)}
+        ${dato('Razón social del contrato', c.razonSocialContrato)}
+        ${dato('Tipo de baja', b.grupo)}
+        ${dato('Motivo', b.motivo)}
+        ${dato('Vacaciones del año (art. 24)', `${vacacionesDe(anios).dias} días corridos`)}
+      </div>
+      ${b.observaciones ? `<p class="ayuda"><strong>Observaciones:</strong> ${esc(b.observaciones)}</p>` : ''}
+      ${(c.sanciones || []).length ? `<p class="ayuda"><strong>Sanciones:</strong> ${
+        c.sanciones.map(x => `${esc(x.tipo || '')} ${x.fecha ? fmtFecha(x.fecha) : ''}`).join(' · ')}</p>` : ''}
+      ${(c.movimientos || []).filter(m => m.estado === 'aplicada').length
+        ? `<p class="ayuda"><strong>Movimientos:</strong> ${
+            c.movimientos.filter(m => m.estado === 'aplicada')
+              .map(m => `${m.vigencia ? fmtFecha(m.vigencia) : ''} ${detalleMovimiento(m)}`).join(' · ')}</p>` : ''}
+    </div>`;
+  }
+
   function vistaReclamos() {
     const e = Store.get();
     contexto = e;
@@ -1048,6 +1196,7 @@ const App = (() => {
      del mes, el organigrama y el plantel. Es la vista de "entro a la sucursal
      y veo de qué se trata" antes de ir a visitarla. */
   let perfilAbierto = null;
+  let formMovimiento = null;   // { colabId, tipo } del formulario de baja o movimiento abierto
 
   function vistaSucursal(id) {
     const e = Store.get();
@@ -1338,12 +1487,156 @@ const App = (() => {
           Lo que cargues acá queda igual y se refleja en el 9-box.
         </p>
 
+        ${fichaMovimientos(c, s)}
+
         ${talentCard(c, s, { sinCabecera: true })}
 
         ${fichaLicencias(c)}
         ${fichaSanciones(c)}
         ${fichaAusencias(c, periodos)}
       </section>`;
+  }
+
+  /* -------- Baja, cesión de contrato y modificación de puesto --------
+     Las tres cosas que le pasan a una persona además de trabajar. Se cargan
+     acá, en su ficha, y se leen juntas en “Cesiones y bajas”. */
+  function fichaMovimientos(c, s) {
+    const movs = (c.movimientos || []).slice().reverse();
+    const abierto = formMovimiento && formMovimiento.colabId === c.id ? formMovimiento : null;
+
+    return `<h4>Baja y movimientos</h4>
+      ${c.baja ? `<div class="aviso-caja">
+        <strong>Baja el ${fmtFecha(c.baja.fecha)}.</strong>
+        ${esc(c.baja.grupo || '')}${c.baja.motivo ? ' · ' + esc(c.baja.motivo) : ''}.
+        ${c.baja.observaciones ? esc(c.baja.observaciones) : ''}
+        <div class="acciones">
+          <button class="b sec" data-accion="revertir-baja" data-id="${c.id}">Deshacer la baja</button>
+        </div>
+      </div>` : `<div class="acciones" style="margin-top:0">
+        <button class="b sec" data-accion="form-mov" data-id="${c.id}" data-tipo="baja">Baja</button>
+        <button class="b sec" data-accion="form-mov" data-id="${c.id}" data-tipo="cesion">Cesión de contrato</button>
+        <button class="b sec" data-accion="form-mov" data-id="${c.id}" data-tipo="modificacion">Modificación</button>
+      </div>`}
+
+      ${abierto ? formularioMovimiento(c, s, abierto.tipo) : ''}
+
+      ${movs.length ? `<div class="tabla-scroll" style="margin-top:14px"><table>
+        <thead><tr><th>Vigencia</th><th>Qué</th><th>Detalle</th><th>Estado</th><th></th></tr></thead>
+        <tbody>${movs.map(m => {
+          const est = ESTADOS_MOVIMIENTO[m.estado] || ESTADOS_MOVIMIENTO.pendiente;
+          return `<tr>
+            <td class="tipo">${m.vigencia ? fmtFecha(m.vigencia) : fmtFecha(m.fecha)}</td>
+            <td class="tipo">${esc((TIPOS_MOVIMIENTO.find(t => t.id === m.tipo) || {}).nombre || m.tipo)}</td>
+            <td>${esc(detalleMovimiento(m))}</td>
+            <td><span class="chip ${est.chip}">${esc(est.nombre)}</span></td>
+            <td class="tipo">
+              ${m.estado === 'pendiente' ? `<button class="mini" data-accion="autorizar-mov" data-id="${c.id}" data-mov="${m.id}">Autorizar</button>
+                <button class="mini" data-accion="anular-mov" data-id="${c.id}" data-mov="${m.id}">Anular</button>` : ''}
+              ${m.estado === 'autorizada' ? `<button class="mini" data-accion="aplicar-mov" data-id="${c.id}" data-mov="${m.id}">Aplicar ahora</button>` : ''}
+            </td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>` : ''}`;
+  }
+
+  /** Una línea que diga qué cambia, para leer la tabla sin abrir nada. */
+  function detalleMovimiento(m) {
+    if (m.tipo === 'cesion') {
+      const d = Store.sucursal(m.desdeSucursalId), h = Store.sucursal(m.haciaSucursalId);
+      const costo = tiendaQueAbsorbeElCosto(m.vigencia);
+      return `${d ? (d.nombre || d.codigo) : '—'} → ${h ? (h.nombre || h.codigo) : '—'}` +
+             (costo ? ` · el costo del mes lo absorbe la tienda de ${costo}` : '') +
+             (m.observaciones ? ` · ${m.observaciones}` : '');
+    }
+    const partes = [];
+    if (m.cargoNuevo) partes.push(`${m.cargoAnterior || 'sin cargo'} → ${m.cargoNuevo}`);
+    if (m.jornadaNueva && Number(m.jornadaNueva) !== Number(m.jornadaAnterior)) {
+      partes.push(`jornada ${m.jornadaAnterior === 0.5 ? 'parcial' : 'completa'} → ${Number(m.jornadaNueva) === 0.5 ? 'parcial' : 'completa'}`);
+    }
+    if (m.observaciones) partes.push(m.observaciones);
+    return partes.join(' · ') || '—';
+  }
+
+  function formularioMovimiento(c, s, tipo) {
+    const hoy = hoyISO();
+    if (tipo === 'baja') {
+      return `<div class="aviso-caja info" style="margin-top:12px">
+        <strong>Baja de ${esc(c.nombre)}</strong>
+        <div class="grid c3" style="margin-top:10px">
+          <label class="campo"><span>Fecha de la baja</span>
+            <input type="date" id="mov-fecha" value="${hoy}"></label>
+          <label class="campo"><span>Tipo</span>
+            <select id="mov-grupo">
+              ${MOTIVOS_BAJA.map(g => `<option value="${esc(g.nombre)}">${esc(g.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Motivo</span>
+            <select id="mov-motivo">
+              ${MOTIVOS_BAJA.map(g => `<optgroup label="${esc(g.nombre)}">${
+                g.motivos.map(x => `<option value="${esc(x)}" data-grupo="${esc(g.nombre)}">${esc(x)}</option>`).join('')
+              }</optgroup>`).join('')}
+            </select></label>
+        </div>
+        <label class="campo"><span>Observaciones</span>
+          <textarea id="mov-obs" style="min-height:60px" placeholder="Lo que haga falta dejar dicho"></textarea></label>
+        <div class="acciones">
+          <button class="b" data-accion="guardar-baja" data-id="${c.id}">Registrar la baja</button>
+          <button class="b sec" data-accion="cerrar-form-mov">Cancelar</button>
+        </div>
+      </div>`;
+    }
+
+    if (tipo === 'cesion') {
+      const otras = Store.get().sucursales.filter(x => x.id !== s.id);
+      return `<div class="aviso-caja info" style="margin-top:12px">
+        <strong>Cesión de contrato de ${esc(c.nombre)}</strong>
+        <div class="grid c3" style="margin-top:10px">
+          ${dato('Sucursal actual', s.nombre || s.codigo)}
+          <label class="campo"><span>Nueva sucursal destino</span>
+            <select id="mov-destino">
+              <option value="">— elegir —</option>
+              ${otras.map(x => `<option value="${x.id}">${esc(x.nombre || x.codigo)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Vigencia</span>
+            <input type="date" id="mov-vigencia" value="${hoy}"></label>
+        </div>
+        <label class="campo"><span>Observaciones</span>
+          <textarea id="mov-obs" style="min-height:60px"
+            placeholder="Nota del empleado, conformidad del gerente que lo recibe, lo que corresponda"></textarea></label>
+        <p class="ayuda">Del 1 al 15 el costo del mes lo absorbe la tienda de destino; del 16 en
+          adelante, la de origen. Al autorizarla la persona pasa al plantel de la tienda nueva;
+          si la vigencia es futura, queda autorizada y se aplica ese día.</p>
+        <div class="acciones">
+          <button class="b" data-accion="guardar-mov" data-id="${c.id}" data-tipo="cesion">Registrar la cesión</button>
+          <button class="b sec" data-accion="cerrar-form-mov">Cancelar</button>
+        </div>
+      </div>`;
+    }
+
+    const jor = jornadaDeVinculo(c);
+    return `<div class="aviso-caja info" style="margin-top:12px">
+      <strong>Modificación de ${esc(c.nombre)}</strong>
+      <div class="grid c3" style="margin-top:10px">
+        ${dato('Cargo actual', c.cargo || 'sin cargo')}
+        <label class="campo"><span>Cargo nuevo</span>
+          <input id="mov-cargo" placeholder="Dejalo vacío si no cambia"></label>
+        <label class="campo"><span>Jornada nueva</span>
+          <select id="mov-jornada">
+            <option value="1"${jor.fte === 1 ? ' selected' : ''}>Completa · 1 FTE</option>
+            <option value="0.5"${jor.fte === 0.5 ? ' selected' : ''}>Parcial · 0,5 FTE</option>
+          </select></label>
+        <label class="campo"><span>Vigencia</span>
+          <input type="date" id="mov-vigencia" value="${hoy}"></label>
+      </div>
+      <label class="campo"><span>Observaciones</span>
+        <textarea id="mov-obs" style="min-height:60px"
+          placeholder="Evaluación del líder que lo recibe, apto médico, lo que avale el cambio"></textarea></label>
+      <p class="ayuda">La modificación de haberes se carga en RyR Online antes del 20 de cada mes
+        para que rija desde el mes siguiente. Esto es el registro del área, no reemplaza esa carga.</p>
+      <div class="acciones">
+        <button class="b" data-accion="guardar-mov" data-id="${c.id}" data-tipo="modificacion">Registrar la modificación</button>
+        <button class="b sec" data-accion="cerrar-form-mov">Cancelar</button>
+      </div>
+    </div>`;
   }
 
   /* ------------------ Encuadre en el convenio 414/05 ------------------ */
@@ -3380,6 +3673,11 @@ const App = (() => {
     else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
+    else if (ruta[0] === 'movimientos') {
+      const tab = ruta[1] || 'cesiones';
+      vistaActual = () => vistaMovimientos(tab);
+      html = vistaMovimientos(tab);
+    }
     else if (ruta[0] === 'sucursal' && ruta[1]) {
       const id = ruta[1];
       vistaActual = () => vistaSucursal(id);
@@ -3845,7 +4143,78 @@ const App = (() => {
       }
 
       /* --- sucursal y perfil --- */
+      /* --- baja, cesión de contrato y modificación --- */
+      if (a === 'form-mov') {
+        formMovimiento = (formMovimiento && formMovimiento.colabId === btn.dataset.id &&
+                          formMovimiento.tipo === btn.dataset.tipo)
+          ? null : { colabId: btn.dataset.id, tipo: btn.dataset.tipo };
+        refrescar();
+      }
+      if (a === 'cerrar-form-mov') { formMovimiento = null; refrescar(); }
+
+      if (a === 'guardar-baja') {
+        const motivo = $('#mov-motivo');
+        const elegido = motivo ? motivo.options[motivo.selectedIndex] : null;
+        const r = Store.registrarBaja(btn.dataset.id, {
+          fecha: valorDe('#mov-fecha'),
+          grupo: elegido ? elegido.dataset.grupo : valorDe('#mov-grupo'),
+          motivo: valorDe('#mov-motivo'),
+          observaciones: valorDe('#mov-obs')
+        });
+        formMovimiento = null;
+        refrescar();
+        avisar(r ? `Baja registrada al ${fmtFecha(r.fecha)}. Queda en el listado de bajas.`
+                 : 'No se encontró a esa persona.', r ? '' : 'error');
+      }
+
+      if (a === 'revertir-baja') {
+        const ok = await confirmar('Deshacer la baja',
+          'La persona vuelve al plantel de su sucursal y se borra el registro de la baja.',
+          'Deshacer');
+        if (ok) { Store.revertirBaja(btn.dataset.id); refrescar(); avisar('La persona volvió al plantel.'); }
+      }
+
+      if (a === 'guardar-mov') {
+        const tipo = btn.dataset.tipo;
+        if (tipo === 'cesion' && !valorDe('#mov-destino')) {
+          avisar('Elegí la sucursal de destino.', 'error');
+          return;
+        }
+        Store.registrarMovimiento(btn.dataset.id, tipo === 'cesion'
+          ? { tipo, haciaSucursalId: valorDe('#mov-destino'),
+              vigencia: valorDe('#mov-vigencia'), observaciones: valorDe('#mov-obs') }
+          : { tipo, cargoNuevo: valorDe('#mov-cargo'), jornadaNueva: valorDe('#mov-jornada'),
+              vigencia: valorDe('#mov-vigencia'), observaciones: valorDe('#mov-obs') });
+        formMovimiento = null;
+        refrescar();
+        avisar('Queda pendiente de autorizar. Se ve en “Cesiones y bajas”.');
+      }
+
+      if (a === 'autorizar-mov') {
+        const m = Store.autorizarMovimiento(btn.dataset.id, btn.dataset.mov);
+        refrescar();
+        avisar(!m ? 'No se pudo autorizar.'
+          : m.estado === 'aplicada' ? 'Autorizada y aplicada.'
+          : `Autorizada. Se aplica el ${fmtFecha(m.vigencia)}.`, m ? '' : 'error');
+      }
+      if (a === 'aplicar-mov') {
+        Store.aplicarMovimiento(btn.dataset.id, btn.dataset.mov);
+        refrescar();
+        avisar('Aplicada.');
+      }
+      if (a === 'anular-mov') {
+        Store.anularMovimiento(btn.dataset.id, btn.dataset.mov);
+        refrescar();
+        avisar('Anulada.');
+      }
+
+      if (a === 'ver-baja') {
+        bajaAbierta = bajaAbierta === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
       if (a === 'ver-perfil') {
+        formMovimiento = null;
         perfilAbierto = perfilAbierto === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
         if (perfilAbierto) {
@@ -4540,7 +4909,16 @@ const App = (() => {
     }
 
     conectar();
+    /* Lo autorizado con vigencia futura se vuelca el día que corresponde, no
+       antes: si no, el plantel de hoy mostraría a alguien en una tienda a la
+       que todavía no fue. */
+    const aplicados = Store.aplicarMovimientosVencidos();
     render();
+    if (aplicados.length) {
+      avisar(aplicados.length === 1
+        ? `Se aplicó la ${aplicados[0].tipo === 'cesion' ? 'cesión' : 'modificación'} de ${aplicados[0].nombre}, vigente desde el ${fmtFecha(aplicados[0].vigencia)}.`
+        : `Se aplicaron ${aplicados.length} movimientos que ya estaban vigentes. Los ves en “Cesiones y bajas”.`);
+    }
     if (Store.cifrado()) {
       const btn = document.getElementById('btn-bloquear');
       if (btn) btn.hidden = false;

@@ -198,6 +198,10 @@ const Store = (() => {
            persona: los topes son por año y por persona, no por período. */
         if (!Array.isArray(c.licencias)) c.licencias = [];
         if (!Array.isArray(c.sanciones)) c.sanciones = [];
+        /* Cesiones de contrato y modificaciones de puesto. Viven en la ficha de
+           la persona y no en la sucursal, así el historial la acompaña cuando
+           se muda de tienda. */
+        if (!Array.isArray(c.movimientos)) c.movimientos = [];
         ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
          'razonSocialContrato', 'direccionArea', 'fechaNacimiento', 'fechaIngresoFTD',
@@ -558,6 +562,7 @@ const Store = (() => {
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
         licencias: [],                    // art. 25, con su tope anual
         sanciones: [],                    // el legajo disciplinario de la persona
+        movimientos: [],                  // cesiones de contrato y modificaciones de puesto
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
         interesDesarrollo: '', aspiracion: '', movilidad: '',
@@ -1256,6 +1261,172 @@ const Store = (() => {
 
       guardar();
       return d;
+    },
+
+    /* ------------------- bajas y movimientos ---------------------- */
+
+    /**
+     * Registra la baja de una persona. No la borra: la saca del piso y la deja
+     * en el listado de bajas con su motivo, que es lo que después alimenta la
+     * rotación del mes y la conversación con Operaciones.
+     */
+    registrarBaja(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      c.baja = {
+        fecha: (datos && datos.fecha) || new Date().toISOString().slice(0, 10),
+        grupo: (datos && datos.grupo) || '',
+        motivo: (datos && datos.motivo) || '',
+        observaciones: (datos && datos.observaciones) || '',
+        registradaEl: new Date().toISOString()
+      };
+      c.activo = false;
+      guardar();
+      return c.baja;
+    },
+
+    /** Deshace una baja cargada por error: vuelve al plantel de su sucursal. */
+    revertirBaja(colabId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return;
+      delete c.baja;
+      c.activo = true;
+      guardar();
+    },
+
+    /** Todas las bajas del área, de la más reciente a la más vieja. */
+    bajas() {
+      const out = [];
+      this.get().sucursales.forEach(s => {
+        (s.colaboradores || []).forEach(c => {
+          if (c.baja) out.push({ colaborador: c, sucursal: s, baja: c.baja });
+        });
+      });
+      return out.sort((a, b) => String(b.baja.fecha || '').localeCompare(String(a.baja.fecha || '')));
+    },
+
+    /**
+     * Anota una cesión de contrato o una modificación de puesto. Queda
+     * pendiente: recién al autorizarla se toca el plantel.
+     */
+    registrarMovimiento(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const s = this.sucursalDe(colabId);
+      /* Las fichas cargadas antes de que existieran los movimientos no traen el
+         arreglo: se crea al vuelo en vez de fallar. */
+      if (!Array.isArray(c.movimientos)) c.movimientos = [];
+      const m = Object.assign({
+        id: uid(),
+        tipo: 'cesion',
+        fecha: new Date().toISOString().slice(0, 10),
+        vigencia: '',
+        desdeSucursalId: s ? s.id : '',
+        haciaSucursalId: '',
+        cargoAnterior: c.cargo || '',
+        cargoNuevo: '',
+        jornadaAnterior: jornadaDeVinculo(c).fte,
+        jornadaNueva: '',
+        observaciones: '',
+        estado: 'pendiente',
+        autorizadoEl: '', aplicadoEl: ''
+      }, datos || {});
+      c.movimientos.push(m);
+      guardar();
+      return m;
+    },
+
+    /**
+     * Autoriza el movimiento y, si ya está vigente, lo aplica. Lo que vence más
+     * adelante queda autorizado y se aplica el día que corresponde, para que el
+     * plantel de hoy no muestre a alguien en una tienda a la que todavía no fue.
+     */
+    autorizarMovimiento(colabId, movId) {
+      const m = this.movimiento(colabId, movId);
+      if (!m || m.estado === 'anulada') return null;
+      m.estado = 'autorizada';
+      m.autorizadoEl = new Date().toISOString();
+      guardar();
+      if (!m.vigencia || m.vigencia <= new Date().toISOString().slice(0, 10)) {
+        this.aplicarMovimiento(colabId, movId);
+      }
+      return m;
+    },
+
+    /** Vuelca el movimiento sobre la ficha: mueve de tienda o cambia el puesto. */
+    aplicarMovimiento(colabId, movId) {
+      const m = this.movimiento(colabId, movId);
+      const c = this.colaboradorPorId(colabId);
+      if (!m || !c || m.estado === 'aplicada' || m.estado === 'anulada') return null;
+
+      if (m.tipo === 'cesion' && m.haciaSucursalId) {
+        const origen = this.sucursalDe(colabId);
+        const destino = this.sucursal(m.haciaSucursalId);
+        if (origen && destino && origen.id !== destino.id) {
+          origen.colaboradores = origen.colaboradores.filter(x => x.id !== c.id);
+          destino.colaboradores.push(c);
+        }
+      } else if (m.tipo === 'modificacion') {
+        if (m.cargoNuevo) {
+          c.cargo = m.cargoNuevo;
+          c.posicion = posicionDeCargo(m.cargoNuevo) || c.posicion;
+        }
+        if (m.jornadaNueva) c.jornada = Number(m.jornadaNueva);
+      }
+      m.estado = 'aplicada';
+      m.aplicadoEl = new Date().toISOString();
+      guardar();
+      return m;
+    },
+
+    anularMovimiento(colabId, movId) {
+      const m = this.movimiento(colabId, movId);
+      if (!m) return;
+      /* Un movimiento ya aplicado no se deshace desde acá: habría que mover a
+         la persona de vuelta y eso se registra como un movimiento nuevo. */
+      if (m.estado === 'aplicada') return;
+      m.estado = 'anulada';
+      guardar();
+    },
+
+    movimiento(colabId, movId) {
+      const c = this.colaboradorPorId(colabId);
+      return c ? ((c.movimientos || []).find(m => m.id === movId) || null) : null;
+    },
+
+    /**
+     * Aplica lo que quedó autorizado con vigencia futura y ya llegó su día. Se
+     * corre al abrir el panel: si no, alguien autorizado en agosto para empezar
+     * en diciembre seguiría figurando en la tienda vieja para siempre.
+     */
+    aplicarMovimientosVencidos() {
+      const hoy = new Date().toISOString().slice(0, 10);
+      const aplicados = [];
+      this.movimientos().forEach(({ colaborador: c, mov: m }) => {
+        if (m.estado === 'autorizada' && m.vigencia && m.vigencia <= hoy) {
+          this.aplicarMovimiento(c.id, m.id);
+          aplicados.push({ nombre: c.nombre, tipo: m.tipo, vigencia: m.vigencia });
+        }
+      });
+      return aplicados;
+    },
+
+    /** Todos los movimientos del área, del más reciente al más viejo. */
+    movimientos() {
+      const out = [];
+      this.get().sucursales.forEach(s => {
+        (s.colaboradores || []).forEach(c => {
+          (c.movimientos || []).forEach(m => out.push({ colaborador: c, sucursal: s, mov: m }));
+        });
+      });
+      return out.sort((a, b) =>
+        String(b.mov.vigencia || b.mov.fecha || '').localeCompare(String(a.mov.vigencia || a.mov.fecha || '')));
+    },
+
+    /** La sucursal donde está cargada una persona. */
+    sucursalDe(colabId) {
+      return this.get().sucursales.find(s =>
+        (s.colaboradores || []).some(c => c.id === colabId)) || null;
     },
 
     colaborador(sucursalId, colabId) {
