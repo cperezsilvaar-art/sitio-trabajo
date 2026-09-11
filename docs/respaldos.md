@@ -87,3 +87,21 @@ sola mirada: si hay contenido y de qué tamaño, si está en claro o cifrado,
 cuántas sucursales y personas tiene, y qué direcciones del navegador está usando
 el panel. La tabla de copias, además, dice qué tiene adentro cada copia antes de
 restaurarla.
+
+## El guardado que fallaba con el padrón cargado
+
+Vale la pena dejarlo escrito porque costó tres días encontrarlo. El base64 del
+cifrado hacía `String.fromCharCode(...bytes)`, que pasa un argumento por byte.
+Con el padrón del área cifrado son más de 150.000 y el navegador corta con
+*Maximum call stack size exceeded*.
+
+El efecto: con clave puesta y el padrón completo, **ningún guardado entraba**. Se
+trabajaba normal toda la sesión —la pantalla mostraba lo que se iba cargando— y
+al recargar volvía el último estado que sí había entrado, más chico. Parecía que
+los datos se borraban solos.
+
+No se veía antes porque con poco contenido el base64 entraba sin problema: el
+error aparecía justo cuando el panel empezaba a tener datos de verdad.
+
+Lo que lo destapó fue el aviso de guardado fallido. Un error tragado en la
+consola habría seguido pareciendo un borrado espontáneo.

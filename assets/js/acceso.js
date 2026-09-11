@@ -14,7 +14,19 @@ const ITERACIONES = 250000;
 const TESTIGO = 'panel-rrhh-ok';
 
 const Acceso = (() => {
-  const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
+/* En trozos, no de una. `String.fromCharCode(...bytes)` pasa un argumento por
+   byte: con el padrón completo cifrado son más de 150.000 argumentos y el
+   navegador corta con "Maximum call stack size exceeded". El guardado fallaba
+   solo cuando había datos de verdad, que es cuando importa. */
+  const b64 = buf => {
+    const bytes = new Uint8Array(buf);
+    const TROZO = 0x8000;
+    let s = '';
+    for (let i = 0; i < bytes.length; i += TROZO) {
+      s += String.fromCharCode.apply(null, bytes.subarray(i, i + TROZO));
+    }
+    return btoa(s);
+  };
   const debuf = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const texto = new TextEncoder();
   const desTexto = new TextDecoder();

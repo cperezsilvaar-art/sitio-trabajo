@@ -74,6 +74,12 @@ visita cargada.
   Usar `_` como separador (`piso_clima`) o un binding propio (`data-diario`).
 - `confirm()` y `alert()` no funcionan dentro del visor de artifacts: usar
   `confirmar()` y `avisar()`.
+- **Trampa conocida:** nada de `String.fromCharCode(...bytes)` ni ningún spread
+  sobre un arreglo grande. Pasa un argumento por elemento y el navegador corta
+  con “Maximum call stack size exceeded” a partir de unos 150.000. Le pasó al
+  base64 del cifrado (`b64()` en `acceso.js`): con el padrón completo cargado
+  **todo guardado fallaba**, y como el error se veía recién al recargar, parecía
+  que los datos se borraban solos. Recorrer en trozos.
 
 ## Separación de escalas
 
