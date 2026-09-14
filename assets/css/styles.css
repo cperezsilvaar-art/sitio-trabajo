@@ -603,3 +603,13 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
    vista dónde terminan las cabezas y empiezan los días es cuestión de un
    parpadeo. */
 .matriz-td01 .fin-heads { border-right: 2px solid var(--borde-fuerte); }
+
+/* El local en la banda de marca. Va entre la bajada y el pie, y se achica antes
+   que el texto: en una pantalla baja lo primero que sobra es la ilustración. */
+.pm-local {
+  display: block; width: 100%; max-width: 520px; height: auto;
+  margin: 20px auto 0; align-self: center;
+  filter: drop-shadow(0 18px 34px rgba(4, 22, 48, .45));
+}
+img.pm-local { border-radius: 14px; object-fit: cover; }
+@media (max-height: 760px) { .pm-local { display: none; } }
