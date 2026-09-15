@@ -226,6 +226,12 @@ const Store = (() => {
            la persona y no en la sucursal, así el historial la acompaña cuando
            se muda de tienda. */
         if (!Array.isArray(c.movimientos)) c.movimientos = [];
+        /* Ausencias con certificado: desde cuándo, hasta cuándo, y qué pasa
+           cuando esa fecha llega. Nada que ver con las novedades del mes. */
+        if (!Array.isArray(c.ausencias)) c.ausencias = [];
+        /* La nómina no trae cargas de familia y los plazos del art. 208 se
+           duplican con ellas: se carga a mano y por eso arranca sin definir. */
+        if (c.cargasFamilia === undefined) c.cargasFamilia = null;
         ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
          'razonSocialContrato', 'direccionArea', 'fechaNacimiento', 'fechaIngresoFTD',
@@ -618,6 +624,8 @@ const Store = (() => {
         licencias: [],                    // art. 25, con su tope anual
         sanciones: [],                    // el legajo disciplinario de la persona
         movimientos: [],                  // cesiones de contrato y modificaciones de puesto
+        ausencias: [],                    // las que tienen certificado, con desde y hasta
+        cargasFamilia: null,              // null = sin definir; duplica los plazos del art. 208
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
         interesDesarrollo: '', aspiracion: '', movilidad: '',
@@ -1356,6 +1364,62 @@ const Store = (() => {
 
       guardar();
       return d;
+    },
+
+    /* ------------------------ ausencias --------------------------- */
+
+    /**
+     * Anota una ausencia con certificado. La fecha de alta puede faltar —el
+     * certificado a veces no la trae— y en ese caso el panel avisa igual,
+     * porque una ausencia sin fecha de vuelta es la que más se olvida.
+     */
+    agregarAusencia(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      if (!Array.isArray(c.ausencias)) c.ausencias = [];
+      const a = Object.assign({
+        id: uid(),
+        desde: '', hasta: '', motivo: 'enfermedad',
+        diagnostico: '', certificado: '', notas: '',
+        reincorporado: false, fechaReincorporacion: '',
+        registradaEl: new Date().toISOString()
+      }, datos || {});
+      c.ausencias.push(a);
+      guardar();
+      return a;
+    },
+
+    ausencia(colabId, ausenciaId) {
+      const c = this.colaboradorPorId(colabId);
+      return c ? ((c.ausencias || []).find(a => a.id === ausenciaId) || null) : null;
+    },
+
+    /** Marca la vuelta. Si no se aclara el día, se toma el alta del certificado. */
+    reincorporar(colabId, ausenciaId, fecha) {
+      const a = this.ausencia(colabId, ausenciaId);
+      if (!a) return null;
+      a.reincorporado = true;
+      a.fechaReincorporacion = fecha || a.hasta || new Date().toISOString().slice(0, 10);
+      guardar();
+      return a;
+    },
+
+    /** Extiende el certificado. La ausencia sigue siendo la misma: el vínculo
+        con el art. 208 se cuenta desde el primer día, no desde el último parte. */
+    extenderAusencia(colabId, ausenciaId, hasta) {
+      const a = this.ausencia(colabId, ausenciaId);
+      if (!a) return null;
+      a.hasta = hasta;
+      a.reincorporado = false;
+      guardar();
+      return a;
+    },
+
+    quitarAusencia(colabId, ausenciaId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return;
+      c.ausencias = (c.ausencias || []).filter(a => a.id !== ausenciaId);
+      guardar();
     },
 
     /* ------------------- bajas y movimientos ---------------------- */

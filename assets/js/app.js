@@ -166,6 +166,21 @@ const App = (() => {
       <h1 class="titulo">${esc(e.config.area || 'Panel de la red')}</h1>
       <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
 
+      ${(() => {
+        /* Los certificados que vencen van en la portada porque la decisión es
+           de mañana a la mañana: o la persona vuelve, o hay que cubrir el
+           turno. Enterarse tarde es enterarse cuando la tienda ya abrió. */
+        const al = alertasDeAusencias(e, hoyISO());
+        if (!al.length) return '';
+        return `<div class="aviso-caja">
+          <strong>Certificados que vencen</strong>
+          <ul>${al.slice(0, 6).map(x => `<li>
+            <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
+          </li>`).join('')}</ul>
+          <a href="#/diario">Resolverlas en el RVD</a>
+        </div>`;
+      })()}
+
       ${Store.falloAlGuardar() ? `<div class="aviso-caja">
         <strong>Ojo: lo que cargues no se está guardando.</strong>
         ${esc(Store.falloAlGuardar())}
@@ -683,6 +698,147 @@ const App = (() => {
 
   const ayerISO = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 
+  let ausenciaAbierta = null;   // el formulario de alta desplegado
+
+  /* ------------------ Ausencias con certificado --------------------
+     Lo que sí se puede llevar día a día sin reloj de fichadas: quién está
+     ausente, desde cuándo, y hasta cuándo dice el certificado. La fecha de
+     alta es lo que más se olvida, y es la que decide si mañana hay que
+     esperar a alguien o llamarlo. */
+  function panelAusenciasLargas() {
+    const e = Store.get();
+    const hoy = hoyISO();
+    const alertas = alertasDeAusencias(e, hoy);
+    const enCurso = ausentesHoy(e, hoy);
+
+    return `
+      ${alertas.length ? `<div class="aviso-caja">
+        <strong>Certificados que vencen</strong>
+        <ul>${alertas.slice(0, 8).map(x => `<li>
+          <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
+          <button class="mini" data-accion="abrir-ausencia" data-id="${x.colaboradorId}"
+            data-suc="${x.sucursalId}">Resolver</button>
+        </li>`).join('')}</ul>
+      </div>` : ''}
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Ausencias con certificado</h2>
+          <span class="chip${enCurso.length ? ' ambar' : ''}">${enCurso.length} en curso</span>
+        </div>
+        <p class="ayuda">
+          La ausencia larga se anota una vez, con la fecha del certificado, y el panel avisa
+          cuando se acerca el alta. Las faltas sueltas del día se cargan más abajo, en cada
+          sucursal.
+        </p>
+
+        <div class="acciones" style="align-items:flex-end">
+          <label class="campo" style="flex:1 1 320px">
+            <span>Colaborador</span>
+            <select id="aus-colab">
+              <option value="">— elegir —</option>
+              ${e.sucursales.map(s => {
+                const act = (s.colaboradores || []).filter(c => c.activo !== false);
+                if (!act.length) return '';
+                return `<optgroup label="${esc(s.nombre || s.codigo)}">${
+                  act.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</optgroup>`;
+              }).join('')}
+            </select>
+          </label>
+          <button class="b" data-accion="nueva-ausencia">+ Registrar ausencia</button>
+        </div>
+
+        ${ausenciaAbierta ? formularioAusencia(ausenciaAbierta) : ''}
+
+        ${enCurso.length ? `<div class="tabla-scroll" style="margin-top:14px"><table>
+          <thead><tr><th>Persona</th><th>Sucursal</th><th>Motivo</th><th>Desde</th>
+            <th>Hasta</th><th>Situación</th><th>Reserva del puesto</th><th></th></tr></thead>
+          <tbody>${enCurso.map(x => {
+            const c = Store.colaboradorPorId(x.colaboradorId);
+            const s = Store.sucursal(x.sucursalId);
+            const est = estadoDeAusencia(x.ausencia, hoy);
+            const cob = cobertura(x.ausencia, c, antiguedadAnios(c.fechaIngreso));
+            return `<tr>
+              <td><button class="mini" data-accion="abrir-ausencia" data-id="${c.id}" data-suc="${s.id}"
+                style="color:var(--azul);border-color:var(--azul)">${esc(c.nombre)}</button></td>
+              <td>${esc(s.nombre || s.codigo)}</td>
+              <td class="tipo">${esc((MOTIVOS_AUSENCIA_LARGA.find(m => m.id === x.ausencia.motivo) || {}).nombre || '—')}</td>
+              <td class="tipo">${fmtFecha(x.ausencia.desde)}</td>
+              <td class="tipo">${x.ausencia.hasta ? fmtFecha(x.ausencia.hasta) : '<span class="chip ambar">sin alta</span>'}</td>
+              <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
+              <td class="tipo">${cob.aplica
+                ? `hasta el ${fmtFecha(cob.finReserva)}`
+                : '<span class="ayuda">otro régimen</span>'}</td>
+              <td class="tipo">
+                <button class="mini" data-accion="reincorporar" data-id="${c.id}" data-aus="${x.ausencia.id}">Se reincorporó</button>
+              </td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Nadie con ausencia abierta.</p>'}
+      </section>`;
+  }
+
+  /* El formulario trae solo lo que el panel ya sabe de la persona: desde
+     cuándo trabaja y si tiene cargas de familia. Con eso se resuelve la
+     pregunta que aparece cuando la ausencia se estira. */
+  function formularioAusencia(colabId) {
+    const c = Store.colaboradorPorId(colabId);
+    if (!c) return '';
+    const s = Store.sucursalDe(colabId);
+    const anios = antiguedadAnios(c.fechaIngreso);
+    const p = plazosEnfermedad(anios, tieneCargasFamilia(c));
+    const propias = (c.ausencias || []).slice().reverse();
+
+    return `<div class="aviso-caja info" style="margin-top:14px">
+      <strong>${esc(c.nombre)}</strong> — ${esc(s ? (s.nombre || s.codigo) : '')}
+      ${c.cargo ? ` · ${esc(c.cargo)}` : ''}
+
+      <div class="grid c4" style="margin-top:12px">
+        ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : 'sin fecha de ingreso')}
+        <label class="campo"><span>Cargas de familia</span>
+          <select data-colab-campo="${c.id}|cargasFamilia">
+            <option value=""${!c.cargasFamilia ? ' selected' : ''}>— sin definir —</option>
+            <option value="si"${tieneCargasFamilia(c) ? ' selected' : ''}>Sí</option>
+            <option value="no"${c.cargasFamilia === 'no' || c.cargasFamilia === false ? ' selected' : ''}>No</option>
+          </select></label>
+        ${dato('Licencia paga (art. 208)', `${p.mesesPagos} meses`)}
+        ${dato('Reserva del puesto (art. 211)', `${p.reservaMeses} meses más`)}
+      </div>
+      <p class="ayuda">
+        Por ${esc(p.tramo)} y ${tieneCargasFamilia(c) ? 'con' : 'sin'} cargas de familia: <strong>${p.mesesPagos} meses con sueldo</strong> y después
+        <strong>${p.reservaMeses} meses de puesto reservado sin goce</strong>.
+        Es una orientación sobre la ley general, no un dictamen: recidivas, ART y maternidad
+        van por otro lado.
+      </p>
+
+      <div class="grid c4" style="margin-top:10px">
+        <label class="campo"><span>Desde (certificado)</span>
+          <input type="date" id="aus-desde" value="${hoyISO()}"></label>
+        <label class="campo"><span>Hasta (alta prevista)</span>
+          <input type="date" id="aus-hasta"></label>
+        <label class="campo"><span>Motivo</span>
+          <select id="aus-motivo">
+            ${MOTIVOS_AUSENCIA_LARGA.map(m => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('')}
+          </select></label>
+        <label class="campo"><span>Diagnóstico o nota</span>
+          <input id="aus-nota" placeholder="Lo que dice el certificado"></label>
+      </div>
+      <div class="acciones">
+        <button class="b" data-accion="guardar-ausencia" data-id="${c.id}">Guardar la ausencia</button>
+        <button class="b sec" data-accion="cerrar-ausencia">Cancelar</button>
+      </div>
+
+      ${propias.length ? `<h4 style="margin-top:16px">Ausencias anteriores</h4>
+        <ul>${propias.map(a => {
+          const est = estadoDeAusencia(a, hoyISO());
+          return `<li>${fmtFecha(a.desde)} → ${a.hasta ? fmtFecha(a.hasta) : 'sin alta'}
+            · ${esc((MOTIVOS_AUSENCIA_LARGA.find(m => m.id === a.motivo) || {}).nombre || '')}
+            · <span class="chip ${est.tono}">${esc(est.texto)}</span>
+            <button class="mini" data-accion="quitar-ausencia" data-id="${c.id}" data-aus="${a.id}">Quitar</button></li>`;
+        }).join('')}</ul>` : ''}
+    </div>`;
+  }
+
   function vistaDiario() {
     const e = Store.get();
     contexto = e;
@@ -705,6 +861,8 @@ const App = (() => {
         Cómo abrió el área. Se carga con el dato del día anterior y se manda a Operaciones
         antes de la apertura: acá todavía se puede mover gente, en la estadística del mes ya no.
       </p>
+
+      ${panelAusenciasLargas()}
 
       <section class="tarjeta">
         <div class="acciones" style="align-items:flex-end;flex-wrap:wrap">
@@ -741,12 +899,8 @@ const App = (() => {
           return kpi('Sucursales bajo el mínimo', valor, nota,
             t.bajoMinimo ? 'alerta' : t.conMinimo ? 'ok' : 'aviso');
         })()}
-        ${kpi('Horas extras', t.horasExtras ? fmtNum(t.horasExtras, 0) + ' hs' : '—',
-              t.pctExtras === null ? 'sin horas ordinarias cargadas'
-                : `${fmtPct(t.pctExtras, 1)} de las ordinarias · ${fmtNum(t.horasExtras / p.horasJornada, 1)} jornadas`,
-              t.pctExtras !== null && t.pctExtras > p.umbralHorasExtras ? 'alerta' : 'ok')}
         ${kpi('FTE real del día', t.fteReal === null ? '—' : fmtNum(t.fteReal, 1),
-              `planificados ${t.planificados} − ausentes ${t.ausentes} + extras`)}
+              `planificados ${t.planificados} − ausentes ${t.ausentes}`)}
         ${kpi('Novedades y bajas', t.novedades, t.novedades ? 'vacantes a cubrir' : 'ninguna en el día',
               t.novedades ? 'alerta' : 'ok')}
       </div>
@@ -938,19 +1092,6 @@ const App = (() => {
       <datalist id="plantel-${s.id}">${plantel.map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}</datalist>
       <div class="acciones">
         <button class="b sec mini" data-accion="agregar-ausente" data-id="${s.id}">+ Agregar ausente</button>
-      </div>
-
-      <h3>Horas extras</h3>
-      <div class="grid c3">
-        <label class="campo"><span>Horas del día</span>${num('horasExtras', 90)}</label>
-        <label class="campo"><span>Motivo</span>
-          <select data-diario="${s.id}|motivoExtras">
-            <option value="">—</option>
-            ${MOTIVOS_EXTRAS.map(m => `<option value="${m.id}"${d && d.motivoExtras === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
-          </select>
-        </label>
-        <label class="campo" title="Vacío = los que tenían que trabajar por la jornada de referencia">
-          <span>Horas ordinarias${k.horasOrdinarias ? ` (por defecto ${k.horasOrdinarias})` : ` (${p.horasJornada} hs por persona)`}</span>${num('horasOrdinarias', 90)}</label>
       </div>
 
       <h3>Novedades del día</h3>
@@ -4356,6 +4497,54 @@ const App = (() => {
       }
 
       /* --- sucursal y perfil --- */
+      /* --- ausencias con certificado --- */
+      if (a === 'nueva-ausencia') {
+        const id = ($('#aus-colab') || {}).value || '';
+        if (!id) return avisar('Elegí a quién le vas a cargar la ausencia.', 'error');
+        ausenciaAbierta = id;
+        refrescar();
+        return;
+      }
+      if (a === 'abrir-ausencia') {
+        ausenciaAbierta = btn.dataset.id;
+        if ((location.hash || '').indexOf('diario') < 0) location.hash = '#/diario';
+        else refrescar();
+        return;
+      }
+      if (a === 'cerrar-ausencia') { ausenciaAbierta = null; refrescar(); return; }
+
+      if (a === 'guardar-ausencia') {
+        const desde = valorDe('#aus-desde');
+        if (!desde) return avisar('Poné la fecha de inicio que dice el certificado.', 'error');
+        const hasta = valorDe('#aus-hasta');
+        if (hasta && hasta < desde) return avisar('El alta no puede ser anterior al inicio.', 'error');
+        Store.agregarAusencia(btn.dataset.id, {
+          desde, hasta,
+          motivo: valorDe('#aus-motivo') || 'enfermedad',
+          diagnostico: valorDe('#aus-nota')
+        });
+        ausenciaAbierta = null;
+        refrescar();
+        avisar(hasta
+          ? `Ausencia registrada hasta el ${fmtFecha(hasta)}. Te aviso cuando se acerque.`
+          : 'Ausencia registrada sin fecha de alta: va a quedar avisando hasta que la cargues.');
+        return;
+      }
+
+      if (a === 'reincorporar') {
+        Store.reincorporar(btn.dataset.id, btn.dataset.aus);
+        refrescar();
+        avisar('Marcada como reincorporada.');
+        return;
+      }
+      if (a === 'quitar-ausencia') {
+        const ok = await confirmar('Quitar la ausencia',
+          'Se borra el registro con sus fechas. Si la persona volvió, mejor marcala como reincorporada: así queda el historial.',
+          'Quitar');
+        if (ok) { Store.quitarAusencia(btn.dataset.id, btn.dataset.aus); refrescar(); }
+        return;
+      }
+
       /* --- el asistente --- */
       if (a === 'chat-sugerencia') { preguntarAlAsistente(btn.dataset.q); return; }
       if (a === 'chat-enviar')     { preguntarAlAsistente(valorDe('#chat-entrada')); return; }

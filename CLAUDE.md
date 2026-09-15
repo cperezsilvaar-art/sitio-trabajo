@@ -57,8 +57,8 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `checklist`, `reclamos`, `agenda`, `asistente`, `diario`, `acceso`, `store`,
-  `reporte`, `app`.
+  `ausencias`, `checklist`, `reclamos`, `agenda`, `asistente`, `diario`,
+  `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/asistente` (y `#/agenda`, que es la misma),
   `#/diario`, `#/visitas`, `#/reclamos`,
@@ -119,6 +119,20 @@ anti-patrón, porque esconde la acción que lo destraba. Documentado en
 **Nunca publicar una página que llame a una herramienta de un conector sin haber
 visto una request y una response reales.** Gmail quedó afuera por eso: el token
 venció y no se pudo observar.
+
+**En el RVD no se cargan horas extras.** La compañía no tiene reloj de fichadas
+y el dato depende de lo que diga cada gerente: pedirlo todos los días deja un KPI
+en cero que parece un problema y es un vacío. El motor las sigue calculando para
+cuando haya fichadas, y siguen llegando por el libro de novedades a la
+estadística mensual. Lo que sí se lleva a diario es el **ausentismo**.
+
+Las **ausencias con certificado** (`assets/js/ausencias.js`, `c.ausencias`) son
+la tercera cosa distinta de `c.novedades` (el mes cerrado) y `c.licencias`
+(art. 25 del CCT): la persona que hoy no está, desde cuándo y hasta cuándo. Los
+plazos salen de la **LCT art. 208** —3/6 meses de licencia paga según
+antigüedad, duplicados con cargas de familia— y **art. 211** —un año más de
+reserva del puesto—. Es una orientación sobre la ley general, no un dictamen, y
+así lo dice la pantalla. Documentado en `docs/ausencias.md`.
 
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
 y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box.
