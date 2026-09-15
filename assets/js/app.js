@@ -222,42 +222,58 @@ const App = (() => {
 
       <section class="tarjeta">
         <h2>Sucursales</h2>
-        <p class="ayuda">Los códigos <em>sucursal1</em>, <em>sucursal2</em>… son provisorios: reemplazalos por el nombre real desde “Sucursales”.</p>
-        <div class="tabla-scroll">
-        <table>
-          <thead><tr>
-            <th>Sucursal</th><th>Tipo</th><th class="num">Personas</th><th class="num">FTE</th>
-            <th class="num">No fijos</th><th class="num">Bajas</th><th>Última visita</th>
-            <th class="num">FTE Real</th><th class="num">Ausent.</th>
-            <th class="num">Hs. Ext.</th><th class="num">Costo / FTE</th>
-            <th>Dotación</th><th>Reporte</th><th></th>
-          </tr></thead>
-          <tbody>
+        <p class="ayuda">Una tarjeta por tienda. Arriba lo que hay hoy —gente y FTE—, abajo lo del
+          último mes cerrado. Tocá el nombre para entrar a la sucursal.</p>
+        <div class="tarjetas-suc">
           ${e.sucursales.map(({ id }) => {
             const f = filas.find(x => x.s.id === id);
             const s = f.s, v = f.v, c = f.c;
             const d = dot.porSucursal[s.id];
-            return `<tr>
-              <td><a href="#/sucursal/${s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(s))}</a>${s.gerente ? `<br><span class="nota" style="font-size:12px;color:var(--texto-suave)">${esc(s.gerente)}</span>` : ''}</td>
-              <td class="tipo">${s.tipo === 'staff' ? '🏢 Staff' : '🏪 Venta'}</td>
-              <td class="num">${d.personas || '—'}</td>
-              <td class="num">${d.personas ? fmtNum(d.fte, 1) : '—'}${d.parciales ? ` <span class="chip">${d.parciales} PT</span>` : ''}</td>
-              <td class="num">${d.noPresenciales.length || '—'}</td>
-              <td class="num">${d.bajas.length ? `<a href="#/movimientos/bajas" style="color:var(--azul)">${d.bajas.length}</a>` : '—'}</td>
-              <td>${v ? fmtFecha(v.fecha) : '<span class="chip">sin visita</span>'}</td>
-              <td class="num">${c && c.matriz.total.fteReal ? fmtNum(c.matriz.total.fteReal) : '—'}</td>
-              <td class="num">${c && c.ausentismo.pctTotal !== null ? fmtPct(c.ausentismo.pctTotal) : '—'}</td>
-              <td class="num">${c && c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) : '—'}</td>
-              <td class="num">${c && c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—'}</td>
-              <td>${c ? chipSemaforo(c.dotacion.semaforo) : '—'}</td>
-              <td>${v ? (v.envio.enviado ? '<span class="chip verde">enviado</span>' : '<span class="chip ambar">pendiente</span>') : '—'}</td>
-              <td class="num">${v
-                  ? `<a class="chip azul" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir</a>`
-                  : `<button class="mini" data-accion="nueva-visita" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">Registrar visita</button>`}</td>
-            </tr>`;
+            const cerrado = c && c.matriz.total.fteReal;
+            return `<article class="suc-card${d.personas ? '' : ' vacia'}">
+              <header>
+                <div>
+                  <a href="#/sucursal/${s.id}">${esc(s.nombre || s.codigo)}</a>
+                  <span>${s.gerente ? esc(s.gerente) : 'sin gerente cargado'}</span>
+                </div>
+                <span class="suc-tipo" title="${s.tipo === 'staff' ? 'No es una tienda: gente del área' : 'Tienda'}">${
+                  s.tipo === 'staff' ? '🏢' : '🏪'}</span>
+              </header>
+
+              <div class="suc-hoy">
+                <div class="suc-fte">
+                  <strong>${d.personas ? fmtNum(d.fte, 1) : '—'}</strong>
+                  <span>FTE de piso</span>
+                </div>
+                <ul>
+                  <li><b>${d.personas || '—'}</b> personas</li>
+                  ${d.parciales ? `<li><b>${d.parciales}</b> media jornada</li>` : ''}
+                  ${d.noPresenciales.length ? `<li class="ojo"><b>${d.noPresenciales.length}</b> con bloqueo</li>` : ''}
+                  ${d.bajas.length ? `<li class="ojo"><a href="#/movimientos/bajas"><b>${d.bajas.length}</b> baja${d.bajas.length === 1 ? '' : 's'}</a></li>` : ''}
+                </ul>
+              </div>
+
+              <div class="suc-mes">
+                ${cerrado ? `
+                  <div><span>FTE real</span><b>${fmtNum(c.matriz.total.fteReal)}</b></div>
+                  <div><span>Ausentismo</span><b>${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</b></div>
+                  <div><span>Hs. extras</span><b>${c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) : '—'}</b></div>
+                  <div><span>Costo / FTE</span><b>${c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—'}</b></div>
+                ` : '<p class="suc-sinmes">Sin mes cerrado todavía.</p>'}
+              </div>
+
+              <footer>
+                <span>${v ? `Visita del ${fmtFecha(v.fecha)}` : '<span class="chip">sin visita</span>'}</span>
+                <span>
+                  ${c ? chipSemaforo(c.dotacion.semaforo) : ''}
+                  ${v && v.envio.enviado ? '<span class="chip verde">enviado</span>' : ''}
+                  ${v
+                    ? `<a class="b sec mini" href="#/visita/${v.id}/checklist" style="text-decoration:none">Abrir visita</a>`
+                    : `<button class="b sec mini" data-accion="nueva-visita" data-id="${s.id}">Visitar</button>`}
+                </span>
+              </footer>
+            </article>`;
           }).join('')}
-          </tbody>
-        </table>
         </div>
       </section>
 
@@ -304,7 +320,7 @@ const App = (() => {
       const vs = Store.visitasDe(s.id);
       const ult = vs[0] || null;
       const desde = ult && ult.fecha ? dias(ult.fecha, hoy) : null;
-      const r = ult ? evaluarRecorrida(ult.recorrida) : null;
+      const r = ult ? evaluarChecklist(ult.checklist.checks).total : null;
       const pend = vs.reduce((a2, v) => a2 + (v.diagnostico.plan || [])
         .filter(x => x.estado !== 'Cumplido').length, 0);
       return { s, ult, desde, r, pend, visitas: vs.length };
@@ -331,7 +347,7 @@ const App = (() => {
 
       <section class="tarjeta">
         <h2>Registrar una visita</h2>
-        <p class="ayuda">Elegí la sucursal a la que vas y se abre la recorrida.</p>
+        <p class="ayuda">Elegí la sucursal a la que vas y se abre el check list.</p>
         <div class="acciones" style="margin-top:6px">
           <select id="visita-sucursal" style="max-width:340px">
             <option value="">Elegí la sucursal…</option>
@@ -358,7 +374,7 @@ const App = (() => {
         <p class="ayuda">Ordenadas por cuánto hace que no se las visita.</p>
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Sucursal</th><th>Última visita</th><th>Recorrida</th>
+            <th>Sucursal</th><th>Última visita</th><th>Check list</th>
             <th class="num">Compromisos abiertos</th><th class="num">Visitas</th><th></th>
           </tr></thead>
           <tbody>
@@ -367,13 +383,13 @@ const App = (() => {
                 ${f.s.gerente ? `<div style="font-size:12px;color:var(--texto-suave)">${esc(f.s.gerente)}</div>` : ''}</td>
               <td>${f.ult ? `${fmtFecha(f.ult.fecha)} · ${semaforo(f.desde)}` : semaforo(null)}</td>
               <td>${f.r && f.r.pct !== null
-                    ? `${fmtPct(f.r.pct, 0)}${f.r.clavesPendientes.length ? ` <span class="chip ambar">${f.r.clavesPendientes.length} clave</span>` : ''}`
+                    ? `${fmtPct(f.r.pct, 0)}${f.r.noAprobados ? ` <span class="chip ambar">${f.r.noAprobados} no aprobados</span>` : ''}`
                     : '—'}</td>
               <td class="num">${f.pend || '—'}</td>
               <td class="num">${f.visitas || '—'}</td>
               <td class="num" style="white-space:nowrap">
                 <button class="b sec" data-accion="nueva-visita" data-id="${f.s.id}">Visitar</button>
-                ${f.ult ? `<a class="mini" href="#/visita/${f.ult.id}/recorrida" style="text-decoration:none;display:inline-block;margin-left:6px">Última</a>` : ''}
+                ${f.ult ? `<a class="mini" href="#/visita/${f.ult.id}/checklist" style="text-decoration:none;display:inline-block;margin-left:6px">Última</a>` : ''}
               </td>
             </tr>`).join('')}
           </tbody>
@@ -383,10 +399,10 @@ const App = (() => {
       <section class="tarjeta">
         <h2>Últimas visitas registradas</h2>
         ${e.visitas.length ? `<div class="tabla-scroll"><table>
-          <thead><tr><th>Fecha</th><th>Sucursal</th><th>Recorrida</th><th class="num">Compromisos</th><th>Reporte</th><th></th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Sucursal</th><th>Check list</th><th class="num">Compromisos</th><th>Reporte</th><th></th></tr></thead>
           <tbody>${e.visitas.slice().sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 15).map(v => {
             const su = Store.sucursal(v.sucursalId);
-            const rr = evaluarRecorrida(v.recorrida);
+            const rr = evaluarChecklist(v.checklist.checks).total;
             const plan = (v.diagnostico.plan || []).length;
             return `<tr>
               <td><strong>${fmtFecha(v.fecha)}</strong></td>
@@ -1294,7 +1310,7 @@ const App = (() => {
 
       <div class="acciones" style="margin-bottom:18px">
         <button class="b grande" data-accion="nueva-visita" data-id="${s.id}">+ Registrar visita</button>
-        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/recorrida" style="text-decoration:none">Abrir la última visita${
+        ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/checklist" style="text-decoration:none">Abrir la última visita${
           ultima.fecha ? ` (${fmtFecha(ultima.fecha)})` : ''}</a>` : ''}
         <a class="b sec" href="#/estadistica" style="text-decoration:none">Estadística mensual</a>
         <a class="b sec" href="#/sucursales" style="text-decoration:none">Editar la ficha</a>
@@ -2484,7 +2500,6 @@ const App = (() => {
      gente. Los números del período viven en Estadística mensual. */
   const PESTANAS = [
     ['checklist', 'Check list RRHH'],
-    ['recorrida', 'Mirada del HRBP'],
     ['talento',   'Talento y 9-box']
   ];
 
@@ -2499,7 +2514,6 @@ const App = (() => {
 
     const cuerpo = {
       checklist: () => panelChecklist(v, s),
-      recorrida: () => panelRecorrida(v, s),
       /* La sucesión es una conversación sobre gente, no un número del mes
          cerrado: se hace mirando el 9-box con el Gerente de Tienda. */
       talento:   () => panelTalento(v, s) + panelSucesion(v, c)
@@ -2535,6 +2549,7 @@ const App = (() => {
   let checkAbierto = null;   // punto con el criterio y las observaciones desplegados
 
   function panelChecklist(v, s) {
+    const pendientes = pendientesAnteriores(v);
     const cl = v.checklist;
     const r = evaluarChecklist(cl.checks);
     const t = r.total;
@@ -2573,6 +2588,12 @@ const App = (() => {
     };
 
     return `
+      ${pendientes.length ? `<div class="aviso-caja">
+        <strong>Antes de arrancar: quedaron ${pendientes.length} compromiso${pendientes.length === 1 ? '' : 's'} de la visita anterior.</strong>
+        <ul>${pendientes.slice(0, 6).map(x => `<li>${esc(x.compromiso || 'sin descripción')}
+          ${x.responsable ? `— ${esc(x.responsable)}` : ''}${x.plazo ? ` · plazo ${fmtFecha(x.plazo)}` : ''}</li>`).join('')}</ul>
+      </div>` : ''}
+
       <section class="tarjeta">
         <h2>Puntaje de la visita</h2>
         <p class="ayuda">
@@ -2717,79 +2738,18 @@ const App = (() => {
             <td>${esc(cl.obs[p.id] || '')}</td>
           </tr>`).join('')}</tbody>
         </table></div>
-      </section>` : ''}`;
+      </section>` : ''}
+
+      ${bloqueReclamos(v, s)}`;
   }
 
   /* -------------------------- 0. Recorrida -------------------------- *
      El check de la visita. Va primero porque es lo que se hace primero: si
      arrancás por la oficina del gerente, el resto de la visita ya es la
      versión que te quieren mostrar. */
-  function panelRecorrida(v, s) {
-    const r = evaluarRecorrida(v.recorrida);
-    const pendientes = pendientesAnteriores(v);
-
-    const item = (b, i) => `<tr>
-      <td>
-        <strong style="font-weight:${i.clave ? 600 : 400}">${esc(i.texto)}</strong>
-        ${i.clave ? '<span class="chip azul" style="margin-left:6px">clave</span>' : ''}
-        ${i.ayuda ? `<div class="ayuda" style="margin:3px 0 0">${esc(i.ayuda)}</div>` : ''}
-      </td>
-      <td style="width:150px">
-        <select data-path="recorrida.checks.${i.id}" data-calc="1">
-          ${ESTADOS_CHECK.map(e2 => `<option value="${e2.id}"${i.estado === e2.id ? ' selected' : ''}>${esc(e2.nombre)}</option>`).join('')}
-        </select>
-      </td>
-      <td><input data-path="recorrida.notas.${i.id}" value="${esc((v.recorrida.notas || {})[i.id] || '')}"
-                 placeholder="Qué viste"></td>
-    </tr>`;
-
-    return `
-      <section class="tarjeta">
-        <h2>Recorrida de la visita</h2>
-        <p class="ayuda">
-          Lo que conviene no saltearse en una visita a sucursal, en el orden en que pasa.
-          Lo que no aplica se marca como tal y no cuenta en contra.
-        </p>
-
-        <div class="kpis">
-          ${kpi('Avance', r.pct === null ? '—' : fmtPct(r.pct, 0),
-                `${r.hechos} de ${r.aplican} puntos que aplican`,
-                r.pct === null ? '' : (r.pct >= 0.9 ? 'ok' : r.pct >= 0.6 ? 'aviso' : 'alerta'))}
-          ${kpi('Puntos clave pendientes', r.clavesPendientes.length,
-                r.clavesPendientes.length ? 'no deberían quedar sin hacer' : 'todos cubiertos',
-                r.clavesPendientes.length ? 'alerta' : 'ok')}
-          ${kpi('Sin responder', r.sinResponder.length,
-                r.sinResponder.length ? 'quedan por marcar' : 'recorrida completa',
-                r.sinResponder.length ? 'aviso' : 'ok')}
-        </div>
-
-        ${pendientes.length ? `<div class="aviso-caja">
-          <strong>Antes de arrancar: quedaron ${pendientes.length} compromiso${pendientes.length === 1 ? '' : 's'} de la visita anterior.</strong>
-          <ul>${pendientes.slice(0, 6).map(x => `<li>${esc(x.compromiso || 'sin descripción')}
-            ${x.responsable ? `— ${esc(x.responsable)}` : ''}${x.plazo ? ` · plazo ${fmtFecha(x.plazo)}` : ''}</li>`).join('')}</ul>
-        </div>` : ''}
-
-        ${r.clavesPendientes.length ? `<div class="aviso-caja">
-          <strong>Puntos clave sin cubrir:</strong>
-          <ul>${r.clavesPendientes.map(x => `<li>${esc(x.texto)}</li>`).join('')}</ul>
-        </div>` : ''}
-      </section>
-
-      ${r.bloques.map(b => `<section class="tarjeta">
-        <h2>${esc(b.nombre)}
-          <span class="chip ${b.pct === 1 ? 'verde' : b.pct === null ? '' : 'ambar'}">${b.hechos}/${b.aplican}</span></h2>
-        <p class="ayuda">${esc(b.ayuda)}</p>
-        <div class="tabla-scroll"><table>
-          <thead><tr><th>Punto</th><th>Estado</th><th>Observación</th></tr></thead>
-          <tbody>${b.items.map(i => item(b, i)).join('')}</tbody>
-        </table></div>
-      </section>`).join('')}
-
-      ${bloqueReclamos(v, s)}`;
-  }
 
   /**
-   * Reclamos, dentro de la recorrida.
+   * Reclamos, al pie del check list.
    *
    * Es donde tiene que estar: el reclamo se plantea en el pasillo, con el
    * colaborador enfrente, y si no se anota ahí se pierde. Arriba se repasan
@@ -4939,7 +4899,7 @@ const App = (() => {
           'Registrar visita').then(ok => {
             if (!ok) return;
             const nueva = Store.crearVisita(idSuc);
-            location.hash = `#/visita/${nueva.id}/recorrida`;
+            location.hash = `#/visita/${nueva.id}/checklist`;
           });
       }
     });

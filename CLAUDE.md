@@ -89,7 +89,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 |---|---|---|
 | El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
 | Lo que llevo | Mi agenda | ¿Qué tengo que hacer y qué estoy esperando? |
-| La semana | Visitas (check list + HRBP + talento) | ¿Qué está pasando en esta tienda? |
+| La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 
 La navegación está agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
@@ -112,9 +112,13 @@ ingreso · total días · hs. extras · ausent + vaca · total). Las cabezas y l
 días son preguntas distintas —a cuánta gente le doy turno, y cuánto trabajo se
 prestó— y por eso van en grupos separados.
 
-El instrumento formal de la visita es el **check list de RRHH Operaciones**
+El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
-con criterio de aprobación. La recorrida del HRBP lo acompaña, no lo reemplaza.
+con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó por
+repetirlo—. Se quedó con lo que aquella tenía y él no: los compromisos abiertos
+de la visita anterior arriba, y los reclamos que se levantan en el pasillo al
+pie. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero no se
+muestra ni entra en ningún reporte.
 
 ## Verificación antes de commitear
 

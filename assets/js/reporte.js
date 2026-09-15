@@ -197,27 +197,6 @@ const Reporte = (() => {
       L.push('');
     }
 
-    /* 2. La mirada del HRBP, que no reemplaza al check list ni lo repite. */
-    const rec = evaluarRecorrida(visita.recorrida);
-    if (rec.hechos || rec.sinHacer.length) {
-      L.push(++n + '. MIRADA DEL HRBP EN LA RECORRIDA');
-      L.push(`- Puntos cubiertos: ${rec.hechos} de ${rec.aplican} que aplicaban (${fmtPct(rec.pct, 0)}).`);
-      rec.bloques.forEach(b => {
-        const conNota = b.items.filter(i => (visita.recorrida.notas || {})[i.id]);
-        if (!b.hechos && !conNota.length) return;
-        L.push(`  * ${b.nombre}: ${b.hechos}/${b.aplican}`);
-        conNota.forEach(i => L.push(`    - ${i.texto}: ${visita.recorrida.notas[i.id]}`));
-      });
-      if (rec.sinHacer.length) {
-        L.push('- Puntos que no se pudieron cubrir en esta visita:');
-        rec.sinHacer.forEach(i => L.push(`  * ${i.texto}`));
-      }
-      if (rec.clavesPendientes.length) {
-        L.push(`- Quedaron ${rec.clavesPendientes.length} punto/s clave sin cubrir.`);
-      }
-      L.push('');
-    }
-
     /* 2. Reclamos */
     if (typeof Store !== 'undefined' && typeof resumirReclamos === 'function') {
       const abiertos = Store.reclamosDe(sucursal.id, true);
@@ -723,9 +702,9 @@ const Reporte = (() => {
     if (!String(visita.minutaGerente.puntos || '').trim()) f.push('Puntos tratados en la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaGerente.acuerdos || '').trim()) f.push('Acuerdos y compromisos de la reunión con el Gerente de Tienda.');
     if (!String(visita.minutaColaborador.nombre || '').trim()) f.push('Colaborador entrevistado.');
-    const rec = evaluarRecorrida(visita.recorrida);
-    if (rec.clavesPendientes.length) {
-      f.push(`Puntos clave de la recorrida sin cubrir: ${rec.clavesPendientes.map(x => x.texto).join('; ')}.`);
+    const chk = evaluarChecklist((visita.checklist || {}).checks);
+    if (chk.total.sinEvaluar) {
+      f.push(`${chk.total.sinEvaluar} punto/s del check list sin evaluar.`);
     }
     if (typeof Store !== 'undefined') {
       const sinRespuesta = Store.reclamosDe(sucursal.id, true)

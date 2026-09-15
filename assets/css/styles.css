@@ -420,7 +420,13 @@ body.bloqueado > nav.tabs,
 body.bloqueado > main,
 body.bloqueado > footer.app { display: none; }
 
-#acceso { position: fixed; inset: 0; z-index: 200; background: var(--fondo); }
+/* Scrollea el contenedor fijo: en el celular la portada mide más que la
+   pantalla y, sin esto, el final del formulario queda fuera y no hay forma de
+   llegar —el body está bloqueado justamente para que no scrollee el fondo—. */
+#acceso {
+  position: fixed; inset: 0; z-index: 200; background: var(--fondo);
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+}
 
 .portada {
   display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
@@ -613,3 +619,53 @@ tr.fila-alerta > td { background: color-mix(in srgb, var(--rojo, #b91c1c) 8%, tr
 }
 img.pm-local { border-radius: 14px; object-fit: cover; }
 @media (max-height: 760px) { .pm-local { display: none; } }
+
+/* ======================= Sucursales en tarjetas ========================= *
+   Una tienda por tarjeta, en cuadrícula. La tabla de catorce columnas hacía
+   scroll horizontal y obligaba a leer en zigzag para contestar una pregunta
+   simple: cómo está esta sucursal. */
+.tarjetas-suc {
+  display: grid; gap: 14px; margin-top: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+}
+.suc-card {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 12px;
+  box-shadow: var(--sombra);
+}
+.suc-card.vacia { opacity: .72; }
+.suc-card > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.suc-card > header a {
+  display: block; font-weight: 700; font-size: 15px; color: var(--azul); text-decoration: none;
+}
+.suc-card > header a:hover { text-decoration: underline; }
+.suc-card > header span { display: block; font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
+.suc-tipo { font-size: 17px; line-height: 1; }
+
+.suc-hoy { display: flex; align-items: center; gap: 14px; }
+.suc-fte { text-align: center; min-width: 78px; }
+.suc-fte strong {
+  display: block; font-size: 26px; font-weight: 700; color: var(--texto);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+}
+.suc-fte span { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--texto-suave); }
+.suc-hoy ul { margin: 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.7; color: var(--texto-suave); }
+.suc-hoy ul b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.suc-hoy ul li.ojo b { color: var(--ambar); }
+.suc-hoy ul a { color: inherit; }
+
+.suc-mes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px;
+  border-top: 1px solid var(--borde); padding-top: 10px; font-size: 12.5px;
+}
+.suc-mes > div { display: flex; justify-content: space-between; gap: 8px; }
+.suc-mes span { color: var(--texto-suave); }
+.suc-mes b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.suc-sinmes { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: var(--texto-suave); }
+
+.suc-card > footer {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  border-top: 1px solid var(--borde); padding-top: 10px; margin-top: auto;
+  font-size: 12px; color: var(--texto-suave); flex-wrap: wrap;
+}
+.suc-card > footer > span:last-child { display: flex; align-items: center; gap: 6px; }
