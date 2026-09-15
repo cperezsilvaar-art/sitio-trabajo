@@ -672,6 +672,31 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 }
 .suc-card > footer > span:last-child { display: flex; align-items: center; gap: 6px; }
 
+/* ============================== Asistente =============================== */
+.titulo-seccion {
+  margin: 30px 0 12px; font-size: 20px; color: var(--azul); letter-spacing: -.2px;
+}
+.chat {
+  border: 1px solid var(--borde); border-radius: var(--radio); background: var(--panel-alt);
+  padding: 14px; max-height: 420px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chat-msg { display: flex; flex-direction: column; gap: 3px; max-width: 86%; }
+.chat-msg.yo { align-self: flex-end; align-items: flex-end; }
+.chat-quien {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave);
+}
+.chat-texto {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 9px 12px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap;
+}
+.chat-msg.yo .chat-texto { background: var(--azul); border-color: var(--azul); color: #fff; }
+.chat-msg.pensando .chat-texto { color: var(--texto-suave); font-style: italic; }
+.chat-vacio { color: var(--texto-suave); font-size: 13.5px; }
+.chat-vacio p { margin: 0 0 10px; }
+.chat-sugerencias { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-sugerencias .b { font-style: normal; }
+
 </style>
 
 <header class="app">
@@ -693,7 +718,6 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 
     <span class="grupo">Cada día</span>
     <a href="#/diario">Reporte del día</a>
-    <a href="#/agenda">Mi agenda</a>
 
     <span class="grupo">En la tienda</span>
     <a href="#/sucursales">Sucursales</a>
@@ -704,7 +728,8 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
     <span class="grupo">Cierre del mes</span>
     <a href="#/estadistica">Estadística</a>
 
-    <a href="#/config" class="al-final" title="Configuración">Configuración</a>
+    <a href="#/asistente" class="al-final">Asistente</a>
+    <a href="#/config" title="Configuración">Configuración</a>
   </nav>
 
   <main id="contenido"></main>
@@ -3718,6 +3743,267 @@ if (typeof module !== 'undefined' && module.exports) {
     estadoItem, repartirAgenda, textoParaTiendas
   };
 }
+
+/*
+ * asistente.js — El asistente del coordinador, conectado a Claude.
+ *
+ * La agenda sola ya servía para no olvidarse de nada. Lo que no hacía era
+ * contestar: “¿qué tengo que mirar hoy?”, “¿cuánta gente me queda en Rivadavia
+ * si se va la DT?”, “armame el mail para Operaciones”. Para eso hace falta que
+ * alguien lea el tablero, y ese alguien es Claude.
+ *
+ * Dos condiciones que mandan sobre todo lo demás:
+ *
+ * 1. El panel tiene que abrir desde file:// y sin conexión. El asistente es un
+ *    agregado: si no está, la agenda funciona igual. `disponible()` devuelve
+ *    false y la pantalla lo dice, sin romperse ni ofrecer un botón muerto.
+ *
+ * 2. Lo que se manda es un resumen, no el padrón. Van números por sucursal y lo
+ *    que el coordinador ya escribió en su agenda; nunca CUIL, DNI, teléfono,
+ *    domicilio, mail, banco ni CBU. Los nombres van solo donde hacen falta para
+ *    entender de quién se habla: quién se fue, quién reclamó, quién no cubre
+ *    turno.
+ */
+
+const Asistente = (() => {
+  let sample = null;          // la función que pregunta, o null si no hay visor
+  let resuelto = false;       // ya se intentó resolverla
+  let turnos = [];            // la conversación, que el modelo no recuerda solo
+
+  /**
+   * Resuelve la capacidad una sola vez. Puede tardar: el visor contesta después
+   * del primer render, así que la pantalla se dibuja sin esperar a esto.
+   */
+  async function iniciar() {
+    if (resuelto) return sample;
+    resuelto = true;
+    try {
+      if (typeof window !== 'undefined' && window.claude && window.claude.use) {
+        sample = await window.claude.use('sample');
+      }
+    } catch (err) {
+      sample = null;
+    }
+    return sample;
+  }
+
+  const disponible = () => !!sample;
+  const historial = () => turnos.slice();
+  const limpiar = () => { turnos = []; };
+
+  /* ------------------------- lo que sabe el panel ------------------------ */
+
+  const _f = (n, d) => (typeof fmtNum === 'function' ? fmtNum(n, d) : String(n));
+  /* `hoyISO` vive adentro del módulo de la interfaz y no llega hasta acá. */
+  const _hoy = () => new Date().toISOString().slice(0, 10);
+
+  /**
+   * Radiografía del área en texto plano. Se arma en cada pregunta porque el
+   * tablero cambia mientras se conversa, y porque el modelo no recuerda nada:
+   * lo que no va en este bloque, no existe para él.
+   */
+  function contexto() {
+    const e = Store.get();
+    const hoy = _hoy();
+    const L = [];
+
+    L.push(`Hoy es ${hoy}.`);
+    L.push(`Área: ${e.config.area || 'Área 3'}. Coordinador de RRHH: ${e.config.coordinador || '—'}.`);
+
+    const d = Store.dotacionDelArea();
+    L.push('');
+    L.push('DOTACIÓN');
+    L.push(`- ${d.tiendas} tiendas · ${d.personas} personas de piso · ${_f(d.fte, 1)} FTE · ${d.parciales} de media jornada.`);
+    L.push(`- Fuera del piso: ${d.noPresenciales} con bloqueo de título o no presenciales, ${d.flotantes} flotantes del área, ${d.sinActividad} sin actividad, ${d.bajas} dados de baja.`);
+    if (d.sucursalesSinPlantel.length) {
+      L.push(`- Sin plantel cargado: ${d.sucursalesSinPlantel.join(', ')}.`);
+    }
+    e.sucursales.forEach(s => {
+      const x = d.porSucursal[s.id];
+      if (!x || (!x.personas && !x.noPresenciales.length)) return;
+      const extra = [];
+      if (x.parciales) extra.push(`${x.parciales} media jornada`);
+      if (x.noPresenciales.length) extra.push(`${x.noPresenciales.length} con bloqueo (${x.noPresenciales.map(y => y.nombre).join('; ')})`);
+      if (x.sinActividad.length) extra.push(`${x.sinActividad.length} sin actividad`);
+      L.push(`  · ${s.nombre || s.codigo}: ${x.personas} personas, ${_f(x.fte, 1)} FTE${extra.length ? ' — ' + extra.join(', ') : ''}.`);
+    });
+
+    /* Las visitas: hace cuánto que no se pisa cada tienda es la pregunta que
+       más veces se hace en voz alta durante la semana. */
+    L.push('');
+    L.push('VISITAS');
+    const sinVisita = [];
+    e.sucursales.forEach(s => {
+      const v = Store.ultimaVisita(s.id);
+      if (!v) { if (s.tipo !== 'staff') sinVisita.push(s.nombre || s.codigo); return; }
+      const chk = evaluarChecklist((v.checklist || {}).checks).total;
+      L.push(`  · ${s.nombre || s.codigo}: última el ${v.fecha}` +
+             (chk.pct === null ? ', check list sin evaluar' : `, check list ${_f(chk.pct * 100, 0)}%`) +
+             (v.envio.enviado ? '' : ', reporte sin enviar') + '.');
+    });
+    if (sinVisita.length) L.push(`  · Sin visita registrada: ${sinVisita.join(', ')}.`);
+
+    const reclamos = e.reclamos.filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+    if (reclamos.length) {
+      L.push('');
+      L.push(`RECLAMOS ABIERTOS (${reclamos.length})`);
+      reclamos.slice(0, 20).forEach(r => {
+        const s = Store.sucursal(r.sucursalId);
+        L.push(`  · ${r.colaborador || 'sin nombre'} (${s ? s.nombre || s.codigo : '—'}): ` +
+               `${(TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo}, planteado el ${r.fecha || '—'}, ` +
+               `estado ${(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).nombre || r.estado}.`);
+      });
+    }
+
+    const movs = Store.movimientos().filter(x => x.mov.estado === 'pendiente' || x.mov.estado === 'autorizada');
+    if (movs.length) {
+      L.push('');
+      L.push('CESIONES Y MODIFICACIONES SIN CERRAR');
+      movs.forEach(({ colaborador: c, mov: m }) => {
+        const h = Store.sucursal(m.haciaSucursalId);
+        L.push(`  · ${c.nombre}: ${m.tipo}${h ? ' hacia ' + (h.nombre || h.codigo) : ''}, ` +
+               `vigencia ${m.vigencia || 'sin fecha'}, ${m.estado}.`);
+      });
+    }
+
+    const bajas = Store.bajas();
+    if (bajas.length) {
+      L.push('');
+      L.push(`BAJAS REGISTRADAS (${bajas.length})`);
+      bajas.slice(0, 15).forEach(b => {
+        L.push(`  · ${b.colaborador.nombre} (${b.sucursal.nombre || b.sucursal.codigo}): ` +
+               `${b.baja.fecha}, ${b.baja.grupo || '—'} / ${b.baja.motivo || '—'}.`);
+      });
+    }
+
+    const r = repartirAgenda(e.agenda, hoy);
+    L.push('');
+    L.push('MI AGENDA');
+    const linea = x => `  · [${x.item.id}] ${x.item.titulo}` +
+      (x.estado.texto ? ` — ${x.estado.texto}` : '') +
+      (x.item.estado === 'esperando' ? ' (esperando respuesta)' : '');
+    if (r.vencidas.length) { L.push(' Vencidas:'); r.vencidas.forEach(x => L.push(linea(x))); }
+    if (r.urgentes.length) { L.push(' Hoy y mañana:'); r.urgentes.forEach(x => L.push(linea(x))); }
+    if (r.semana.length) { L.push(' Esta semana:'); r.semana.forEach(x => L.push(linea(x))); }
+    if (r.adelante.length) { L.push(' Más adelante:'); r.adelante.forEach(x => L.push(linea(x))); }
+    if (r.sinFecha.length) { L.push(' Sin fecha:'); r.sinFecha.forEach(x => L.push(linea(x))); }
+    if (!r.abiertas.length) L.push('  (no hay nada abierto)');
+
+    return L.join('\n');
+  }
+
+  const INSTRUCCIONES = [
+    'Sos el asistente de Christian Pérez, Coordinador de RRHH del Área 3 de Farmatodo Argentina.',
+    'Trabajás sobre su panel: sucursales, dotación en FTE, visitas con check list, reclamos, bajas y su agenda.',
+    '',
+    'Cómo contestar:',
+    '- En castellano rioplatense, de vos. Sin jerga de RRHH que un gerente de tienda no usaría.',
+    '- Breve y concreto. Si alcanza con dos renglones, dos renglones.',
+    '- Los números salen del panel, que te va abajo. Si algo no está ahí, decí que no lo tenés en vez de inventarlo.',
+    '- Números en formato argentino: coma decimal.',
+    '- El marco normativo es el CCT 414/05 (ADEF), farmacias de CABA y conurbano.',
+    '',
+    'Qué tener presente:',
+    '- La dotación se cuenta en FTE: jornada completa 1, tiempo parcial 0,5.',
+    '- Quien tiene bloqueo de título o figura como no presencial no cubre turno: nunca lo cuentes en la dotación de piso.',
+    '- Los flotantes del área no son de ninguna tienda: suman al área.',
+    '- En una cesión, del 1 al 15 el costo del mes lo absorbe la tienda de destino; del 16 en adelante, la de origen.',
+    '',
+    'Tenés dos herramientas para escribirle en la agenda. Usalas cuando te lo pida,',
+    'no por tu cuenta, y después decile en una línea qué anotaste.'
+  ].join('\n');
+
+  /* ------------------ lo que el asistente puede hacer ------------------- */
+
+  function herramientas(alCambiar) {
+    return [
+      {
+        name: 'anotar_en_agenda',
+        description: 'Anota algo en la agenda del coordinador. El texto se escribe como se diría ' +
+                     'en voz alta y el panel le saca la fecha: "llamar a Ana de Botánico el jueves".',
+        inputSchema: {
+          type: 'object',
+          properties: { texto: { type: 'string', description: 'Qué anotar, con la fecha adentro si la tiene.' } },
+          required: ['texto']
+        },
+        execute: ({ texto }) => {
+          const i = Store.anotarTexto(String(texto || '').trim());
+          if (alCambiar) alCambiar();
+          return { anotado: i.titulo, fechas: (i.hitos || []).map(h => h.fecha) };
+        }
+      },
+      {
+        name: 'marcar_hecho',
+        description: 'Marca como hecho un ítem de la agenda. El id figura entre corchetes en la lista.',
+        inputSchema: {
+          type: 'object',
+          properties: { id: { type: 'string', description: 'El id del ítem, tal cual aparece entre corchetes.' } },
+          required: ['id']
+        },
+        execute: ({ id }) => {
+          const i = Store.item(String(id || '').trim());
+          if (!i) throw new Error('No encontré ese ítem en la agenda.');
+          Store.marcarHecho(i.id);
+          if (alCambiar) alCambiar();
+          return { hecho: i.titulo };
+        }
+      }
+    ];
+  }
+
+  /**
+   * Una pregunta. El contexto viaja pegado al último turno y no queda en el
+   * historial: si se guardara, cada pregunta arrastraría la foto del tablero de
+   * cuando se hizo, y a la tercera ya estaría contestando con datos viejos.
+   *
+   * @param {string} texto lo que escribió el coordinador
+   * @param {object} opciones { onText, signal, alCambiar }
+   * @returns {Promise<string>} la respuesta completa
+   */
+  async function preguntar(texto, opciones) {
+    const o = opciones || {};
+    if (!sample) throw new Error('El asistente no está disponible en esta versión del panel.');
+
+    const pregunta = String(texto || '').trim();
+    if (!pregunta) throw new Error('Escribí la pregunta.');
+
+    const conDatos = turnos.length
+      ? pregunta
+      : INSTRUCCIONES + '\n\n' + pregunta;
+
+    const envio = turnos.concat([{
+      role: 'user',
+      content: conDatos + '\n\n--- ESTADO DEL PANEL ---\n' + contexto()
+    }]);
+
+    const res = await sample(envio, {
+      onText: o.onText,
+      signal: o.signal,
+      tools: herramientas(o.alCambiar),
+      modelTier: 'default'
+    });
+
+    /* Al historial va la pregunta pelada: el estado se vuelve a mandar en la
+       siguiente, ya actualizado. */
+    turnos.push({ role: 'user', content: conDatos });
+    turnos.push({ role: 'assistant', content: res.text });
+    if (turnos.length > 20) turnos = turnos.slice(-20);
+    return res.text;
+  }
+
+  /* Preguntas de arranque: la pantalla en blanco es el peor comienzo, y estas
+     son las que el coordinador hace de verdad un lunes a la mañana. */
+  const SUGERENCIAS = [
+    '¿Qué tengo que mirar hoy?',
+    '¿Qué sucursales hace más tiempo que no visito?',
+    'Resumime los reclamos abiertos',
+    'Armame el mail para el Gerente de Operaciones con el estado del área'
+  ];
+
+  return { iniciar, disponible, preguntar, contexto, historial, limpiar, SUGERENCIAS };
+})();
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { Asistente };
 
 /* ===================== REPORTE DIARIO DE OPERACIÓN =====================
  *
@@ -7793,21 +8079,6 @@ const App = (() => {
         </div>`;
       })()}
 
-      ${(() => {
-        /* Lo vencido y lo de hoy y mañana entra acá: la agenda sirve si te
-           encuentra, no si hay que ir a buscarla. */
-        const r = repartirAgenda(e.agenda, hoyISO());
-        const urge = r.vencidas.concat(r.urgentes);
-        if (!urge.length) return '';
-        return `<div class="aviso-caja${r.vencidas.length ? '' : ' info'}">
-          <strong>De tu agenda</strong>
-          <ul>${urge.slice(0, 6).map(x => {
-            const tema = TEMAS_AGENDA_POR_ID[x.item.tema] || TEMAS_AGENDA_POR_ID.otros;
-            return `<li>${tema.icono} <strong>${esc(x.estado.texto)}.</strong> ${esc(x.item.titulo)}</li>`;
-          }).join('')}</ul>
-          <a href="#/agenda">Ver la agenda</a>
-        </div>`;
-      })()}
 
       <div class="kpis">
         ${kpi('Sucursales a cargo', dot.tiendas, `${visitadas} con visita registrada`)}
@@ -8048,7 +8319,70 @@ const App = (() => {
   let licenciaAnio = null;   // año que se está mirando en la ficha de licencias
   let bancoVisible = null;   // ficha cuyo bloque bancario está desplegado
 
-  function vistaAgenda() {
+  /* ========================= VISTA: ASISTENTE =======================
+     Arriba la conversación con Claude, abajo la agenda de siempre. El orden no
+     es casual: la pregunta “¿qué tengo que mirar hoy?” se contesta mirando el
+     tablero entero, y la agenda es una parte de la respuesta, no toda. */
+  let chatMsgs = [];          // { rol, texto } de esta sesión, para dibujar
+  let chatPensando = false;
+  let chatAbortar = null;
+
+  function vistaAsistente() {
+    return panelAsistente() + vistaAgenda({ sinTitulo: true });
+  }
+
+  function panelAsistente() {
+    const listo = Asistente.disponible();
+    return `
+      <h1 class="titulo">Asistente</h1>
+      <p class="subtitulo">
+        Preguntale por el área y te contesta con los números del panel. Abajo, tu agenda.
+      </p>
+
+      <section class="tarjeta" id="asistente">
+        ${listo ? '' : `<div class="aviso-caja info" id="asistente-espera">
+          <strong>Buscando el asistente…</strong> Necesita el visor de claude.ai: abierto como
+          archivo en tu computadora, esta parte no funciona y la agenda de abajo sí.
+        </div>`}
+
+        <div class="chat" id="chat-hilo">
+          ${chatMsgs.length ? chatMsgs.map(m => `<div class="chat-msg ${m.rol}">
+              <span class="chat-quien">${m.rol === 'yo' ? 'Vos' : 'Asistente'}</span>
+              <div class="chat-texto">${esc(m.texto)}</div>
+            </div>`).join('')
+            : `<div class="chat-vacio">
+                <p>Empezá por acá:</p>
+                <div class="chat-sugerencias">
+                  ${Asistente.SUGERENCIAS.map(x =>
+                    `<button class="b sec mini" data-accion="chat-sugerencia" data-q="${esc(x)}">${esc(x)}</button>`).join('')}
+                </div>
+              </div>`}
+          ${chatPensando ? `<div class="chat-msg asistente pensando">
+            <span class="chat-quien">Asistente</span>
+            <div class="chat-texto" id="chat-parcial">Pensando…</div>
+          </div>` : ''}
+        </div>
+
+        <div class="acciones" style="align-items:flex-end">
+          <label class="campo" style="flex:1 1 460px">
+            <span>Preguntá</span>
+            <input id="chat-entrada" autocomplete="off" ${listo ? '' : 'disabled'}
+              placeholder="¿Con cuánta gente me quedo en Rivadavia si se va la DT?">
+          </label>
+          ${chatPensando
+            ? '<button class="b sec" data-accion="chat-cortar">Cortar</button>'
+            : `<button class="b" data-accion="chat-enviar" ${listo ? '' : 'disabled'}>Preguntar</button>`}
+          ${chatMsgs.length ? '<button class="b sec" data-accion="chat-limpiar">Empezar de nuevo</button>' : ''}
+        </div>
+        <p class="ayuda">
+          Ve los números del área, las visitas, los reclamos, las bajas y esta agenda. No le
+          llegan CUIL, DNI, teléfonos, domicilios, mails ni datos bancarios. Puede anotarte
+          cosas en la agenda si se lo pedís.
+        </p>
+      </section>`;
+  }
+
+  function vistaAgenda(opciones) {
     const e = Store.get();
     contexto = e;
     visitaEnCurso = null;
@@ -8065,11 +8399,12 @@ const App = (() => {
       </section>`;
 
     return `
-      <h1 class="titulo">Mi agenda</h1>
-      <p class="subtitulo">
-        Lo que llevás: lo tuyo, lo que estás esperando que te respondan y lo que te
-        informaron. Escribilo como lo dirías y el panel le saca la fecha.
-      </p>
+      ${(opciones || {}).sinTitulo ? '<h2 class="titulo-seccion">Mi agenda</h2>' : `
+        <h1 class="titulo">Mi agenda</h1>
+        <p class="subtitulo">
+          Lo que llevás: lo tuyo, lo que estás esperando que te respondan y lo que te
+          informaron. Escribilo como lo dirías y el panel le saca la fecha.
+        </p>`}
 
       <section class="tarjeta">
         <div class="acciones" style="align-items:flex-end">
@@ -11326,7 +11661,9 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'agenda')        { vistaActual = vistaAgenda;    html = vistaAgenda(); }
+    if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
+      vistaActual = vistaAsistente; html = vistaAsistente();
+    }
     else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
@@ -11375,6 +11712,51 @@ const App = (() => {
     if (!pre || !contexto || !contexto.sucursalId) return;
     const s = Store.sucursal(contexto.sucursalId);
     pre.textContent = Reporte.textoVisita(contexto, s, Store.get().config);
+  }
+
+  /**
+   * Manda la pregunta y va escribiendo la respuesta a medida que llega. El
+   * parcial se pinta tocando un solo nodo: re-renderizar la vista en cada
+   * fragmento borraría lo que el coordinador esté escribiendo en la agenda.
+   */
+  async function preguntarAlAsistente(texto) {
+    const q = String(texto || '').trim();
+    if (!q || chatPensando) return;
+    if (!Asistente.disponible()) return avisar('El asistente no está disponible acá.', 'error');
+
+    chatMsgs.push({ rol: 'yo', texto: q });
+    chatPensando = true;
+    chatAbortar = new AbortController();
+    refrescar();
+    const hilo = $('#chat-hilo');
+    if (hilo) hilo.scrollTop = hilo.scrollHeight;
+
+    try {
+      const res = await Asistente.preguntar(q, {
+        signal: chatAbortar.signal,
+        onText: ({ text }) => {
+          const el = $('#chat-parcial');
+          if (el) { el.textContent = text; }
+          const h = $('#chat-hilo');
+          if (h) h.scrollTop = h.scrollHeight;
+        },
+        alCambiar: () => { /* la vista se refresca al terminar, con la agenda ya tocada */ }
+      });
+      chatMsgs.push({ rol: 'asistente', texto: res });
+    } catch (err) {
+      const codigo = err && err.code;
+      chatMsgs.push({ rol: 'asistente', texto:
+        codigo === 'cancelled'   ? 'Cortado.'
+      : codigo === 'rate_limited' ? 'Llegaste al límite por ahora. Probá de nuevo en un rato.'
+      : codigo === 'not_granted'  ? 'No diste permiso para consultar a Claude desde esta página.'
+      : 'No se pudo contestar: ' + ((err && err.message) || 'error desconocido') });
+    } finally {
+      chatPensando = false;
+      chatAbortar = null;
+      refrescar();
+      const h = $('#chat-hilo');
+      if (h) h.scrollTop = h.scrollHeight;
+    }
   }
 
   function refrescar() {
@@ -11436,6 +11818,13 @@ const App = (() => {
       return Store.get().sucursales.find(x =>
         (x.colaboradores || []).some(c => c.id === id)) || null;
     }
+
+    cont.addEventListener('keydown', ev => {
+      if (ev.target.id === 'chat-entrada' && ev.key === 'Enter') {
+        ev.preventDefault();
+        preguntarAlAsistente(ev.target.value);
+      }
+    });
 
     cont.addEventListener('input', ev => {
       const el = ev.target.closest('[data-colab-campo]');
@@ -11816,6 +12205,12 @@ const App = (() => {
       }
 
       /* --- sucursal y perfil --- */
+      /* --- el asistente --- */
+      if (a === 'chat-sugerencia') { preguntarAlAsistente(btn.dataset.q); return; }
+      if (a === 'chat-enviar')     { preguntarAlAsistente(valorDe('#chat-entrada')); return; }
+      if (a === 'chat-cortar')     { if (chatAbortar) chatAbortar.abort(); return; }
+      if (a === 'chat-limpiar')    { chatMsgs = []; Asistente.limpiar(); refrescar(); return; }
+
       /* --- baja, cesión de contrato y modificación --- */
       if (a === 'form-mov') {
         formMovimiento = (formMovimiento && formMovimiento.colabId === btn.dataset.id &&
@@ -12601,6 +12996,13 @@ const App = (() => {
     /* Lo autorizado con vigencia futura se vuelca el día que corresponde, no
        antes: si no, el plantel de hoy mostraría a alguien en una tienda a la
        que todavía no fue. */
+    /* El visor contesta después del primer render: se pide y se refresca cuando
+       llegue, en vez de hacer esperar a toda la página por esto. */
+    Asistente.iniciar().then(ok => {
+      if (ok && (location.hash || '').indexOf('asistente') >= 0) refrescar();
+      if (ok) { const av = document.getElementById('asistente-espera'); if (av) av.remove(); }
+    });
+
     const aplicados = Store.aplicarMovimientosVencidos();
     render();
     if (aplicados.length) {

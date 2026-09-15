@@ -57,10 +57,11 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `checklist`, `reclamos`, `agenda`, `diario`, `acceso`, `store`, `reporte`,
-  `app`.
+  `checklist`, `reclamos`, `agenda`, `asistente`, `diario`, `acceso`, `store`,
+  `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
-- Ruteo por hash: `#/red`, `#/agenda`, `#/diario`, `#/visitas`, `#/reclamos`,
+- Ruteo por hash: `#/red`, `#/asistente` (y `#/agenda`, que es la misma),
+  `#/diario`, `#/visitas`, `#/reclamos`,
   `#/movimientos[/cesiones|/bajas]`, `#/sucursales`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
@@ -88,7 +89,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 | Escala | Pantalla | Pregunta |
 |---|---|---|
 | El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
-| Lo que llevo | Mi agenda | ¿Qué tengo que hacer y qué estoy esperando? |
+| Lo que llevo | Asistente (chat + agenda) | ¿Qué tengo que hacer y qué estoy esperando? |
 | La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 
@@ -102,6 +103,14 @@ acompaña cuando se muda de tienda. Se cargan en su ficha y se leen juntas en
 `#/movimientos`. Lo autorizado con vigencia futura **no se aplica antes de
 tiempo**: `aplicarMovimientosVencidos()` corre al abrir el panel. Documentado en
 `docs/cesiones-y-bajas.md`.
+
+El **asistente** (`assets/js/asistente.js`, pantalla `#/asistente`) pregunta a
+Claude con la capacidad `sample` del visor de artifacts. Dos reglas que mandan:
+**el panel tiene que seguir abriendo sin conexión** —si `claude.use('sample')`
+devuelve null, la agenda funciona igual y la pantalla lo dice—, y **lo que se
+manda es un resumen, nunca el padrón**: números por sucursal, visitas, reclamos,
+bajas y la agenda; jamás CUIL, DNI, teléfono, domicilio, mail, banco ni CBU.
+Documentado en `docs/asistente.md`.
 
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
 y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box.

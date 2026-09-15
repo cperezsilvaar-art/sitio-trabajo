@@ -669,3 +669,28 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   font-size: 12px; color: var(--texto-suave); flex-wrap: wrap;
 }
 .suc-card > footer > span:last-child { display: flex; align-items: center; gap: 6px; }
+
+/* ============================== Asistente =============================== */
+.titulo-seccion {
+  margin: 30px 0 12px; font-size: 20px; color: var(--azul); letter-spacing: -.2px;
+}
+.chat {
+  border: 1px solid var(--borde); border-radius: var(--radio); background: var(--panel-alt);
+  padding: 14px; max-height: 420px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chat-msg { display: flex; flex-direction: column; gap: 3px; max-width: 86%; }
+.chat-msg.yo { align-self: flex-end; align-items: flex-end; }
+.chat-quien {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--texto-suave);
+}
+.chat-texto {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 9px 12px; font-size: 13.5px; line-height: 1.6; white-space: pre-wrap;
+}
+.chat-msg.yo .chat-texto { background: var(--azul); border-color: var(--azul); color: #fff; }
+.chat-msg.pensando .chat-texto { color: var(--texto-suave); font-style: italic; }
+.chat-vacio { color: var(--texto-suave); font-size: 13.5px; }
+.chat-vacio p { margin: 0 0 10px; }
+.chat-sugerencias { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-sugerencias .b { font-style: normal; }
