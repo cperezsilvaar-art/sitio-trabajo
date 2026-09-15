@@ -42,14 +42,122 @@ const Asistente = (() => {
   }
 
   const disponible = () => !!sample;
+
+  /* ---------------------- los conectores del visor ---------------------- *
+     El calendario de Google, con las credenciales de quien abre la página: el
+     código nunca ve un token. Vale lo mismo que para `sample`: si no está, la
+     pantalla lo dice y el resto sigue andando. */
+
+  const CALENDARIO = 'Google Calendar';
+  let mcp = null, mcpResuelto = false;
+  let servidores = null;              // lo que el visor dice que hay conectado
+
+  async function iniciarConectores() {
+    if (mcpResuelto) return mcp;
+    mcpResuelto = true;
+    try {
+      if (typeof window !== 'undefined' && window.claude && window.claude.use) {
+        mcp = await window.claude.use('mcp');
+      }
+    } catch (err) { mcp = null; }
+    if (mcp) {
+      try { servidores = (await mcp.listTools()).servers || []; }
+      catch (err) { servidores = []; }
+    }
+    return mcp;
+  }
+
+  /** Cómo está el calendario para este visor, sin llamar a nada. */
+  function estadoCalendario() {
+    if (!mcp) return { hay: false, motivo: 'sin-visor' };
+    const s = (servidores || []).find(x => x.server === CALENDARIO);
+    if (!s) return { hay: false, motivo: 'server_not_connected' };
+    if (s.authStatus === 'needs_reauth') return { hay: false, motivo: 'needs_reauth' };
+    if (!s.tools.length) return { hay: false, motivo: 'selection_required' };
+    return { hay: true, motivo: '' };
+  }
+
+  /**
+   * Los eventos de un día. Se pide con el rango en hora local porque el
+   * conector resuelve las fechas sin zona con la del calendario, y el
+   * coordinador trabaja en Buenos Aires, no en UTC.
+   */
+  async function eventosDelDia(fechaISO) {
+    if (!mcp) throw Object.assign(new Error('Sin visor'), { code: 'capability_disabled' });
+    const dia = fechaISO || _hoy();
+    const desde = new Date(dia + 'T00:00:00');
+    const hasta = new Date(dia + 'T23:59:59');
+    const r = await mcp.callTool(CALENDARIO, 'list_events', {
+      startTime: desde.toISOString(),
+      endTime: hasta.toISOString(),
+      orderBy: 'startTime',
+      pageSize: 20
+    }, { cache: { staleTime: 60000 } });
+
+    const p = r.payload || {};
+    const eventos = (p.events || []).map(ev => ({
+      titulo: ev.summary || '(sin título)',
+      desde: (ev.start || {}).dateTime || (ev.start || {}).date || '',
+      hasta: (ev.end || {}).dateTime || (ev.end || {}).date || '',
+      todoElDia: !(ev.start || {}).dateTime,
+      tipo: ev.eventType || 'DEFAULT',
+      estado: ev.status || ''
+    })).filter(x => x.estado !== 'cancelled');
+    return { eventos, cache: r.cache || null };
+  }
+
+  /** La hora de un evento, para mostrar y para contarle al modelo. */
+  function horaDe(ev) {
+    if (ev.todoElDia) return 'todo el día';
+    const d = new Date(ev.desde);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+
+  /**
+   * Qué hacer con cada error del conector. No hay un cartel único: cada código
+   * tiene un arreglo distinto, y esconderlos atrás de “algo falló” deja al
+   * coordinador sin saber que le alcanzaba con reconectar.
+   */
+  function explicarError(err) {
+    const c = (err && err.code) || 'upstream_error';
+    switch (c) {
+      case 'needs_reauth':
+        return { texto: 'Se venció el acceso al calendario. Reconectalo en claude.ai → Configuración → Conectores.', reintentar: false };
+      case 'server_not_connected':
+        return { texto: 'No tenés el calendario conectado. Se agrega en claude.ai → Configuración → Conectores.', reintentar: false };
+      case 'selection_required':
+        return { texto: 'Tenés más de un calendario con ese nombre y todavía no elegiste cuál.', reintentar: false };
+      case 'server_unavailable':
+        return { texto: 'Google no contestó. Probá de nuevo en un momento.', reintentar: true };
+      case 'blocked_by_policy':
+      case 'approval_required':
+        return { texto: 'La política de tu organización no permite esta consulta.', reintentar: false };
+      case 'not_granted':
+      case 'capability_disabled':
+      case 'capability_removed':
+        return { texto: 'Esta versión del panel no puede leer el calendario.', reintentar: false };
+      case 'tool_error':
+        return { texto: 'El calendario rechazó la consulta: ' + ((err && err.message) || ''), reintentar: false };
+      case 'cancelled':
+        return { texto: 'Consulta cortada.', reintentar: false };
+      default:
+        return { texto: 'No se pudo leer el calendario.', reintentar: false };
+    }
+  }
+
   const historial = () => turnos.slice();
   const limpiar = () => { turnos = []; };
 
   /* ------------------------- lo que sabe el panel ------------------------ */
 
   const _f = (n, d) => (typeof fmtNum === 'function' ? fmtNum(n, d) : String(n));
-  /* `hoyISO` vive adentro del módulo de la interfaz y no llega hasta acá. */
-  const _hoy = () => new Date().toISOString().slice(0, 10);
+  /* `hoyISO` vive adentro del módulo de la interfaz y no llega hasta acá. Igual
+     que allá, la fecha es la de acá y no la de UTC. */
+  const _hoy = () => {
+    const d = new Date();
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
 
   /**
    * Radiografía del área en texto plano. Se arma en cada pregunta porque el
@@ -163,8 +271,10 @@ const Asistente = (() => {
     '- Los flotantes del área no son de ninguna tienda: suman al área.',
     '- En una cesión, del 1 al 15 el costo del mes lo absorbe la tienda de destino; del 16 en adelante, la de origen.',
     '',
-    'Tenés dos herramientas para escribirle en la agenda. Usalas cuando te lo pida,',
-    'no por tu cuenta, y después decile en una línea qué anotaste.'
+    'Tenés herramientas para escribirle en la agenda —anotar y marcar hecho— y para',
+    'mirar su calendario de Google. Las de la agenda, solo cuando te lo pida, y después',
+    'decile en una línea qué anotaste. La del calendario, cada vez que la pregunta tenga',
+    'que ver con el día o con el tiempo que le queda libre.'
   ].join('\n');
 
   /* ------------------ lo que el asistente puede hacer ------------------- */
@@ -184,6 +294,23 @@ const Asistente = (() => {
           const i = Store.anotarTexto(String(texto || '').trim());
           if (alCambiar) alCambiar();
           return { anotado: i.titulo, fechas: (i.hitos || []).map(h => h.fecha) };
+        }
+      },
+      {
+        name: 'ver_agenda_del_dia',
+        description: 'Trae las reuniones del calendario de Google de un día. Usala cuando la ' +
+                     'pregunta tenga que ver con el día, con reuniones o con cuánto tiempo hay.',
+        inputSchema: {
+          type: 'object',
+          properties: { fecha: { type: 'string', description: 'El día en formato AAAA-MM-DD. Si falta, hoy.' } }
+        },
+        execute: async ({ fecha }) => {
+          const { eventos } = await eventosDelDia(fecha || _hoy());
+          if (!eventos.length) return { dia: fecha || _hoy(), eventos: [] };
+          return {
+            dia: fecha || _hoy(),
+            eventos: eventos.map(x => ({ hora: horaDe(x), titulo: x.titulo }))
+          };
         }
       },
       {
@@ -254,7 +381,10 @@ const Asistente = (() => {
     'Armame el mail para el Gerente de Operaciones con el estado del área'
   ];
 
-  return { iniciar, disponible, preguntar, contexto, historial, limpiar, SUGERENCIAS };
+  return {
+    iniciar, disponible, preguntar, contexto, historial, limpiar, SUGERENCIAS,
+    iniciarConectores, estadoCalendario, eventosDelDia, horaDe, explicarError
+  };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = { Asistente };
