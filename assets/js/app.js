@@ -928,7 +928,7 @@ const App = (() => {
                 const act = (s.colaboradores || []).filter(c => c.activo !== false);
                 if (!act.length) return '';
                 return `<optgroup label="${esc(s.nombre || s.codigo)}">${
-                  act.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}</optgroup>`;
+                  act.map(c => `<option value="${c.id}"${c.id === ausenciaAbierta ? ' selected' : ''}>${esc(c.nombre)}</option>`).join('')}</optgroup>`;
               }).join('')}
             </select>
           </label>
@@ -1910,6 +1910,7 @@ const App = (() => {
 
         ${fichaLicencias(c)}
         ${fichaSanciones(c)}
+        ${fichaAusenciasRegistradas(c)}
         ${fichaAusencias(c, periodos)}
       </section>`;
   }
@@ -2219,6 +2220,72 @@ const App = (() => {
         Eso se carga y se corrige en la estadística del período; acá se muestra
         para que el legajo esté completo.
       </div>` : ''}`;
+  }
+
+  /* --------- Lo que se cargó en Presentismo, en la ficha ----------
+     Las ausencias viven en `c.ausencias`, o sea que ya cuelgan de la persona:
+     lo que faltaba era mostrárselas acá. Es el historial que se mira cuando
+     alguien pregunta «¿cuánto faltó este año?», y el que acompaña a la persona
+     si se muda de tienda. */
+  function fichaAusenciasRegistradas(c) {
+    const hoy = hoyISO();
+    const todas = (c.ausencias || []).slice()
+      .sort((a, b) => String(b.desde || '').localeCompare(String(a.desde || '')));
+
+    if (!todas.length) {
+      return `<h4>Licencias y ausencias registradas</h4>
+        <p class="vacio">No tiene ninguna cargada.
+          <a href="#/diario/${c.id}">Registrar una</a>.</p>`;
+    }
+
+    const r = ausenciasPorMes(c, hoy);
+    const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
+    /* Solo las columnas que esta persona usó: una tabla con seis licencias en
+       cero no dice nada que el «—» no diga mejor. */
+    const motivos = MOTIVOS_AUSENCIA_LARGA.filter(m => r.porMotivo[m.id]);
+
+    return `<h4>Licencias y ausencias registradas
+        <span class="chip${r.abiertas ? ' ambar' : ''}">${r.total} día${r.total === 1 ? '' : 's'} en total</span>
+        ${r.sinJustificar ? `<span class="chip rojo">${r.sinJustificar} sin justificar</span>` : ''}</h4>
+
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Mes</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
+          <th class="num">Días</th></tr></thead>
+        <tbody>${r.periodos.map(per => `<tr>
+          <td><strong>${esc(per)}</strong></td>
+          ${motivos.map(m => `<td class="num">${r.porMes[per].motivos[m.id] || '—'}</td>`).join('')}
+          <td class="num"><strong>${r.porMes[per].total}</strong></td>
+        </tr>`).join('')}</tbody>
+        <tfoot><tr class="total"><td><strong>Total</strong></td>
+          ${motivos.map(m => `<td class="num">${r.porMotivo[m.id] || '—'}</td>`).join('')}
+          <td class="num"><strong>${r.total}</strong></td></tr></tfoot>
+      </table></div>
+
+      <div class="tabla-scroll" style="margin-top:12px"><table>
+        <thead><tr><th>Licencia</th><th>Desde</th><th>Hasta</th><th class="num">Días</th>
+          <th>Certificado</th><th>Situación</th></tr></thead>
+        <tbody>${todas.map(a => {
+          const est = estadoDeAusencia(a, hoy);
+          return `<tr${a.reincorporado ? ' class="inactivo"' : ''}>
+            <td><strong>${esc(nombreMotivo(a.motivo))}</strong>
+              ${a.diagnostico ? `<div style="font-size:11.5px;color:var(--texto-suave)">${esc(a.diagnostico)}</div>` : ''}</td>
+            <td class="tipo">${a.desde ? fmtFecha(a.desde) : '—'}</td>
+            <td class="tipo">${a.hasta ? fmtFecha(a.hasta) : '—'}</td>
+            <td class="num">${diasDeAusencia(a, hoy) || '—'}</td>
+            <td class="tipo">${tieneCertificado(a)
+              ? '<span class="chip verde">presentado</span>'
+              : '<span class="chip rojo">no lo trajo</span>'}</td>
+            <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+
+      <p class="ayuda">
+        Sale de lo que cargás en <a href="#/diario/${c.id}">Presentismo</a>. Los días se
+        reparten por mes: una licencia del 25 de agosto al 5 de septiembre son días de los
+        dos meses, no del primero. Lo que todavía no pasó no se cuenta: un certificado
+        hasta el 20 no son días de ausencia el 16.
+      </p>`;
   }
 
   /* ------------- Historial de ausencias mes a mes ------------- */
@@ -3977,6 +4044,10 @@ const App = (() => {
       vistaActual = vistaAsistente; html = vistaAsistente();
     }
     else if (ruta[0] === 'diario' || ruta[0] === 'presentismo') {
+      /* `#/diario/<colaborador>` abre el alta con esa persona ya elegida: es
+         como se llega desde su ficha, sin tener que buscarla en el
+         desplegable de 139 nombres. */
+      if (ruta[1] && Store.colaboradorPorId(ruta[1])) ausenciaAbierta = ruta[1];
       vistaActual = vistaDiario;    html = vistaDiario();
     }
     else if (ruta[0] === 'operacion' || ruta[0] === 'ventas') {

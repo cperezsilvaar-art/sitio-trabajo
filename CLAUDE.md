@@ -152,15 +152,29 @@ papel—. `tieneCertificado()` está en `ausencias.js`, junto a `tieneCargasFami
 y por el mismo motivo: el campo llega como texto y un `!!` a secas daría verdadero
 para `'no'`.
 
+**El historial va en la ficha de la persona**, no en la de la sucursal: vive en
+`c.ausencias`, así que la acompaña cuando se muda de tienda. `ausenciasPorMes()`
+lo reparte por mes calendario —del 25/08 al 05/09 son siete días de agosto y
+cinco de septiembre, no doce de agosto— y no cuenta lo que todavía no pasó ni el
+día de la reincorporación. Los días se cuentan con los dos extremos, y
+`diasDeAusencia()` y el texto de `estadoDeAusencia()` usan la misma cuenta: dos
+números distintos para lo mismo, uno al lado del otro, es peor que no mostrarlos.
+No confundir ese bloque con *Ausencias mes a mes*, que sale de `c.novedades` (lo
+liquidado). `#/diario/<colaboradorId>` abre el alta con esa persona ya elegida.
+
 **La venta va en su propia pantalla**, `#/operacion` (*Ventas*), y es la única que
 genera documento (`Reporte.textoVentasDia()`). Los totales van sobre
 `calc.filasVenta`, **no sobre `calc.filas`**: el RDV llega completo todas las
 mañanas y no depende de ninguna otra carga.
 
-**Ojo con `_diaHoy`:** está declarado con `const` en `ausencias.js` y el resto de
-los módulos lo usan sin redeclararlo. En la build de un solo archivo todo comparte
-ámbito global, así que un segundo `const _diaHoy` no rompe ese módulo: rompe la
-página entera.
+**Trampa conocida — nombres de ayuda repetidos entre módulos.** Los `.js` no son
+módulos: en la página comparten ámbito global, y en la build de un solo archivo
+van todos dentro del mismo `<script>`. Un segundo `const _diaHoy` o
+`function _sumarDias` no rompe ese archivo: **rompe la página entera**, y con
+`<script>` separados el módulo que llega segundo no se ejecuta. `_diaHoy` está en
+`ausencias.js` y `_sumarDias` en `agenda.js`; los demás los usan sin redeclarar, o
+eligen otro nombre (`_diaMas`). El chequeo que lo agarra está en la verificación
+de más abajo y hay que correrlo siempre.
 
 Las **ausencias con certificado** (`assets/js/ausencias.js`, `c.ausencias`) son
 la tercera cosa distinta de `c.novedades` (el mes cerrado) y `c.licencias`
@@ -218,7 +232,14 @@ Documentado en `docs/reclamos.md`.
 ```
 for f in assets/js/*.js; do node --check "$f"; done
 python3 build-pagina-unica.py
+node -e "const vm=require('vm'),fs=require('fs');
+  new vm.Script(fs.readFileSync('tablero-visitas-rrhh.html','utf8')
+    .split('<script>')[1].split('</script>')[0]);
+  console.log('la página compila')"
 ```
+El tercero no es opcional: `node --check` valida cada archivo por separado y no
+ve los choques de nombres entre módulos, que son los que dejan la página en
+blanco.
 Más las pruebas e2e con Playwright (`/opt/node22/lib/node_modules/playwright`)
 y Chromium headless, que viven en el directorio de trabajo temporal de la sesión.
 

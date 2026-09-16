@@ -143,7 +143,10 @@ function estadoDeAusencia(a, hoy) {
     return { clase: 'porEmpezar', texto: 'Empieza el ' + _fecha(x.desde),
              diasParaVencer: null, diasLlevados: null, tono: 'azul' };
   }
-  const llevados = _dias(x.desde, h);
+  /* Inclusivo, igual que `diasDeAusencia`: el día que arranca la licencia la
+     persona tampoco fue. Con la cuenta exclusiva la fila decía «3 días» en la
+     columna y «2 días» en la situación, una al lado de la otra. */
+  const llevados = (_dias(x.desde, h) || 0) + 1;
 
   /* Sin papel, la falta no está justificada, sea cual sea la licencia que la
      persona invoque. Va antes que cualquier otra lectura porque es la única
@@ -208,7 +211,88 @@ function cobertura(ausencia, colaborador, anios) {
 }
 
 /* ------------------------------------------------------------------ *
- * 3. Lo que hay que mirar hoy                                          *
+ * 3. El historial de una persona                                       *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Días que una ausencia lleva efectivamente transcurridos.
+ *
+ * No cuenta lo que todavía no pasó: un certificado hasta el 20 no son días de
+ * ausencia el día 16. Cuenta los dos extremos, porque el día que arranca la
+ * licencia la persona tampoco fue.
+ */
+function diasDeAusencia(a, hoy) {
+  const h = hoy || _diaHoy();
+  const x = a || {};
+  if (!x.desde) return 0;
+  const fin = _finComputable(x, h);
+  if (!fin || fin < x.desde) return 0;
+  return (_dias(x.desde, fin) || 0) + 1;
+}
+
+const _finComputable = (x, h) => {
+  if (x.reincorporado) {
+    /* Se reincorporó el 20 quiere decir que el 20 ya trabajó: el último día de
+       ausencia es el anterior. */
+    const r = x.fechaReincorporacion;
+    return r ? _diaMas(r, -1) : (x.hasta && x.hasta < h ? x.hasta : h);
+  }
+  return (x.hasta && x.hasta < h) ? x.hasta : h;
+};
+
+const _diaMas = (fecha, n) => {
+  const d = new Date(fecha + 'T00:00:00');
+  if (isNaN(d.getTime())) return fecha;
+  d.setDate(d.getDate() + n);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+};
+
+/**
+ * El historial de ausencias de una persona, repartido mes a mes.
+ *
+ * Una licencia del 25/08 al 05/09 son siete días de agosto y cinco de
+ * septiembre. Imputarla entera al mes en que arrancó infla un mes y vacía el
+ * otro, que es justo lo que se mira cuando se compara contra la liquidación.
+ *
+ * @returns {{periodos:string[], porMes:object, porMotivo:object, total:number,
+ *            abiertas:number, sinJustificar:number}}
+ */
+function ausenciasPorMes(colaborador, hoy) {
+  const h = hoy || _diaHoy();
+  const out = { periodos: [], porMes: {}, porMotivo: {}, total: 0,
+                abiertas: 0, sinJustificar: 0 };
+
+  ((colaborador || {}).ausencias || []).forEach(a => {
+    if (!a.reincorporado) {
+      out.abiertas++;
+      if (!tieneCertificado(a)) out.sinJustificar++;
+    }
+    if (!a.desde) return;
+    const fin = _finComputable(a, h);
+    if (!fin || fin < a.desde) return;
+
+    const motivo = a.motivo || 'otra';
+    /* Se recorre día por día en vez de calcular solapamientos: son tramos de
+       semanas o meses, y un tope protege de una fecha cargada con un año mal
+       tipeado. */
+    let d = a.desde;
+    for (let i = 0; i < 1500 && d <= fin; i++) {
+      const per = d.slice(0, 7);
+      if (!out.porMes[per]) out.porMes[per] = { total: 0, motivos: {} };
+      out.porMes[per].total++;
+      out.porMes[per].motivos[motivo] = (out.porMes[per].motivos[motivo] || 0) + 1;
+      out.porMotivo[motivo] = (out.porMotivo[motivo] || 0) + 1;
+      out.total++;
+      d = _diaMas(d, 1);
+    }
+  });
+
+  out.periodos = Object.keys(out.porMes).sort().reverse();
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * 4. Lo que hay que mirar hoy                                          *
  * ------------------------------------------------------------------ */
 
 /**
@@ -270,6 +354,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
+    diasDeAusencia, ausenciasPorMes,
     alertasDeAusencias, ausentesHoy
   };
 }

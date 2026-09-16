@@ -27,6 +27,50 @@ El motor de horas extras sigue calculando: el día que haya sistema de fichadas,
 campo vuelve y las cuentas ya están. Mientras tanto siguen llegando por el libro
 de novedades a la **estadística mensual**, que es donde el dato sí existe.
 
+## El historial queda en la ficha de la persona
+
+Las ausencias viven en **`c.ausencias`**, o sea que ya cuelgan del colaborador y
+no de la sucursal: si se muda de tienda, el historial se muda con él. Lo que
+faltaba era mostrárselo, y desde septiembre de 2026 está en su perfil —el que se
+abre desde *Nómina* o desde el organigrama—, en **Licencias y ausencias
+registradas**, arriba de *Ausencias mes a mes*.
+
+Son dos bloques distintos y conviene no confundirlos:
+
+| Bloque | De dónde sale | Qué contesta |
+|---|---|---|
+| **Licencias y ausencias registradas** | `c.ausencias`, lo que cargás en Presentismo | Qué licencias tuvo, cuándo y si trajo el papel |
+| **Ausencias mes a mes** | `c.novedades`, el libro de liquidación | Qué días pagó la liquidación de cada mes |
+
+El primero es lo que sabés **hoy**; el segundo es lo que quedó **liquidado**. Que
+no coincidan es información, no un error: una licencia de este mes se liquida el
+mes que viene.
+
+### Cómo se reparten los días
+
+`ausenciasPorMes(colaborador, hoy)` corta cada ausencia por mes calendario. Una
+licencia **del 25 de agosto al 5 de septiembre son siete días de agosto y cinco
+de septiembre**, no doce de agosto: imputarla entera al mes en que arrancó infla
+un mes y vacía el otro, que es justo lo que se mira cuando se compara contra la
+liquidación.
+
+Dos reglas más, las dos por el mismo motivo —el historial cuenta lo que pasó, no
+lo que va a pasar—:
+
+- **Lo que todavía no ocurrió no suma.** Un certificado hasta el 30 no son días
+  de ausencia el 16. Se cuenta hasta hoy, y el total crece solo.
+- **El día de la reincorporación no cuenta**, porque ese día la persona trabajó.
+  Del 25/08 al 05/09 con alta el 06/09 son doce días, no trece.
+
+Los días se cuentan **con los dos extremos**: una licencia que empieza hoy y
+termina hoy es un día, no cero. `diasDeAusencia()` y el texto de
+`estadoDeAusencia()` usan la misma cuenta, para que la columna y la situación no
+digan números distintos uno al lado del otro.
+
+Desde la ficha, **`#/diario/<colaboradorId>`** abre Presentismo con esa persona
+ya elegida y el formulario desplegado: el alta sigue estando en un solo lugar,
+pero no hay que buscarla entre 139 nombres.
+
 ## Pendiente de justificar
 
 Una ausencia sin certificado presentado queda en `pendienteJustificar`, **sea cual
