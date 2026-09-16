@@ -440,6 +440,136 @@ const App = (() => {
   let licenciaAnio = null;   // año que se está mirando en la ficha de licencias
   let bancoVisible = null;   // ficha cuyo bloque bancario está desplegado
 
+  /* ========================== VISTA: NÓMINA =========================
+     El padrón entero en una lista, flotantes incluidos. Es la pantalla que se
+     abre cuando alguien pregunta por una persona y hay que encontrarla ya: por
+     eso el buscador está arriba de todo y filtra mientras se escribe. */
+  let nominaFiltro = '';
+  let nominaOrden = 'nombre';
+  let nominaEstado = 'todos';   // todos | activos | bajas
+
+  const _norm = t => String(t == null ? '' : t)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+  function vistaNomina() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    /* Una fila por persona de toda el área. El orden por defecto es
+       alfabético porque es como se la busca cuando ya se sabe el nombre. */
+    const gente = [];
+    e.sucursales.forEach(s => {
+      (s.colaboradores || []).forEach(c => gente.push({ c, s }));
+    });
+
+    /* La baja no sale del listado: al mes siguiente se la sigue buscando por
+       nombre —para la liquidación, para un certificado, para saber cuándo se
+       fue—. Se muestra con su fecha y se puede aislar con el desplegable. */
+    const activos = gente.filter(({ c }) => c.activo !== false).length;
+    const porEstado = nominaEstado === 'activos' ? gente.filter(({ c }) => c.activo !== false)
+                    : nominaEstado === 'bajas'   ? gente.filter(({ c }) => c.activo === false)
+                    : gente;
+
+    const q = _norm(nominaFiltro).trim();
+    const filtrada = !q ? porEstado : porEstado.filter(({ c, s }) => _norm([
+      c.nombre, c.cargo, c.nivelCargo, c.categoriaConvenio, c.posicion,
+      s.nombre, s.codigo, c.dni, c.cuil, c.nroPersonal, c.legajo
+    ].join(' ')).indexOf(q) >= 0);
+
+    const orden = {
+      nombre:    (a, b2) => _norm(a.c.nombre).localeCompare(_norm(b2.c.nombre)),
+      sucursal:  (a, b2) => _norm(a.s.nombre || a.s.codigo).localeCompare(_norm(b2.s.nombre || b2.s.codigo)) ||
+                            _norm(a.c.nombre).localeCompare(_norm(b2.c.nombre)),
+      antiguedad:(a, b2) => String(a.c.fechaIngreso || '9999').localeCompare(String(b2.c.fechaIngreso || '9999')),
+      puesto:    (a, b2) => _norm(a.c.cargo).localeCompare(_norm(b2.c.cargo)) ||
+                            _norm(a.c.nombre).localeCompare(_norm(b2.c.nombre)),
+      /* Las bajas más recientes primero: es el orden en que se las revisa. */
+      baja:      (a, b2) => String(fechaBaja(b2.c) || '').localeCompare(String(fechaBaja(a.c) || '')) ||
+                            _norm(a.c.nombre).localeCompare(_norm(b2.c.nombre))
+    }[nominaOrden] || ((a, b2) => 0);
+    filtrada.sort(orden);
+
+    const dot = Store.dotacionDelArea();
+
+    return `
+      <h1 class="titulo">Nómina del ${esc(e.config.area || 'área')}</h1>
+      <p class="subtitulo">
+        Todo el personal, flotantes incluidos. Escribí en el buscador para filtrar por nombre,
+        sucursal, puesto o documento; tocá una fila para abrir la ficha completa.
+      </p>
+
+      <section class="tarjeta">
+        <div class="acciones" style="align-items:flex-end;margin-top:0">
+          <label class="campo" style="flex:1 1 380px">
+            <span>Buscar</span>
+            <input id="buscar-nomina" autocomplete="off" value="${esc(nominaFiltro)}"
+              placeholder="Apellido, sucursal, puesto, DNI…">
+          </label>
+          <label class="campo" style="max-width:170px">
+            <span>Mostrar</span>
+            <select id="estado-nomina">
+              ${[['todos', 'Activos y bajas'], ['activos', 'Solo activos'],
+                 ['bajas', 'Solo bajas']].map(([v, t]) =>
+                `<option value="${v}"${nominaEstado === v ? ' selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </label>
+          <label class="campo" style="max-width:190px">
+            <span>Ordenar por</span>
+            <select id="orden-nomina">
+              ${[['nombre', 'Apellido y nombre'], ['sucursal', 'Sucursal'],
+                 ['puesto', 'Puesto'], ['antiguedad', 'Antigüedad'],
+                 ['baja', 'Fecha de baja']].map(([v, t]) =>
+                `<option value="${v}"${nominaOrden === v ? ' selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </label>
+          ${nominaFiltro || nominaEstado !== 'todos'
+            ? '<button class="b sec" data-accion="limpiar-nomina">Limpiar</button>' : ''}
+        </div>
+        <p class="ayuda">
+          ${filtrada.length === gente.length
+            ? `${gente.length} personas en la nómina · ${activos} activas · ${gente.length - activos} de baja · ${dot.personas} en el piso de una tienda · ${dot.flotantes} flotantes · ${dot.noPresenciales} con bloqueo.`
+            : `${filtrada.length} de ${gente.length} personas${nominaEstado === 'activos' ? ' (solo activas)' : nominaEstado === 'bajas' ? ' (solo bajas)' : ''}.`}
+        </p>
+      </section>
+
+      ${filtrada.length ? `<div class="lista-nomina">
+        ${filtrada.map(({ c, s }) => filaNomina(c, s)).join('')}
+      </div>` : `<section class="tarjeta"><p class="vacio">
+        Nadie coincide con “${esc(nominaFiltro)}”. Probá con menos letras o con el apellido solo.
+      </p></section>`}`;
+  }
+
+  const fechaBaja = c => (c.baja && c.baja.fecha) || '';
+
+  /* Una línea por persona: lo que se necesita para reconocerla sin abrirla. */
+  function filaNomina(c, s) {
+    const anios = antiguedadAnios(c.fechaIngreso);
+    const np = esNoPresencial(c);
+    const jor = jornadaDeVinculo(c);
+    const abierta = perfilAbierto === c.id;
+    const sexo = { M: 'M', F: 'F', MASCULINO: 'M', FEMENINO: 'F' }[String(c.sexo || '').toUpperCase()] || '';
+
+    return `<article class="nom-fila${abierta ? ' abierta' : ''}${c.activo === false ? ' de-baja' : ''}">
+      <button class="nom-cab" data-accion="ver-perfil" data-id="${c.id}"
+        title="Ver la ficha de ${esc(c.nombre)}">
+        <span class="nom-nombre">${esc(c.nombre || 'Sin nombre')}
+          ${sexo ? `<em class="nom-sexo">${sexo}</em>` : ''}
+          ${c.activo === false
+            ? `<span class="chip rojo">Baja${fechaBaja(c) ? ' ' + fmtFecha(fechaBaja(c)) : ''}</span>`
+            : ''}
+          ${np.noPresencial ? `<span class="chip ambar">${esc(np.motivo)}</span>` : ''}
+          ${jor.parcial ? '<span class="chip azul">½ jornada</span>' : ''}
+        </span>
+        <span class="nom-puesto">${esc(c.cargo || c.posicion || 'sin puesto cargado')}</span>
+        <span class="nom-suc">${esc(s.nombre || s.codigo)}</span>
+        <span class="nom-ingreso">${c.fechaIngreso ? fmtFecha(c.fechaIngreso) : '—'}</span>
+        <span class="nom-ant">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</span>
+      </button>
+      ${abierta ? perfilColaborador(s, c) : ''}
+    </article>`;
+  }
+
   /* ========================= VISTA: ASISTENTE =======================
      Arriba la conversación con Claude, abajo la agenda de siempre. El orden no
      es casual: la pregunta “¿qué tengo que mirar hoy?” se contesta mirando el
@@ -3941,7 +4071,8 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
+    if (ruta[0] === 'nomina')        { vistaActual = vistaNomina;    html = vistaNomina(); }
+    else if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
       vistaActual = vistaAsistente; html = vistaAsistente();
     }
     else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
@@ -4110,6 +4241,17 @@ const App = (() => {
       return Store.get().sucursales.find(x =>
         (x.colaboradores || []).some(c => c.id === id)) || null;
     }
+
+    cont.addEventListener('input', ev => {
+      if (ev.target.id !== 'buscar-nomina') return;
+      nominaFiltro = ev.target.value;
+      const pos = ev.target.selectionStart;
+      refrescar();
+      /* Re-renderizar la lista rehace el input: hay que devolverle el foco y el
+         cursor donde estaba, o se escribe una letra y se pierde el teclado. */
+      const nuevo = $('#buscar-nomina');
+      if (nuevo) { nuevo.focus(); nuevo.setSelectionRange(pos, pos); }
+    });
 
     cont.addEventListener('keydown', ev => {
       if (ev.target.id === 'chat-entrada' && ev.key === 'Enter') {
@@ -4615,6 +4757,15 @@ const App = (() => {
         Store.anularMovimiento(btn.dataset.id, btn.dataset.mov);
         refrescar();
         avisar('Anulada.');
+      }
+
+      if (a === 'limpiar-nomina') {
+        nominaFiltro = '';
+        nominaEstado = 'todos';
+        refrescar();
+        const el = $('#buscar-nomina');
+        if (el) el.focus();
+        return;
       }
 
       if (a === 'ver-baja') {
@@ -5229,6 +5380,8 @@ const App = (() => {
         refrescar();
         return;
       }
+      if (ev.target.id === 'orden-nomina') { nominaOrden = ev.target.value; refrescar(); return; }
+      if (ev.target.id === 'estado-nomina') { nominaEstado = ev.target.value; refrescar(); return; }
       if (ev.target.id === 'estad-sucursal') {
         estadSuc = ev.target.value;
         estadPeriodo = null;   // se recalcula con los períodos de la nueva sucursal

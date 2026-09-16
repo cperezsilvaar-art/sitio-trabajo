@@ -694,3 +694,62 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .chat-vacio p { margin: 0 0 10px; }
 .chat-sugerencias { display: flex; flex-wrap: wrap; gap: 8px; }
 .chat-sugerencias .b { font-style: normal; }
+
+/* ================================ Nómina ================================
+   Una grilla de cinco columnas repetida fila a fila. Es una tabla en todo
+   menos en el marcado: hace falta que cada fila se abra y muestre la ficha
+   entera adentro, y un `<tr>` con un formulario adentro no se lleva bien con
+   el ancho de las columnas. La grilla mantiene las columnas alineadas entre
+   filas sin ese problema. */
+.lista-nomina { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+
+.nom-fila {
+  border: 1px solid var(--borde); border-radius: var(--radio);
+  background: var(--panel); overflow: hidden;
+}
+.nom-fila.abierta { border-color: var(--azul); box-shadow: var(--sombra); }
+/* La baja no se esconde: se sigue buscando por nombre al mes siguiente. */
+.nom-fila.de-baja .nom-cab { opacity: .62; }
+
+.nom-cab {
+  display: grid; width: 100%; gap: 4px 14px; align-items: baseline;
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.6fr) minmax(0, 1.4fr) 104px 86px;
+  padding: 10px 14px; text-align: left; font: inherit; color: inherit;
+  background: none; border: 0; cursor: pointer;
+}
+.nom-cab:hover { background: var(--panel-alt); }
+.nom-cab:focus-visible { outline: 2px solid var(--azul-claro); outline-offset: -2px; }
+
+.nom-nombre {
+  font-weight: 600; font-size: 13.5px; min-width: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+}
+.nom-sexo {
+  font-style: normal; font-size: 11px; font-weight: 600; color: var(--texto-suave);
+  border: 1px solid var(--borde-fuerte); border-radius: 4px; padding: 0 4px; line-height: 15px;
+}
+.nom-puesto, .nom-suc, .nom-ingreso, .nom-ant {
+  font-size: 12.5px; color: var(--texto-suave);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.nom-ingreso, .nom-ant { font-variant-numeric: tabular-nums; }
+.nom-ant { text-align: right; }
+/* La ficha ya es una `.tarjeta` con su propio marco: adentro de la fila
+   sobran el borde redondeado y la sombra, que dibujarían una caja dentro de
+   otra. */
+.nom-fila > .tarjeta {
+  border: 0; border-top: 1px solid var(--borde); border-radius: 0;
+  box-shadow: none; margin: 0;
+}
+
+/* En el teléfono las cinco columnas no entran. Cada dato pasa a su renglón y
+   se rotula, porque sin el encabezado de la grilla una fecha suelta no dice
+   si es el ingreso o cualquier otra cosa. */
+@media (max-width: 720px) {
+  .nom-cab { grid-template-columns: 1fr; gap: 2px; padding: 11px 13px; }
+  .nom-ant { text-align: left; }
+  .nom-puesto::before  { content: 'Puesto: '; }
+  .nom-suc::before     { content: 'Sucursal: '; }
+  .nom-ingreso::before { content: 'Ingreso: '; }
+  .nom-ant::before     { content: 'Antigüedad: '; }
+}

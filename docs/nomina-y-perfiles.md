@@ -77,9 +77,40 @@ posición asignada: el panel lo lista para que lo resuelvas a mano.
 esta nómina. Las visitas que ya existían suman esas filas a su matriz de FTE sin
 perder nada de lo cargado.
 
+## La pantalla *Nómina* (`#/nomina`)
+
+El padrón entero en una lista, **flotantes incluidos**, con un buscador arriba
+de todo. Es la pantalla que se abre cuando alguien pregunta por una persona y
+hay que encontrarla ya: antes había que adivinar en qué tienda estaba y entrar
+por su organigrama.
+
+Cada línea trae lo mínimo para reconocer a la persona sin abrirla: **apellido y
+nombre, sexo, puesto, sucursal, fecha de ingreso y antigüedad**, más un cartel
+cuando corresponde —de baja, bloqueo de título, media jornada—. Tocar la línea
+la despliega en la **ficha completa**, la misma del organigrama; tocarla de
+nuevo la cierra.
+
+- **El buscador filtra mientras se escribe** por nombre, sucursal, puesto,
+  categoría, legajo, DNI y CUIL, sin acentos ni mayúsculas que valgan. Una sola
+  caja para todo: no hay que elegir antes por qué campo se busca.
+- **Mostrar** aísla activos o bajas. Por defecto están los dos, que es la
+  pregunta normal —«¿trabajaba acá fulano?» no distingue—.
+- **Ordenar por** apellido, sucursal, puesto, antigüedad o fecha de baja.
+
+**Las bajas no salen del listado.** Al mes siguiente se sigue buscando a esa
+persona por nombre —para la liquidación, para un certificado de trabajo, para
+saber cuándo se fue— y una lista que las esconde obliga a ir a mirar a otro
+lado. Van con su **fecha de baja** en el cartel rojo y no cuentan en la
+dotación de piso, que es lo que separa una cosa de la otra.
+
+El sexo lo trae la nómina pegada: `plantel-area3.js`, que es lo que hace que el
+panel no abra vacío, no lo guarda, así que en un navegador recién limpiado esa
+marca aparece recién después de pegar la planilla.
+
 ## El perfil de cada persona
 
-Se abre desde el organigrama de la sucursal, haciendo clic en su tarjeta.
+Se abre desde el organigrama de la sucursal o desde la pantalla *Nómina*,
+haciendo clic en su tarjeta o en su línea.
 
 **De la nómina, como dato:** número de personal, legajo de tienda, CUIL, DNI,
 sexo, fecha de nacimiento y edad, obra social, estatus, fecha de ingreso y

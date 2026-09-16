@@ -60,8 +60,8 @@ visita cargada.
   `ausencias`, `checklist`, `reclamos`, `agenda`, `asistente`, `diario`,
   `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
-- Ruteo por hash: `#/red`, `#/asistente` (y `#/agenda`, que es la misma),
-  `#/diario`, `#/visitas`, `#/reclamos`,
+- Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
+  misma), `#/diario`, `#/visitas`, `#/reclamos`,
   `#/movimientos[/cesiones|/bajas]`, `#/sucursales`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
@@ -96,6 +96,13 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 La navegación está agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
 *Cierre del mes*— y no por módulo. Una solapa nueva va adentro del grupo que le
 corresponde, no al final de la fila.
+
+Fuera de esas tres escalas está **`#/nomina`**, que no responde a un ritmo sino a
+«¿quién es esta persona?»: el padrón entero en una lista con buscador, flotantes
+incluidos, y cada línea abre la ficha. Va al lado de *Panel* porque es material
+de consulta, no una tarea del día. **Las bajas se quedan en ese listado, con su
+fecha** —se las sigue buscando por nombre meses después—; lo que las separa de
+los activos es la dotación, no la visibilidad.
 
 La baja, la cesión de contrato y la modificación de puesto cuelgan de la
 **persona** (`c.baja`, `c.movimientos[]`), no de la sucursal, así el historial la
