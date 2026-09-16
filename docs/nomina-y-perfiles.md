@@ -7,8 +7,8 @@ no el puesto — y de acá sale la dotación por posición de cada sucursal.
 
 ## Cómo se importa
 
-**Sucursales → Nómina del área**: pegá la planilla completa, desde la fila de
-encabezados. Es una sola pegada para toda el área: cada persona se reparte a su
+**Nómina → Nómina del área**, al pie de la pantalla: pegá la planilla completa,
+desde la fila de encabezados. Es una sola pegada para toda el área: cada persona se reparte a su
 tienda según su columna de tienda.
 
 Entiende dos formatos, porque los dos circulan:
@@ -272,7 +272,7 @@ personas donde el mostrador tiene 13.
 
 ## Dos caminos para cargar el plantel
 
-**Cargar el plantel del área** (`Sucursales → Nómina del área`) repone las 139
+**Cargar el plantel del área** (`Nómina`, al pie) repone las 139
 personas desde `assets/js/plantel-area3.js`, que es parte del proyecto. Es la
 respuesta a que el navegador se limpie: el padrón de sucursales vuelve solo y el
 plantel, hasta ahora, no.

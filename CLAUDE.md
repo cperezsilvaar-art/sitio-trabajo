@@ -63,8 +63,9 @@ visita cargada.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
   `#/visitas`, `#/reclamos`,
-  `#/movimientos[/cesiones|/bajas]`, `#/sucursales`, `#/sucursal/<id>`,
+  `#/movimientos[/cesiones|/bajas]`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
+  `#/sucursales` ya no es una solapa: la ruta sobrevive y redirige a `#/red`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
 - **Trampa conocida:** todo lo que entra al panel se pega desde Excel, y Excel
   entrecomilla las celdas que tienen un salto de línea adentro —los encabezados
@@ -172,6 +173,22 @@ El instrumento de la visita es el **check list de RRHH Operaciones**
 con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó por
 repetirlo—. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero
 no se muestra ni entra en ningún reporte.
+
+**Cada tienda se edita en su propia página.** La solapa *Sucursales* se eliminó:
+era una tercera lista de las mismas doce tiendas —las otras dos son las tarjetas
+de `#/red` y la tabla de `#/visitas`— y lo único propio que tenía era una ficha
+editable escondida en una fila desplegable, mientras los mismos campos se leían
+en `#/sucursal/<id>`. Lo que tenía se repartió donde ya vivía la mitad:
+
+- **la ficha** (razón social, CUIT, ART, dirección, horario, referentes, notas)
+  es ahora editable en `#/sucursal/<id>`, con un botón que alterna lectura y
+  edición sobre `fichaSucursal`;
+- **la importación de la nómina** está al pie de `#/nomina`;
+- **el alta, la baja y «Cargar padrón del Área 3»** están en `#/config`
+  (`panelSucursalesConfig()`), que es donde vive el resto de la puesta a punto.
+
+Una pantalla nueva que necesite listar las doce tiendas tiene que apoyarse en
+una de las que ya existen, no agregar una cuarta.
 
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos

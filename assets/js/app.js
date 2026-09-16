@@ -3,8 +3,9 @@
  *
  * Ruteo por hash:
  *   #/red                      panel consolidado de la red
- *   #/sucursales               alta, renombrado y baja de sucursales
- *   #/config                   parámetros de cálculo y destinatarios
+ *   #/nomina                   el padrón entero, con buscador e importación
+ *   #/sucursal/<id>            la tienda: ficha editable, organigrama y visitas
+ *   #/config                   sucursales del área, parámetros y destinatarios
  *   #/visita/<id>/<pestaña>    ficha de una visita
  */
 
@@ -537,8 +538,60 @@ const App = (() => {
       ${filtrada.length ? `<div class="lista-nomina">
         ${filtrada.map(({ c, s }) => filaNomina(c, s)).join('')}
       </div>` : `<section class="tarjeta"><p class="vacio">
-        Nadie coincide con “${esc(nominaFiltro)}”. Probá con menos letras o con el apellido solo.
-      </p></section>`}`;
+        ${gente.length
+          ? `Nadie coincide con “${esc(nominaFiltro)}”. Probá con menos letras o con el apellido solo.`
+          : 'Todavía no hay nadie cargado. Pegá la nómina acá abajo y el padrón se arma solo.'}
+      </p></section>`}
+
+      <section class="tarjeta">
+        <h2>Nómina del área</h2>
+        <p class="ayuda">
+          El padrón de personas, con todas las sucursales juntas. Pegá la planilla completa
+          —desde la fila de encabezados— y cada persona se reparte a su tienda con su cargo,
+          sus fechas y sus datos de contacto. Es lo que llena la dotación por posición.
+        </p>
+        <textarea id="pegar-nomina" style="min-height:110px"
+          placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-nomina">Importar la nómina</button>
+          ${PLANTEL_AREA3.length
+            ? `<button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>`
+            : ''}
+        </div>
+        ${PLANTEL_AREA3.length ? `<p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
+          septiembre de 2026 con su tienda, su cargo, su categoría, su jornada y sus fechas de
+          ingreso, sin tener que pegar nada. No trae el CUIL, el DNI, el teléfono, el domicilio
+          ni los mails: eso vive solo en tu navegador y entra al pegar la planilla. Los dos
+          caminos se complementan y ninguno duplica a nadie.</p>` : ''}
+        <div id="resultado-nomina"></div>
+
+        ${(() => {
+          const con = e.sucursales.filter(x => (x.colaboradores || []).length);
+          if (!con.length) return '';
+          const activos = x => (x.colaboradores || []).filter(c => c.activo !== false);
+          const total = con.reduce((a, x) => a + activos(x).length, 0);
+          const noPres = con.reduce((a, x) => a + activos(x).filter(c => esNoPresencial(c).noPresencial).length, 0);
+          const sinPos = con.reduce((a, x) => a + activos(x).filter(c => !c.posicion).length, 0);
+          return `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${total - noPres} persona${total - noPres === 1 ? '' : 's'} en el piso</strong>
+            en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
+            ${noPres ? `Otras ${noPres} están en la nómina con bloqueo de título o como no
+              presenciales: cuestan, pero no cubren turno.` : ''}
+            ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
+          </div>
+          ${(() => {
+            const sinCargo = con.reduce((a, x) =>
+              a + activos(x).filter(c => !String(c.cargo || '').trim()).length, 0);
+            if (!sinCargo) return '';
+            return `<div class="aviso-caja">
+              <strong>${sinCargo} persona${sinCargo === 1 ? '' : 's'} sin puesto cargado.</strong>
+              El listado corto del área trae el nombre y la tienda, pero no el cargo: sin eso
+              el organigrama no puede ordenar a nadie por posición. Pegá acá abajo la nómina
+              completa —la que tiene las columnas CARGO y NIVEL DE CARGO— y se completa sola.
+            </div>`;
+          })()}`;
+        })()}
+      </section>`;
   }
 
   const fechaBaja = c => (c.baja && c.baja.fecha) || '';
@@ -1783,24 +1836,81 @@ const App = (() => {
         ${ultima ? `<a class="b sec" href="#/visita/${ultima.id}/checklist" style="text-decoration:none">Abrir la última visita${
           ultima.fecha ? ` (${fmtFecha(ultima.fecha)})` : ''}</a>` : ''}
         <a class="b sec" href="#/estadistica" style="text-decoration:none">Estadística mensual</a>
-        <a class="b sec" href="#/sucursales" style="text-decoration:none">Editar la ficha</a>
       </div>
 
-      <section class="tarjeta">
-        <h2>Referentes y datos de la tienda</h2>
-        <div class="grid c3">
-          ${dato('Gerente de Tienda', s.gerente)}
-          ${dato('Director Técnico', s.directorTecnico)}
-          ${dato('Gerente de Operaciones', s.gerenteOperaciones)}
-          ${dato('Horario', s.horario)}
-          ${dato('Razón social', s.razonSocial)}
-          ${dato('CUIT', s.cuit)}
-          ${dato('ART', s.art)}
-          ${dato('Referente de RRHH', s.referenteRRHH)}
-          ${dato('Email del gerente', s.emailGerente)}
-        </div>
-        ${s.notas ? `<div class="aviso-caja info" style="margin-top:14px">${esc(s.notas)}</div>` : ''}
-      </section>
+      ${(() => {
+        /* La ficha de la tienda se edita acá y no en otra pantalla. Estaba de
+           las dos formas: de solo lectura en esta página y editable dentro de
+           una fila desplegable de la tabla de Sucursales. Eran los mismos
+           campos dos veces, y para cambiar un mail había que acordarse de en
+           cuál de las dos estaba el formulario. */
+        const i = e.sucursales.indexOf(s);
+        const gops = e.config.gerentesOperaciones || [];
+        const editando = fichaSucursal === s.id;
+        return `<section class="tarjeta">
+          <div class="cabecera-suc">
+            <h2>Referentes y datos de la tienda</h2>
+            <button class="b sec" data-accion="ficha-sucursal" data-id="${s.id}">${editando ? 'Listo' : 'Editar'}</button>
+          </div>
+
+          ${editando ? `
+            <h4>Identificación</h4>
+            <div class="grid c3">
+              ${campo('Nombre de la tienda', `sucursales.${i}.nombre`, { calc: true })}
+              ${campo('Código interno', `sucursales.${i}.codigo`)}
+              ${campo('Código en el RVD', `sucursales.${i}.rvd`, { placeholder: 'ej. 008' })}
+              ${campo('Tipo', `sucursales.${i}.tipo`, { tipo: 'select', calc: true, opciones: [
+                { valor: 'venta', texto: '🏪 Tienda' }, { valor: 'staff', texto: '🏢 Staff del área' }] })}
+              ${campo('Grupo operador', `sucursales.${i}.operador`, { tipo: 'select', calc: true,
+                opciones: [{ valor: '', texto: '—' }].concat(OPERADORES.map(m => ({ valor: m, texto: m }))) })}
+              ${campo('Razón social', `sucursales.${i}.razonSocial`)}
+              ${campo('CUIT', `sucursales.${i}.cuit`)}
+              ${campo('ART', `sucursales.${i}.art`, { tipo: 'select',
+                opciones: [{ valor: '', texto: '—' }].concat(ARTS.map(x => ({ valor: x, texto: x }))) })}
+            </div>
+
+            <h4>Ubicación y horario</h4>
+            <div class="grid c2">
+              ${campo('Dirección', `sucursales.${i}.direccion`)}
+              ${campo('Localidad o partido', `sucursales.${i}.localidad`)}
+            </div>
+            <div style="margin-top:12px">${campo('Horario de atención', `sucursales.${i}.horario`, { tipo: 'textarea', alto: 60 })}</div>
+
+            <h4>Referentes</h4>
+            <div class="grid c3">
+              ${campo('Gerente de Tienda', `sucursales.${i}.gerente`, { calc: true })}
+              ${campo('Email del gerente', `sucursales.${i}.emailGerente`, { tipo: 'email', calc: true,
+                placeholder: 'recibe copia del reporte' })}
+              ${campo('Gerente de Operaciones', `sucursales.${i}.gerenteOperaciones`, { tipo: 'select', calc: true,
+                opciones: [{ valor: '', texto: '—' }].concat(gops.map(g => ({ valor: g.nombre, texto: g.nombre }))) })}
+              ${campo('Director Técnico', `sucursales.${i}.directorTecnico`)}
+              ${campo('Contacto administrativo', `sucursales.${i}.contactoAdmin`)}
+              ${campo('Email del contacto', `sucursales.${i}.emailContactoAdmin`, { tipo: 'email' })}
+              ${campo('Referente de RRHH', `sucursales.${i}.referenteRRHH`)}
+            </div>
+
+            <h4>Notas</h4>
+            ${campo('', `sucursales.${i}.notas`, { tipo: 'textarea', alto: 70,
+              placeholder: 'Lo que quieras recordar de esta sucursal' })}
+          ` : `
+            <div class="grid c3">
+              ${dato('Gerente de Tienda', s.gerente)}
+              ${dato('Director Técnico', s.directorTecnico)}
+              ${dato('Gerente de Operaciones', s.gerenteOperaciones)}
+              ${dato('Horario', s.horario)}
+              ${dato('Razón social', s.razonSocial)}
+              ${dato('CUIT', s.cuit)}
+              ${dato('ART', s.art)}
+              ${dato('Referente de RRHH', s.referenteRRHH)}
+              ${dato('Email del gerente', s.emailGerente)}
+              ${dato('Dirección', s.direccion)}
+              ${dato('Localidad', s.localidad)}
+              ${dato('Código en el RVD', s.rvd)}
+            </div>
+            ${s.notas ? `<div class="aviso-caja info" style="margin-top:14px">${esc(s.notas)}</div>` : ''}
+          `}
+        </section>`;
+      })()}
 
       <section class="tarjeta">
         <h2>Organigrama</h2>
@@ -1818,7 +1928,7 @@ const App = (() => {
           return `<div class="aviso-caja">
             <strong>${sinCargo.length} de ${plantel.length} personas no tienen el puesto cargado.</strong>
             Vinieron de un listado que trae el nombre y la tienda pero no el cargo.
-            Importá la nómina completa desde <a href="#/sucursales">Sucursales</a> y se
+            Importá la nómina completa desde <a href="#/nomina">Nómina</a> y se
             completan solas: no se duplica a nadie ni se pierde lo que ya cargaste a mano.
           </div>`;
         })()}
@@ -2175,7 +2285,7 @@ const App = (() => {
     return `<h4>Puesto y encuadre</h4>
       ${faltaNomina ? `<div class="aviso-caja">
         <strong>No tiene cargado el puesto.</strong> Esta persona vino de un listado que no trae
-        el cargo. Importá la nómina completa desde <a href="#/sucursales">Sucursales</a> y se
+        el cargo. Importá la nómina completa desde <a href="#/nomina">Nómina</a> y se
         completan el cargo, el nivel y la categoría del convenio.
       </div>` : ''}
       <div class="grid c4">
@@ -2629,153 +2739,61 @@ const App = (() => {
   /* ======================== VISTA: SUCURSALES ======================= */
   let fichaSucursal = null;   // id de la sucursal con la ficha desplegada
 
-  function vistaSucursales() {
+  /* ==================== Sucursales, en Configuración ==================
+     La solapa *Sucursales* se eliminó: era una tercera lista de las mismas
+     doce tiendas —las otras dos son las tarjetas del panel y la tabla de
+     Visitas— y lo único propio que tenía, la ficha editable, estaba escondida
+     dentro de una fila desplegable mientras la misma ficha se leía en la
+     página de la tienda. Ahora cada tienda se edita en su página, y acá queda
+     solo lo que es alta y baja del área. */
+  function panelSucursalesConfig() {
     const e = Store.get();
-    contexto = e;
-    const gops = e.config.gerentesOperaciones || [];
-
-    const ficha = (s, i) => `<tr class="ficha-fila"><td colspan="7"><div class="talent-card">
-      <div class="tc-cab">
-        <div><strong>${esc(s.nombre || s.codigo)}</strong>
-          <span>${esc(s.marca || MARCA_AREA)}${s.operador && s.operador !== s.marca ? ` · operada por ${esc(s.operador)}` : ''}
-            · ${esc(s.razonSocial || 'sin razón social')}${s.cuit ? ` · CUIT ${esc(s.cuit)}` : ''}</span></div>
-        ${s.rvd ? `<span class="chip azul">RVD ${esc(s.rvd)}</span>` : ''}
-      </div>
-
-      <h4>Identificación</h4>
-      <div class="grid c3">
-        ${campo('Código interno', `sucursales.${i}.codigo`)}
-        ${campo('Código en el RVD', `sucursales.${i}.rvd`, { placeholder: 'ej. 008' })}
-        ${campo('Grupo operador', `sucursales.${i}.operador`, { tipo: 'select', calc: true,
-          opciones: [{ valor: '', texto: '—' }].concat(OPERADORES.map(m => ({ valor: m, texto: m }))) })}
-        ${campo('Razón social', `sucursales.${i}.razonSocial`)}
-        ${campo('CUIT', `sucursales.${i}.cuit`)}
-        ${campo('ART', `sucursales.${i}.art`, { tipo: 'select',
-          opciones: [{ valor: '', texto: '—' }].concat(ARTS.map(a => ({ valor: a, texto: a }))) })}
-      </div>
-
-      <h4>Ubicación y horario</h4>
-      <div class="grid c2">
-        ${campo('Dirección', `sucursales.${i}.direccion`)}
-        ${campo('Localidad o partido', `sucursales.${i}.localidad`)}
-      </div>
-      <div style="margin-top:12px">${campo('Horario de atención', `sucursales.${i}.horario`, { tipo: 'textarea', alto: 60 })}</div>
-
-      <h4>Referentes</h4>
-      <div class="grid c3">
-        ${campo('Gerente de Operaciones', `sucursales.${i}.gerenteOperaciones`, { tipo: 'select', calc: true,
-          opciones: [{ valor: '', texto: '—' }].concat(gops.map(g => ({ valor: g.nombre, texto: g.nombre }))) })}
-        ${campo('Director Técnico', `sucursales.${i}.directorTecnico`)}
-        ${campo('Contacto administrativo', `sucursales.${i}.contactoAdmin`)}
-        ${campo('Email del contacto', `sucursales.${i}.emailContactoAdmin`, { tipo: 'email' })}
-        ${campo('Referente de RRHH', `sucursales.${i}.referenteRRHH`)}
-      </div>
-
-      <h4>Notas</h4>
-      ${campo('', `sucursales.${i}.notas`, { tipo: 'textarea', alto: 70, placeholder: 'Lo que quieras recordar de esta sucursal' })}
-    </div></td></tr>`;
+    const dot = Store.dotacionDelArea();
 
     return `
-      <h1 class="titulo">Sucursales de ${esc(e.config.area || 'mi área')}</h1>
-      <p class="subtitulo">
-        Las doce operan bajo la marca Farmatodo y reportan al mismo Gerente de Operaciones.
-        El email del gerente de cada tienda recibe copia automática del reporte de su sucursal.
-      </p>
-
       <section class="tarjeta">
+        <h2>Sucursales del área</h2>
+        <p class="ayuda">
+          Alta y baja de tiendas. Los datos de cada una —razón social, CUIT, ART, referentes,
+          horario— se editan en su propia página, con el botón <em>Editar</em>.
+        </p>
+
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Sucursal</th><th>Localidad</th><th>Tipo</th><th>Gerente de Operaciones</th>
-            <th>Gerente de Tienda</th><th>Email del gerente</th><th></th>
+            <th>Sucursal</th><th>Localidad</th><th>Tipo</th><th>Gerente de Tienda</th>
+            <th class="num">Plantel</th><th></th>
           </tr></thead>
           <tbody>
-          ${e.sucursales.map((s, i) => `<tr>
-            <td><input data-path="sucursales.${i}.nombre" data-calc="1" value="${esc(s.nombre)}" placeholder="${esc(s.codigo || 'Nombre')}">
-              ${s.rvd ? `<div style="font-size:11px;color:var(--texto-suave);margin-top:3px">RVD ${esc(s.rvd)}</div>` : ''}</td>
-            <td><input data-path="sucursales.${i}.localidad" value="${esc(s.localidad)}" style="max-width:130px"></td>
-            <td><select data-path="sucursales.${i}.tipo" data-calc="1">
-              <option value="venta"${s.tipo === 'venta' ? ' selected' : ''}>🏪 Venta</option>
-              <option value="staff"${s.tipo === 'staff' ? ' selected' : ''}>🏢 Staff</option>
-            </select></td>
-            <td><select data-path="sucursales.${i}.gerenteOperaciones" data-calc="1" style="max-width:190px">
-              <option value="">—</option>
-              ${gops.map(g => `<option value="${esc(g.nombre)}"${s.gerenteOperaciones === g.nombre ? ' selected' : ''}>${esc(g.nombre)}</option>`).join('')}
-            </select></td>
-            <td><input data-path="sucursales.${i}.gerente" value="${esc(s.gerente)}"></td>
-            <td><input type="email" data-path="sucursales.${i}.emailGerente" data-calc="1" value="${esc(s.emailGerente)}" placeholder="recibe copia"></td>
-            <td class="num" style="white-space:nowrap">
-              <button class="b sec" data-accion="nueva-visita" data-id="${s.id}" style="padding:5px 12px;font-size:13px">Visitar</button>
-              <a class="mini" href="#/sucursal/${s.id}" style="color:var(--azul);border-color:var(--azul);text-decoration:none;display:inline-block">Ver</a>
-              <button class="mini" data-accion="ficha-sucursal" data-id="${s.id}" style="color:var(--azul);border-color:var(--azul)">${fichaSucursal === s.id ? 'Cerrar' : 'Editar'}</button>
-              <button class="mini" data-accion="borrar-sucursal" data-id="${s.id}">✕</button>
-            </td>
-          </tr>
-          ${fichaSucursal === s.id ? ficha(s, i) : ''}`).join('')}
+            ${e.sucursales.map(x => {
+              const d = dot.porSucursal[x.id] || { personas: 0 };
+              return `<tr>
+                <td><a href="#/sucursal/${x.id}" style="font-weight:700;color:var(--azul)">${esc(x.nombre || x.codigo)}</a>
+                  ${x.rvd ? `<div style="font-size:11px;color:var(--texto-suave);margin-top:2px">RVD ${esc(x.rvd)}</div>` : ''}</td>
+                <td>${esc(x.localidad || '—')}</td>
+                <td class="tipo">${x.tipo === 'staff' ? '🏢 Staff' : '🏪 Tienda'}</td>
+                <td>${esc(x.gerente || '—')}
+                  ${x.emailGerente ? '' : '<span class="chip ambar">sin mail</span>'}</td>
+                <td class="num">${d.personas || '—'}</td>
+                <td class="num" style="white-space:nowrap">
+                  <a class="mini" href="#/sucursal/${x.id}" style="color:var(--azul);border-color:var(--azul);text-decoration:none;display:inline-block">Abrir</a>
+                  <button class="mini" data-accion="borrar-sucursal" data-id="${x.id}">✕</button>
+                </td>
+              </tr>`;
+            }).join('')}
           </tbody>
         </table></div>
+
         <div class="acciones">
           <button class="b" data-accion="agregar-sucursal">+ Agregar sucursal</button>
           <button class="b sec" data-accion="cargar-padron">Cargar padrón del Área 3</button>
         </div>
-      </section>
 
-      <section class="tarjeta">
-        <h2>Nómina del área</h2>
-        <p class="ayuda">
-          El padrón de personas, con todas las sucursales juntas. Pegá la planilla completa
-          —desde la fila de encabezados— y cada persona se reparte a su tienda con su cargo,
-          sus fechas y sus datos de contacto. Es lo que llena la dotación por posición.
-        </p>
-        <textarea id="pegar-nomina" style="min-height:110px"
-          placeholder="CUIL  DNI  Apellido  Nombre  Sexo  ESTATUS  …  TIENDA DONDE ESTÁ  CARGO  …"></textarea>
-        <div class="acciones">
-          <button class="b" data-accion="importar-nomina">Importar la nómina</button>
-          ${PLANTEL_AREA3.length
-            ? `<button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>`
-            : ''}
-        </div>
-        ${PLANTEL_AREA3.length ? `<p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
-          septiembre de 2026 con su tienda, su cargo, su categoría, su jornada y sus fechas de
-          ingreso, sin tener que pegar nada. No trae el CUIL, el DNI, el teléfono, el domicilio
-          ni los mails: eso vive solo en tu navegador y entra al pegar la planilla. Los dos
-          caminos se complementan y ninguno duplica a nadie.</p>` : ''}
-        <div id="resultado-nomina"></div>
-
-        ${(() => {
-          const con = e.sucursales.filter(x => (x.colaboradores || []).length);
-          if (!con.length) return '';
-          const activos = x => (x.colaboradores || []).filter(c => c.activo !== false);
-          const total = con.reduce((a, x) => a + activos(x).length, 0);
-          const noPres = con.reduce((a, x) => a + activos(x).filter(c => esNoPresencial(c).noPresencial).length, 0);
-          const sinPos = con.reduce((a, x) => a + activos(x).filter(c => !c.posicion).length, 0);
-          return `<div class="aviso-caja info" style="margin-top:12px">
-            <strong>${total - noPres} persona${total - noPres === 1 ? '' : 's'} en el piso</strong>
-            en ${con.length} sucursal${con.length === 1 ? '' : 'es'}.
-            ${noPres ? `Otras ${noPres} están en la nómina con bloqueo de título o como no
-              presenciales: cuestan, pero no cubren turno.` : ''}
-            ${sinPos ? `${sinPos} sin posición asignada.` : 'Todas con posición asignada.'}
-          </div>
-          ${(() => {
-            const sinCargo = con.reduce((a, x) =>
-              a + activos(x).filter(c => !String(c.cargo || '').trim()).length, 0);
-            if (!sinCargo) return '';
-            return `<div class="aviso-caja">
-              <strong>${sinCargo} persona${sinCargo === 1 ? '' : 's'} sin puesto cargado.</strong>
-              El listado corto del área trae el nombre y la tienda, pero no el cargo: sin eso
-              el organigrama no puede ordenar a nadie por posición. Pegá acá abajo la nómina
-              completa —la que tiene las columnas CARGO y NIVEL DE CARGO— y se completa sola.
-            </div>`;
-          })()}`;
-        })()}
-      </section>
-
-      ${e.sucursales.some(s => s.notas) ? `<section class="tarjeta">
-        <h2>Puntos a confirmar</h2>
-        <ul style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.7">
-          ${e.sucursales.filter(s => s.notas).map(s =>
-            `<li><strong>${esc(s.nombre || s.codigo)}:</strong> ${esc(s.notas)}</li>`).join('')}
-        </ul>
-      </section>` : ''}`;
+        ${e.sucursales.some(x => x.notas) ? `<h4>Puntos a confirmar</h4>
+          <ul style="margin:0;padding-left:20px;font-size:13.5px;line-height:1.7">
+            ${e.sucursales.filter(x => x.notas).map(x =>
+              `<li><strong>${esc(x.nombre || x.codigo)}:</strong> ${esc(x.notas)}</li>`).join('')}
+          </ul>` : ''}
+      </section>`;
   }
 
   /* ========================== VISTA: CONFIG ========================= */
@@ -2784,7 +2802,9 @@ const App = (() => {
     contexto = e.config;
     return `
       <h1 class="titulo">Configuración</h1>
-      <p class="subtitulo">Destinatarios de los reportes y parámetros de cálculo.</p>
+      <p class="subtitulo">Sucursales del área, destinatarios de los reportes y parámetros de cálculo.</p>
+
+      ${panelSucursalesConfig()}
 
       <section class="tarjeta">
         <h2>Coordinación y destinatarios</h2>
@@ -3175,7 +3195,7 @@ const App = (() => {
 
         ${!s.emailGerente ? `<div class="aviso-caja">
           <strong>Falta el email del Gerente de Tienda.</strong> Sin eso el informe le llega
-          solo al Gerente de Operaciones. Cargalo en <a href="#/sucursales">Sucursales</a>.
+          solo al Gerente de Operaciones. Cargalo en <a href="#/sucursal/${s.id}">la ficha de la tienda</a>.
         </div>` : ''}
 
         ${v.envioChecklist && v.envioChecklist.enviado ? `<div class="aviso-caja info">
@@ -4202,7 +4222,12 @@ const App = (() => {
       vistaActual = () => vistaEstadistica(tab);
       html = vistaEstadistica(tab);
     }
-    else if (ruta[0] === 'sucursales') { vistaActual = vistaSucursales; html = vistaSucursales(); }
+    else if (ruta[0] === 'sucursales') {
+      /* La solapa se eliminó, pero la ruta sigue viva: había enlaces guardados
+         y el panel ya es la lista de sucursales que servía para trabajar. */
+      location.replace(location.href.split('#')[0] + '#/red');
+      vistaActual = vistaRed; html = vistaRed();
+    }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
       const id = ruta[1], tab = ruta[2] || 'minutas';
