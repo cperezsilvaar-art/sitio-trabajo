@@ -200,7 +200,13 @@ const Reporte = (() => {
     /* 2. Reclamos */
     if (typeof Store !== 'undefined' && typeof resumirReclamos === 'function') {
       const abiertos = Store.reclamosDe(sucursal.id, true);
-      const nuevos = Store.reclamosDe(sucursal.id).filter(x => x.origenVisitaId === visita.id);
+      /* «Planteado en esta visita» se decide por la fecha, no por desde qué
+         pantalla se cargó: los reclamos ya no se dan de alta adentro de la
+         visita. `origenVisitaId` sigue valiendo para los que se guardaron
+         cuando sí se hacía. */
+      const deLaVisita = x => x.origenVisitaId === visita.id ||
+                              (!x.origenVisitaId && x.fecha && x.fecha === visita.fecha);
+      const nuevos = Store.reclamosDe(sucursal.id).filter(deLaVisita);
       if (abiertos.length || nuevos.length) {
         L.push(++n + '. RECLAMOS DE LOS COLABORADORES');
         if (nuevos.length) {
@@ -212,7 +218,7 @@ const Reporte = (() => {
             if (String(x.detalle || '').trim()) L.push(`    ${String(x.detalle).trim()}`);
           });
         }
-        const previos = abiertos.filter(x => x.origenVisitaId !== visita.id);
+        const previos = abiertos.filter(x => !deLaVisita(x));
         if (previos.length) {
           L.push(`- Abiertos de visitas anteriores: ${previos.length}`);
           previos.forEach(x => {

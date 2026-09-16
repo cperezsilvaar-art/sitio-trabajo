@@ -13,9 +13,33 @@ resuelve, y casi nunca se resuelve el mismo día. Si viviera dentro de la visita
 al abrir la visita siguiente empezaría de cero.
 
 Por eso los reclamos tienen su propia pestaña, su propio estado y su propio
-reloj. En la recorrida aparecen las dos puntas: **los que quedaron abiertos de
-antes** —que es lo primero que la gente va a preguntar— y el campo para **anotar
-uno nuevo** en el momento.
+reloj.
+
+## Un solo lugar: `#/reclamos`
+
+Hasta septiembre de 2026 había **dos altas**: la de esta pantalla y otra al pie
+del check list de la visita. Eran la misma cosa con distintos campos, y el
+problema no era el espacio que ocupaban: era tener que acordarse de cuál de las
+dos estaba más completa. La respuesta siempre era la otra.
+
+Ahora el alta y el seguimiento están **acá y en ningún otro lado**. Lo que
+cambia es cómo se llega:
+
+- **`#/reclamos/<sucursal>`** abre la misma pantalla filtrada por una tienda.
+  Los indicadores de arriba pasan a ser los de esa tienda, la columna *Sucursal*
+  desaparece de la tabla porque sobra, el alta viene con la tienda ya elegida y
+  el autocompletado de nombres ofrece **su** plantel y no las 139 del área.
+- **Al pie del check list de la visita** quedó el recordatorio, no el
+  formulario: cuántos hay abiertos, quiénes son y desde cuándo, con un botón
+  que lleva a `#/reclamos/<sucursal>`. Es lo que hace falta parado en la tienda
+  —es lo primero que la gente pregunta—, sin duplicar dónde se carga.
+- **En la ficha de la tienda**, el indicador *Reclamos abiertos* es un enlace al
+  mismo lugar.
+
+Que un reclamo cuente como **planteado en esta visita** ya no depende de desde
+qué pantalla se cargó, sino de que su fecha coincida con la de la visita. El
+campo `origenVisitaId` sigue en el modelo y sigue valiendo para los que se
+guardaron cuando el alta de la visita existía.
 
 ## El reloj
 
@@ -58,8 +82,10 @@ suerte, es un problema de carga o de criterio que va a volver el mes que viene.
 ## Qué conviene registrar y qué no
 
 **Sí:** el nombre, el tipo y la fecha en que lo planteó. Con eso alcanza para
-abrirlo en la tienda. El detalle —con las palabras del colaborador, cuanto más
-textual mejor— y el monto estimado se completan después, desde *Reclamos*.
+abrirlo en la tienda: el botón **+ Registrar** pide nada más que esos tres datos
+y la fila queda abierta para completarla. El detalle —con las palabras del
+colaborador, cuanto más textual mejor— y el monto estimado se completan
+después.
 
 **La respuesta también, aunque sea que no procede.** Es el campo que más se
 saltea y el único que cierra el circuito de verdad: si no quedó escrito qué se le
@@ -67,9 +93,10 @@ contestó y cuándo, para el colaborador nadie le contestó.
 
 ## Adónde llega
 
-- **Panel de la sucursal**: un indicador con los abiertos y cuántos se pasaron.
-- **Recorrida de la visita**: los abiertos, para repasarlos antes de que te los
-  pregunten.
+- **Panel de la sucursal**: un indicador con los abiertos y cuántos se pasaron,
+  que además es el enlace a esta pantalla filtrada por esa tienda.
+- **Check list de la visita**: los abiertos, para repasarlos antes de que te los
+  pregunten, y el botón para ir a anotar uno.
 - **Reporte de la visita** al Gerente de Operaciones: los planteados en esa
   visita con su detalle, los que vienen de antes con su antigüedad, y los que
   todavía no tienen respuesta como dato pendiente.

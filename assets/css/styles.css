@@ -199,14 +199,17 @@ textarea { min-height: 96px; resize: vertical; line-height: 1.5; }
 table input, table select { padding: 6px 8px; font-size: 13px; }
 input.num { text-align: right; font-variant-numeric: tabular-nums; }
 
-button.b {
+button.b, a.b {
   background: var(--azul); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px;
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
-button.b:hover { background: var(--azul-claro); }
+button.b:hover, a.b:hover { background: var(--azul-claro); }
+/* Un enlace que se ve como botón necesita que le digan las dos cosas que el
+   botón trae de fábrica: que no se subraye y que ocupe su caja. */
+a.b { display: inline-block; text-decoration: none; line-height: 1.5; }
 button.b.grande { padding: 13px 26px; font-size: 15.5px; }
-button.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
-button.b.sec:hover { background: var(--panel-alt); }
+button.b.sec, a.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
+button.b.sec:hover, a.b.sec:hover { background: var(--panel-alt); }
 button.b.peligro { background: transparent; color: var(--rojo-alerta); border: 1px solid var(--rojo-alerta); }
 button.b.peligro:hover { background: rgba(192,57,43,.08); }
 button.mini {

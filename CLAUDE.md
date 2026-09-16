@@ -170,10 +170,20 @@ prestó— y por eso van en grupos separados.
 El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
 con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó por
-repetirlo—. Se quedó con lo que aquella tenía y él no: los compromisos abiertos
-de la visita anterior arriba, y los reclamos que se levantan en el pasillo al
-pie. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero no se
-muestra ni entra en ningún reporte.
+repetirlo—. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero
+no se muestra ni entra en ningún reporte.
+
+**Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
+segundo formulario al pie del check list: era la misma cosa con distintos campos
+y obligaba a acordarse de cuál de las dos pantallas estaba más completa.
+`#/reclamos/<sucursalId>` abre esa misma pantalla filtrada por una tienda —KPIs,
+patrones, alta preseleccionada y autocompletado de su plantel—, y es a donde
+llevan tanto el botón del pie del check list como el indicador *Reclamos
+abiertos* de la ficha de la tienda. En la visita quedó el recordatorio —cuántos
+hay abiertos y quiénes—, no el formulario. Que un reclamo cuente como
+«planteado en esta visita» en `Reporte.textoVisita()` lo decide ahora la fecha,
+no la pantalla de origen; `origenVisitaId` sigue valiendo para lo ya guardado.
+Documentado en `docs/reclamos.md`.
 
 ## Verificación antes de commitear
 
