@@ -861,7 +861,7 @@ const App = (() => {
       </div>
 
       <label class="marca-check"
-        title="Lo que marques acá sale en el reporte diario cuando falten tres días o menos">
+        title="Lo que marques acá sale en el informe del check list cuando falten tres días o menos">
         <input type="checkbox" data-item-check="${i.id}|avisarEnTienda"${i.avisarEnTienda ? ' checked' : ''}>
         Hay que avisarlo en la tienda
       </label>
@@ -878,7 +878,6 @@ const App = (() => {
      que es la única escala donde todavía se puede hacer algo. Se carga a la
      mañana con el dato de ayer y se manda antes de que abran las tiendas. */
   let diarioFecha = null;      // día que se está mirando
-  let diarioAbierta = null;    // sucursal con el detalle desplegado
 
   const ayerISO = () => new Date(Date.now() - 864e5).toISOString().slice(0, 10);
 
@@ -907,13 +906,17 @@ const App = (() => {
 
       <section class="tarjeta">
         <div class="cabecera-suc">
-          <h2>Ausencias con certificado</h2>
+          <h2>Ausencias del área</h2>
           <span class="chip${enCurso.length ? ' ambar' : ''}">${enCurso.length} en curso</span>
+          ${(() => {
+            const sinPapel = enCurso.filter(x => !tieneCertificado(x.ausencia)).length;
+            return sinPapel ? `<span class="chip rojo">${sinPapel} sin justificar</span>` : '';
+          })()}
         </div>
         <p class="ayuda">
-          La ausencia larga se anota una vez, con la fecha del certificado, y el panel avisa
-          cuando se acerca el alta. Las faltas sueltas del día se cargan más abajo, en cada
-          sucursal.
+          Elegí a la persona y el panel completa su sucursal, su antigüedad y lo que le
+          corresponde por ley. Si todavía no trajo el certificado, guardala igual: queda
+          <strong>pendiente de justificar</strong> hasta que lo presente.
         </p>
 
         <div class="acciones" style="align-items:flex-end">
@@ -935,8 +938,8 @@ const App = (() => {
         ${ausenciaAbierta ? formularioAusencia(ausenciaAbierta) : ''}
 
         ${enCurso.length ? `<div class="tabla-scroll" style="margin-top:14px"><table>
-          <thead><tr><th>Persona</th><th>Sucursal</th><th>Motivo</th><th>Desde</th>
-            <th>Hasta</th><th>Situación</th><th>Reserva del puesto</th><th></th></tr></thead>
+          <thead><tr><th>Persona</th><th>Sucursal</th><th>Licencia</th><th>Desde</th>
+            <th>Hasta</th><th>Certificado</th><th>Situación</th><th>Reserva del puesto</th><th></th></tr></thead>
           <tbody>${enCurso.map(x => {
             const c = Store.colaboradorPorId(x.colaboradorId);
             const s = Store.sucursal(x.sucursalId);
@@ -944,11 +947,17 @@ const App = (() => {
             const cob = cobertura(x.ausencia, c, antiguedadAnios(c.fechaIngreso));
             return `<tr>
               <td><button class="mini" data-accion="abrir-ausencia" data-id="${c.id}" data-suc="${s.id}"
-                style="color:var(--azul);border-color:var(--azul)">${esc(c.nombre)}</button></td>
+                style="color:var(--azul);border-color:var(--azul);white-space:nowrap">${esc(c.nombre)}</button></td>
               <td>${esc(s.nombre || s.codigo)}</td>
               <td class="tipo">${esc((MOTIVOS_AUSENCIA_LARGA.find(m => m.id === x.ausencia.motivo) || {}).nombre || '—')}</td>
               <td class="tipo">${fmtFecha(x.ausencia.desde)}</td>
               <td class="tipo">${x.ausencia.hasta ? fmtFecha(x.ausencia.hasta) : '<span class="chip ambar">sin alta</span>'}</td>
+              <td class="tipo">
+                <label class="marca-check" style="margin:0;font-size:12.5px">
+                  <input type="checkbox" data-aus-certificado="${c.id}|${x.ausencia.id}"${tieneCertificado(x.ausencia) ? ' checked' : ''}>
+                  ${tieneCertificado(x.ausencia) ? 'presentado' : 'no lo trajo'}
+                </label>
+              </td>
               <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
               <td class="tipo">${cob.aplica
                 ? `hasta el ${fmtFecha(cob.finReserva)}`
@@ -974,10 +983,10 @@ const App = (() => {
     const propias = (c.ausencias || []).slice().reverse();
 
     return `<div class="aviso-caja info" style="margin-top:14px">
-      <strong>${esc(c.nombre)}</strong> — ${esc(s ? (s.nombre || s.codigo) : '')}
-      ${c.cargo ? ` · ${esc(c.cargo)}` : ''}
+      <strong>${esc(c.nombre)}</strong>${c.cargo ? ` · ${esc(c.cargo)}` : ''}
 
       <div class="grid c4" style="margin-top:12px">
+        ${dato('Sucursal', s ? (s.nombre || s.codigo) : 'sin sucursal')}
         ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : 'sin fecha de ingreso')}
         <label class="campo"><span>Cargas de familia</span>
           <select data-colab-campo="${c.id}|cargasFamilia">
@@ -996,17 +1005,25 @@ const App = (() => {
       </p>
 
       <div class="grid c4" style="margin-top:10px">
-        <label class="campo"><span>Desde (certificado)</span>
-          <input type="date" id="aus-desde" value="${hoyISO()}"></label>
-        <label class="campo"><span>Hasta (alta prevista)</span>
-          <input type="date" id="aus-hasta"></label>
-        <label class="campo"><span>Motivo</span>
+        <label class="campo"><span>Tipo de licencia</span>
           <select id="aus-motivo">
             ${MOTIVOS_AUSENCIA_LARGA.map(m => `<option value="${m.id}">${esc(m.nombre)}</option>`).join('')}
           </select></label>
+        <label class="campo"><span>Desde</span>
+          <input type="date" id="aus-desde" value="${hoyISO()}"></label>
+        <label class="campo"><span>Hasta (según el certificado)</span>
+          <input type="date" id="aus-hasta"></label>
         <label class="campo"><span>Diagnóstico o nota</span>
           <input id="aus-nota" placeholder="Lo que dice el certificado"></label>
       </div>
+      <label class="marca-check">
+        <input type="checkbox" id="aus-certificado">
+        Ya trajo el certificado
+      </label>
+      <p class="ayuda" style="margin-top:4px">
+        Sin esa marca la ausencia queda <strong>pendiente de justificar</strong> y aparece
+        primera en los avisos, hasta que la persona presente el papel.
+      </p>
       <div class="acciones">
         <button class="b" data-accion="guardar-ausencia" data-id="${c.id}">Guardar la ausencia</button>
         <button class="b sec" data-accion="cerrar-ausencia">Cancelar</button>
@@ -1028,105 +1045,15 @@ const App = (() => {
     contexto = e;
     visitaEnCurso = null;
 
-    const fechas = Store.fechasDiarias();
-    if (!diarioFecha) diarioFecha = fechas[0] || ayerISO();
-    const dia = Store.diarioDe(diarioFecha);
-    const calc = calcularDiario(dia, e.sucursales, e.config.parametros);
-    const t = calc.total;
-    const alertas = alertasDiarias(calc);
-    const p = e.config.parametros;
-
-    const opcionesFecha = Array.from(new Set(fechas.concat([diarioFecha])))
-      .sort((a, b) => String(b).localeCompare(String(a)));
-
     return `
       <h1 class="titulo">Presentismo del día</h1>
       <p class="subtitulo">
-        Quién vino y quién no. Se carga con el dato del día anterior y se manda a Operaciones
-        antes de la apertura: acá todavía se puede mover gente, en la estadística del mes ya no.
-        La venta del día va aparte, en <a href="#/operacion">Ventas del día</a>.
+        Quién no está hoy, desde cuándo y hasta cuándo. Se anota una vez, con la fecha del
+        certificado, y el panel avisa cuando se acerca el alta. Mientras no haya certificado,
+        la falta queda <strong>pendiente de justificar</strong>.
       </p>
 
-      ${panelAusenciasLargas()}
-
-      <section class="tarjeta">
-        <div class="acciones" style="align-items:flex-end;flex-wrap:wrap">
-          <label class="campo" style="max-width:200px">
-            <span>Día reportado</span>
-            <input type="date" id="diario-fecha" value="${esc(diarioFecha)}">
-          </label>
-          ${opcionesFecha.length > 1 ? `<label class="campo" style="max-width:220px">
-            <span>Días cargados</span>
-            <select id="diario-historico">
-              ${opcionesFecha.map(f => `<option value="${esc(f)}"${f === diarioFecha ? ' selected' : ''}>${fmtFecha(f)}</option>`).join('')}
-            </select>
-          </label>` : ''}
-          <button class="b sec" data-accion="prellenar-diario">Traer la dotación del padrón</button>
-          ${dia ? `<button class="b peligro" data-accion="borrar-diario">Borrar este día</button>` : ''}
-        </div>
-      </section>
-
-      <div class="kpis">
-        ${kpi('Ausentismo del día', t.pctAusentismo === null ? '—' : fmtPct(t.pctAusentismo, 1),
-              `${t.ausentes} de ${t.planificados} planificadas`,
-              t.pctAusentismo !== null && t.pctAusentismo > p.umbralAusentismo ? 'alerta' : 'ok')}
-        ${(() => {
-          const sinMinimo = e.sucursales.filter(x => !x.minimoTurno).length;
-          /* Lo que Operaciones decide no es un promedio: es cuántas tiendas
-             quedaron abajo del mínimo. El porcentaje va de nota. */
-          const valor = t.conMinimo
-            ? `${t.bajoMinimo} de ${t.conMinimo}`
-            : '—';
-          const nota = t.conMinimo
-            ? `bajo el mínimo · ${fmtPct(t.cobertura, 0)} de cobertura` +
-              (sinMinimo ? ` · falta el mínimo de ${sinMinimo}` : '')
-            : 'definí el mínimo de cada sucursal para poder medirla';
-          return kpi('Sucursales bajo el mínimo', valor, nota,
-            t.bajoMinimo ? 'alerta' : t.conMinimo ? 'ok' : 'aviso');
-        })()}
-        ${kpi('FTE real del día', t.fteReal === null ? '—' : fmtNum(t.fteReal, 1),
-              `planificados ${t.planificados} − ausentes ${t.ausentes}`)}
-        ${kpi('Novedades y bajas', t.novedades, t.novedades ? 'vacantes a cubrir' : 'ninguna en el día',
-              t.novedades ? 'alerta' : 'ok')}
-      </div>
-
-      ${alertas.length ? `<div class="aviso-caja${alertas.some(a => a.nivel === 'critico') ? '' : ' info'}">
-        <strong>Alertas del día</strong>
-        <ul>${alertas.slice(0, 8).map(a =>
-          `<li><strong>${esc(a.titulo)}.</strong> ${esc(a.texto)}</li>`).join('')}</ul>
-      </div>` : ''}
-
-      <section class="tarjeta">
-        <h2>Carga del día</h2>
-        <p class="ayuda">
-          De a una sucursal. La mayoría de los días la mayoría de las tiendas no tiene nada
-          para reportar: esas se despachan con <em>Sin novedades</em> y listo. Solo se abre
-          la que tiene algo.
-        </p>
-        <div class="fichas-suc">
-          ${e.sucursales.map(s => fichaSucursalDia(s, dia, p)).join('')}
-        </div>
-      </section>
-
-      ${panelSucursalDia(dia, p)}
-
-      <section class="tarjeta">
-        <h2>Notas y envío</h2>
-        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
-          <textarea id="diario-notas" style="min-height:70px"
-            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
-        </label>
-        <div class="acciones">
-          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
-          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
-          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
-        </div>
-      </section>
-
-      <section class="tarjeta">
-        <h2>Vista previa</h2>
-        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
-      </section>`;
+      ${panelAusenciasLargas()}`;
   }
 
   /* ====================== VISTA: VENTAS DEL DÍA ======================
@@ -1155,8 +1082,8 @@ const App = (() => {
       <p class="subtitulo">
         El volumen que hubo que atender. No mueve ningún indicador de RRHH: está para leer
         la cobertura contra la venta, porque el mismo hueco de personal pesa distinto en un
-        día flojo que en uno de promoción. El presentismo va aparte, en
-        <a href="#/diario">Presentismo del día</a>.
+        día flojo que en uno de promoción. La gente con turno sale del padrón, descontando a
+        quien tiene una licencia abierta en <a href="#/diario">Presentismo</a>.
       </p>
 
       <section class="tarjeta">
@@ -1188,8 +1115,8 @@ const App = (() => {
         ${kpi('Venta por persona presente',
               v.presentes && v.ayerConPresentismo ? dinero(v.ayerConPresentismo / v.presentes) : '—',
               v.presentes
-                ? `${v.presentes} personas en las ${v.tiendasConAmbos} tienda${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo`
-                : 'cargá el presentismo del día para poder cruzarlo')}
+                ? `${v.presentes} personas con turno en ${v.tiendasConAmbos} tienda${v.tiendasConAmbos === 1 ? '' : 's'}, descontando licencias`
+                : 'sin plantel cargado no se puede cruzar')}
       </div>` : ''}
 
       <section class="tarjeta">
@@ -1245,151 +1172,6 @@ const App = (() => {
         </div>
         <pre class="reporte" id="vista-ventas" style="margin-top:14px">${esc(Reporte.textoVentasDia(diarioFecha, e.config))}</pre>
       </section>` : ''}`;
-  }
-
-  /**
-   * Botón-ficha de una sucursal en el reporte del día. Dice de un vistazo en
-   * qué estado está: sin cargar, sin novedades, o con algo que mirar.
-   */
-  function fichaSucursalDia(s, dia, p) {
-    const d = (dia && dia.sucursales && dia.sucursales[s.id]) || null;
-    const cargada = d && String(d.planificados || '').trim() !== '';
-    const k = calcularDiarioSucursal(d || {}, p);
-    const abierta = diarioAbierta === s.id;
-
-    let estado = 'pendiente', marca = '○', detalle = 'sin cargar';
-    if (cargada) {
-      const problema = (k.cobertura !== null && k.cobertura < 1) ||
-                       k.novedades > 0 ||
-                       (k.pctAusentismo !== null && k.pctAusentismo > p.umbralAusentismo * 2);
-      if (problema) {
-        estado = 'alerta'; marca = '▲';
-        detalle = [k.ausentes ? `${k.ausentes} ausente${k.ausentes === 1 ? '' : 's'}` : '',
-                   k.novedades ? `${k.novedades} novedad${k.novedades === 1 ? '' : 'es'}` : '',
-                   k.cobertura !== null && k.cobertura < 1 ? 'bajo el mínimo' : '']
-                   .filter(Boolean).join(' · ');
-      } else {
-        estado = 'ok'; marca = '✓';
-        detalle = k.ausentes ? `${k.ausentes} ausente${k.ausentes === 1 ? '' : 's'}, cubierto`
-                             : `${k.presentes} en el piso`;
-      }
-    }
-
-    return `<button class="ficha-suc ${estado}${abierta ? ' abierta' : ''}"
-      data-accion="abrir-diario" data-id="${s.id}">
-      <span class="marca">${marca}</span>
-      <span class="nombre">${esc(s.nombre || s.codigo)}</span>
-      <span class="detalle">${esc(detalle)}</span>
-    </button>`;
-  }
-
-  /** El detalle de la sucursal elegida: lo único que se edita a la vez. */
-  function panelSucursalDia(dia, p) {
-    const e = Store.get();
-    const s = diarioAbierta ? Store.sucursal(diarioAbierta) : null;
-    if (!s) {
-      const faltan = e.sucursales.filter(x => {
-        const d = (dia && dia.sucursales && dia.sucursales[x.id]) || null;
-        return !d || String(d.planificados || '').trim() === '';
-      });
-      return `<div class="aviso-caja info">
-        ${faltan.length
-          ? `Faltan cargar ${faltan.length} de ${e.sucursales.length} sucursales. Elegí una arriba para empezar.`
-          : 'Están todas cargadas. El reporte de abajo ya se puede mandar.'}
-      </div>`;
-    }
-
-    const d = (dia && dia.sucursales && dia.sucursales[s.id]) || null;
-    const k = calcularDiarioSucursal(d || {}, p);
-    const val = c => esc(d ? (d[c] ?? '') : '');
-    const num = (c, ancho, titulo) =>
-      `<input class="num" type="number" min="0" step="any" data-diario="${s.id}|${c}" ` +
-      `value="${val(c)}" style="width:${ancho}px"${titulo ? ` title="${esc(titulo)}"` : ''}>`;
-
-    const ausentes = (d && d.ausentes) || [];
-    const novedades = (d && d.novedades) || [];
-    /* Solo los que cubren turno: al que tiene bloqueo de título no se lo marca
-       ausente porque nunca estuvo previsto en el piso. */
-    const plantel = (s.colaboradores || [])
-      .filter(c => c.activo !== false && !esNoPresencial(c).noPresencial);
-    const siguiente = proximaSinCargar(dia, s.id);
-
-    return `<section class="tarjeta">
-      <div class="cabecera-suc">
-        <h2>${esc(Store.etiquetaSucursal(s))}</h2>
-        ${k.cobertura !== null
-          ? `<span class="chip ${k.cobertura < 1 ? 'rojo' : k.cobertura < 1.1 ? 'ambar' : 'verde'}">Cobertura ${fmtPct(k.cobertura, 0)}</span>`
-          : ''}
-        ${k.fteReal !== null ? `<span class="chip azul">FTE del día ${fmtNum(k.fteReal, 1)}</span>` : ''}
-      </div>
-
-      <div class="grid c3">
-        <label class="campo" title="Personas que tenían que trabajar según la grilla">
-          <span>Tenían que trabajar</span>${num('planificados', 90)}</label>
-        <label class="campo" title="De las que tenía previstas, con cuántas la tienda funciona sin resentir la atención. Se guarda para todos los días.">
-          <span>Mínimo del día${s.minimoTurno ? '' : ' ⚠'}</span>${num('minimo', 90)}</label>
-        <label class="campo" title="Se deduce como planificados menos ausentes. Escribilo solo si no coincide">
-          <span>Presentes (se deduce: ${k.presentes})</span>${num('presentes', 90)}</label>
-      </div>
-
-      ${s.minimoTurno ? '' : `<div class="aviso-caja info">
-        <strong>Falta definir el mínimo de ${esc(s.nombre || s.codigo)}.</strong>
-        De las personas que tiene previstas en el día, con cuántas puede funcionar sin
-        resentir la atención: cubriendo la apertura, el cierre y el mostrador. No se estima
-        solo porque depende de la tienda. Se carga una vez y queda para todos los días;
-        hasta entonces la cobertura de esta sucursal no se calcula.
-      </div>`}
-
-      <h3>¿Faltó alguien?</h3>
-      ${ausentes.length ? ausentes.map((a, i) => `<div class="linea-item">
-        <input list="plantel-${s.id}" data-ausente="${s.id}|${i}|nombre" value="${esc(a.nombre || '')}"
-          placeholder="Nombre" class="nombre-item">
-        <select data-ausente="${s.id}|${i}|motivo">
-          ${MOTIVOS_AUSENCIA_DIA.map(m => `<option value="${m.id}"${a.motivo === m.id ? ' selected' : ''}>${esc(m.nombre)}</option>`).join('')}
-        </select>
-        <button class="b peligro mini" data-accion="quitar-ausente" data-id="${s.id}" data-i="${i}">Quitar</button>
-      </div>`).join('') : '<p class="vacio">Nadie faltó.</p>'}
-      <datalist id="plantel-${s.id}">${plantel.map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}</datalist>
-      <div class="acciones">
-        <button class="b sec mini" data-accion="agregar-ausente" data-id="${s.id}">+ Agregar ausente</button>
-      </div>
-
-      <h3>Novedades del día</h3>
-      ${novedades.length ? novedades.map((n, i) => `<div class="linea-item">
-        <input list="plantel-${s.id}" data-novedad="${s.id}|${i}|nombre" value="${esc(n.nombre || '')}"
-          placeholder="Nombre" class="nombre-item">
-        <select data-novedad="${s.id}|${i}|tipo">
-          ${TIPOS_NOVEDAD_DIA.map(x => `<option value="${x.id}"${n.tipo === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
-        </select>
-        <button class="b peligro mini" data-accion="quitar-novedad" data-id="${s.id}" data-i="${i}">Quitar</button>
-      </div>`).join('') : '<p class="vacio">Sin renuncias, desvinculaciones ni licencias largas.</p>'}
-      <div class="acciones">
-        <button class="b sec mini" data-accion="agregar-novedad" data-id="${s.id}">+ Agregar novedad</button>
-      </div>
-
-      <label class="campo" style="margin-top:14px"><span>Nota de la sucursal</span>
-        <input data-diario="${s.id}|nota" value="${esc((d && d.nota) || '')}"
-          placeholder="Lo que hay que saber de esta tienda hoy.">
-      </label>
-
-      <div class="acciones" style="margin-top:16px">
-        <button class="b" data-accion="sin-novedades" data-id="${s.id}">Sin novedades: dotación completa</button>
-        ${siguiente
-          ? `<button class="b sec" data-accion="abrir-diario" data-id="${siguiente.id}">Pasar a ${esc(siguiente.nombre || siguiente.codigo)} →</button>`
-          : '<button class="b sec" data-accion="cerrar-diario">Cerrar</button>'}
-      </div>
-    </section>`;
-  }
-
-  /** Primera sucursal sin cargar después de la actual, para encadenar la carga. */
-  function proximaSinCargar(dia, desdeId) {
-    const lista = Store.get().sucursales;
-    const i = lista.findIndex(x => x.id === desdeId);
-    const orden = lista.slice(i + 1).concat(lista.slice(0, i + 1));
-    return orden.find(x => {
-      const d = (dia && dia.sucursales && dia.sucursales[x.id]) || null;
-      return !d || String(d.planificados || '').trim() === '';
-    }) || null;
   }
 
   /* ===================== VISTA: CESIONES Y BAJAS ====================
@@ -4430,20 +4212,6 @@ const App = (() => {
       }
     });
 
-    /* Carga del reporte diario. Se resuelve por sucursal y campo en vez de por
-       ruta, porque la clave del día es un id que no puede viajar en un
-       data-path (setPath parte por el punto y armaría objetos anidados). */
-    function campoDiario(ref) {
-      const [sucId, campo] = String(ref).split('|');
-      return { d: Store.diarioSucursal(diarioFecha, sucId), campo, sucId };
-    }
-
-    function itemDiario(ref) {
-      const [sucId, i, campo] = String(ref).split('|');
-      const d = Store.diarioSucursal(diarioFecha, sucId);
-      return { d, i: Number(i), campo };
-    }
-
     /* Check list: el punto y el campo viajan en data-cl porque las claves son
        ids de punto y setPath partiría por el punto de la ruta. */
     cont.addEventListener('input', ev => {
@@ -4541,40 +4309,18 @@ const App = (() => {
       }
     });
 
-    cont.addEventListener('input', ev => {
-      const el = ev.target.closest('[data-diario], [data-ausente], [data-novedad]');
-      if (el) {
-        if (el.dataset.diario) {
-          const { d, campo, sucId } = campoDiario(el.dataset.diario);
-          d[campo] = el.value;
-          /* El mínimo para abrir es de la tienda, no del día: se guarda en la
-             sucursal para que los días siguientes ya lo traigan. */
-          if (campo === 'minimo') {
-            const suc = Store.sucursal(sucId);
-            if (suc) suc.minimoTurno = el.value === '' ? null : Number(el.value);
-          }
-        } else if (el.dataset.ausente) {
-          const { d, i, campo } = itemDiario(el.dataset.ausente);
-          if (d.ausentes[i]) d.ausentes[i][campo] = el.value;
-        } else {
-          const { d, i, campo } = itemDiario(el.dataset.novedad);
-          if (d.novedades[i]) d.novedades[i][campo] = el.value;
-        }
-        guardarDiferido();
+    cont.addEventListener('change', ev => {
+      const cert = ev.target.closest('[data-aus-certificado]');
+      if (cert) {
+        const [colabId, ausId] = cert.dataset.ausCertificado.split('|');
+        const a = Store.ausencia(colabId, ausId);
+        if (a) { a.certificado = cert.checked; Store.save(); }
+        refrescar();
+        avisar(cert.checked ? 'Certificado presentado.' : 'Vuelve a quedar pendiente de justificar.');
         return;
       }
-      if (ev.target.id === 'diario-notas') {
-        Store.asegurarDiario(diarioFecha).notas = ev.target.value;
-        guardarDiferido();
-      }
-    });
-
-    cont.addEventListener('change', ev => {
-      const el = ev.target.closest('[data-diario], [data-ausente], [data-novedad]');
-      if (el) { Store.save(); refrescar(); return; }
       if (ev.target.id === 'diario-fecha' || ev.target.id === 'diario-historico') {
         diarioFecha = ev.target.value || ayerISO();
-        diarioAbierta = null;
         refrescar();
       }
     });
@@ -4791,19 +4537,23 @@ const App = (() => {
 
       if (a === 'guardar-ausencia') {
         const desde = valorDe('#aus-desde');
-        if (!desde) return avisar('Poné la fecha de inicio que dice el certificado.', 'error');
+        if (!desde) return avisar('Poné el día en que empezó la ausencia.', 'error');
         const hasta = valorDe('#aus-hasta');
         if (hasta && hasta < desde) return avisar('El alta no puede ser anterior al inicio.', 'error');
+        const cert = !!($('#aus-certificado') || {}).checked;
         Store.agregarAusencia(btn.dataset.id, {
           desde, hasta,
           motivo: valorDe('#aus-motivo') || 'enfermedad',
-          diagnostico: valorDe('#aus-nota')
+          diagnostico: valorDe('#aus-nota'),
+          certificado: cert
         });
         ausenciaAbierta = null;
         refrescar();
-        avisar(hasta
-          ? `Ausencia registrada hasta el ${fmtFecha(hasta)}. Te aviso cuando se acerque.`
-          : 'Ausencia registrada sin fecha de alta: va a quedar avisando hasta que la cargues.');
+        avisar(!cert
+          ? 'Ausencia registrada, pendiente de justificar hasta que traiga el certificado.'
+          : hasta
+            ? `Ausencia registrada hasta el ${fmtFecha(hasta)}. Te aviso cuando se acerque.`
+            : 'Ausencia registrada sin fecha de alta: va a quedar avisando hasta que la cargues.');
         return;
       }
 
@@ -5102,87 +4852,6 @@ const App = (() => {
         avisar('Borrado.');
       }
 
-      /* --- reporte diario --- */      /* --- reporte diario --- */
-      if (a === 'abrir-diario') {
-        diarioAbierta = diarioAbierta === btn.dataset.id ? null : btn.dataset.id;
-        refrescar();
-      }
-
-      if (a === 'cerrar-diario') { diarioAbierta = null; refrescar(); }
-
-      /* El caso más común del día: la tienda abrió con todos. Un click en vez
-         de tres campos, o el módulo se abandona en dos semanas. */
-      if (a === 'sin-novedades') {
-        const suc = Store.sucursal(btn.dataset.id);
-        const d = Store.diarioSucursal(diarioFecha, suc.id);
-        if (String(d.planificados || '').trim() === '') {
-          const padron = Store.dotacionDelPadron(suc.id, diarioFecha.slice(0, 7));
-          const heads = padron && padron.personas
-            ? padron.personas
-            : (suc.colaboradores || [])
-                .filter(c => c.activo !== false && !esNoPresencial(c).noPresencial).length;
-          if (!heads) {
-            return avisar('No hay plantel cargado en esta sucursal: escribí a mano cuántos tenían que trabajar.', 'error');
-          }
-          d.planificados = heads;
-        }
-        d.ausentes = [];
-        d.novedades = [];
-        Store.save();
-        const siguiente = proximaSinCargar(Store.diarioDe(diarioFecha), suc.id);
-        diarioAbierta = siguiente ? siguiente.id : null;
-        refrescar();
-        avisar(`${suc.nombre || suc.codigo}: sin novedades.` +
-               (siguiente ? ` Sigue ${siguiente.nombre || siguiente.codigo}.` : ' Están todas cargadas.'));
-      }
-
-      if (a === 'prellenar-diario') {
-        const r = Store.prellenarDiario(diarioFecha);
-        refrescar();
-        avisar(r.completadas
-          ? `Dotación traída del padrón en ${r.completadas} sucursal${r.completadas === 1 ? '' : 'es'}.`
-          : 'No había nada que completar: ya estaba todo cargado o el padrón está vacío.',
-          r.completadas ? '' : 'error');
-      }
-
-      if (a === 'borrar-diario') {
-        const ok = await confirmar('Borrar el día',
-          `Se borra toda la carga del ${fmtFecha(diarioFecha)}, incluida la venta importada.`,
-          'Borrar');
-        if (!ok) return;
-        Store.eliminarDiario(diarioFecha);
-        diarioAbierta = null;
-        refrescar();
-        avisar('Día borrado.');
-      }
-
-      if (a === 'agregar-ausente') {
-        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
-        d.ausentes.push({ nombre: '', motivo: MOTIVOS_AUSENCIA_DIA[0].id });
-        Store.save();
-        refrescar();
-      }
-
-      if (a === 'quitar-ausente') {
-        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
-        d.ausentes.splice(Number(btn.dataset.i), 1);
-        Store.save();
-        refrescar();
-      }
-
-      if (a === 'agregar-novedad') {
-        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
-        d.novedades.push({ nombre: '', tipo: TIPOS_NOVEDAD_DIA[0].id });
-        Store.save();
-        refrescar();
-      }
-
-      if (a === 'quitar-novedad') {
-        const d = Store.diarioSucursal(diarioFecha, btn.dataset.id);
-        d.novedades.splice(Number(btn.dataset.i), 1);
-        Store.save();
-        refrescar();
-      }
 
       if (a === 'importar-rdv') {
         const crudo = ($('#pegar-rdv') || {}).value || '';
@@ -5205,17 +4874,6 @@ const App = (() => {
         avisar(r.cargadas ? `Venta importada en ${r.cargadas} sucursal${r.cargadas === 1 ? '' : 'es'}.`
                           : 'No se pudo cruzar ninguna tienda con el padrón.',
                r.cargadas ? '' : 'error');
-      }
-
-      if (a === 'copiar-diario') {
-        const texto = Reporte.textoDiario(diarioFecha, Store.get().config);
-        try { await navigator.clipboard.writeText(texto); avisar('Reporte copiado.'); }
-        catch (_) { avisar('No se pudo copiar: seleccioná el texto de la vista previa.', 'error'); }
-      }
-
-      if (a === 'descargar-diario') {
-        guardarArchivo(`presentismo-${diarioFecha}.txt`,
-                       Reporte.textoDiario(diarioFecha, Store.get().config));
       }
 
       if (a === 'copiar-ventas') {

@@ -804,7 +804,7 @@ const Store = (() => {
       return i;
     },
 
-    /** Lo que hay que llevar a la tienda, para el reporte del día. */
+    /** Lo que hay que llevar a la tienda: va en el informe del check list. */
     itemsParaTienda(hoyISO) {
       return this.get().agenda.filter(i => i.avisarEnTienda &&
         !(ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado);

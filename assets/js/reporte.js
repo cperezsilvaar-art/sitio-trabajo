@@ -879,6 +879,26 @@ const Reporte = (() => {
     L.push(barra);
     L.push('');
 
+    /* Lo que el coordinador marcó como «hay que avisarlo en la tienda» viaja
+       acá. Antes iba en el reporte diario de presentismo, que se eliminó junto
+       con la carga manual del día; este informe es el que efectivamente se
+       lleva a la tienda, así que es donde corresponde. */
+    (() => {
+      if (typeof repartirAgenda !== 'function') return;
+      const rep = repartirAgenda(Store.itemsParaTienda(), visita.fecha);
+      const porDecir = rep.vencidas.concat(rep.urgentes,
+        rep.semana.filter(x => x.estado.dias <= 3), rep.sinFecha);
+      if (!porDecir.length) return;
+      L.push('PARA AVISAR EN LA TIENDA');
+      porDecir.forEach(x => {
+        L.push(`   - ${x.estado.texto.toUpperCase()}. ${x.item.titulo}`);
+        if (x.estado.proximo && x.estado.proximo.contexto) {
+          L.push(`     ${x.estado.proximo.contexto}`);
+        }
+      });
+      L.push('');
+    })();
+
     if (!r.total.aplicables && !r.total.noAplica) {
       L.push('El check list todavía no tiene ningún punto evaluado.');
       L.push('');
@@ -1063,191 +1083,6 @@ const Reporte = (() => {
    * hay que decidir antes de que abran las tiendas. Cinco bloques fijos, en
    * el orden en que se leen cuando hay diez minutos.
    */
-  function textoDiario(fecha, config) {
-    const e = Store.get();
-    const cfg = config || e.config;
-    const dia = Store.diarioDe(fecha);
-    const calc = calcularDiario(dia, e.sucursales, cfg.parametros);
-    const barra = '='.repeat(60);
-    const t = calc.total;
-
-    const L = [barra, 'REPORTE DIARIO DE PRESENTISMO - FARMATODO'];
-    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
-    L.push('Día reportado: ' + fmtFecha(fecha));
-    L.push('Coordinador de RRHH: ' + oPendiente(cfg.coordinador));
-    L.push('Gerente de Operaciones: ' + oPendiente((cfg.gerenteOperaciones || {}).nombre));
-    L.push(barra);
-    L.push('');
-
-    /* De la agenda solo viaja lo que el coordinador marcó como "hay que
-       avisarlo en la tienda": el resto es su trabajo, no el de Operaciones.
-       No depende de que se haya cargado el día: si mañana vence el plazo de
-       adelantos, hay que avisarlo igual. */
-    const bloqueAgenda = () => {
-      const rep = repartirAgenda(Store.itemsParaTienda(), fecha);
-      /* Lo que no tiene fecha entra igual: si el coordinador marcó “avisarlo en
-         la tienda”, quiso que se avise, no que espere a tener plazo. Antes la
-         marca no hacía nada y no había forma de darse cuenta. */
-      const porDecir = rep.vencidas.concat(rep.urgentes,
-        rep.semana.filter(x => x.estado.dias <= 3), rep.sinFecha);
-      if (!porDecir.length) return [];
-      const B = ['PARA AVISAR EN LA TIENDA'];
-      porDecir.forEach(x => {
-        B.push(`   - ${x.estado.texto.toUpperCase()}. ${x.item.titulo}`);
-        if (x.estado.proximo && x.estado.proximo.contexto) {
-          B.push(`     ${x.estado.proximo.contexto}`);
-        }
-      });
-      B.push('');
-      return B;
-    };
-
-    if (!calc.filas.length) {
-      L.push('Todavía no hay ninguna sucursal cargada para este día.');
-      L.push('');
-      L.push(...bloqueAgenda());
-      L.push(...pie());
-      return L.join('\n');
-    }
-
-    const nom = s => (s.nombre && s.nombre.trim()) ? s.nombre.trim() : s.codigo;
-    const alertas = alertasDiarias(calc);
-    const criticas = alertas.filter(a => a.nivel === 'critico');
-
-    /* 1. Resumen ejecutivo ------------------------------------------- */
-    L.push('1. RESUMEN EJECUTIVO DEL DÍA');
-    const frases = [];
-    frases.push(
-      `El área operó con ${calc.filas.length} de ${e.sucursales.length} sucursales reportadas, ` +
-      `${t.presentes} personas presentes sobre ${t.planificados} planificadas ` +
-      `(${fmtPct(t.pctAusentismo === null ? null : t.pctAusentismo, 1)} de ausentismo).`);
-    if (t.cobertura !== null) {
-      const bajo = calc.filas.filter(f => f.k.cobertura !== null && f.k.cobertura < 1);
-      frases.push(bajo.length
-        ? `${bajo.length} de las ${t.conMinimo} sucursales con mínimo definido quedó por debajo: ` +
-          bajo.map(f => nom(f.sucursal)).join(', ') + '.'
-        : `Las ${t.conMinimo} sucursales con mínimo definido lo cubrieron.`);
-    }
-    if (t.horasExtras) {
-      frases.push(
-        `Se usaron ${fmtNum(t.horasExtras, 0)} horas extras ` +
-        `(${fmtPct(t.pctExtras, 1)} de las ordinarias), equivalentes a ` +
-        `${fmtNum(t.horasExtras / calc.par.horasJornada, 1)} jornadas.`);
-    }
-    if (t.novedades) {
-      frases.push(`Hay ${t.novedades} vacante${t.novedades === 1 ? '' : 's'} nueva${t.novedades === 1 ? '' : 's'} para cubrir.`);
-    }
-    frases.forEach(f => L.push('   ' + f));
-    L.push('');
-
-    /* 2. Tablero de KPIs --------------------------------------------- */
-    L.push('2. TABLERO DE KPIs DEL DÍA');
-    L.push('');
-    const cab = ['Sucursal', 'Plan.', 'Pres.', 'Aus.', '% Aus.', 'Mín.', 'Cobert.', 'HE', '% HE', 'FTE día'];
-    const anchos = [22, 6, 6, 5, 7, 5, 8, 6, 7, 8];
-    const fila = cs => '   ' + cs.map((c, i) =>
-      i === 0 ? String(c).slice(0, anchos[i]).padEnd(anchos[i])
-              : String(c).padStart(anchos[i])).join(' ');
-    L.push(fila(cab));
-    L.push('   ' + '-'.repeat(anchos.reduce((a, b) => a + b + 1, -1)));
-    calc.filas.forEach(f => {
-      const k = f.k;
-      L.push(fila([
-        nom(f.sucursal), k.planificados, k.presentes, k.ausentes,
-        fmtPct(k.pctAusentismo, 1), k.minimo || '—',
-        k.cobertura === null ? '—' : fmtPct(k.cobertura, 0),
-        k.horasExtras || '—', fmtPct(k.pctExtras, 1),
-        k.fteReal === null ? '—' : fmtNum(k.fteReal, 1)
-      ]));
-    });
-    L.push('   ' + '-'.repeat(anchos.reduce((a, b) => a + b + 1, -1)));
-    L.push(fila([
-      'TOTAL ÁREA', t.planificados, t.presentes, t.ausentes,
-      fmtPct(t.pctAusentismo, 1), t.minimo || '—',
-      t.cobertura === null ? '—' : fmtPct(t.cobertura, 0),
-      t.horasExtras || '—', fmtPct(t.pctExtras, 1),
-      t.fteReal === null ? '—' : fmtNum(t.fteReal, 1)
-    ]));
-    L.push('');
-    L.push(`   Novedades del día: ${t.novedades || 'ninguna'}` +
-           (t.novedades ? ' · ' + calc.filas.flatMap(f =>
-             (f.dato.novedades || []).map(n =>
-               `${n.nombre || 'sin nombre'} (${nom(f.sucursal)})`)).join(' · ') : ''));
-    L.push('');
-
-    /* 3. Traducción al negocio --------------------------------------- */
-    L.push('3. QUÉ SIGNIFICA ESTO PARA LA OPERACIÓN');
-    const trad = [];
-    if (t.pctAusentismo !== null && t.ausentes) {
-      trad.push(
-        `Faltaron ${t.ausentes} persona${t.ausentes === 1 ? '' : 's'} de ${t.planificados}. ` +
-        (t.controlables
-          ? (t.controlables === 1
-              ? '1 de esas ausencias es evitable: es la parte sobre la que se puede trabajar hoy mismo.'
-              : `${t.controlables} de esas ausencias son evitables: es la parte sobre la que se puede trabajar hoy mismo.`)
-          : 'Ninguna es evitable: son licencias, enfermedad o vacaciones, se administran pero no se reducen.'));
-    }
-    if (t.horasExtras) {
-      const porAusencia = calc.filas.filter(f => f.dato.motivoExtras === 'ausencia');
-      trad.push(
-        `Las ${fmtNum(t.horasExtras, 0)} horas extras recuperaron ` +
-        `${fmtNum(t.horasExtras / calc.par.horasJornada, 1)} de las ${t.ausentes} jornada${t.ausentes === 1 ? '' : 's'} que se perdieron` +
-        (porAusencia.length
-          ? `. En ${porAusencia.map(f => nom(f.sucursal)).join(', ')} se usaron para tapar ausencias, ` +
-            'que es la forma más cara de cubrir un turno.'
-          : '.'));
-    }
-    const desabastecidas = calc.filas.filter(f => f.k.cobertura !== null && f.k.cobertura < 1);
-    if (desabastecidas.length) {
-      trad.push(
-        `${desabastecidas.map(f => nom(f.sucursal)).join(', ')} atendió por debajo del mínimo. ` +
-        'Eso no se ve en la planilla de dotación: se ve en la cola de la caja y en el reclamo del cliente.');
-    }
-    if (!trad.length) trad.push('Día sin desvíos: la dotación presente alcanzó para operar en todas las sucursales reportadas.');
-    trad.forEach(x => L.push('   - ' + x));
-    L.push('');
-
-    /* 4. Alertas ------------------------------------------------------ */
-    L.push('4. ALERTAS Y DESVÍOS');
-    if (!alertas.length) {
-      L.push('   Sin alertas en el día.');
-    } else {
-      const etiqueta = { critico: '[CRÍTICO] ', atencion: '[ATENCIÓN] ', dato: '[DATO] ' };
-      alertas.forEach(a => L.push('   ' + etiqueta[a.nivel] + a.titulo + '. ' + a.texto));
-    }
-    L.push('');
-
-    /* 5. Acciones ----------------------------------------------------- */
-    L.push('5. ACCIONES PARA MAÑANA');
-    accionesDiarias(calc).forEach((a, i) => L.push('   ' + (i + 1) + '. ' + a));
-    L.push('');
-
-    /* Solo cuando vence algo en los próximos tres días: si entrara siempre,
-       en dos semanas nadie lo lee. */
-    L.push(...bloqueAgenda());
-
-    if (dia && String(dia.notas || '').trim()) {
-      L.push('NOTAS DEL COORDINADOR');
-      String(dia.notas).split('\n').forEach(x => L.push('   ' + x));
-      L.push('');
-    }
-
-    if (criticas.length) {
-      const uno = criticas.length === 1;
-      L.push(`Resumen de urgencia: ${criticas.length} punto${uno ? '' : 's'} ` +
-             `que no puede${uno ? '' : 'n'} esperar al informe del mes.`);
-      L.push('');
-    }
-
-    L.push(...pie());
-    return L.join('\n');
-  }
-
-  function asuntoDiario(fecha, config) {
-    const cfg = config || Store.get().config;
-    return `Reporte diario de presentismo · ${cfg.area || 'Área'} · ${fmtFecha(fecha)}`;
-  }
-
   /**
    * La venta del día, aparte del presentismo.
    *
@@ -1289,8 +1124,8 @@ const Reporte = (() => {
     if (v.transacciones) L.push(`   Transacciones: ${fmtNum(v.transacciones, 0)}`);
     if (v.presentes && v.ayerConPresentismo) {
       L.push(`   Venta por persona presente: ${plata(v.ayerConPresentismo / v.presentes)} ` +
-             `(${v.presentes} personas en las ${v.tiendasConAmbos} tienda` +
-             `${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo).`);
+             `(${v.presentes} personas con turno en ${v.tiendasConAmbos} tienda` +
+             `${v.tiendasConAmbos === 1 ? '' : 's'}, descontando a quien está de licencia).`);
     }
     L.push('');
 
@@ -1323,7 +1158,7 @@ const Reporte = (() => {
 
   return {
     calcular, datosMensuales,
-    textoDiario, asuntoDiario, textoVentasDia,
+    textoVentasDia,
     textoVisita, textoMensual, textoChecklist,
     asuntoVisita, asuntoMensual, asuntoChecklist,
     enviarVisita, enviarMensual, enviarChecklist,

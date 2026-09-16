@@ -97,6 +97,14 @@ const _dias = (desde, hasta) => {
   return Math.round((b - a) / 86400000);
 };
 
+/* Las fechas que salen en el texto de la situación se leen en pantalla: van en
+   es-AR como el resto del panel, no en ISO. */
+const _fecha = f => {
+  if (!f) return '';
+  const [a, m, d] = String(f).split('-');
+  return (d && m && a) ? `${d}/${m}/${a}` : String(f);
+};
+
 const _sumarMeses = (fecha, meses) => {
   if (!fecha) return '';
   const d = new Date(fecha + 'T00:00:00');
@@ -109,6 +117,12 @@ const _sumarMeses = (fecha, meses) => {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 };
 
+/** Si la persona ya trajo el certificado que respalda la ausencia. */
+function tieneCertificado(a) {
+  const v = (a || {}).certificado;
+  return v === true || v === 'si' || v === 'sí';
+}
+
 /**
  * En qué situación está una ausencia hoy.
  *
@@ -119,17 +133,29 @@ function estadoDeAusencia(a, hoy) {
   const h = hoy || _diaHoy();
   const x = a || {};
   if (x.reincorporado) {
-    return { clase: 'cerrada', texto: 'Se reincorporó' + (x.fechaReincorporacion ? ' el ' + x.fechaReincorporacion : ''),
+    return { clase: 'cerrada', texto: 'Se reincorporó' + (x.fechaReincorporacion ? ' el ' + _fecha(x.fechaReincorporacion) : ''),
              diasParaVencer: null, diasLlevados: _dias(x.desde, x.fechaReincorporacion || x.hasta), tono: 'verde' };
   }
   if (!x.desde) {
     return { clase: 'sinFecha', texto: 'Sin fecha de inicio', diasParaVencer: null, diasLlevados: null, tono: 'ambar' };
   }
   if (x.desde > h) {
-    return { clase: 'porEmpezar', texto: 'Empieza el ' + x.desde,
+    return { clase: 'porEmpezar', texto: 'Empieza el ' + _fecha(x.desde),
              diasParaVencer: null, diasLlevados: null, tono: 'azul' };
   }
   const llevados = _dias(x.desde, h);
+
+  /* Sin papel, la falta no está justificada, sea cual sea la licencia que la
+     persona invoque. Va antes que cualquier otra lectura porque es la única
+     que cambia lo que hay que hacer: reclamar el certificado. Mientras tanto
+     la ausencia se cuenta, pero como pendiente. */
+  if (!tieneCertificado(x)) {
+    return { clase: 'pendienteJustificar',
+             texto: llevados > 0 ? `Pendiente de justificar · ${llevados} día${llevados === 1 ? '' : 's'}`
+                                 : 'Pendiente de justificar',
+             diasParaVencer: null, diasLlevados: llevados, tono: 'rojo' };
+  }
+
   if (!x.hasta) {
     return { clase: 'sinAlta', texto: 'Sin fecha de alta en el certificado',
              diasParaVencer: null, diasLlevados: llevados, tono: 'ambar' };
@@ -147,7 +173,7 @@ function estadoDeAusencia(a, hoy) {
     return { clase: 'porVencer', texto: `Vuelve en ${faltan} día${faltan === 1 ? '' : 's'}`,
              diasParaVencer: faltan, diasLlevados: llevados, tono: 'ambar' };
   }
-  return { clase: 'enCurso', texto: `Vuelve el ${x.hasta}`, diasParaVencer: faltan,
+  return { clase: 'enCurso', texto: `Vuelve el ${_fecha(x.hasta)}`, diasParaVencer: faltan,
            diasLlevados: llevados, tono: 'azul' };
 }
 
@@ -205,15 +231,16 @@ function alertasDeAusencias(estado, hoy, avisarDias) {
         if (a.reincorporado) return;
         const est = estadoDeAusencia(a, h);
         const urge = est.clase === 'vencida' || est.clase === 'vence' ||
-                     est.clase === 'sinAlta' ||
+                     est.clase === 'sinAlta' || est.clase === 'pendienteJustificar' ||
                      (est.clase === 'porVencer' && est.diasParaVencer <= margen);
         if (!urge) return;
         out.push({
           colaboradorId: c.id, nombre: c.nombre, sucursalId: s.id,
           sucursal: s.nombre || s.codigo,
           ausencia: a, estado: est,
-          orden: est.clase === 'vencida' ? 0 : est.clase === 'vence' ? 1
-               : est.clase === 'sinAlta' ? 2 : 3 + (est.diasParaVencer || 0)
+          orden: est.clase === 'pendienteJustificar' ? 0
+               : est.clase === 'vencida' ? 1 : est.clase === 'vence' ? 2
+               : est.clase === 'sinAlta' ? 3 : 4 + (est.diasParaVencer || 0)
         });
       });
     });
@@ -242,7 +269,7 @@ function ausentesHoy(estado, hoy) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
-    MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura,
+    MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     alertasDeAusencias, ausentesHoy
   };
 }

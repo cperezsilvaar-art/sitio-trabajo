@@ -8,25 +8,40 @@ El panel guarda tres cosas distintas que se parecen y no hay que mezclar:
 | `c.licencias` | Las especiales del art. 25 del CCT 414/05 | Controlar el tope anual de estudio, matrimonio, etc. |
 | `c.ausencias` | **La persona que hoy no está** | Saber a quién esperar y hasta cuándo |
 
-## Por qué no hay horas extras en Presentismo
+## Por qué Presentismo no tiene nada más que esto
 
-Se sacaron de la carga diaria. La compañía no tiene reloj de fichadas: el dato
-depende de lo que diga cada Gerente de Tienda, y nadie va a llamar a doce
-tiendas todas las mañanas para preguntar por las horas extras. Pedir un dato que
-no se va a poder cargar solo ensucia el tablero y deja un KPI en cero que parece
-un problema y es un vacío.
+Primero se sacaron las **horas extras** de la carga diaria. La compañía no tiene
+reloj de fichadas: el dato depende de lo que diga cada Gerente de Tienda, y nadie
+va a llamar a doce tiendas todas las mañanas para preguntar. Pedir un dato que no
+se va a poder cargar solo ensucia el tablero y deja un KPI en cero que parece un
+problema y es un vacío.
 
-El motor las sigue calculando: el día que haya sistema de fichadas, el campo
-vuelve y las cuentas ya están. Mientras tanto, las horas extras siguen llegando
-por el libro de novedades a la **estadística mensual**, que es donde el dato sí
-existe.
+Después se cayó el resto por el mismo motivo. La pantalla tenía una ficha por
+sucursal para anotar a mano los planificados, el mínimo para abrir, los ausentes
+y las novedades, todas las mañanas, tienda por tienda. **Nadie la completaba**, y
+sobre esa carga se apoyaban el tablero de KPIs, las alertas, las acciones para
+mañana y el reporte diario. Se eliminó entera en septiembre de 2026: lo que queda
+es lo único que el coordinador sí lleva, **las ausencias**.
 
-Lo que sí se puede llevar día a día es el **ausentismo**, y eso es lo que ocupó
-ese lugar.
+El motor de horas extras sigue calculando: el día que haya sistema de fichadas, el
+campo vuelve y las cuentas ya están. Mientras tanto siguen llegando por el libro
+de novedades a la **estadística mensual**, que es donde el dato sí existe.
+
+## Pendiente de justificar
+
+Una ausencia sin certificado presentado queda en `pendienteJustificar`, **sea cual
+sea la licencia** que la persona invoque. Va antes que cualquier otra lectura de
+`estadoDeAusencia()` porque es la única que cambia lo que hay que hacer hoy:
+reclamar el papel. Encabeza los avisos y la fila lo muestra con una marca que se
+puede tildar sin abrir la ficha.
+
+La ausencia **se registra igual**, sin certificado: lo que no se anota el día que
+pasa, se pierde. Marcar el certificado la mueve al circuito normal —fecha de alta,
+cuántos días faltan, cuándo se agota la licencia paga—.
 
 ## Cómo se carga
 
-**Presentismo → Ausencias con certificado.** Se elige a la persona y se anota la fecha
+**Presentismo → Ausencias del área.** Se elige a la persona y se anota la fecha
 de inicio y la de alta que dice el certificado. La fecha de alta puede faltar
 —muchos certificados no la traen— y en ese caso el panel avisa igual: una
 ausencia sin fecha de vuelta es la que más se olvida.

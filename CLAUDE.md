@@ -90,7 +90,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 
 | Escala | Pantalla | Pregunta |
 |---|---|---|
-| El día | Presentismo | ¿Con cuánta gente abrió el área y qué hago hoy? |
+| El día | Presentismo | ¿Quién no está hoy y desde cuándo? |
 | Lo que llevo | Asistente (chat + agenda) | ¿Qué tengo que hacer y qué estoy esperando? |
 | La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
@@ -129,27 +129,38 @@ anti-patrón, porque esconde la acción que lo destraba. Documentado en
 visto una request y una response reales.** Gmail quedó afuera por eso: el token
 venció y no se pudo observar.
 
-**El presentismo y la venta van en pantallas separadas.** `#/diario`
-(*Presentismo*) contesta quién vino y quién no; `#/operacion` (*Ventas*)
-contesta cuánto volumen hubo que atender. No es una preferencia de orden: el que
-las recibe hace cosas distintas con cada una —el presentismo se resuelve moviendo
-gente antes de la apertura, la venta se lee después para saber cuánto pesó el
-hueco—, y mezcladas el informe a Operaciones tenía que explicar las dos.
-`Reporte.textoDiario()` es solo presentismo y `Reporte.textoVentasDia()` solo
-venta. El único cruce que queda es la **venta por persona presente**, que vive en
-*Ventas*.
+**`#/diario` (*Presentismo*) es solo las ausencias.** Nada más. Tenía además una
+carga manual por sucursal —planificados, mínimo, ausentes, novedades, todas las
+mañanas, tienda por tienda—, un tablero de KPIs, alertas, acciones para mañana y
+su propio reporte. **Nadie la completaba**: sin reloj de fichadas el dato dependía
+de que doce gerentes lo mandaran y de que el coordinador lo transcribiera antes de
+la apertura, así que los indicadores quedaban en cero y el panel parecía roto
+cuando lo que faltaba era una carga imposible de sostener. Se eliminó entera, con
+`Reporte.textoDiario()`, `fichaSucursalDia()` y `panelSucursalDia()`. No reponerla:
+si algún día hay fichadas, el dato entra solo, no a mano.
 
-Los totales de venta van sobre `calc.filasVenta`, **no sobre `calc.filas`**: el
-RDV llega completo todas las mañanas y el presentismo se carga tienda por tienda,
-así que atarlos mostraba la venta de dos sucursales de once. La venta por persona
-presente es la excepción y se arma con las dos puntas del mismo subconjunto
-(`venta.ayerConPresentismo / venta.presentes`).
+Lo que el motor necesitaba de esa carga sale ahora del padrón:
+`presentesDelPadron(sucursal, fecha)` en `diario.js` cuenta la gente con turno de
+una tienda —activa y que cubre turno— menos quien tiene una ausencia abierta esa
+fecha. Es lo único que alimenta la venta por persona presente.
 
-**En Presentismo no se cargan horas extras.** La compañía no tiene reloj de
-fichadas y el dato depende de lo que diga cada gerente: pedirlo todos los días
-deja un KPI en cero que parece un problema y es un vacío. El motor las sigue
-calculando para cuando haya fichadas, y siguen llegando por el libro de novedades
-a la estadística mensual. Lo que sí se lleva a diario es el **ausentismo**.
+La ausencia se anota eligiendo a la persona: el panel completa su sucursal, su
+antigüedad y los plazos de los arts. 208 y 211. **Sin la marca de certificado
+presentado queda `pendienteJustificar`**, cualquiera sea la licencia, y encabeza
+`alertasDeAusencias()`: es el único estado que dice qué hacer hoy —reclamar el
+papel—. `tieneCertificado()` está en `ausencias.js`, junto a `tieneCargasFamilia()`,
+y por el mismo motivo: el campo llega como texto y un `!!` a secas daría verdadero
+para `'no'`.
+
+**La venta va en su propia pantalla**, `#/operacion` (*Ventas*), y es la única que
+genera documento (`Reporte.textoVentasDia()`). Los totales van sobre
+`calc.filasVenta`, **no sobre `calc.filas`**: el RDV llega completo todas las
+mañanas y no depende de ninguna otra carga.
+
+**Ojo con `_diaHoy`:** está declarado con `const` en `ausencias.js` y el resto de
+los módulos lo usan sin redeclararlo. En la build de un solo archivo todo comparte
+ámbito global, así que un segundo `const _diaHoy` no rompe ese módulo: rompe la
+página entera.
 
 Las **ausencias con certificado** (`assets/js/ausencias.js`, `c.ausencias`) son
 la tercera cosa distinta de `c.novedades` (el mes cerrado) y `c.licencias`

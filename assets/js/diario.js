@@ -73,6 +73,28 @@ function calcularDiarioSucursal(d, par) {
  * carga quedan aparte: un día sin reportar no es un día sin ausencias, y
  * mezclarlos daría un ausentismo optimista.
  */
+/**
+ * Cuánta gente tenía turno en una tienda ese día, según el padrón.
+ *
+ * La carga manual del día —planificados, mínimo, ausentes tienda por tienda—
+ * se eliminó: sin reloj de fichadas dependía de que alguien la completara
+ * todas las mañanas, y no se completaba. Los presentes se deducen de lo que el
+ * panel ya sabe: la dotación de piso menos quien tiene una ausencia abierta en
+ * esa fecha. Quien no cubre turno —bloqueo de título, no presencial— nunca
+ * entra, igual que en el resto del panel.
+ */
+function presentesDelPadron(sucursal, fecha) {
+  /* `_diaHoy` viene de ausencias.js, que carga antes. No se redeclara: con
+     `const` en el mismo ámbito global la página no arranca. */
+  const f = fecha || _diaHoy();
+  return ((sucursal || {}).colaboradores || []).filter(c => {
+    if (c.activo === false) return false;
+    if (typeof esNoPresencial === 'function' && esNoPresencial(c).noPresencial) return false;
+    return !(c.ausencias || []).some(a =>
+      !a.reincorporado && a.desde && a.desde <= f && (!a.hasta || a.hasta >= f));
+  }).length;
+}
+
 function calcularDiario(dia, sucursales, par) {
   const p = Object.assign({}, PARAMETROS_DEFECTO, par || {});
   const carga = (dia && dia.sucursales) || {};
@@ -132,8 +154,7 @@ function calcularDiario(dia, sucursales, par) {
   (sucursales || []).forEach(s => {
     const v = ventas[s.id];
     if (!v) return;
-    const f = filas.find(x => x.sucursal.id === s.id);
-    filasVenta.push({ sucursal: s, venta: v, k: f ? f.k : null });
+    filasVenta.push({ sucursal: s, venta: v, k: { presentes: presentesDelPadron(s, dia && dia.fecha) } });
   });
 
   const venta = { ayer: 0, metaHoy: 0, mes: 0, requerido: 0, transacciones: 0, conDato: 0,
@@ -150,7 +171,7 @@ function calcularDiario(dia, sucursales, par) {
        tienda, así que dividir la venta de once tiendas por los presentes de
        dos da un número que no es de nadie: se suman solo las que tienen las
        dos cosas. */
-    if (f.k) {
+    if (f.k.presentes) {
       venta.tiendasConAmbos++;
       venta.presentes += f.k.presentes;
       venta.ayerConPresentismo += _num(f.venta.ayer);

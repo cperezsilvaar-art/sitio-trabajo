@@ -88,9 +88,11 @@ aunque su fecha haya pasado: se saca del camino.
 Lo vencido y lo de hoy y mañana aparece como una tira en el **Panel de la red**.
 La agenda sirve si te encuentra, no si hay que ir a buscarla.
 
-Al **reporte diario** que va a Operaciones viaja **solo lo que marcaste como
-"hay que avisarlo en la tienda"**, y solo cuando faltan tres días o menos. El
-resto es tu trabajo, no el de Operaciones.
+Al **informe del check list** que se lleva a la tienda viaja **solo lo que
+marcaste como "hay que avisarlo en la tienda"**, y solo cuando faltan tres días o
+menos. El resto es tu trabajo, no el de la tienda. Iba en el reporte diario de
+presentismo hasta que ese reporte se eliminó junto con la carga manual del día;
+el informe de la visita es el que efectivamente se lleva puesto.
 
 **Copiar para mandar** arma la versión de WhatsApp: título con el ícono del
 tema, el detalle, y las fechas al final en `dd/mm`, que es lo que después
