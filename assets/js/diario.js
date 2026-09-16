@@ -120,16 +120,41 @@ function calcularDiario(dia, sucursales, par) {
 
   /* Venta del día: sirve para leer la cobertura contra lo que efectivamente
      había que atender. Una tienda al 80% de cobertura en un día flojo no es
-     el mismo problema que al 80% en un día de promoción bancaria. */
-  const venta = { ayer: 0, metaHoy: 0, mes: 0, requerido: 0, transacciones: 0, conDato: 0 };
-  filas.forEach(f => {
-    if (!f.venta) return;
+     el mismo problema que al 80% en un día de promoción bancaria.
+
+     Va sobre su propia lista y no sobre `filas`, que son las tiendas con el
+     presentismo cargado. El RDV llega entero todas las mañanas y el
+     presentismo se carga tienda por tienda a lo largo del día: atarlos
+     mostraba la venta de dos sucursales cuando estaban importadas las once.
+     `k` viene solo cuando esa tienda además reportó su gente, que es lo único
+     que hace falta para la venta por persona presente. */
+  const filasVenta = [];
+  (sucursales || []).forEach(s => {
+    const v = ventas[s.id];
+    if (!v) return;
+    const f = filas.find(x => x.sucursal.id === s.id);
+    filasVenta.push({ sucursal: s, venta: v, k: f ? f.k : null });
+  });
+
+  const venta = { ayer: 0, metaHoy: 0, mes: 0, requerido: 0, transacciones: 0, conDato: 0,
+                  presentes: 0, ayerConPresentismo: 0, tiendasConAmbos: 0 };
+  filasVenta.forEach(f => {
     venta.conDato++;
     venta.ayer += _num(f.venta.ayer);
     venta.metaHoy += _num(f.venta.metaHoy);
     venta.mes += _num(f.venta.mes);
     venta.requerido += _num(f.venta.requerido);
     venta.transacciones += _num(f.venta.transAyer);
+    /* La venta por persona presente se arma con las dos puntas del mismo
+       subconjunto. El RDV llega completo y el presentismo se carga tienda por
+       tienda, así que dividir la venta de once tiendas por los presentes de
+       dos da un número que no es de nadie: se suman solo las que tienen las
+       dos cosas. */
+    if (f.k) {
+      venta.tiendasConAmbos++;
+      venta.presentes += f.k.presentes;
+      venta.ayerConPresentismo += _num(f.venta.ayer);
+    }
   });
   /* Dos lecturas distintas: la del día se compara contra la meta del día, la
      del mes contra lo requerido acumulado. Mezclarlas da un desvío falso del
@@ -138,7 +163,7 @@ function calcularDiario(dia, sucursales, par) {
   venta.indexDia = venta.metaHoy ? venta.ayer / venta.metaHoy - 1 : null;
   venta.indexMes = venta.requerido ? venta.mes / venta.requerido - 1 : null;
 
-  return { filas, sinCargar, total: t, venta, par: p };
+  return { filas, filasVenta, sinCargar, total: t, venta, par: p };
 }
 
 /**

@@ -124,6 +124,17 @@ nav.tabs.principal .grupo {
 }
 nav.tabs.principal .grupo:first-of-type { }
 nav.tabs.principal a.al-final { margin-left: auto; }
+
+/* Con nueve solapas y cuatro rótulos de grupo la fila ya no entra en una
+   pantalla de 1400. Scrollear la escondía a Panel por la izquierda —el
+   navegador corre la solapa activa a la vista— y perder el botón de inicio es
+   peor que usar dos renglones. */
+@media (min-width: 901px) {
+  nav.tabs.principal { flex-wrap: wrap; overflow-x: visible; row-gap: 0; }
+}
+/* El rótulo y sus solapas son una unidad: si la fila corta entre los dos, el
+   grupo queda encabezando una línea que no es la suya. */
+nav.tabs.principal .nav-grupo { display: flex; align-items: stretch; }
 @media (max-width: 900px) {
   /* En el teléfono la barra ya scrollea: las etiquetas de grupo solo estorban. */
   nav.tabs.principal .grupo { display: none; }
@@ -776,17 +787,28 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
     <a href="#/red">Panel</a>
     <a href="#/nomina">Nómina</a>
 
-    <span class="grupo">Cada día</span>
-    <a href="#/diario" title="Reporte del día: cómo abrió el área">RVD</a>
+    <span class="nav-grupo">
+      <span class="grupo">Cada día</span>
+      <a href="#/diario" title="Quién vino y quién no: el reporte que va a Operaciones">Presentismo</a>
+    </span>
 
-    <span class="grupo">En la tienda</span>
-    <a href="#/sucursales">Sucursales</a>
-    <a href="#/visitas">Visitas</a>
-    <a href="#/reclamos">Reclamos</a>
-    <a href="#/movimientos">Cesiones y bajas</a>
+    <span class="nav-grupo">
+      <span class="grupo">En la tienda</span>
+      <a href="#/sucursales">Sucursales</a>
+      <a href="#/visitas">Visitas</a>
+      <a href="#/reclamos">Reclamos</a>
+      <a href="#/movimientos">Cesiones y bajas</a>
+    </span>
 
-    <span class="grupo">Cierre del mes</span>
-    <a href="#/estadistica">Estadística</a>
+    <span class="nav-grupo">
+      <span class="grupo">Cierre del mes</span>
+      <a href="#/estadistica">Estadística</a>
+    </span>
+
+    <span class="nav-grupo">
+      <span class="grupo">La operación</span>
+      <a href="#/operacion" title="La venta del día, para leer la cobertura contra el volumen">Ventas</a>
+    </span>
 
     <a href="#/asistente" class="al-final">Asistente</a>
     <a href="#/config" title="Configuración">Configuración</a>
@@ -4566,16 +4588,41 @@ function calcularDiario(dia, sucursales, par) {
 
   /* Venta del día: sirve para leer la cobertura contra lo que efectivamente
      había que atender. Una tienda al 80% de cobertura en un día flojo no es
-     el mismo problema que al 80% en un día de promoción bancaria. */
-  const venta = { ayer: 0, metaHoy: 0, mes: 0, requerido: 0, transacciones: 0, conDato: 0 };
-  filas.forEach(f => {
-    if (!f.venta) return;
+     el mismo problema que al 80% en un día de promoción bancaria.
+
+     Va sobre su propia lista y no sobre `filas`, que son las tiendas con el
+     presentismo cargado. El RDV llega entero todas las mañanas y el
+     presentismo se carga tienda por tienda a lo largo del día: atarlos
+     mostraba la venta de dos sucursales cuando estaban importadas las once.
+     `k` viene solo cuando esa tienda además reportó su gente, que es lo único
+     que hace falta para la venta por persona presente. */
+  const filasVenta = [];
+  (sucursales || []).forEach(s => {
+    const v = ventas[s.id];
+    if (!v) return;
+    const f = filas.find(x => x.sucursal.id === s.id);
+    filasVenta.push({ sucursal: s, venta: v, k: f ? f.k : null });
+  });
+
+  const venta = { ayer: 0, metaHoy: 0, mes: 0, requerido: 0, transacciones: 0, conDato: 0,
+                  presentes: 0, ayerConPresentismo: 0, tiendasConAmbos: 0 };
+  filasVenta.forEach(f => {
     venta.conDato++;
     venta.ayer += _num(f.venta.ayer);
     venta.metaHoy += _num(f.venta.metaHoy);
     venta.mes += _num(f.venta.mes);
     venta.requerido += _num(f.venta.requerido);
     venta.transacciones += _num(f.venta.transAyer);
+    /* La venta por persona presente se arma con las dos puntas del mismo
+       subconjunto. El RDV llega completo y el presentismo se carga tienda por
+       tienda, así que dividir la venta de once tiendas por los presentes de
+       dos da un número que no es de nadie: se suman solo las que tienen las
+       dos cosas. */
+    if (f.k) {
+      venta.tiendasConAmbos++;
+      venta.presentes += f.k.presentes;
+      venta.ayerConPresentismo += _num(f.venta.ayer);
+    }
   });
   /* Dos lecturas distintas: la del día se compara contra la meta del día, la
      del mes contra lo requerido acumulado. Mezclarlas da un desvío falso del
@@ -4584,7 +4631,7 @@ function calcularDiario(dia, sucursales, par) {
   venta.indexDia = venta.metaHoy ? venta.ayer / venta.metaHoy - 1 : null;
   venta.indexMes = venta.requerido ? venta.mes / venta.requerido - 1 : null;
 
-  return { filas, sinCargar, total: t, venta, par: p };
+  return { filas, filasVenta, sinCargar, total: t, venta, par: p };
 }
 
 /**
@@ -8200,11 +8247,10 @@ const Reporte = (() => {
     const cfg = config || e.config;
     const dia = Store.diarioDe(fecha);
     const calc = calcularDiario(dia, e.sucursales, cfg.parametros);
-    const moneda = cfg.parametros.moneda || '$';
     const barra = '='.repeat(60);
     const t = calc.total;
 
-    const L = [barra, 'REPORTE DIARIO DE OPERACIÓN - FARMATODO'];
+    const L = [barra, 'REPORTE DIARIO DE PRESENTISMO - FARMATODO'];
     if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
     L.push('Día reportado: ' + fmtFecha(fecha));
     L.push('Coordinador de RRHH: ' + oPendiente(cfg.coordinador));
@@ -8330,16 +8376,6 @@ const Reporte = (() => {
             'que es la forma más cara de cubrir un turno.'
           : '.'));
     }
-    if (calc.venta.conDato) {
-      trad.push(
-        `La venta del día en las sucursales reportadas fue de ${moneda} ${fmtNum(calc.venta.ayer, 0)}` +
-        (calc.venta.indexDia !== null
-          ? ` (${calc.venta.indexDia >= 0 ? '+' : ''}${fmtPct(calc.venta.indexDia, 1)} sobre la meta del día)`
-          : '') +
-        (calc.venta.transacciones ? ` con ${fmtNum(calc.venta.transacciones, 0)} transacciones` : '') +
-        '. La cobertura hay que leerla contra ese volumen: el mismo hueco de personal pesa distinto ' +
-        'en un día flojo que en uno de promoción.');
-    }
     const desabastecidas = calc.filas.filter(f => f.k.cobertura !== null && f.k.cobertura < 1);
     if (desabastecidas.length) {
       trad.push(
@@ -8388,12 +8424,85 @@ const Reporte = (() => {
 
   function asuntoDiario(fecha, config) {
     const cfg = config || Store.get().config;
-    return `Reporte diario de operación · ${cfg.area || 'Área'} · ${fmtFecha(fecha)}`;
+    return `Reporte diario de presentismo · ${cfg.area || 'Área'} · ${fmtFecha(fecha)}`;
+  }
+
+  /**
+   * La venta del día, aparte del presentismo.
+   *
+   * Van separados porque son dos preguntas distintas y el que las recibe hace
+   * cosas distintas con cada una: el presentismo se resuelve moviendo gente
+   * antes de la apertura, la venta se lee para saber cuánto pesó el hueco. El
+   * único cruce que sobrevive es la venta por persona presente, que es el que
+   * contesta si la dotación alcanzó para el volumen que hubo.
+   */
+  function textoVentasDia(fecha, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const dia = Store.diarioDe(fecha);
+    const calc = calcularDiario(dia, e.sucursales, cfg.parametros);
+    const moneda = cfg.parametros.moneda || '$';
+    const barra = '='.repeat(60);
+    const v = calc.venta;
+
+    const L = [barra, 'VENTA DEL DÍA - FARMATODO'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    L.push('Día reportado: ' + fmtFecha(fecha));
+    L.push(barra);
+    L.push('');
+
+    if (!v.conDato) {
+      L.push('Todavía no se importó el RDV de este día.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    const pct = x => x === null ? '—' : (x >= 0 ? '+' : '') + fmtPct(x, 1);
+    const plata = n => moneda + ' ' + fmtNum(n, 0);
+
+    L.push('1. EL DÍA');
+    L.push(`   Venta: ${plata(v.ayer)} en ${v.conDato} sucursal${v.conDato === 1 ? '' : 'es'} con dato.`);
+    if (v.metaHoy) L.push(`   Meta del día: ${plata(v.metaHoy)} · Índice: ${pct(v.indexDia)}`);
+    if (v.requerido) L.push(`   Mes contra lo requerido: ${pct(v.indexMes)}`);
+    if (v.transacciones) L.push(`   Transacciones: ${fmtNum(v.transacciones, 0)}`);
+    if (v.presentes && v.ayerConPresentismo) {
+      L.push(`   Venta por persona presente: ${plata(v.ayerConPresentismo / v.presentes)} ` +
+             `(${v.presentes} personas en las ${v.tiendasConAmbos} tienda` +
+             `${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo).`);
+    }
+    L.push('');
+
+    L.push('2. POR SUCURSAL');
+    const nom = s => (s.nombre && s.nombre.trim()) ? s.nombre.trim() : s.codigo;
+    const cab = ['Sucursal', 'Venta', 'Meta', 'Índ. día', 'Índ. mes', 'Tickets', 'x presente'];
+    const anchos = [22, 12, 12, 9, 9, 8, 12];
+    const fila = cs => '   ' + cs.map((c, i) =>
+      i === 0 ? String(c).slice(0, anchos[i]).padEnd(anchos[i])
+              : String(c).padStart(anchos[i])).join(' ');
+    L.push(fila(cab));
+    L.push('   ' + '-'.repeat(anchos.reduce((a, b) => a + b + 1, -1)));
+    calc.filasVenta.forEach(f => {
+      const idxDia = f.venta.metaHoy ? f.venta.ayer / f.venta.metaHoy - 1 : null;
+      L.push(fila([
+        nom(f.sucursal), plata(f.venta.ayer),
+        f.venta.metaHoy ? plata(f.venta.metaHoy) : '—',
+        pct(idxDia), pct(f.venta.index === undefined ? null : f.venta.index),
+        f.venta.transAyer ? fmtNum(f.venta.transAyer, 0) : '—',
+        f.k && f.k.presentes && f.venta.ayer ? plata(f.venta.ayer / f.k.presentes) : '—'
+      ]));
+    });
+    L.push('');
+    L.push('   La venta no mueve ningún indicador de RRHH: está para leer la cobertura');
+    L.push('   contra el volumen que efectivamente hubo que atender.');
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
   }
 
   return {
     calcular, datosMensuales,
-    textoDiario, asuntoDiario,
+    textoDiario, asuntoDiario, textoVentasDia,
     textoVisita, textoMensual, textoChecklist,
     asuntoVisita, asuntoMensual, asuntoChecklist,
     enviarVisita, enviarMensual, enviarChecklist,
@@ -8581,7 +8690,7 @@ const App = (() => {
           <ul>${al.slice(0, 6).map(x => `<li>
             <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
           </li>`).join('')}</ul>
-          <a href="#/diario">Resolverlas en el RVD</a>
+          <a href="#/diario">Resolverlas en Presentismo</a>
         </div>`;
       })()}
 
@@ -9390,10 +9499,11 @@ const App = (() => {
       .sort((a, b) => String(b).localeCompare(String(a)));
 
     return `
-      <h1 class="titulo">Reportes a diario</h1>
+      <h1 class="titulo">Presentismo del día</h1>
       <p class="subtitulo">
-        Cómo abrió el área. Se carga con el dato del día anterior y se manda a Operaciones
+        Quién vino y quién no. Se carga con el dato del día anterior y se manda a Operaciones
         antes de la apertura: acá todavía se puede mover gente, en la estadística del mes ya no.
+        La venta del día va aparte, en <a href="#/operacion">Ventas del día</a>.
       </p>
 
       ${panelAusenciasLargas()}
@@ -9460,14 +9570,94 @@ const App = (() => {
       ${panelSucursalDia(dia, p)}
 
       <section class="tarjeta">
+        <h2>Notas y envío</h2>
+        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
+          <textarea id="diario-notas" style="min-height:70px"
+            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
+        </label>
+        <div class="acciones">
+          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
+          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
+          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Vista previa</h2>
+        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
+      </section>`;
+  }
+
+  /* ====================== VISTA: VENTAS DEL DÍA ======================
+     La venta salió de la pantalla de presentismo a pedido del coordinador: son
+     dos preguntas distintas y mezclarlas hacía que el reporte que va a
+     Operaciones tuviera que explicar las dos. Acá el número de la operación se
+     mira contra la gente que efectivamente estuvo, que es el único cruce que
+     interesa. */
+  function vistaOperacion() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const fechas = Store.fechasDiarias();
+    if (!diarioFecha) diarioFecha = fechas[0] || ayerISO();
+    const dia = Store.diarioDe(diarioFecha);
+    const calc = calcularDiario(dia, e.sucursales, e.config.parametros);
+    const v = calc.venta;
+    const t = calc.total;
+
+    const opcionesFecha = Array.from(new Set(fechas.concat([diarioFecha])))
+      .sort((a, b) => String(b).localeCompare(String(a)));
+
+    return `
+      <h1 class="titulo">Ventas del día</h1>
+      <p class="subtitulo">
+        El volumen que hubo que atender. No mueve ningún indicador de RRHH: está para leer
+        la cobertura contra la venta, porque el mismo hueco de personal pesa distinto en un
+        día flojo que en uno de promoción. El presentismo va aparte, en
+        <a href="#/diario">Presentismo del día</a>.
+      </p>
+
+      <section class="tarjeta">
+        <div class="acciones" style="align-items:flex-end;flex-wrap:wrap;margin-top:0">
+          <label class="campo" style="max-width:200px">
+            <span>Día reportado</span>
+            <input type="date" id="diario-fecha" value="${esc(diarioFecha)}">
+          </label>
+          ${opcionesFecha.length > 1 ? `<label class="campo" style="max-width:220px">
+            <span>Días cargados</span>
+            <select id="diario-historico">
+              ${opcionesFecha.map(f => `<option value="${esc(f)}"${f === diarioFecha ? ' selected' : ''}>${fmtFecha(f)}</option>`).join('')}
+            </select>
+          </label>` : ''}
+        </div>
+      </section>
+
+      ${v.conDato ? `<div class="kpis">
+        ${kpi('Venta del día', dinero(v.ayer),
+              `${v.conDato} sucursal${v.conDato === 1 ? '' : 'es'} con dato`)}
+        ${kpi('Índice del día', v.indexDia === null ? '—'
+                : (v.indexDia >= 0 ? '+' : '') + fmtPct(v.indexDia, 1),
+              v.metaHoy ? `meta ${dinero(v.metaHoy)}` : 'sin meta cargada',
+              v.indexDia === null ? '' : v.indexDia >= 0 ? 'ok' : 'alerta')}
+        ${kpi('Índice del mes', v.indexMes === null ? '—'
+                : (v.indexMes >= 0 ? '+' : '') + fmtPct(v.indexMes, 1),
+              v.requerido ? `requerido ${dinero(v.requerido)}` : 'sin requerido cargado',
+              v.indexMes === null ? '' : v.indexMes >= 0 ? 'ok' : 'alerta')}
+        ${kpi('Venta por persona presente',
+              v.presentes && v.ayerConPresentismo ? dinero(v.ayerConPresentismo / v.presentes) : '—',
+              v.presentes
+                ? `${v.presentes} personas en las ${v.tiendasConAmbos} tienda${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo`
+                : 'cargá el presentismo del día para poder cruzarlo')}
+      </div>` : ''}
+
+      <section class="tarjeta">
         <h2>Reporte Diario de Ventas (RDV)</h2>
         <p class="ayuda">
           Pegá la hoja <strong>RDV Operaciones</strong> del reporte de ventas del día:
           abrila en Excel, seleccioná desde la fila de encabezados —la que dice
           <em>Área … Tienda … Ayer … Mes</em>— hasta la última tienda, copiá y pegá.
-          Solo se toman las filas del ${esc(e.config.area || 'área')}. La venta no cambia
-          ningún indicador de RRHH: sirve para leer la cobertura contra el volumen que
-          efectivamente hubo que atender.
+          Solo se toman las filas del ${esc(e.config.area || 'área')}.
         </p>
         <textarea id="pegar-rdv" style="min-height:100px"
           placeholder="Área  #Global  #País  Ciudad  #Ciudad  Formato  Capa  Tienda  Ayer  Semana  Mes  Requerido  Index  …"></textarea>
@@ -9485,7 +9675,7 @@ const App = (() => {
             <th class="num" title="Venta del día dividida por la gente que efectivamente estuvo">Venta por persona presente</th>
           </tr></thead>
           <tbody>
-            ${calc.filas.filter(f => f.venta).map(f => {
+            ${calc.filasVenta.map(f => {
               const chipIdx = v => (v === null || v === undefined) ? '—'
                 : `<span class="chip ${v >= 0 ? 'verde' : 'rojo'}">${v >= 0 ? '+' : ''}${fmtPct(v, 1)}</span>`;
               const idxDia = f.venta.metaHoy ? f.venta.ayer / f.venta.metaHoy - 1 : null;
@@ -9496,29 +9686,24 @@ const App = (() => {
               <td class="num">${chipIdx(idxDia)}</td>
               <td class="num">${chipIdx(f.venta.index)}</td>
               <td class="num">${f.venta.transAyer ? fmtNum(f.venta.transAyer, 0) : '—'}</td>
-              <td class="num">${f.k.presentes && f.venta.ayer ? dinero(f.venta.ayer / f.k.presentes) : '—'}</td>
+              <td class="num">${f.k && f.k.presentes && f.venta.ayer ? dinero(f.venta.ayer / f.k.presentes) : '<em style="opacity:.6">sin presentismo</em>'}</td>
             </tr>`; }).join('')}
           </tbody>
         </table></div>` : ''}
       </section>
 
-      <section class="tarjeta">
-        <h2>Notas y envío</h2>
-        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
-          <textarea id="diario-notas" style="min-height:70px"
-            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
-        </label>
-        <div class="acciones">
-          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
-          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
-          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
-        </div>
-      </section>
 
-      <section class="tarjeta">
-        <h2>Vista previa</h2>
-        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
-      </section>`;
+      ${v.conDato ? `<section class="tarjeta">
+        <h2>Resumen para copiar</h2>
+        <p class="ayuda">
+          Solo la venta del día. Lo de presentismo se copia desde su propia pantalla.
+        </p>
+        <div class="acciones" style="margin-top:0">
+          <button class="b" data-accion="copiar-ventas">Copiar el resumen</button>
+          <button class="b sec" data-accion="descargar-ventas">Descargar .txt</button>
+        </div>
+        <pre class="reporte" id="vista-ventas" style="margin-top:14px">${esc(Reporte.textoVentasDia(diarioFecha, e.config))}</pre>
+      </section>` : ''}`;
   }
 
   /**
@@ -12479,7 +12664,12 @@ const App = (() => {
     else if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
       vistaActual = vistaAsistente; html = vistaAsistente();
     }
-    else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
+    else if (ruta[0] === 'diario' || ruta[0] === 'presentismo') {
+      vistaActual = vistaDiario;    html = vistaDiario();
+    }
+    else if (ruta[0] === 'operacion' || ruta[0] === 'ventas') {
+      vistaActual = vistaOperacion; html = vistaOperacion();
+    }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'movimientos') {
@@ -13484,8 +13674,19 @@ const App = (() => {
       }
 
       if (a === 'descargar-diario') {
-        guardarArchivo(`reporte-diario-${diarioFecha}.txt`,
+        guardarArchivo(`presentismo-${diarioFecha}.txt`,
                        Reporte.textoDiario(diarioFecha, Store.get().config));
+      }
+
+      if (a === 'copiar-ventas') {
+        const texto = Reporte.textoVentasDia(diarioFecha, Store.get().config);
+        try { await navigator.clipboard.writeText(texto); avisar('Resumen copiado.'); }
+        catch (_) { avisar('No se pudo copiar: seleccioná el texto de la vista previa.', 'error'); }
+      }
+
+      if (a === 'descargar-ventas') {
+        guardarArchivo(`ventas-${diarioFecha}.txt`,
+                       Reporte.textoVentasDia(diarioFecha, Store.get().config));
       }
 
       /* --- nómina del área --- */

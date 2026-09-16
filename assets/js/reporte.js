@@ -1062,11 +1062,10 @@ const Reporte = (() => {
     const cfg = config || e.config;
     const dia = Store.diarioDe(fecha);
     const calc = calcularDiario(dia, e.sucursales, cfg.parametros);
-    const moneda = cfg.parametros.moneda || '$';
     const barra = '='.repeat(60);
     const t = calc.total;
 
-    const L = [barra, 'REPORTE DIARIO DE OPERACIÓN - FARMATODO'];
+    const L = [barra, 'REPORTE DIARIO DE PRESENTISMO - FARMATODO'];
     if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
     L.push('Día reportado: ' + fmtFecha(fecha));
     L.push('Coordinador de RRHH: ' + oPendiente(cfg.coordinador));
@@ -1192,16 +1191,6 @@ const Reporte = (() => {
             'que es la forma más cara de cubrir un turno.'
           : '.'));
     }
-    if (calc.venta.conDato) {
-      trad.push(
-        `La venta del día en las sucursales reportadas fue de ${moneda} ${fmtNum(calc.venta.ayer, 0)}` +
-        (calc.venta.indexDia !== null
-          ? ` (${calc.venta.indexDia >= 0 ? '+' : ''}${fmtPct(calc.venta.indexDia, 1)} sobre la meta del día)`
-          : '') +
-        (calc.venta.transacciones ? ` con ${fmtNum(calc.venta.transacciones, 0)} transacciones` : '') +
-        '. La cobertura hay que leerla contra ese volumen: el mismo hueco de personal pesa distinto ' +
-        'en un día flojo que en uno de promoción.');
-    }
     const desabastecidas = calc.filas.filter(f => f.k.cobertura !== null && f.k.cobertura < 1);
     if (desabastecidas.length) {
       trad.push(
@@ -1250,12 +1239,85 @@ const Reporte = (() => {
 
   function asuntoDiario(fecha, config) {
     const cfg = config || Store.get().config;
-    return `Reporte diario de operación · ${cfg.area || 'Área'} · ${fmtFecha(fecha)}`;
+    return `Reporte diario de presentismo · ${cfg.area || 'Área'} · ${fmtFecha(fecha)}`;
+  }
+
+  /**
+   * La venta del día, aparte del presentismo.
+   *
+   * Van separados porque son dos preguntas distintas y el que las recibe hace
+   * cosas distintas con cada una: el presentismo se resuelve moviendo gente
+   * antes de la apertura, la venta se lee para saber cuánto pesó el hueco. El
+   * único cruce que sobrevive es la venta por persona presente, que es el que
+   * contesta si la dotación alcanzó para el volumen que hubo.
+   */
+  function textoVentasDia(fecha, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const dia = Store.diarioDe(fecha);
+    const calc = calcularDiario(dia, e.sucursales, cfg.parametros);
+    const moneda = cfg.parametros.moneda || '$';
+    const barra = '='.repeat(60);
+    const v = calc.venta;
+
+    const L = [barra, 'VENTA DEL DÍA - FARMATODO'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    L.push('Día reportado: ' + fmtFecha(fecha));
+    L.push(barra);
+    L.push('');
+
+    if (!v.conDato) {
+      L.push('Todavía no se importó el RDV de este día.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    const pct = x => x === null ? '—' : (x >= 0 ? '+' : '') + fmtPct(x, 1);
+    const plata = n => moneda + ' ' + fmtNum(n, 0);
+
+    L.push('1. EL DÍA');
+    L.push(`   Venta: ${plata(v.ayer)} en ${v.conDato} sucursal${v.conDato === 1 ? '' : 'es'} con dato.`);
+    if (v.metaHoy) L.push(`   Meta del día: ${plata(v.metaHoy)} · Índice: ${pct(v.indexDia)}`);
+    if (v.requerido) L.push(`   Mes contra lo requerido: ${pct(v.indexMes)}`);
+    if (v.transacciones) L.push(`   Transacciones: ${fmtNum(v.transacciones, 0)}`);
+    if (v.presentes && v.ayerConPresentismo) {
+      L.push(`   Venta por persona presente: ${plata(v.ayerConPresentismo / v.presentes)} ` +
+             `(${v.presentes} personas en las ${v.tiendasConAmbos} tienda` +
+             `${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo).`);
+    }
+    L.push('');
+
+    L.push('2. POR SUCURSAL');
+    const nom = s => (s.nombre && s.nombre.trim()) ? s.nombre.trim() : s.codigo;
+    const cab = ['Sucursal', 'Venta', 'Meta', 'Índ. día', 'Índ. mes', 'Tickets', 'x presente'];
+    const anchos = [22, 12, 12, 9, 9, 8, 12];
+    const fila = cs => '   ' + cs.map((c, i) =>
+      i === 0 ? String(c).slice(0, anchos[i]).padEnd(anchos[i])
+              : String(c).padStart(anchos[i])).join(' ');
+    L.push(fila(cab));
+    L.push('   ' + '-'.repeat(anchos.reduce((a, b) => a + b + 1, -1)));
+    calc.filasVenta.forEach(f => {
+      const idxDia = f.venta.metaHoy ? f.venta.ayer / f.venta.metaHoy - 1 : null;
+      L.push(fila([
+        nom(f.sucursal), plata(f.venta.ayer),
+        f.venta.metaHoy ? plata(f.venta.metaHoy) : '—',
+        pct(idxDia), pct(f.venta.index === undefined ? null : f.venta.index),
+        f.venta.transAyer ? fmtNum(f.venta.transAyer, 0) : '—',
+        f.k && f.k.presentes && f.venta.ayer ? plata(f.venta.ayer / f.k.presentes) : '—'
+      ]));
+    });
+    L.push('');
+    L.push('   La venta no mueve ningún indicador de RRHH: está para leer la cobertura');
+    L.push('   contra el volumen que efectivamente hubo que atender.');
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
   }
 
   return {
     calcular, datosMensuales,
-    textoDiario, asuntoDiario,
+    textoDiario, asuntoDiario, textoVentasDia,
     textoVisita, textoMensual, textoChecklist,
     asuntoVisita, asuntoMensual, asuntoChecklist,
     enviarVisita, enviarMensual, enviarChecklist,

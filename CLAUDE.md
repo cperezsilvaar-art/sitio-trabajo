@@ -61,7 +61,8 @@ visita cargada.
   `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
-  misma), `#/diario`, `#/visitas`, `#/reclamos`,
+  misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
+  `#/visitas`, `#/reclamos`,
   `#/movimientos[/cesiones|/bajas]`, `#/sucursales`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
@@ -88,7 +89,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 
 | Escala | Pantalla | Pregunta |
 |---|---|---|
-| El día | Reportes a diario | ¿Con cuánta gente abrió el área y qué hago hoy? |
+| El día | Presentismo | ¿Con cuánta gente abrió el área y qué hago hoy? |
 | Lo que llevo | Asistente (chat + agenda) | ¿Qué tengo que hacer y qué estoy esperando? |
 | La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
@@ -127,11 +128,27 @@ anti-patrón, porque esconde la acción que lo destraba. Documentado en
 visto una request y una response reales.** Gmail quedó afuera por eso: el token
 venció y no se pudo observar.
 
-**En el RVD no se cargan horas extras.** La compañía no tiene reloj de fichadas
-y el dato depende de lo que diga cada gerente: pedirlo todos los días deja un KPI
-en cero que parece un problema y es un vacío. El motor las sigue calculando para
-cuando haya fichadas, y siguen llegando por el libro de novedades a la
-estadística mensual. Lo que sí se lleva a diario es el **ausentismo**.
+**El presentismo y la venta van en pantallas separadas.** `#/diario`
+(*Presentismo*) contesta quién vino y quién no; `#/operacion` (*Ventas*)
+contesta cuánto volumen hubo que atender. No es una preferencia de orden: el que
+las recibe hace cosas distintas con cada una —el presentismo se resuelve moviendo
+gente antes de la apertura, la venta se lee después para saber cuánto pesó el
+hueco—, y mezcladas el informe a Operaciones tenía que explicar las dos.
+`Reporte.textoDiario()` es solo presentismo y `Reporte.textoVentasDia()` solo
+venta. El único cruce que queda es la **venta por persona presente**, que vive en
+*Ventas*.
+
+Los totales de venta van sobre `calc.filasVenta`, **no sobre `calc.filas`**: el
+RDV llega completo todas las mañanas y el presentismo se carga tienda por tienda,
+así que atarlos mostraba la venta de dos sucursales de once. La venta por persona
+presente es la excepción y se arma con las dos puntas del mismo subconjunto
+(`venta.ayerConPresentismo / venta.presentes`).
+
+**En Presentismo no se cargan horas extras.** La compañía no tiene reloj de
+fichadas y el dato depende de lo que diga cada gerente: pedirlo todos los días
+deja un KPI en cero que parece un problema y es un vacío. El motor las sigue
+calculando para cuando haya fichadas, y siguen llegando por el libro de novedades
+a la estadística mensual. Lo que sí se lleva a diario es el **ausentismo**.
 
 Las **ausencias con certificado** (`assets/js/ausencias.js`, `c.ausencias`) son
 la tercera cosa distinta de `c.novedades` (el mes cerrado) y `c.licencias`

@@ -1,4 +1,4 @@
-# Reportes a diario
+# Presentismo del día y venta del día
 
 La estadística mensual mide el mes que cerró. Este módulo mide **el día que
 pasó**, que es la única escala en la que todavía se puede hacer algo: si hoy
@@ -6,6 +6,24 @@ faltaron tres personas en una tienda de ocho, la decisión es de hoy a la mañan
 
 Se carga con el dato del día anterior y se manda a Operaciones **antes de la
 apertura**.
+
+## Dos pantallas, no una
+
+Son **dos preguntas distintas** y desde septiembre de 2026 viven separadas, a
+pedido del coordinador:
+
+| Pantalla | Ruta | Pregunta |
+|---|---|---|
+| **Presentismo** | `#/diario` (también `#/presentismo`) | ¿Quién vino y quién no? |
+| **Ventas** | `#/operacion` (también `#/ventas`) | ¿Cuánto volumen hubo que atender? |
+
+Lo que las separa no es una preferencia de orden: **el que las recibe hace cosas
+distintas con cada una**. El presentismo se resuelve moviendo gente antes de la
+apertura; la venta se lee después, para saber cuánto pesó el hueco. Mezcladas,
+el informe que va a Operaciones tenía que explicar las dos y no se leía ninguna.
+
+El único cruce que sobrevive es la **venta por persona presente**, y vive en la
+pantalla de Ventas.
 
 ## Los cinco indicadores
 
@@ -70,7 +88,7 @@ Esta división es la misma de la estadística mensual y por el mismo motivo:
 llevar a comité un ausentismo que es casi todo vacaciones hace perder
 credibilidad.
 
-## El RDV
+## El RDV (pantalla *Ventas*)
 
 El **Reporte Diario de Ventas** que llega todas las mañanas trae, por tienda, la
 venta de ayer, la del mes, lo requerido, la meta del día y las transacciones.
@@ -101,7 +119,21 @@ Dos índices distintos, que no hay que mezclar:
 Comparar la venta de ayer contra el requerido del mes entero da un desvío falso
 de −80%.
 
-## El documento
+### Por qué la venta no espera al presentismo
+
+El RDV llega **completo** todas las mañanas; el presentismo se carga **tienda por
+tienda** a lo largo del día. Cuando los totales de venta se armaban sobre las
+sucursales con el día cargado, importar el RDV entero mostraba la venta de dos
+tiendas de once y parecía un error de importación. Por eso `calcularDiario()`
+devuelve `filasVenta` aparte de `filas`: la venta se suma sobre todas las
+tiendas que la tienen.
+
+La **venta por persona presente** es la excepción, y se calcula con las dos
+puntas del mismo subconjunto —solo las tiendas que tienen venta *y* presentismo—.
+Dividir la venta de once tiendas por los presentes de dos da un número que no es
+de nadie.
+
+## El documento de presentismo
 
 Cinco bloques fijos, en el orden en que se leen cuando hay diez minutos:
 
@@ -113,6 +145,9 @@ Cinco bloques fijos, en el orden en que se leen cuando hay diez minutos:
    vuelva costumbre.
 5. **Acciones para mañana** — hasta cuatro, derivadas de las alertas. No se
    inventan: cada una responde a un desvío concreto del día.
+
+**La venta no está en este documento.** Tiene el suyo, en la pantalla de Ventas:
+el día, la tabla por sucursal y la venta por persona presente.
 
 Las sucursales sin carga quedan explícitamente afuera del cálculo y se listan al
 final de las alertas. Un día sin reportar no es un día sin ausencias, y mezclarlos

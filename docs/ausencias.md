@@ -8,7 +8,7 @@ El panel guarda tres cosas distintas que se parecen y no hay que mezclar:
 | `c.licencias` | Las especiales del art. 25 del CCT 414/05 | Controlar el tope anual de estudio, matrimonio, etc. |
 | `c.ausencias` | **La persona que hoy no está** | Saber a quién esperar y hasta cuándo |
 
-## Por qué no hay horas extras en el RVD
+## Por qué no hay horas extras en Presentismo
 
 Se sacaron de la carga diaria. La compañía no tiene reloj de fichadas: el dato
 depende de lo que diga cada Gerente de Tienda, y nadie va a llamar a doce
@@ -26,7 +26,7 @@ ese lugar.
 
 ## Cómo se carga
 
-**RVD → Ausencias con certificado.** Se elige a la persona y se anota la fecha
+**Presentismo → Ausencias con certificado.** Se elige a la persona y se anota la fecha
 de inicio y la de alta que dice el certificado. La fecha de alta puede faltar
 —muchos certificados no la traen— y en ese caso el panel avisa igual: una
 ausencia sin fecha de vuelta es la que más se olvida.
@@ -71,7 +71,7 @@ alta** y la que vence en los próximos tres días.
 
 Aparecen en dos lugares: en el **panel general**, porque la decisión es de
 mañana a la mañana —o la persona vuelve, o hay que cubrir el turno— y enterarse
-tarde es enterarse con la tienda ya abierta; y en el **RVD**, con el botón para
+tarde es enterarse con la tienda ya abierta; y en **Presentismo**, con el botón para
 resolverlas ahí mismo.
 
 Al volver se marca **Se reincorporó**. Si en cambio trae otro certificado, se

@@ -122,6 +122,17 @@ nav.tabs.principal .grupo {
 }
 nav.tabs.principal .grupo:first-of-type { }
 nav.tabs.principal a.al-final { margin-left: auto; }
+
+/* Con nueve solapas y cuatro rótulos de grupo la fila ya no entra en una
+   pantalla de 1400. Scrollear la escondía a Panel por la izquierda —el
+   navegador corre la solapa activa a la vista— y perder el botón de inicio es
+   peor que usar dos renglones. */
+@media (min-width: 901px) {
+  nav.tabs.principal { flex-wrap: wrap; overflow-x: visible; row-gap: 0; }
+}
+/* El rótulo y sus solapas son una unidad: si la fila corta entre los dos, el
+   grupo queda encabezando una línea que no es la suya. */
+nav.tabs.principal .nav-grupo { display: flex; align-items: stretch; }
 @media (max-width: 900px) {
   /* En el teléfono la barra ya scrollea: las etiquetas de grupo solo estorban. */
   nav.tabs.principal .grupo { display: none; }

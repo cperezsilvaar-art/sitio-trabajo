@@ -177,7 +177,7 @@ const App = (() => {
           <ul>${al.slice(0, 6).map(x => `<li>
             <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
           </li>`).join('')}</ul>
-          <a href="#/diario">Resolverlas en el RVD</a>
+          <a href="#/diario">Resolverlas en Presentismo</a>
         </div>`;
       })()}
 
@@ -986,10 +986,11 @@ const App = (() => {
       .sort((a, b) => String(b).localeCompare(String(a)));
 
     return `
-      <h1 class="titulo">Reportes a diario</h1>
+      <h1 class="titulo">Presentismo del día</h1>
       <p class="subtitulo">
-        Cómo abrió el área. Se carga con el dato del día anterior y se manda a Operaciones
+        Quién vino y quién no. Se carga con el dato del día anterior y se manda a Operaciones
         antes de la apertura: acá todavía se puede mover gente, en la estadística del mes ya no.
+        La venta del día va aparte, en <a href="#/operacion">Ventas del día</a>.
       </p>
 
       ${panelAusenciasLargas()}
@@ -1056,14 +1057,94 @@ const App = (() => {
       ${panelSucursalDia(dia, p)}
 
       <section class="tarjeta">
+        <h2>Notas y envío</h2>
+        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
+          <textarea id="diario-notas" style="min-height:70px"
+            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
+        </label>
+        <div class="acciones">
+          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
+          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
+          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Vista previa</h2>
+        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
+      </section>`;
+  }
+
+  /* ====================== VISTA: VENTAS DEL DÍA ======================
+     La venta salió de la pantalla de presentismo a pedido del coordinador: son
+     dos preguntas distintas y mezclarlas hacía que el reporte que va a
+     Operaciones tuviera que explicar las dos. Acá el número de la operación se
+     mira contra la gente que efectivamente estuvo, que es el único cruce que
+     interesa. */
+  function vistaOperacion() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const fechas = Store.fechasDiarias();
+    if (!diarioFecha) diarioFecha = fechas[0] || ayerISO();
+    const dia = Store.diarioDe(diarioFecha);
+    const calc = calcularDiario(dia, e.sucursales, e.config.parametros);
+    const v = calc.venta;
+    const t = calc.total;
+
+    const opcionesFecha = Array.from(new Set(fechas.concat([diarioFecha])))
+      .sort((a, b) => String(b).localeCompare(String(a)));
+
+    return `
+      <h1 class="titulo">Ventas del día</h1>
+      <p class="subtitulo">
+        El volumen que hubo que atender. No mueve ningún indicador de RRHH: está para leer
+        la cobertura contra la venta, porque el mismo hueco de personal pesa distinto en un
+        día flojo que en uno de promoción. El presentismo va aparte, en
+        <a href="#/diario">Presentismo del día</a>.
+      </p>
+
+      <section class="tarjeta">
+        <div class="acciones" style="align-items:flex-end;flex-wrap:wrap;margin-top:0">
+          <label class="campo" style="max-width:200px">
+            <span>Día reportado</span>
+            <input type="date" id="diario-fecha" value="${esc(diarioFecha)}">
+          </label>
+          ${opcionesFecha.length > 1 ? `<label class="campo" style="max-width:220px">
+            <span>Días cargados</span>
+            <select id="diario-historico">
+              ${opcionesFecha.map(f => `<option value="${esc(f)}"${f === diarioFecha ? ' selected' : ''}>${fmtFecha(f)}</option>`).join('')}
+            </select>
+          </label>` : ''}
+        </div>
+      </section>
+
+      ${v.conDato ? `<div class="kpis">
+        ${kpi('Venta del día', dinero(v.ayer),
+              `${v.conDato} sucursal${v.conDato === 1 ? '' : 'es'} con dato`)}
+        ${kpi('Índice del día', v.indexDia === null ? '—'
+                : (v.indexDia >= 0 ? '+' : '') + fmtPct(v.indexDia, 1),
+              v.metaHoy ? `meta ${dinero(v.metaHoy)}` : 'sin meta cargada',
+              v.indexDia === null ? '' : v.indexDia >= 0 ? 'ok' : 'alerta')}
+        ${kpi('Índice del mes', v.indexMes === null ? '—'
+                : (v.indexMes >= 0 ? '+' : '') + fmtPct(v.indexMes, 1),
+              v.requerido ? `requerido ${dinero(v.requerido)}` : 'sin requerido cargado',
+              v.indexMes === null ? '' : v.indexMes >= 0 ? 'ok' : 'alerta')}
+        ${kpi('Venta por persona presente',
+              v.presentes && v.ayerConPresentismo ? dinero(v.ayerConPresentismo / v.presentes) : '—',
+              v.presentes
+                ? `${v.presentes} personas en las ${v.tiendasConAmbos} tienda${v.tiendasConAmbos === 1 ? '' : 's'} que además cargaron el presentismo`
+                : 'cargá el presentismo del día para poder cruzarlo')}
+      </div>` : ''}
+
+      <section class="tarjeta">
         <h2>Reporte Diario de Ventas (RDV)</h2>
         <p class="ayuda">
           Pegá la hoja <strong>RDV Operaciones</strong> del reporte de ventas del día:
           abrila en Excel, seleccioná desde la fila de encabezados —la que dice
           <em>Área … Tienda … Ayer … Mes</em>— hasta la última tienda, copiá y pegá.
-          Solo se toman las filas del ${esc(e.config.area || 'área')}. La venta no cambia
-          ningún indicador de RRHH: sirve para leer la cobertura contra el volumen que
-          efectivamente hubo que atender.
+          Solo se toman las filas del ${esc(e.config.area || 'área')}.
         </p>
         <textarea id="pegar-rdv" style="min-height:100px"
           placeholder="Área  #Global  #País  Ciudad  #Ciudad  Formato  Capa  Tienda  Ayer  Semana  Mes  Requerido  Index  …"></textarea>
@@ -1081,7 +1162,7 @@ const App = (() => {
             <th class="num" title="Venta del día dividida por la gente que efectivamente estuvo">Venta por persona presente</th>
           </tr></thead>
           <tbody>
-            ${calc.filas.filter(f => f.venta).map(f => {
+            ${calc.filasVenta.map(f => {
               const chipIdx = v => (v === null || v === undefined) ? '—'
                 : `<span class="chip ${v >= 0 ? 'verde' : 'rojo'}">${v >= 0 ? '+' : ''}${fmtPct(v, 1)}</span>`;
               const idxDia = f.venta.metaHoy ? f.venta.ayer / f.venta.metaHoy - 1 : null;
@@ -1092,29 +1173,24 @@ const App = (() => {
               <td class="num">${chipIdx(idxDia)}</td>
               <td class="num">${chipIdx(f.venta.index)}</td>
               <td class="num">${f.venta.transAyer ? fmtNum(f.venta.transAyer, 0) : '—'}</td>
-              <td class="num">${f.k.presentes && f.venta.ayer ? dinero(f.venta.ayer / f.k.presentes) : '—'}</td>
+              <td class="num">${f.k && f.k.presentes && f.venta.ayer ? dinero(f.venta.ayer / f.k.presentes) : '<em style="opacity:.6">sin presentismo</em>'}</td>
             </tr>`; }).join('')}
           </tbody>
         </table></div>` : ''}
       </section>
 
-      <section class="tarjeta">
-        <h2>Notas y envío</h2>
-        <label class="campo"><span>Notas del coordinador (van al final del reporte)</span>
-          <textarea id="diario-notas" style="min-height:70px"
-            placeholder="Lo que no entra en ningún indicador y Operaciones tiene que saber.">${esc((dia && dia.notas) || '')}</textarea>
-        </label>
-        <div class="acciones">
-          <button class="b" data-accion="copiar-diario">Copiar el reporte</button>
-          <button class="b sec" data-accion="descargar-diario">Descargar .txt</button>
-          <button class="b sec" data-accion="imprimir">Imprimir / PDF</button>
-        </div>
-      </section>
 
-      <section class="tarjeta">
-        <h2>Vista previa</h2>
-        <pre class="reporte" id="vista-diario">${esc(Reporte.textoDiario(diarioFecha, e.config))}</pre>
-      </section>`;
+      ${v.conDato ? `<section class="tarjeta">
+        <h2>Resumen para copiar</h2>
+        <p class="ayuda">
+          Solo la venta del día. Lo de presentismo se copia desde su propia pantalla.
+        </p>
+        <div class="acciones" style="margin-top:0">
+          <button class="b" data-accion="copiar-ventas">Copiar el resumen</button>
+          <button class="b sec" data-accion="descargar-ventas">Descargar .txt</button>
+        </div>
+        <pre class="reporte" id="vista-ventas" style="margin-top:14px">${esc(Reporte.textoVentasDia(diarioFecha, e.config))}</pre>
+      </section>` : ''}`;
   }
 
   /**
@@ -4075,7 +4151,12 @@ const App = (() => {
     else if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
       vistaActual = vistaAsistente; html = vistaAsistente();
     }
-    else if (ruta[0] === 'diario')   { vistaActual = vistaDiario;    html = vistaDiario(); }
+    else if (ruta[0] === 'diario' || ruta[0] === 'presentismo') {
+      vistaActual = vistaDiario;    html = vistaDiario();
+    }
+    else if (ruta[0] === 'operacion' || ruta[0] === 'ventas') {
+      vistaActual = vistaOperacion; html = vistaOperacion();
+    }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
     else if (ruta[0] === 'reclamos') { vistaActual = vistaReclamos;  html = vistaReclamos(); }
     else if (ruta[0] === 'movimientos') {
@@ -5080,8 +5161,19 @@ const App = (() => {
       }
 
       if (a === 'descargar-diario') {
-        guardarArchivo(`reporte-diario-${diarioFecha}.txt`,
+        guardarArchivo(`presentismo-${diarioFecha}.txt`,
                        Reporte.textoDiario(diarioFecha, Store.get().config));
+      }
+
+      if (a === 'copiar-ventas') {
+        const texto = Reporte.textoVentasDia(diarioFecha, Store.get().config);
+        try { await navigator.clipboard.writeText(texto); avisar('Resumen copiado.'); }
+        catch (_) { avisar('No se pudo copiar: seleccioná el texto de la vista previa.', 'error'); }
+      }
+
+      if (a === 'descargar-ventas') {
+        guardarArchivo(`ventas-${diarioFecha}.txt`,
+                       Reporte.textoVentasDia(diarioFecha, Store.get().config));
       }
 
       /* --- nómina del área --- */

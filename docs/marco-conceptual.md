@@ -97,7 +97,7 @@ solo **7%** avanza de verdad.
 
 | Decisión del panel | Por qué |
 |---|---|
-| El módulo **Reportes a diario** existe | Orquestar requiere ver el estado hoy. Un dato que llega a mes vencido permite planificar, no orquestar. |
+| El módulo **Presentismo del día** existe | Orquestar requiere ver el estado hoy. Un dato que llega a mes vencido permite planificar, no orquestar. |
 | Las acciones del día proponen **mover gente entre sucursales antes que autorizar horas extras** | Reconfigurar capacidad existente es orquestación; comprar horas es asignación cara. |
 | La lista de **flotantes del área** se trata como plantel real, no como excepción | Es la capacidad reconfigurable del área. |
 | El **índice de cobertura de turnos** es el KPI del día | Es la métrica de si el área está orquestada: cuánta gente presente contra cuánta hace falta para operar. |
