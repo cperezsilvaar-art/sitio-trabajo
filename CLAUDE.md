@@ -121,6 +121,22 @@ el velo, `Escape` o elegir un ítem la cierran. Cerrarla al elegir no es un
 detalle: dejarla abierta tapando la pantalla a la que acabás de entrar es el
 error clásico del patrón.
 
+**Los cargos que existen hoy están en `CARGOS_NOMINA` (`catalogos.js`)**: los
+catorce que aparecen en las 139 fichas de la nómina, ninguno inventado. Cada fila
+junta cargo, nivel de cargo, categoría de la nómina, posición del panel, jornada
+y si es un bloqueo de matrícula, porque en la práctica van juntos: elegir
+«FARMACEUTICO AUXILIAR TP» ya dice que son 0,5 FTE. `MAPA_CARGOS` **se deriva de
+esa lista** — no agregar una segunda lista de cargos. Un cargo nuevo se agrega
+ahí y aparece en el alta a mano, en la importación y en el organigrama.
+
+**Se puede dar de alta a alguien a mano**, desde `#/nomina`, sin esperar la
+nómina del mes: nombre, legajo, DNI, sucursal, unidad de negocio, posición, fecha
+de ingreso, jornada y jefe (`c.jefe`, que la nómina no trae). Al guardar suma su
+FTE a la tienda. **Un cargo que dice `TP` o `JORNADA PARCIAL` entra como 0,5
+aunque el desplegable diga full time**: lo define el cargo, porque si no la
+dotación de la tienda sale mal y no se nota hasta el cierre del mes. La
+importación posterior lo reconoce por nombre y lo completa sin duplicarlo.
+
 Fuera de esas tres escalas está **`#/nomina`**, que no responde a un ritmo sino a
 «¿quién es esta persona?»: el padrón entero en una lista con buscador, flotantes
 incluidos, y cada línea abre la ficha. Va al lado de *Panel* porque es material

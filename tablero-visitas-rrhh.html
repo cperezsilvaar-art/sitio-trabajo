@@ -1000,29 +1000,76 @@ const POSICIONES = [
    2 las posiciones que responden a él y 3 el piso de venta. */
 
 /**
+ * Los cargos que existen hoy en el Área 3, con todo lo que cada uno arrastra.
+ *
+ * Salen de la nómina de septiembre de 2026: son los catorce que aparecen en las
+ * 139 fichas, ni uno inventado. Cada fila junta lo que en la planilla vive en
+ * cuatro columnas distintas —cargo, nivel de cargo, categoría de convenio y
+ * jornada— porque en la práctica van juntos: elegir «FARMACEUTICO AUXILIAR TP»
+ * ya dice que el nivel es FARMACEUTICO y que son 0,5 FTE. Al dar de alta a
+ * alguien a mano se elige una sola cosa y el resto se completa; si mañana la
+ * compañía crea un cargo nuevo, se agrega acá y aparece en todos lados.
+ *
+ * `noPresencial` es el bloqueo de matrícula: presta la habilitación pero no
+ * cubre turno, así que `esNoPresencial()` lo saca de la dotación de piso.
+ *
+ * El orden es el del organigrama —de arriba hacia abajo—, no el de cuántos hay:
+ * es el orden en el que se busca un cargo en una lista.
+ */
+const CARGOS_NOMINA = [
+  { cargo: 'GERENTE DE TIENDA',                 nivel: 'GERENTE DE TIENDA',   categoria: 'FUERA DE CONVENIO',          posicion: 'Gerente de Tienda',  jornada: 1 },
+  { cargo: 'ASISTENTE DE PISO DE VENTA SENIOR', nivel: 'APV SENIOR',          categoria: 'EMPLEADO ESP. DE FARMACIA',  posicion: 'Senior',             jornada: 1 },
+  { cargo: 'DIRECTOR TECNICO',                  nivel: 'DIRECTOR TECNICO',    categoria: 'DIRECTOR TECNICO',           posicion: 'DT',                 jornada: 1 },
+  { cargo: 'DIRECTOR TECNICO TP',               nivel: 'DIRECTOR TECNICO',    categoria: 'DIRECTOR TECNICO',           posicion: 'DT',                 jornada: 0.5 },
+  { cargo: 'DIRECTOR TECNICO CON BLOQUEO',      nivel: 'DT CON BLOQUEO',      categoria: 'DT NO PRESENCIAL',           posicion: 'DT',                 jornada: 1, noPresencial: true },
+  { cargo: 'FARMACEUTICO AUXILIAR',             nivel: 'FARMACEUTICO',        categoria: 'FARMACEUTICO AUXILIAR',      posicion: 'Farmacéutico',       jornada: 1 },
+  { cargo: 'FARMACEUTICO AUXILIAR TP',          nivel: 'FARMACEUTICO',        categoria: 'FARMACEUTICO AUXILIAR',      posicion: 'Farmacéutico',       jornada: 0.5 },
+  { cargo: 'FARMA AUX. JORNADA PARCIAL',        nivel: 'FARMACEUTICO',        categoria: 'FARMA AUX. JORNADA PARCIAL', posicion: 'Farmacéutico',       jornada: 0.5 },
+  { cargo: 'FARM. AUX. BLOQUEO',                nivel: 'FARM. AUXL. BLOQUEO', categoria: 'FARMA. AUX. BLOQUEO',        posicion: 'Farmacéutico',       jornada: 1, noPresencial: true },
+  { cargo: 'ASESORA DERMO',                     nivel: 'ASESORA DERMO',       categoria: 'PERFUMERIA',                 posicion: 'Asesora de Dermo',   jornada: 1 },
+  { cargo: 'ASESORA DE BELLEZA',                nivel: 'ASESORA DE BELLEZA',  categoria: 'PERFUMERIA',                 posicion: 'Asesora de Belleza', jornada: 1 },
+  { cargo: 'ASISTENTE DE PISO DE VENTAS',       nivel: 'BASE FARMACIA',       categoria: 'EMPLEADO DE FARMACIA',       posicion: 'APV',                jornada: 1 },
+  { cargo: 'CHOFER',                            nivel: 'CHOFER',              categoria: 'INICIAL B',                  posicion: 'Otros',              jornada: 1 },
+  { cargo: 'LIMPIEZA',                          nivel: 'LIMPIEZA',            categoria: 'INICIAL B',                  posicion: 'Otros',              jornada: 1 }
+];
+
+/** La clave con la que se busca un cargo: sin espacios, puntos ni acentos. */
+const _claveCargo = t => String(t || '').toUpperCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
+
+/** Qué arrastra un cargo escrito como venga de la planilla. */
+function cargoDeNomina(cargo) {
+  const k = _claveCargo(cargo);
+  return CARGOS_NOMINA.find(x => _claveCargo(x.cargo) === k) || null;
+}
+
+/**
  * Cargo de la nómina → posición del panel.
  *
  * La nómina abre el cargo mucho más que el tablero de FTE: distingue la jornada
  * parcial, el bloqueo de matrícula y el convenio. Para la dotación todo eso es
  * la misma posición, así que se agrupa; el cargo original queda guardado en el
  * perfil de cada persona, que es donde importa el detalle.
+ *
+ * Se arma desde `CARGOS_NOMINA` para que no haya dos listas de cargos que
+ * mantener sincronizadas: agregar un cargo allá lo hace conocido acá.
  */
-const MAPA_CARGOS = {
-  'GERENTEDETIENDA':                'Gerente de Tienda',
-  'ASISTENTEDEPISODEVENTASENIOR':   'Senior',
-  'ASISTENTEDEPISODEVENTAS':        'APV',
-  'FARMACEUTICOAUXILIAR':           'Farmacéutico',
-  'FARMACEUTICOAUXILIARTP':         'Farmacéutico',
-  'FARMAAUXJORNADAPARCIAL':         'Farmacéutico',
-  'FARMAUXBLOQUEO':                 'Farmacéutico',
-  'DIRECTORTECNICO':                'DT',
-  'DIRECTORTECNICOCONBLOQUEO':      'DT',
-  'DIRECTORTECNICOTP':              'DT',
-  'ASESORADERMO':                   'Asesora de Dermo',
-  'ASESORADEBELLEZA':               'Asesora de Belleza',
-  'CHOFER':                         'Otros',
-  'LIMPIEZA':                       'Otros'
-};
+const MAPA_CARGOS = CARGOS_NOMINA.reduce((m, x) => {
+  m[_claveCargo(x.cargo)] = x.posicion;
+  return m;
+}, {});
+
+/** Las unidades de negocio del área, como las escribe la nómina. */
+const UNIDADES_NEGOCIO = ['OPERACIONES - FARMACIA', 'OPERACIONES - LABORATORIO'];
+
+/** Estatus del vínculo. Todo lo que no es INDETERMINADO se marca en la ficha. */
+const ESTATUS_VINCULO = [
+  'INDETERMINADO',
+  'PERIODO DE PRUEBA',
+  'PLAZO FIJO',
+  'LICENCIA SIN GOCE DE SUELDO',
+  'FUERA DE NOMINA (HONORARIOS)'
+];
 
 /* Talles que se registran para la ropa de trabajo. La nómina no los trae:
    se cargan a mano en el perfil de cada persona. */
@@ -5788,7 +5835,7 @@ const Store = (() => {
         /* La nómina no trae cargas de familia y los plazos del art. 208 se
            duplican con ellas: se carga a mano y por eso arranca sin definir. */
         if (c.cargasFamilia === undefined) c.cargasFamilia = null;
-        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
+        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus', 'jefe',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
          'razonSocialContrato', 'direccionArea', 'fechaNacimiento', 'fechaIngresoFTD',
          'email', 'emailCorporativo', 'telefono', 'domicilio', 'localidad',
@@ -6167,6 +6214,9 @@ const Store = (() => {
         /* Datos que llegan de la nómina */
         dni: '', nroPersonal: '', sexo: '', estatus: '',
         cargo: '', nivelCargo: '', categoriaConvenio: '',
+        /* A quién le reporta. La nómina no lo trae: se carga al dar de alta a
+           mano y se puede corregir en la ficha. */
+        jefe: '',
         unidadNegocio: '', razonSocialContrato: '', direccionArea: '',
         fechaNacimiento: '', fechaIngresoFTD: '',
         email: '', emailCorporativo: '', telefono: '',
@@ -9084,6 +9134,100 @@ const App = (() => {
   let nominaFiltro = '';
   let nominaOrden = 'nombre';
   let nominaEstado = 'todos';   // todos | activos | bajas
+  let altaAbierta = false;      // el formulario de alta a mano, desplegado
+
+  /* A quién puede reportarle alguien: primero los gerentes —de tienda y de
+     operaciones—, que es el caso de nueve de cada diez altas, y después el
+     resto del padrón por si el jefe directo es un Senior. */
+  function opcionesDeJefe(e) {
+    const gerentes = [];
+    (e.config.gerentesOperaciones || []).forEach(g => {
+      if (g.nombre) gerentes.push({ nombre: g.nombre, detalle: 'Gerente de Operaciones' });
+    });
+    e.sucursales.forEach(x => {
+      if (x.gerente) gerentes.push({ nombre: x.gerente, detalle: 'Gerente de Tienda · ' + (x.nombre || x.codigo) });
+    });
+    const resto = [];
+    e.sucursales.forEach(x => (x.colaboradores || []).forEach(c => {
+      if (c.activo === false || !c.nombre) return;
+      if (gerentes.some(g => g.nombre === c.nombre)) return;
+      resto.push({ nombre: c.nombre, detalle: (c.cargo || 'sin puesto') + ' · ' + (x.nombre || x.codigo) });
+    }));
+    resto.sort((a, b2) => a.nombre.localeCompare(b2.nombre));
+    return { gerentes, resto };
+  }
+
+  /* Los mismos nombres para el campo «Le reporta a» de cualquier ficha. */
+  function datalistDeJefes(e) {
+    const { gerentes, resto } = opcionesDeJefe(e);
+    return `<datalist id="jefes-area">${gerentes.concat(resto)
+      .map(x => `<option value="${esc(x.nombre)}">${esc(x.detalle)}</option>`).join('')}</datalist>`;
+  }
+
+  /* El alta a mano. Existe porque una persona entra a trabajar el lunes y la
+     nómina de la compañía la trae recién el mes que viene: hasta entonces no
+     figura en ningún lado y la dotación de su tienda está mal. Con esto entra
+     el mismo día y suma su FTE; cuando llega la planilla, la importación la
+     reconoce por nombre y le completa lo que falta sin duplicarla. */
+  function formularioAlta(e) {
+    if (!altaAbierta) {
+      return `<div class="acciones" style="margin-top:0">
+        <button class="b" data-accion="abrir-alta">+ Agregar un colaborador</button>
+      </div>`;
+    }
+    const { gerentes, resto } = opcionesDeJefe(e);
+    return `
+      <div class="grid c3" style="margin-top:4px">
+        <label class="campo"><span>Apellido y nombre</span>
+          <input id="alta-nombre" placeholder="PEREZ, MARIA" autocomplete="off"></label>
+        <label class="campo"><span>Legajo</span>
+          <input id="alta-legajo" placeholder="N° de la compañía" autocomplete="off"></label>
+        <label class="campo"><span>DNI</span>
+          <input id="alta-dni" inputmode="numeric" autocomplete="off"></label>
+
+        <label class="campo"><span>Sucursal</span>
+          <select id="alta-sucursal">
+            ${e.sucursales.map(x => `<option value="${x.id}">${esc(Store.etiquetaSucursal(x))}</option>`).join('')}
+          </select></label>
+        <label class="campo"><span>Área a la que pertenece</span>
+          <select id="alta-unidad">
+            ${UNIDADES_NEGOCIO.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('')}
+          </select></label>
+        <label class="campo"><span>Fecha de ingreso</span>
+          <input type="date" id="alta-ingreso" value="${hoyISO()}"></label>
+
+        <label class="campo"><span>Posición</span>
+          <select id="alta-cargo">
+            ${CARGOS_NOMINA.map(x => `<option value="${esc(x.cargo)}">${esc(x.cargo)}${
+              x.jornada === 0.5 ? ' · media jornada' : ''}${x.noPresencial ? ' · no cubre turno' : ''}</option>`).join('')}
+          </select></label>
+        <label class="campo"><span>Jornada</span>
+          <select id="alta-jornada">
+            <option value="1">Full time · 1 FTE</option>
+            <option value="0.5">Part time · 0,5 FTE</option>
+          </select></label>
+        <label class="campo"><span>Le reporta a</span>
+          <select id="alta-jefe">
+            <option value="">— sin definir —</option>
+            <optgroup label="Gerentes">
+              ${gerentes.map(x => `<option value="${esc(x.nombre)}">${esc(x.nombre)} — ${esc(x.detalle)}</option>`).join('')}
+            </optgroup>
+            <optgroup label="Resto del padrón">
+              ${resto.map(x => `<option value="${esc(x.nombre)}">${esc(x.nombre)} — ${esc(x.detalle)}</option>`).join('')}
+            </optgroup>
+          </select></label>
+      </div>
+      <p class="ayuda">
+        La posición completa sola el nivel de cargo y la categoría de la nómina. Los cargos que
+        ya dicen <em>TP</em> o <em>jornada parcial</em> entran como medio FTE aunque acá elijas
+        full time: lo dice el cargo. Los que llevan <em>bloqueo</em> suman a la nómina pero no a
+        la dotación de piso, porque prestan la matrícula y no cubren turno.
+      </p>
+      <div class="acciones">
+        <button class="b" data-accion="guardar-alta">Guardar y sumarlo a la tienda</button>
+        <button class="b sec" data-accion="cerrar-alta">Cancelar</button>
+      </div>`;
+  }
 
   const _norm = t => String(t == null ? '' : t)
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -9168,6 +9312,14 @@ const App = (() => {
             ? `${gente.length} personas en la nómina · ${activos} activas · ${gente.length - activos} de baja · ${dot.personas} en el piso de una tienda · ${dot.flotantes} flotantes · ${dot.noPresenciales} con bloqueo.`
             : `${filtrada.length} de ${gente.length} personas${nominaEstado === 'activos' ? ' (solo activas)' : nominaEstado === 'bajas' ? ' (solo bajas)' : ''}.`}
         </p>
+      </section>
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Agregar un colaborador</h2>
+          ${altaAbierta ? '' : '<span class="ayuda" style="margin:0">A mano, sin esperar la nómina del mes</span>'}
+        </div>
+        ${formularioAlta(e)}
       </section>
 
       ${filtrada.length ? `<div class="lista-nomina">
@@ -10051,6 +10203,7 @@ const App = (() => {
               ${TIPOS_RECLAMO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
             </select></label>
         </div>
+        ${datalistDeJefes(e)}
         <datalist id="plantel-area">
           ${(sucFiltro ? (sucFiltro.colaboradores || [])
                        : e.sucursales.reduce((a, x) => a.concat(x.colaboradores || []), []))
@@ -10710,6 +10863,9 @@ const App = (() => {
         ${dato('Cargo', c.cargo)}
         ${dato('Nivel de cargo', c.nivelCargo)}
         ${dato('Categoría de la nómina', c.categoriaConvenio)}
+        <label class="campo"><span>Le reporta a</span>
+          <input data-colab-campo="${c.id}|jefe" value="${esc(c.jefe || '')}"
+            list="jefes-area" placeholder="Apellido y nombre"></label>
         <label class="campo"><span>Jornada</span>
           <select data-colab-campo="${c.id}|jornada">
             ${[['1', 'Completa · 1 FTE'], ['0.5', 'Parcial · 0,5 FTE']].map(([v, t]) =>
@@ -13631,6 +13787,66 @@ const App = (() => {
       }
 
       /* --- nómina del área --- */
+      if (a === 'abrir-alta')  { altaAbierta = true;  refrescar(); return; }
+      if (a === 'cerrar-alta') { altaAbierta = false; refrescar(); return; }
+
+      if (a === 'guardar-alta') {
+        const nombre = valorDe('#alta-nombre');
+        if (!nombre) return avisar('Poné el apellido y nombre.', 'error');
+        const sucursalId = ($('#alta-sucursal') || {}).value;
+        if (!sucursalId) return avisar('Elegí la sucursal.', 'error');
+        const ingreso = valorDe('#alta-ingreso');
+        if (!ingreso) return avisar('Poné la fecha de ingreso.', 'error');
+
+        const suc = Store.sucursal(sucursalId);
+        const info = cargoDeNomina(($('#alta-cargo') || {}).value) || {};
+
+        /* Un cargo que dice TP o jornada parcial ya define la jornada: si el
+           desplegable dijera otra cosa, la dotación de la tienda saldría mal y
+           nadie lo notaría hasta el cierre del mes. */
+        const elegida = Number(($('#alta-jornada') || {}).value) === 0.5 ? 0.5 : 1;
+        const jornada = info.jornada === 0.5 ? 0.5 : elegida;
+
+        /* Dos personas con el mismo nombre en la misma tienda casi siempre son
+           la misma cargada dos veces. */
+        const repetida = (suc.colaboradores || []).some(c =>
+          c.activo !== false && _norm(c.nombre) === _norm(nombre));
+        if (repetida) {
+          const sigo = await confirmar('Ya hay alguien con ese nombre',
+            `${nombre} ya figura en ${Store.etiquetaSucursal(suc)}. ¿Lo cargás igual?`,
+            'Cargarlo igual');
+          if (!sigo) return;
+        }
+
+        const c = Store.agregarColaborador(sucursalId, {
+          nombre,
+          legajo: valorDe('#alta-legajo'),
+          dni: valorDe('#alta-dni'),
+          fechaIngreso: ingreso,
+          unidadNegocio: ($('#alta-unidad') || {}).value || '',
+          jefe: ($('#alta-jefe') || {}).value || '',
+          cargo: info.cargo || '',
+          nivelCargo: info.nivel || '',
+          categoriaConvenio: info.categoria || '',
+          posicion: info.posicion || '',
+          jornada,
+          estatus: 'INDETERMINADO'
+        });
+        Store.save();
+
+        altaAbierta = false;
+        nominaFiltro = '';
+        perfilAbierto = c.id;
+        refrescar();
+
+        const d = Store.dotacionPlantel(sucursalId);
+        const np = esNoPresencial(c).noPresencial;
+        avisar(np
+          ? `${nombre} quedó cargado en ${Store.etiquetaSucursal(suc)}. Con bloqueo: suma a la nómina, no a la dotación de piso.`
+          : `${nombre} suma ${fmtNum(jornada, 1)} FTE a ${Store.etiquetaSucursal(suc)}, que ahora tiene ${fmtNum(d.fte, 1)}.`);
+        return;
+      }
+
       if (a === 'importar-nomina') {
         const crudo = ($('#pegar-nomina') || {}).value || '';
         if (!crudo.trim()) return avisar('Pegá primero la nómina.', 'error');

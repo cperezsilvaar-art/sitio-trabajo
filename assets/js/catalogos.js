@@ -29,29 +29,76 @@ const POSICIONES = [
    2 las posiciones que responden a él y 3 el piso de venta. */
 
 /**
+ * Los cargos que existen hoy en el Área 3, con todo lo que cada uno arrastra.
+ *
+ * Salen de la nómina de septiembre de 2026: son los catorce que aparecen en las
+ * 139 fichas, ni uno inventado. Cada fila junta lo que en la planilla vive en
+ * cuatro columnas distintas —cargo, nivel de cargo, categoría de convenio y
+ * jornada— porque en la práctica van juntos: elegir «FARMACEUTICO AUXILIAR TP»
+ * ya dice que el nivel es FARMACEUTICO y que son 0,5 FTE. Al dar de alta a
+ * alguien a mano se elige una sola cosa y el resto se completa; si mañana la
+ * compañía crea un cargo nuevo, se agrega acá y aparece en todos lados.
+ *
+ * `noPresencial` es el bloqueo de matrícula: presta la habilitación pero no
+ * cubre turno, así que `esNoPresencial()` lo saca de la dotación de piso.
+ *
+ * El orden es el del organigrama —de arriba hacia abajo—, no el de cuántos hay:
+ * es el orden en el que se busca un cargo en una lista.
+ */
+const CARGOS_NOMINA = [
+  { cargo: 'GERENTE DE TIENDA',                 nivel: 'GERENTE DE TIENDA',   categoria: 'FUERA DE CONVENIO',          posicion: 'Gerente de Tienda',  jornada: 1 },
+  { cargo: 'ASISTENTE DE PISO DE VENTA SENIOR', nivel: 'APV SENIOR',          categoria: 'EMPLEADO ESP. DE FARMACIA',  posicion: 'Senior',             jornada: 1 },
+  { cargo: 'DIRECTOR TECNICO',                  nivel: 'DIRECTOR TECNICO',    categoria: 'DIRECTOR TECNICO',           posicion: 'DT',                 jornada: 1 },
+  { cargo: 'DIRECTOR TECNICO TP',               nivel: 'DIRECTOR TECNICO',    categoria: 'DIRECTOR TECNICO',           posicion: 'DT',                 jornada: 0.5 },
+  { cargo: 'DIRECTOR TECNICO CON BLOQUEO',      nivel: 'DT CON BLOQUEO',      categoria: 'DT NO PRESENCIAL',           posicion: 'DT',                 jornada: 1, noPresencial: true },
+  { cargo: 'FARMACEUTICO AUXILIAR',             nivel: 'FARMACEUTICO',        categoria: 'FARMACEUTICO AUXILIAR',      posicion: 'Farmacéutico',       jornada: 1 },
+  { cargo: 'FARMACEUTICO AUXILIAR TP',          nivel: 'FARMACEUTICO',        categoria: 'FARMACEUTICO AUXILIAR',      posicion: 'Farmacéutico',       jornada: 0.5 },
+  { cargo: 'FARMA AUX. JORNADA PARCIAL',        nivel: 'FARMACEUTICO',        categoria: 'FARMA AUX. JORNADA PARCIAL', posicion: 'Farmacéutico',       jornada: 0.5 },
+  { cargo: 'FARM. AUX. BLOQUEO',                nivel: 'FARM. AUXL. BLOQUEO', categoria: 'FARMA. AUX. BLOQUEO',        posicion: 'Farmacéutico',       jornada: 1, noPresencial: true },
+  { cargo: 'ASESORA DERMO',                     nivel: 'ASESORA DERMO',       categoria: 'PERFUMERIA',                 posicion: 'Asesora de Dermo',   jornada: 1 },
+  { cargo: 'ASESORA DE BELLEZA',                nivel: 'ASESORA DE BELLEZA',  categoria: 'PERFUMERIA',                 posicion: 'Asesora de Belleza', jornada: 1 },
+  { cargo: 'ASISTENTE DE PISO DE VENTAS',       nivel: 'BASE FARMACIA',       categoria: 'EMPLEADO DE FARMACIA',       posicion: 'APV',                jornada: 1 },
+  { cargo: 'CHOFER',                            nivel: 'CHOFER',              categoria: 'INICIAL B',                  posicion: 'Otros',              jornada: 1 },
+  { cargo: 'LIMPIEZA',                          nivel: 'LIMPIEZA',            categoria: 'INICIAL B',                  posicion: 'Otros',              jornada: 1 }
+];
+
+/** La clave con la que se busca un cargo: sin espacios, puntos ni acentos. */
+const _claveCargo = t => String(t || '').toUpperCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
+
+/** Qué arrastra un cargo escrito como venga de la planilla. */
+function cargoDeNomina(cargo) {
+  const k = _claveCargo(cargo);
+  return CARGOS_NOMINA.find(x => _claveCargo(x.cargo) === k) || null;
+}
+
+/**
  * Cargo de la nómina → posición del panel.
  *
  * La nómina abre el cargo mucho más que el tablero de FTE: distingue la jornada
  * parcial, el bloqueo de matrícula y el convenio. Para la dotación todo eso es
  * la misma posición, así que se agrupa; el cargo original queda guardado en el
  * perfil de cada persona, que es donde importa el detalle.
+ *
+ * Se arma desde `CARGOS_NOMINA` para que no haya dos listas de cargos que
+ * mantener sincronizadas: agregar un cargo allá lo hace conocido acá.
  */
-const MAPA_CARGOS = {
-  'GERENTEDETIENDA':                'Gerente de Tienda',
-  'ASISTENTEDEPISODEVENTASENIOR':   'Senior',
-  'ASISTENTEDEPISODEVENTAS':        'APV',
-  'FARMACEUTICOAUXILIAR':           'Farmacéutico',
-  'FARMACEUTICOAUXILIARTP':         'Farmacéutico',
-  'FARMAAUXJORNADAPARCIAL':         'Farmacéutico',
-  'FARMAUXBLOQUEO':                 'Farmacéutico',
-  'DIRECTORTECNICO':                'DT',
-  'DIRECTORTECNICOCONBLOQUEO':      'DT',
-  'DIRECTORTECNICOTP':              'DT',
-  'ASESORADERMO':                   'Asesora de Dermo',
-  'ASESORADEBELLEZA':               'Asesora de Belleza',
-  'CHOFER':                         'Otros',
-  'LIMPIEZA':                       'Otros'
-};
+const MAPA_CARGOS = CARGOS_NOMINA.reduce((m, x) => {
+  m[_claveCargo(x.cargo)] = x.posicion;
+  return m;
+}, {});
+
+/** Las unidades de negocio del área, como las escribe la nómina. */
+const UNIDADES_NEGOCIO = ['OPERACIONES - FARMACIA', 'OPERACIONES - LABORATORIO'];
+
+/** Estatus del vínculo. Todo lo que no es INDETERMINADO se marca en la ficha. */
+const ESTATUS_VINCULO = [
+  'INDETERMINADO',
+  'PERIODO DE PRUEBA',
+  'PLAZO FIJO',
+  'LICENCIA SIN GOCE DE SUELDO',
+  'FUERA DE NOMINA (HONORARIOS)'
+];
 
 /* Talles que se registran para la ropa de trabajo. La nómina no los trae:
    se cargan a mano en el perfil de cada persona. */

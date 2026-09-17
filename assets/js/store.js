@@ -232,7 +232,7 @@ const Store = (() => {
         /* La nómina no trae cargas de familia y los plazos del art. 208 se
            duplican con ellas: se carga a mano y por eso arranca sin definir. */
         if (c.cargasFamilia === undefined) c.cargasFamilia = null;
-        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus',
+        ['legajo', 'cuil', 'sector', 'dni', 'nroPersonal', 'sexo', 'estatus', 'jefe',
          'cargo', 'nivelCargo', 'categoriaConvenio', 'unidadNegocio',
          'razonSocialContrato', 'direccionArea', 'fechaNacimiento', 'fechaIngresoFTD',
          'email', 'emailCorporativo', 'telefono', 'domicilio', 'localidad',
@@ -611,6 +611,9 @@ const Store = (() => {
         /* Datos que llegan de la nómina */
         dni: '', nroPersonal: '', sexo: '', estatus: '',
         cargo: '', nivelCargo: '', categoriaConvenio: '',
+        /* A quién le reporta. La nómina no lo trae: se carga al dar de alta a
+           mano y se puede corregir en la ficha. */
+        jefe: '',
         unidadNegocio: '', razonSocialContrato: '', direccionArea: '',
         fechaNacimiento: '', fechaIngresoFTD: '',
         email: '', emailCorporativo: '', telefono: '',

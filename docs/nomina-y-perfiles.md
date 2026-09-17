@@ -107,6 +107,72 @@ El sexo lo trae la nómina pegada: `plantel-area3.js`, que es lo que hace que el
 panel no abra vacío, no lo guarda, así que en un navegador recién limpiado esa
 marca aparece recién después de pegar la planilla.
 
+## Agregar a alguien a mano
+
+Una persona entra a trabajar el lunes y la nómina de la compañía la trae recién
+el mes que viene. Hasta entonces no figura en ningún lado y la dotación de su
+tienda está mal. El bloque **Agregar un colaborador**, arriba de la lista, la
+mete el mismo día.
+
+Pide lo mínimo para que cuente: **apellido y nombre, legajo, DNI, sucursal, área
+a la que pertenece, posición, fecha de ingreso, jornada y a quién le reporta.**
+
+Lo demás se completa solo:
+
+- **La posición trae su nivel de cargo, su categoría de la nómina y su posición
+  del panel.** Salen de `CARGOS_NOMINA`, en `catalogos.js`.
+- **Al guardar, la persona suma su FTE a la tienda elegida** y aparece en su
+  organigrama, en el buscador de la nómina y en la dotación del área. El aviso
+  dice cuánto sumó y cuánto tiene esa tienda ahora.
+- **Un cargo que dice `TP` o `JORNADA PARCIAL` entra como 0,5 FTE** aunque el
+  desplegable de jornada diga full time. Lo define el cargo: si no, la dotación
+  de la tienda saldría mal y nadie lo notaría hasta el cierre del mes.
+- **Un cargo con `BLOQUEO` suma a la nómina pero no a la dotación de piso**,
+  como cualquier otro no presencial.
+
+Si ya hay alguien con ese nombre en esa tienda, pregunta antes de guardar: casi
+siempre es la misma persona cargada dos veces.
+
+**Cuando después llega la planilla, la importación lo reconoce y le completa lo
+que falta sin duplicarlo** — lo encuentra por nombre, que es la segunda de las
+tres pasadas de arriba.
+
+## Los cargos que existen hoy
+
+`CARGOS_NOMINA`, en `assets/js/catalogos.js`, es la lista de los **catorce
+cargos** que aparecen en las 139 fichas de la nómina de septiembre de 2026. Ni
+uno inventado. Cada fila junta lo que en la planilla vive en cuatro columnas
+distintas, porque en la práctica van juntas:
+
+| Cargo | Nivel | Categoría | Posición | Jornada |
+|---|---|---|---|---|
+| GERENTE DE TIENDA | GERENTE DE TIENDA | FUERA DE CONVENIO | Gerente de Tienda | 1 |
+| ASISTENTE DE PISO DE VENTA SENIOR | APV SENIOR | EMPLEADO ESP. DE FARMACIA | Senior | 1 |
+| DIRECTOR TECNICO | DIRECTOR TECNICO | DIRECTOR TECNICO | DT | 1 |
+| DIRECTOR TECNICO TP | DIRECTOR TECNICO | DIRECTOR TECNICO | DT | 0,5 |
+| DIRECTOR TECNICO CON BLOQUEO | DT CON BLOQUEO | DT NO PRESENCIAL | DT | 1 · no cubre turno |
+| FARMACEUTICO AUXILIAR | FARMACEUTICO | FARMACEUTICO AUXILIAR | Farmacéutico | 1 |
+| FARMACEUTICO AUXILIAR TP | FARMACEUTICO | FARMACEUTICO AUXILIAR | Farmacéutico | 0,5 |
+| FARMA AUX. JORNADA PARCIAL | FARMACEUTICO | FARMA AUX. JORNADA PARCIAL | Farmacéutico | 0,5 |
+| FARM. AUX. BLOQUEO | FARM. AUXL. BLOQUEO | FARMA. AUX. BLOQUEO | Farmacéutico | 1 · no cubre turno |
+| ASESORA DERMO | ASESORA DERMO | PERFUMERIA | Asesora de Dermo | 1 |
+| ASESORA DE BELLEZA | ASESORA DE BELLEZA | PERFUMERIA | Asesora de Belleza | 1 |
+| ASISTENTE DE PISO DE VENTAS | BASE FARMACIA | EMPLEADO DE FARMACIA | APV | 1 |
+| CHOFER | CHOFER | INICIAL B | Otros | 1 |
+| LIMPIEZA | LIMPIEZA | INICIAL B | Otros | 1 |
+
+El orden es el del **organigrama**, de arriba hacia abajo, no el de cuántos hay
+de cada uno: es el orden en el que se busca un cargo en una lista.
+
+`MAPA_CARGOS` —lo que usa la importación para llevar un cargo a una posición del
+panel— **se arma desde esta tabla**, así que no hay dos listas que mantener
+sincronizadas. Si mañana la compañía crea un cargo nuevo, se agrega acá y
+aparece en el alta a mano, en la importación y en el organigrama.
+
+Las dos **unidades de negocio** del área están en `UNIDADES_NEGOCIO`:
+`OPERACIONES - FARMACIA` (125 personas) y `OPERACIONES - LABORATORIO` (14, la
+tienda y el laboratorio de Olivos).
+
 ## El perfil de cada persona
 
 Se abre desde el organigrama de la sucursal o desde la pantalla *Nómina*,
