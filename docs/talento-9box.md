@@ -11,6 +11,23 @@ Cada cambio queda registrado en el historial de la persona con la fecha, el
 gerente con quien se evaluó y el motivo. Solo se registra cuando el valor
 efectivamente cambia, así el historial cuenta movimientos y no reediciones.
 
+## En esta solapa solo se evalúa
+
+La tabla tenía el **nombre, la posición y la fecha de ingreso como campos
+editables**, al lado de los desplegables de evaluación. Era fácil pisar el dato
+de la nómina sin querer mientras se evaluaba a otro, y no había ningún motivo
+para editarlos ahí: la conversación con el gerente es sobre desempeño y
+potencial, no sobre cómo se escribe un apellido.
+
+Ahora esas tres columnas **se leen**, y muestran el cargo real de la nómina en
+vez de la posición genérica del panel. Lo único editable de la fila son
+desempeño y potencial, que es el punto de la solapa.
+
+**Se corrigen en la ficha de la persona**, desde *Nómina*. Ahí se agregaron el
+apellido y nombre y la fecha de ingreso como campos editables: antes solo se
+leían, así que sacarlos de esta tabla habría dejado un dato sin ningún lugar
+donde arreglarlo —el caso concreto es un tipeo en el alta a mano—.
+
 ## Las dos escalas
 
 **Desempeño** — qué resultados da hoy en su posición:

@@ -225,6 +225,14 @@ así lo dice la pantalla. Documentado en `docs/ausencias.md`.
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
 y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box.
 
+**En *Talento y 9-box* solo se evalúa.** El nombre, el puesto y la fecha de
+ingreso se leen: eran campos editables al lado de los desplegables de evaluación
+y era fácil pisar el dato de la nómina mientras se evaluaba a otro. Lo editable
+de la fila son desempeño y potencial, que es el punto de la solapa. La identidad
+se corrige en la ficha de la persona —donde `nombre` y `fechaIngreso` son ahora
+campos, no `dato()`— porque sacarlos de la tabla los dejaba sin ningún lugar
+donde arreglarlos.
+
 La matriz de FTE de la estadística usa el **cabezal de dos niveles de la planilla
 TD01**: *Heads* (todo el mes · ingreso · total) y *F.T.U.* (todo el mes · egreso ·
 ingreso · total días · hs. extras · ausent + vaca · total). Las cabezas y los

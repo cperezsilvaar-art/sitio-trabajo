@@ -10609,6 +10609,9 @@ const App = (() => {
 
         <h4>Identificación</h4>
         <div class="grid c4">
+          <label class="campo"><span>Apellido y nombre</span>
+            <input data-colab-campo="${c.id}|nombre" value="${esc(c.nombre || '')}"
+              placeholder="PEREZ, MARIA"></label>
           ${dato('N° de personal', c.nroPersonal)}
           ${dato('Legajo de tienda', c.legajo)}
           ${dato('CUIL', c.cuil)}
@@ -10625,7 +10628,8 @@ const App = (() => {
 
         <h4>Vínculo</h4>
         <div class="grid c4">
-          ${dato('Ingreso', c.fechaIngreso ? `${fmtFecha(c.fechaIngreso)}${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}` : '')}
+          <label class="campo"><span>Ingreso${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}</span>
+            <input type="date" data-colab-campo="${c.id}|fechaIngreso" value="${esc(c.fechaIngreso || '')}"></label>
           ${dato('Ingreso a Farmatodo', c.fechaIngresoFTD ? fmtFecha(c.fechaIngresoFTD) : '')}
           ${dato('Razón social del contrato', c.razonSocialContrato)}
           ${dato('Unidad de negocio', c.unidadNegocio)}
@@ -12401,6 +12405,9 @@ const App = (() => {
           Evaluación hecha en conjunto con el Gerente de Tienda. Vive en la sucursal, no en esta visita:
           cuando el gerente aporte algo nuevo, cambiás el valor acá o arrastrás a la persona en la matriz
           y el movimiento queda fechado en su historial.
+          <strong>Acá solo se evalúa:</strong> el nombre, el puesto y la fecha de ingreso se leen, y se
+          corrigen en la ficha de la persona, desde <a href="#/nomina">Nómina</a>. Estaban editables y
+          era fácil pisar el dato de la nómina sin querer mientras se evaluaba a otro.
         </p>
         <div class="tabla-scroll"><table>
           <thead><tr>
@@ -12413,12 +12420,9 @@ const App = (() => {
             const ant = antiguedadAnios(c.fechaIngreso);
             const ult = (c.historial || []).slice(-1)[0];
             return `<tr class="${c.activo === false ? 'inactivo' : ''}">
-              <td><input data-colab-campo="${c.id}|nombre" value="${esc(c.nombre)}" placeholder="Apellido y nombre"></td>
-              <td><select data-colab-campo="${c.id}|posicion">
-                <option value="">—</option>
-                ${POSICIONES.map(pp => `<option value="${esc(pp.nombre)}"${c.posicion === pp.nombre ? ' selected' : ''}>${esc(pp.nombre)}</option>`).join('')}
-              </select></td>
-              <td><input type="date" data-colab-campo="${c.id}|fechaIngreso" value="${esc(c.fechaIngreso)}"></td>
+              <td><strong>${esc(c.nombre || 'Sin nombre')}</strong></td>
+              <td>${esc(c.cargo || c.posicion || '—')}</td>
+              <td class="tipo">${c.fechaIngreso ? fmtFecha(c.fechaIngreso) : '—'}</td>
               <td class="num">${ant === null ? '—' : fmtNum(ant, 1)}</td>
               <td><select data-colab-eval="${c.id}|desempeno">
                 <option value="">— sin evaluar —</option>
