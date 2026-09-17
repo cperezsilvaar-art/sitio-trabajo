@@ -204,10 +204,6 @@ header.app button, header.app select {
 }
 header.app button:hover { border-color: var(--azul); color: var(--azul); }
 header.app select { width: auto; max-width: 260px; }
-header.app [data-accion="nueva-visita-selector"] {
-  background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 600;
-}
-header.app [data-accion="nueva-visita-selector"]:hover { background: var(--azul-claro); color: #fff; }
 
 .btn-menu {
   display: none; padding: 6px 8px !important; line-height: 0;
@@ -235,12 +231,10 @@ main { padding: 22px; max-width: 1180px; margin: 0 auto; width: 100%; }
   }
   body.menu-abierto .lateral { transform: none; }
   .btn-menu { display: inline-flex; flex: 0 0 auto; }
-  /* Una sola fila: el nombre de la pantalla ya está en el h1, a dos dedos de
-     acá, y tres renglones de encabezado en un teléfono son media pantalla. */
-  header.app { flex-wrap: nowrap; gap: 8px; padding: 9px 12px; }
-  header.app .marca-chica, header.app .crece { display: none; }
-  header.app select { flex: 1 1 auto; min-width: 0; max-width: none; }
-  header.app [data-accion="nueva-visita-selector"] { flex: 0 0 auto; }
+  /* Una sola fila. Desde que el selector de sucursal y «+ Nueva visita» se
+     fueron a la solapa Visitas, en el encabezado queda el botón de menú y
+     dónde estás parado, que entran de sobra. */
+  header.app { flex-wrap: nowrap; gap: 10px; padding: 9px 12px; }
   main { padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .lateral { transition: none; } }

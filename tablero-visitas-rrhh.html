@@ -206,10 +206,6 @@ header.app button, header.app select {
 }
 header.app button:hover { border-color: var(--azul); color: var(--azul); }
 header.app select { width: auto; max-width: 260px; }
-header.app [data-accion="nueva-visita-selector"] {
-  background: var(--azul); border-color: var(--azul); color: #fff; font-weight: 600;
-}
-header.app [data-accion="nueva-visita-selector"]:hover { background: var(--azul-claro); color: #fff; }
 
 .btn-menu {
   display: none; padding: 6px 8px !important; line-height: 0;
@@ -237,12 +233,10 @@ main { padding: 22px; max-width: 1180px; margin: 0 auto; width: 100%; }
   }
   body.menu-abierto .lateral { transform: none; }
   .btn-menu { display: inline-flex; flex: 0 0 auto; }
-  /* Una sola fila: el nombre de la pantalla ya está en el h1, a dos dedos de
-     acá, y tres renglones de encabezado en un teléfono son media pantalla. */
-  header.app { flex-wrap: nowrap; gap: 8px; padding: 9px 12px; }
-  header.app .marca-chica, header.app .crece { display: none; }
-  header.app select { flex: 1 1 auto; min-width: 0; max-width: none; }
-  header.app [data-accion="nueva-visita-selector"] { flex: 0 0 auto; }
+  /* Una sola fila. Desde que el selector de sucursal y «+ Nueva visita» se
+     fueron a la solapa Visitas, en el encabezado queda el botón de menú y
+     dónde estás parado, que entran de sobra. */
+  header.app { flex-wrap: nowrap; gap: 10px; padding: 9px 12px; }
   main { padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { .lateral { transition: none; } }
@@ -956,8 +950,9 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
       </button>
       <div class="marca-chica">Panel de RRHH</div>
       <div class="crece"></div>
-      <select id="selector-sucursal" title="Ir a la última visita de una sucursal"></select>
-      <button data-accion="nueva-visita-selector">+ Nueva visita</button>
+      <!-- Registrar una visita se hace en un solo lugar, la solapa Visitas:
+           acá aparecía en todas las pantallas, incluso en las que no tienen
+           nada que ver con una visita. -->
       <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
     </header>
 
@@ -12935,11 +12930,6 @@ const App = (() => {
     const h1 = $('#contenido h1.titulo');
     if (donde) donde.textContent = h1 ? h1.textContent.trim() : 'Panel de RRHH';
 
-    const sel = $('#selector-sucursal');
-    if (sel) {
-      sel.innerHTML = '<option value="">Ir a una sucursal…</option>' +
-        e.sucursales.map(s => `<option value="${s.id}">${esc(Store.etiquetaSucursal(s))}</option>`).join('');
-    }
     completarCensoResguardos();
   }
 
@@ -13309,13 +13299,6 @@ const App = (() => {
       if (a === 'nueva-visita-desde-selector') {
         const sel = $('#visita-sucursal');
         if (!sel || !sel.value) return avisar('Elegí primero a qué sucursal vas.', 'error');
-        const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/checklist`;
-      }
-
-      if (a === 'nueva-visita-selector') {
-        const sel = $('#selector-sucursal');
-        if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
         location.hash = `#/visita/${v.id}/checklist`;
       }
@@ -14181,19 +14164,6 @@ const App = (() => {
         estadPeriodo = ev.target.value || hoyISO().slice(0, 7);
         refrescar();
         return;
-      }
-      if (ev.target.id === 'selector-sucursal' && ev.target.value) {
-        const v = Store.ultimaVisita(ev.target.value);
-        const idSuc = ev.target.value;
-        ev.target.value = '';
-        if (v) { location.hash = `#/visita/${v.id}/checklist`; return; }
-        confirmar('Sin visitas registradas',
-          `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
-          'Registrar visita').then(ok => {
-            if (!ok) return;
-            const nueva = Store.crearVisita(idSuc);
-            location.hash = `#/visita/${nueva.id}/checklist`;
-          });
       }
     });
 

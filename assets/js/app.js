@@ -4250,11 +4250,6 @@ const App = (() => {
     const h1 = $('#contenido h1.titulo');
     if (donde) donde.textContent = h1 ? h1.textContent.trim() : 'Panel de RRHH';
 
-    const sel = $('#selector-sucursal');
-    if (sel) {
-      sel.innerHTML = '<option value="">Ir a una sucursal…</option>' +
-        e.sucursales.map(s => `<option value="${s.id}">${esc(Store.etiquetaSucursal(s))}</option>`).join('');
-    }
     completarCensoResguardos();
   }
 
@@ -4624,13 +4619,6 @@ const App = (() => {
       if (a === 'nueva-visita-desde-selector') {
         const sel = $('#visita-sucursal');
         if (!sel || !sel.value) return avisar('Elegí primero a qué sucursal vas.', 'error');
-        const v = Store.crearVisita(sel.value);
-        location.hash = `#/visita/${v.id}/checklist`;
-      }
-
-      if (a === 'nueva-visita-selector') {
-        const sel = $('#selector-sucursal');
-        if (!sel.value) return avisar('Elegí primero una sucursal en el selector.', 'error');
         const v = Store.crearVisita(sel.value);
         location.hash = `#/visita/${v.id}/checklist`;
       }
@@ -5496,19 +5484,6 @@ const App = (() => {
         estadPeriodo = ev.target.value || hoyISO().slice(0, 7);
         refrescar();
         return;
-      }
-      if (ev.target.id === 'selector-sucursal' && ev.target.value) {
-        const v = Store.ultimaVisita(ev.target.value);
-        const idSuc = ev.target.value;
-        ev.target.value = '';
-        if (v) { location.hash = `#/visita/${v.id}/checklist`; return; }
-        confirmar('Sin visitas registradas',
-          `${Store.etiquetaSucursal(Store.sucursal(idSuc))} todavía no tiene visitas. ¿Registrar una ahora?`,
-          'Registrar visita').then(ok => {
-            if (!ok) return;
-            const nueva = Store.crearVisita(idSuc);
-            location.hash = `#/visita/${nueva.id}/checklist`;
-          });
       }
     });
 

@@ -121,6 +121,12 @@ el velo, `Escape` o elegir un ítem la cierran. Cerrarla al elegir no es un
 detalle: dejarla abierta tapando la pantalla a la que acabás de entrar es el
 error clásico del patrón.
 
+**El encabezado es solo el botón de menú y dónde estás parado.** Tenía el
+selector «Ir a una sucursal…» y «+ Nueva visita», que aparecían en las trece
+pantallas, incluidas las que no tienen nada que ver con una visita. Registrar
+una visita se hace en `#/visitas` y en ningún otro lado. Una acción que sirve en
+una sola pantalla no va en el armazón.
+
 **Los cargos que existen hoy están en `CARGOS_NOMINA` (`catalogos.js`)**: los
 catorce que aparecen en las 139 fichas de la nómina, ninguno inventado. Cada fila
 junta cargo, nivel de cargo, categoría de la nómina, posición del panel, jornada
