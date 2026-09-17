@@ -4033,6 +4033,35 @@ const App = (() => {
       </section>`;
   }
 
+  /* Lo que está esperando en cada pantalla, al lado de su nombre.
+     Solo se dibuja cuando hay algo: un cero permanente deja de leerse a los
+     dos días y ocupa el mismo lugar que un número que importa. */
+  function contadoresDelMenu(e) {
+    const cuentas = {
+      ausencias: alertasDeAusencias(e, hoyISO()).length,
+      reclamos: (e.reclamos || []).filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado).length,
+      movimientos: (e.sucursales || []).reduce((n, s) => n + (s.colaboradores || [])
+        .reduce((m, c) => m + (c.movimientos || [])
+          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length, 0), 0)
+    };
+    document.querySelectorAll('[data-badge]').forEach(b => {
+      const n = cuentas[b.dataset.badge] || 0;
+      b.hidden = !n;
+      b.textContent = n > 99 ? '99+' : n;
+      b.title = `${n} pendiente${n === 1 ? '' : 's'}`;
+    });
+  }
+
+  /* El cajón del teléfono. Se cierra solo al elegir un ítem: dejarlo abierto
+     tapando la pantalla a la que acabás de entrar es el error clásico. */
+  function menu(abierto) {
+    document.body.classList.toggle('menu-abierto', abierto);
+    const velo = document.querySelector('.velo-menu');
+    if (velo) velo.hidden = !abierto;
+    const btn = document.querySelector('[data-accion="abrir-menu"]');
+    if (btn) btn.setAttribute('aria-expanded', abierto ? 'true' : 'false');
+  }
+
   /* ============================= RUTEO ============================= */
   function render() {
     const ruta = (location.hash || '#/red').replace(/^#\/?/, '').split('/');
@@ -4094,6 +4123,14 @@ const App = (() => {
       const activo = (location.hash || '#/red').startsWith(a.getAttribute('href'));
       a.classList.toggle('activo', activo);
     });
+    contadoresDelMenu(e);
+
+    const lat = $('#lat-area');
+    if (lat) lat.textContent = e.config.area || 'Farmatodo';
+
+    const donde = $('.marca-chica');
+    const h1 = $('#contenido h1.titulo');
+    if (donde) donde.textContent = h1 ? h1.textContent.trim() : 'Panel de RRHH';
 
     const sel = $('#selector-sucursal');
     if (sel) {
@@ -5338,6 +5375,18 @@ const App = (() => {
     });
 
     window.addEventListener('hashchange', render);
+
+    /* El cajón, fuera de #contenido: sus controles viven en el armazón y no se
+       redibujan con la vista. */
+    document.addEventListener('click', ev => {
+      const b = ev.target.closest('[data-accion="abrir-menu"]');
+      if (b) { menu(!document.body.classList.contains('menu-abierto')); return; }
+      if (ev.target.closest('[data-accion="cerrar-menu"]')) { menu(false); return; }
+      if (ev.target.closest('nav.tabs.principal a')) menu(false);
+    });
+    document.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && document.body.classList.contains('menu-abierto')) menu(false);
+    });
   }
 
   async function iniciar() {

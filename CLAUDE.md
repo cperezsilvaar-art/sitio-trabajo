@@ -95,9 +95,31 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 | La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 
-La navegación está agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
-*Cierre del mes*— y no por módulo. Una solapa nueva va adentro del grupo que le
-corresponde, no al final de la fila.
+La navegación es una **columna a la izquierda** (`aside.lateral` en
+`index.html`), agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
+*Cierre del mes*, *La operación*— y no por módulo. Una entrada nueva va adentro
+del grupo que le corresponde. Era una fila de solapas y dejó de entrar: en
+vertical el rótulo del grupo se lee arriba de sus ítems en vez de pelear por el
+ancho, y entran el ícono y el contador sin empujar nada fuera de la pantalla.
+
+Tres cosas que hay que respetar al tocarla:
+
+- El marcado sigue siendo `nav.tabs.principal` con `<a>` adentro, y el ruteo le
+  pone `.activo` al que coincide con el hash. **La forma la da el CSS**
+  (`.lateral nav.tabs.principal`), no otro marcado: las sub-navegaciones
+  (`nav.tabs:not(.principal)`) siguen siendo horizontales con las mismas clases.
+- **Los íconos son SVG en línea**, 24×24, `fill: none` y `stroke: currentColor`.
+  Nada de tipografías de íconos ni de archivos: el panel abre desde `file://` y
+  sin conexión.
+- **Los contadores** (`[data-badge]`) los llena `contadoresDelMenu()` después de
+  cada render: ausencias que piden acción, reclamos abiertos y movimientos sin
+  aplicar. Se esconden en cero a propósito — un cero permanente deja de leerse a
+  los dos días y ocupa el lugar de un número que importa.
+
+Abajo de 980px la columna se vuelve **cajón**: el botón del encabezado la abre y
+el velo, `Escape` o elegir un ítem la cierran. Cerrarla al elegir no es un
+detalle: dejarla abierta tapando la pantalla a la que acabás de entrar es el
+error clásico del patrón.
 
 Fuera de esas tres escalas está **`#/nomina`**, que no responde a un ritmo sino a
 «¿quién es esta persona?»: el padrón entero en una lista con buscador, flotantes
