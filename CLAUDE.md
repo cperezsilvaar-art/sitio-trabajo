@@ -57,12 +57,12 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `ausencias`, `checklist`, `reclamos`, `agenda`, `asistente`, `diario`,
-  `acceso`, `store`, `reporte`, `app`.
+  `ausencias`, `desarrollo`, `checklist`, `reclamos`, `agenda`, `asistente`,
+  `diario`, `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
-  `#/visitas`, `#/reclamos`,
+  `#/visitas`, `#/desarrollo[/<id>]`, `#/reclamos`,
   `#/movimientos[/cesiones|/bajas]`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
   `#/sucursales` ya no es una solapa: la ruta sobrevive y redirige a `#/red`.
@@ -229,7 +229,9 @@ reserva del puesto—. Es una orientación sobre la ley general, no un dictamen,
 así lo dice la pantalla. Documentado en `docs/ausencias.md`.
 
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
-y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box.
+y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box. Ahí se
+decide **a quién mirar**; qué pasó después con esa persona se registra en
+`#/desarrollo`.
 
 **En *Talento y 9-box* solo se evalúa.** El nombre, el puesto y la fecha de
 ingreso se leen: eran campos editables al lado de los desplegables de evaluación
@@ -253,6 +255,36 @@ TD01**: *Heads* (todo el mes · ingreso · total) y *F.T.U.* (todo el mes · egr
 ingreso · total días · hs. extras · ausent + vaca · total). Las cabezas y los
 días son preguntas distintas —a cuánta gente le doy turno, y cuánto trabajo se
 prestó— y por eso van en grupos separados.
+
+**El desarrollo al rol de Senior vive en `#/desarrollo`** y está documentado en
+`docs/desarrollo-senior.md`. Es la trazabilidad de un APV propuesto para cubrir
+el rol: quién lo propuso y cuándo, desde cuándo entrena, la **fecha de fin
+tentativa**, cada assessment y la conversación mensual con el gerente. Tres
+cuadrantes —propuesto, en entrenamiento, cerrado— y ninguno más; el panel
+**no mueve el estado solo**, pero marca en rojo lo vencido y avisa cuando un mes
+se fue sin evaluación.
+
+Lo que se evalúa **sale del inventario de competencias de Farmatodo**, no de una
+lista inventada: `COMPETENCIAS_SENIOR` (`desarrollo.js`) son las once que la
+matriz *Modelos de competencias por áreas de negocio y roles* le pide al APV
+Senior, con el nivel que ya trae como APV y el que le exige el rol. Los niveles
+del inventario son **acumulativos**, así que se guarda un número por competencia.
+Cada una trae su definición textual y los títulos de los indicadores **hasta el
+nivel del rol**: los seis niveles de Liderazgo para evaluar el primero es lo
+mismo que no darle nada al gerente. *Conciencia de equipo* queda afuera a
+propósito —el modelo se la pide al APV y no al Senior— y la pantalla lo dice.
+
+El entrenamiento cuelga de la **persona** (`c.entrenamientos[]`), como `c.baja`,
+`c.movimientos` y `c.ausencias`, así la trazabilidad la acompaña si la trasladan
+en el medio del proceso. Lo que se deja en *sin cambio* en una evaluación
+**mantiene lo de la evaluación anterior**: `nivelesActuales()` se queda con el
+último número de cada competencia, para que una charla sobre tres competencias
+no borre lo que midió el assessment del mes pasado. El avance se cuenta como
+**competencias que llegaron al nivel que pide el rol, sobre once**, nunca como
+promedio: un 2 sobre una escala de 6 y un 2 sobre una de 4 no son lo mismo.
+El formulario de evaluación está **solo ahí**; la ficha de la persona y el pie de
+*Talento y 9-box* en la visita lo listan en lectura y enlazan, como el
+recordatorio de reclamos.
 
 El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
@@ -300,7 +332,9 @@ node -e "const vm=require('vm'),fs=require('fs');
 ```
 El tercero no es opcional: `node --check` valida cada archivo por separado y no
 ve los choques de nombres entre módulos, que son los que dejan la página en
-blanco.
+blanco. Ese chequeo parte el HTML por `<script>`, así que **ningún `.js` puede
+llevar esa etiqueta escrita en un comentario**: parte el archivo en dos y el
+chequeo falla en una línea que no tiene nada malo.
 Más las pruebas e2e con Playwright (`/opt/node22/lib/node_modules/playwright`)
 y Chromium headless, que viven en el directorio de trabajo temporal de la sesión.
 

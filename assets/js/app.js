@@ -5,6 +5,7 @@
  *   #/red                      panel consolidado de la red
  *   #/nomina                   el padrón entero, con buscador e importación
  *   #/sucursal/<id>            la tienda: ficha editable, organigrama y visitas
+ *   #/desarrollo[/<id>]        entrenamientos al rol de Senior y su trazabilidad
  *   #/config                   sucursales del área, parámetros y destinatarios
  *   #/visita/<id>/<pestaña>    ficha de una visita
  */
@@ -2020,6 +2021,7 @@ const App = (() => {
         ${fichaLicencias(c)}
         ${fichaSanciones(c)}
         ${fichaAusenciasRegistradas(c)}
+        ${fichaEntrenamientos(c)}
         ${fichaAusencias(c, periodos)}
       </section>`;
   }
@@ -2339,6 +2341,41 @@ const App = (() => {
      lo que faltaba era mostrárselas acá. Es el historial que se mira cuando
      alguien pregunta «¿cuánto faltó este año?», y el que acompaña a la persona
      si se muda de tienda. */
+  /* Los entrenamientos al rol de Senior en la ficha de la persona. Se leen
+     acá y se trabajan en Desarrollo: duplicar el formulario de evaluación en
+     dos pantallas obliga a acordarse de cuál de las dos está más completa. */
+  function fichaEntrenamientos(c) {
+    const hoy = hoyISO();
+    const todos = (c.entrenamientos || []).slice()
+      .sort((a, b) => String(b.fechaPropuesta || '').localeCompare(String(a.fechaPropuesta || '')));
+
+    if (!todos.length) {
+      return `<h4>Desarrollo al rol de Senior</h4>
+        <p class="vacio">Nunca lo propusieron.
+          <a href="#/desarrollo">Proponerlo</a>.</p>`;
+    }
+
+    return `<h4>Desarrollo al rol de Senior</h4>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Rol</th><th>Propuesto</th><th>Lo propuso</th><th>Desde</th>
+          <th>Fin tentativo</th><th>Situación</th><th>Competencias en nivel</th><th></th></tr></thead>
+        <tbody>${todos.map(ent => {
+          const est = estadoDeEntrenamiento(ent, hoy);
+          const av = avanceDeEntrenamiento(ent);
+          return `<tr>
+            <td>${esc(ent.rol || 'APV Senior')}</td>
+            <td class="tipo">${ent.fechaPropuesta ? fmtFecha(ent.fechaPropuesta) : '—'}</td>
+            <td>${esc(ent.propuestoPor || '—')}</td>
+            <td class="tipo">${ent.fechaInicio ? fmtFecha(ent.fechaInicio) : '—'}</td>
+            <td class="tipo">${ent.finTentativo ? fmtFecha(ent.finTentativo) : '—'}</td>
+            <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
+            <td class="tipo">${av.alcanzadas} de ${av.total}</td>
+            <td><a class="mini" href="#/desarrollo/${ent.id}">Ver la trazabilidad</a></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`;
+  }
+
   function fichaAusenciasRegistradas(c) {
     const hoy = hoyISO();
     const todas = (c.ausencias || []).slice()
@@ -3824,7 +3861,58 @@ const App = (() => {
             </div>`;
           }).join('')}
         </div>
-      </section>` : ''}`;
+      </section>` : ''}
+
+      ${bloqueDesarrollo(s)}`;
+  }
+
+  /**
+   * Los entrenamientos a Senior de esta tienda, al pie del 9-box.
+   *
+   * Recordatorio, no formulario, por el mismo motivo que los reclamos: la
+   * evaluación se carga en `#/desarrollo` y en ningún otro lado. Lo que hace
+   * falta durante la visita es acordarse de que este mes hay que sentarse con
+   * el gerente a hablar de esta persona, que es justo cuando el gerente está
+   * enfrente.
+   */
+  function bloqueDesarrollo(s) {
+    const hoy = hoyISO();
+    const filas = cuadrantesDeDesarrollo({ sucursales: [s] }, hoy)
+      .todas.filter(f => f.estado.abierto);
+
+    if (!filas.length) {
+      return `<section class="tarjeta">
+        <h2>Desarrollo al rol de Senior</h2>
+        <p class="ayuda">
+          Nadie de esta tienda está propuesto ni entrenando para el rol.
+          Si el gerente propone a alguien, se anota en <em>Desarrollo</em>.
+        </p>
+        <div class="acciones"><a class="b sec" href="#/desarrollo">Ir a Desarrollo</a></div>
+      </section>`;
+    }
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Desarrollo al rol de Senior</h2>
+        <span class="chip azul">${filas.length} en proceso</span>
+      </div>
+      <p class="ayuda">
+        El seguimiento es una conversación por mes con el gerente, y la visita es
+        el momento. Se anota en <em>Desarrollo</em>, que es donde vive.
+      </p>
+      <ul style="font-size:13.5px;line-height:1.8;margin:0 0 4px;padding-left:20px">
+        ${filas.map(f => `<li>
+          <strong>${esc(f.nombre)}</strong> — ${esc(f.estado.texto)}
+          · ${f.avance.alcanzadas} de ${f.avance.total} competencias en nivel
+          ${f.seguimiento.delMes
+            ? '<span class="chip verde">evaluado este mes</span>'
+            : '<span class="chip ambar">falta la evaluación del mes</span>'}
+        </li>`).join('')}
+      </ul>
+      <div class="acciones">
+        <a class="b" href="#/desarrollo">Anotar la evaluación del mes</a>
+      </div>
+    </section>`;
   }
 
   /* ---------------------------- Talent card --------------------------- */
@@ -4154,13 +4242,328 @@ const App = (() => {
   /* Lo que está esperando en cada pantalla, al lado de su nombre.
      Solo se dibuja cuando hay algo: un cero permanente deja de leerse a los
      dos días y ocupa el mismo lugar que un número que importa. */
+  /* =================== VISTA: DESARROLLO A SENIOR ===================
+     La conversación de sucesión ya vivía en el 9-box de la visita, pero ahí se
+     decide a quién mirar, no qué pasó después. Esta pantalla es el "después":
+     desde que el gerente lo propone hasta que queda efectivo, con la fecha de
+     cada paso y la evaluación mes a mes contra el inventario de competencias.
+
+     Los cuadrantes son tres y no más: propuesto, en entrenamiento y cerrado.
+     Un cuarto estado intermedio suena prolijo y en la práctica hace que nadie
+     sepa en cuál va cada uno. */
+
+  let entrenamientoAbierto = null;   // id del entrenamiento en la ficha
+  let proponerAbierto = false;       // el formulario de propuesta, desplegado
+
+  function vistaDesarrollo() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const hoy = hoyISO();
+    const cu = cuadrantesDeDesarrollo(e, hoy);
+    const alertas = alertasDeDesarrollo(e, hoy);
+    const anio = hoy.slice(0, 4);
+    const efectivos = cu.cerrados.filter(f =>
+      f.entrenamiento.resultado === 'efectivo' &&
+      String(f.entrenamiento.fechaCierre || '').slice(0, 4) === anio).length;
+
+    return `
+      <h1 class="titulo">Desarrollo al rol de Senior</h1>
+      <p class="subtitulo">
+        A quién propuso cada gerente, desde cuándo lo está entrenando, hasta cuándo se estimó
+        y cómo viene. Lo que se evalúa sale del <strong>inventario de competencias de
+        Farmatodo</strong>: las once que la matriz de roles le pide a un APV Senior, con el
+        nivel que ya trae como APV y el que tiene que alcanzar.
+      </p>
+
+      ${alertas.length ? `<div class="aviso-caja">
+        <strong>Entrenamientos que piden una charla</strong>
+        <ul>${alertas.slice(0, 8).map(x => `<li>
+          <strong>${esc(x.fila.nombre)}</strong> (${esc(x.fila.sucursal)}) — ${esc(x.texto)}.
+          <button class="mini" data-accion="abrir-entrenamiento" data-id="${x.fila.entrenamiento.id}">Abrir</button>
+        </li>`).join('')}</ul>
+      </div>` : ''}
+
+      <div class="kpis">
+        ${kpi('Propuestos', fmtNum(cu.propuestos.length, 0), 'esperando arrancar',
+              cu.propuestos.length ? 'alerta' : '')}
+        ${kpi('En entrenamiento', fmtNum(cu.enCurso.length, 0), 'cubriendo el rol hoy')}
+        ${kpi('Vencidos', fmtNum(cu.enCurso.filter(f => f.estado.vencido).length, 0),
+              'pasó la fecha tentativa y siguen abiertos',
+              cu.enCurso.some(f => f.estado.vencido) ? 'alerta' : '')}
+        ${kpi(`Efectivos en ${anio}`, fmtNum(efectivos, 0), 'cerraron como Senior', efectivos ? 'ok' : '')}
+      </div>
+
+      <div class="grid c3" style="align-items:start">
+        ${cuadranteDesarrollo('Propuestos', cu.propuestos,
+          'El gerente los propuso. Todavía no arrancaron: falta poner la fecha de inicio.')}
+        ${cuadranteDesarrollo('En entrenamiento', cu.enCurso,
+          'Están cubriendo el rol. Cada uno con su fecha de fin tentativa y su avance.')}
+        ${cuadranteDesarrollo('Cerrados', cu.cerrados,
+          'Terminaron: quedaron efectivos, siguen como APV o se interrumpió.')}
+      </div>
+
+      ${entrenamientoAbierto ? fichaEntrenamiento(entrenamientoAbierto) : ''}
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Proponer a alguien para el rol</h2>
+          <button class="b sec" data-accion="${proponerAbierto ? 'cerrar-proponer' : 'abrir-proponer'}">
+            ${proponerAbierto ? 'Cerrar' : '+ Nueva propuesta'}</button>
+        </div>
+        ${proponerAbierto ? formularioPropuesta(e) : `<p class="ayuda">
+          La propuesta la hace el gerente de tienda. Acá se anota quién, cuándo y por qué,
+          y desde ese momento el entrenamiento tiene fecha y seguimiento.</p>`}
+      </section>
+
+      ${perfilDelRolSenior()}`;
+  }
+
+  /** Una de las tres columnas. La fila es un botón: toda la línea abre la ficha. */
+  function cuadranteDesarrollo(titulo, filas, ayuda) {
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>${esc(titulo)}</h2>
+        <span class="chip">${filas.length}</span>
+      </div>
+      <p class="ayuda">${esc(ayuda)}</p>
+      ${filas.length ? `<ul class="lista-desarrollo">${filas.map(f => `<li>
+        <button class="fila-desarrollo" data-accion="abrir-entrenamiento" data-id="${f.entrenamiento.id}">
+          <strong>${esc(f.nombre)}</strong>
+          <em>${esc(f.sucursal)}</em>
+          <span class="chip ${f.estado.tono}">${esc(f.estado.texto)}</span>
+          ${f.estado.id === 'entrenamiento'
+            ? `<span class="avance-comp"><i style="width:${Math.round(f.avance.pct * 100)}%"></i></span>
+               <em class="avance-nota">${f.avance.alcanzadas} de ${f.avance.total} competencias en nivel</em>`
+            : ''}
+        </button></li>`).join('')}</ul>`
+        : '<p class="vacio">Nadie por acá.</p>'}
+    </section>`;
+  }
+
+  function formularioPropuesta(e) {
+    /* Quien ya tiene un entrenamiento abierto no aparece: proponerlo dos veces
+       parte la trazabilidad en dos legajos que después nadie concilia. */
+    const conAbierto = new Set();
+    e.sucursales.forEach(s => (s.colaboradores || []).forEach(c =>
+      (c.entrenamientos || []).forEach(x => {
+        if (estadoDeEntrenamiento(x, hoyISO()).abierto) conAbierto.add(c.id);
+      })));
+
+    return `<div class="grid c3" style="margin-top:12px">
+      <label class="campo" style="grid-column:span 2"><span>Colaborador propuesto</span>
+        <select id="dev-colab">
+          <option value="">— elegir —</option>
+          ${e.sucursales.map(s => {
+            const act = (s.colaboradores || []).filter(c =>
+              c.activo !== false && !esNoPresencial(c).noPresencial && !conAbierto.has(c.id));
+            if (!act.length) return '';
+            return `<optgroup label="${esc(s.nombre || s.codigo)}">${act.map(c =>
+              `<option value="${c.id}">${esc(c.nombre)}${c.cargo ? ` · ${esc(c.cargo)}` : ''}</option>`).join('')}</optgroup>`;
+          }).join('')}
+        </select></label>
+      <label class="campo"><span>Fecha de la propuesta</span>
+        <input type="date" id="dev-fecha" value="${esc(hoyISO())}"></label>
+      <label class="campo"><span>Lo propone</span>
+        <input id="dev-gerente" list="jefes-area" placeholder="Gerente de tienda"></label>
+      <label class="campo" style="grid-column:span 2"><span>Por qué lo propone</span>
+        <input id="dev-motivo" placeholder="Qué vio el gerente para proponerlo"></label>
+    </div>
+    ${datalistDeJefes(e)}
+    <div class="acciones">
+      <button class="b" data-accion="guardar-propuesta">Guardar la propuesta</button>
+    </div>`;
+  }
+
+  /* ---------------- la ficha de un entrenamiento ---------------- */
+
+  function fichaEntrenamiento(entId) {
+    const hallado = Store.entrenamientoPorId(entId);
+    if (!hallado) return '';
+    const { colaborador: c, sucursal: s, entrenamiento: ent } = hallado;
+    const hoy = hoyISO();
+    const est = estadoDeEntrenamiento(ent, hoy);
+    const av = avanceDeEntrenamiento(ent);
+    const seg = seguimientoDelMes(ent, hoy);
+    const evs = (ent.evaluaciones || []).slice()
+      .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+
+    return `<section class="tarjeta" id="ficha-entrenamiento">
+      <div class="cabecera-suc">
+        <h2>${esc(c.nombre)}</h2>
+        <span class="chip ${est.tono}">${esc(est.texto)}</span>
+        <span class="chip">${esc(s.nombre || s.codigo)}</span>
+        <div class="crece"></div>
+        <button class="mini" data-accion="ir-a-ficha" data-id="${c.id}">Ver su ficha</button>
+        <button class="mini" data-accion="cerrar-entrenamiento-ficha">Cerrar</button>
+      </div>
+
+      <div class="grid c4" style="margin-top:10px">
+        ${dato('Cargo hoy', c.cargo || c.posicion || '')}
+        ${dato('Lo propuso', ent.propuestoPor || '')}
+        ${dato('Fecha de la propuesta', ent.fechaPropuesta ? fmtFecha(ent.fechaPropuesta) : '')}
+        ${dato('Evaluaciones cargadas', `${seg.cantidad}`)}
+      </div>
+      ${ent.motivo ? `<p class="ayuda" style="margin-top:6px"><strong>Por qué lo propusieron:</strong> ${esc(ent.motivo)}</p>` : ''}
+
+      <div class="grid c4" style="margin-top:12px">
+        <label class="campo"><span>Inicio del entrenamiento</span>
+          <input type="date" data-ent-campo="${c.id}|${ent.id}|fechaInicio" value="${esc(ent.fechaInicio || '')}"></label>
+        <label class="campo"><span>Fin tentativo</span>
+          <input type="date" data-ent-campo="${c.id}|${ent.id}|finTentativo" value="${esc(ent.finTentativo || '')}"></label>
+        <label class="campo"><span>Estado</span>
+          <select data-ent-campo="${c.id}|${ent.id}|estado">
+            ${ESTADOS_ENTRENAMIENTO.map(x =>
+              `<option value="${x.id}"${ent.estado === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${ent.estado === 'cerrado' ? `<label class="campo"><span>Cómo cerró</span>
+          <select data-ent-campo="${c.id}|${ent.id}|resultado">
+            ${RESULTADOS_ENTRENAMIENTO.map(x =>
+              `<option value="${x.id}"${ent.resultado === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>`
+        : `<div class="campo-lectura"><span>Acción</span>
+            ${ent.estado === 'propuesto'
+              ? `<button class="b" data-accion="iniciar-entrenamiento" data-id="${c.id}" data-ent="${ent.id}">Arrancó el entrenamiento</button>`
+              : `<button class="b sec" data-accion="cerrar-proceso" data-id="${c.id}" data-ent="${ent.id}">Cerrar el proceso</button>`}
+          </div>`}
+      </div>
+
+      ${est.id === 'entrenamiento' && !seg.delMes ? `<div class="aviso-caja" style="margin-top:12px">
+        <strong>Falta la evaluación de este mes.</strong> El seguimiento es una conversación
+        por mes con el gerente: ${seg.ultima
+          ? `la última quedó anotada el ${fmtFecha(seg.ultima.fecha)}.`
+          : 'todavía no hay ninguna anotada.'}
+      </div>` : ''}
+
+      <h3 style="margin-top:18px">Perfil de competencias del rol</h3>
+      <p class="ayuda">
+        Los niveles del inventario son acumulativos: quien está en 3 hace también lo de 1 y 2.
+        <strong>${av.alcanzadas} de ${av.total}</strong> llegaron al nivel que pide el rol
+        y ${av.total - av.evaluadas === 0 ? 'están todas evaluadas' : `quedan ${av.total - av.evaluadas} sin evaluar`}.
+      </p>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Competencia</th><th>Como APV</th><th>Pide el Senior</th>
+          <th>Hoy</th><th>Qué falta</th></tr></thead>
+        <tbody>${av.filas.map(f => `<tr>
+          <td><strong>${esc(f.competencia.nombre)}</strong>
+            <div class="ayuda">${esc(f.competencia.indicadores[f.competencia.senior - 1] || '')}</div></td>
+          <td class="tipo">${f.competencia.apv || '—'}</td>
+          <td class="tipo">${f.competencia.senior} de ${f.competencia.escala}</td>
+          <td class="tipo">${f.evaluada ? f.actual : '<span class="ayuda">sin evaluar</span>'}</td>
+          <td>${f.alcanzada
+            ? '<span class="chip verde">en nivel</span>'
+            : f.evaluada
+              ? `<span class="chip ambar">${f.brecha} nivel${f.brecha === 1 ? '' : 'es'}</span>`
+              : '<span class="chip">—</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <p class="ayuda">
+        <strong>${esc(COMPETENCIA_QUE_NO_SIGUE.nombre)}</strong> no está en la tabla:
+        el modelo se la pide al APV en nivel ${COMPETENCIA_QUE_NO_SIGUE.apv} y no se la pide al
+        Senior. ${esc(COMPETENCIA_QUE_NO_SIGUE.nota)}
+      </p>
+
+      <h3 style="margin-top:18px">Anotar una evaluación</h3>
+      <div class="grid c4">
+        <label class="campo"><span>Fecha</span>
+          <input type="date" id="ev-fecha" value="${esc(hoy)}"></label>
+        <label class="campo"><span>Instancia</span>
+          <select id="ev-instancia">
+            ${INSTANCIAS_EVALUACION.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        <label class="campo" style="grid-column:span 2"><span>Con quién se hizo</span>
+          <input id="ev-con" list="jefes-area" value="${esc(ent.propuestoPor || '')}"
+            placeholder="Gerente de tienda"></label>
+      </div>
+      <p class="ayuda">
+        Poné el nivel que hoy le reconocés en cada competencia. Lo que dejes en
+        <em>sin cambio</em> mantiene lo de la evaluación anterior: una charla que habló de tres
+        competencias no tiene por qué volver a puntuar las once.
+      </p>
+      <div class="grid c2" style="margin-top:8px">
+        ${COMPETENCIAS_SENIOR.map(comp => {
+          const actual = av.filas.find(f => f.competencia.id === comp.id);
+          return `<label class="campo">
+            <span title="${esc(comp.definicion)}">${esc(comp.nombre)}
+              <em class="ayuda">objetivo ${comp.senior}</em></span>
+            <select data-ev-nivel="${comp.id}">
+              <option value="">— sin cambio ${actual.evaluada ? `(hoy ${actual.actual})` : ''} —</option>
+              ${comp.indicadores.map((t, i) =>
+                `<option value="${i + 1}">${i + 1} · ${esc(t)}</option>`).join('')}
+              ${comp.senior < comp.escala
+                ? `<option value="${comp.senior + 1}">${comp.senior + 1} · por encima de lo que pide el rol</option>` : ''}
+            </select></label>`;
+        }).join('')}
+      </div>
+      <div class="grid c2" style="margin-top:10px">
+        <label class="campo"><span>Cómo le fue</span>
+          <textarea id="ev-como" rows="3" placeholder="Qué se vio en la tienda, qué dijo el gerente"></textarea></label>
+        <label class="campo"><span>Próximo paso</span>
+          <textarea id="ev-paso" rows="3" placeholder="Con qué se compromete hasta la próxima"></textarea></label>
+      </div>
+      <div class="acciones">
+        <button class="b" data-accion="guardar-evaluacion" data-id="${c.id}" data-ent="${ent.id}">Guardar la evaluación</button>
+        <button class="b peligro sec" data-accion="borrar-entrenamiento" data-id="${c.id}" data-ent="${ent.id}">Borrar el entrenamiento</button>
+      </div>
+
+      <h3 style="margin-top:18px">La trazabilidad</h3>
+      ${evs.length ? `<ol class="linea-tiempo">${evs.map(ev => {
+        const movidas = Object.keys(ev.niveles || {})
+          .map(k => { const comp = competenciaSenior(k); return comp ? `${comp.nombre} ${ev.niveles[k]}` : ''; })
+          .filter(Boolean);
+        return `<li>
+          <div class="lt-cabeza">
+            <strong>${esc(fmtFecha(ev.fecha))}</strong>
+            <span class="chip">${esc(nombreDeInstancia(ev.instancia))}</span>
+            ${ev.evaluadaCon ? `<em>con ${esc(ev.evaluadaCon)}</em>` : ''}
+            <div class="crece"></div>
+            <button class="mini" data-accion="borrar-evaluacion" data-id="${c.id}"
+              data-ent="${ent.id}" data-ev="${ev.id}">Quitar</button>
+          </div>
+          ${movidas.length ? `<p class="ayuda">${esc(movidas.join(' · '))}</p>` : ''}
+          ${ev.comoLeFue ? `<p>${esc(ev.comoLeFue)}</p>` : ''}
+          ${ev.proximoPaso ? `<p class="ayuda"><strong>Próximo paso:</strong> ${esc(ev.proximoPaso)}</p>` : ''}
+        </li>`;
+      }).join('')}</ol>`
+      : '<p class="vacio">Todavía no hay ninguna evaluación anotada.</p>'}
+    </section>`;
+  }
+
+  /* El rol, escrito una sola vez. Sirve para la charla con el gerente: qué se
+     le va a mirar y con qué criterio, antes de que empiece a entrenar. */
+  function perfilDelRolSenior() {
+    const suben = competenciasQueSuben();
+    return `<section class="tarjeta">
+      <h2>Qué tiene que trabajar un APV para ser efectivo como Senior</h2>
+      <p class="ayuda">
+        Sale de la matriz de competencias por rol del inventario de Farmatodo: se compara el
+        nivel que el modelo le pide al APV con el que le pide al APV Senior.
+        <strong>${suben.length} de las ${COMPETENCIAS_SENIOR.length}</strong> suben de nivel;
+        el resto ya las trae y tiene que sostenerlas.
+      </p>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Competencia</th><th>APV</th><th>Senior</th><th>Lo que hay que ver</th></tr></thead>
+        <tbody>${COMPETENCIAS_SENIOR.map(c => `<tr>
+          <td><strong>${esc(c.nombre)}</strong>
+            <div class="ayuda">${esc(c.definicion)}</div></td>
+          <td class="tipo">${c.apv || '—'}</td>
+          <td class="tipo">${c.senior}</td>
+          <td>${esc(c.indicadores[c.senior - 1] || '')}
+            ${c.senior > c.apv ? '<span class="chip ambar">sube</span>' : '<span class="chip">sostiene</span>'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </section>`;
+  }
+
   function contadoresDelMenu(e) {
     const cuentas = {
       ausencias: alertasDeAusencias(e, hoyISO()).length,
       reclamos: (e.reclamos || []).filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado).length,
       movimientos: (e.sucursales || []).reduce((n, s) => n + (s.colaboradores || [])
         .reduce((m, c) => m + (c.movimientos || [])
-          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length, 0), 0)
+          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length, 0), 0),
+      desarrollo: alertasDeDesarrollo(e, hoyISO()).length
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
       const n = cuentas[b.dataset.badge] || 0;
@@ -4201,6 +4604,12 @@ const App = (() => {
       vistaActual = vistaOperacion; html = vistaOperacion();
     }
     else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    else if (ruta[0] === 'desarrollo') {
+      /* `#/desarrollo/<entrenamiento>` abre esa ficha: es como se llega desde
+         el aviso del menú y desde la ficha de la persona. */
+      if (ruta[1] !== undefined) entrenamientoAbierto = ruta[1] || null;
+      vistaActual = vistaDesarrollo; html = vistaDesarrollo();
+    }
     else if (ruta[0] === 'reclamos') {
       /* `#/reclamos/<sucursal>` es como se llega desde la visita y desde la
          ficha de la tienda: la pantalla es la misma, filtrada. */
@@ -4531,6 +4940,32 @@ const App = (() => {
     });
 
     cont.addEventListener('change', ev => {
+      /* Los campos de la ficha del entrenamiento guardan al salir del campo.
+         Mover el estado a mano es válido: el panel no decide por su cuenta
+         que alguien quedó efectivo. */
+      const ec = ev.target.closest('[data-ent-campo]');
+      if (ec) {
+        const [colabId, entId, campo] = ec.dataset.entCampo.split('|');
+        const datos = {};
+        datos[campo] = ec.value;
+        /* Arrancar sin fecha de fin deja el entrenamiento sin vencimiento y
+           nadie se entera de que se estiró: se propone una. */
+        if (campo === 'estado' && ec.value === 'entrenamiento') {
+          const ent = Store.entrenamiento(colabId, entId);
+          if (ent && !ent.fechaInicio) datos.fechaInicio = hoyISO();
+          if (ent && !ent.finTentativo) {
+            datos.finTentativo = _sumarMeses(datos.fechaInicio || ent.fechaInicio, MESES_ENTRENAMIENTO);
+          }
+        }
+        if (campo === 'estado' && ec.value === 'cerrado') {
+          const ent = Store.entrenamiento(colabId, entId);
+          if (ent && !ent.fechaCierre) datos.fechaCierre = hoyISO();
+          if (ent && !ent.resultado) datos.resultado = 'efectivo';
+        }
+        Store.actualizarEntrenamiento(colabId, entId, datos);
+        refrescar();
+        return;
+      }
       const cert = ev.target.closest('[data-aus-certificado]');
       if (cert) {
         const [colabId, ausId] = cert.dataset.ausCertificado.split('|');
@@ -4567,6 +5002,100 @@ const App = (() => {
       if (!btn) return;
       const a = btn.dataset.accion;
       const e = Store.get();
+
+      /* --- desarrollo al rol de Senior --- */
+      if (a === 'abrir-proponer' || a === 'cerrar-proponer') {
+        proponerAbierto = a === 'abrir-proponer';
+        refrescar();
+      }
+
+      if (a === 'guardar-propuesta') {
+        const colabId = valorDe('#dev-colab');
+        if (!colabId) { avisar('Elegí a quién proponen.', 'error'); return; }
+        const ent = Store.proponerEntrenamiento(colabId, {
+          propuestoPor: valorDe('#dev-gerente'),
+          fechaPropuesta: valorDe('#dev-fecha') || hoyISO(),
+          motivo: valorDe('#dev-motivo')
+        });
+        if (!ent) { avisar('No se encontró a esa persona.', 'error'); return; }
+        proponerAbierto = false;
+        entrenamientoAbierto = ent.id;
+        refrescar();
+        avisar('Propuesta registrada.');
+      }
+
+      if (a === 'abrir-entrenamiento') {
+        entrenamientoAbierto = entrenamientoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+        if (entrenamientoAbierto) {
+          setTimeout(() => {
+            const el = document.getElementById('ficha-entrenamiento');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }, 60);
+        }
+      }
+
+      if (a === 'cerrar-entrenamiento-ficha') { entrenamientoAbierto = null; refrescar(); }
+
+      if (a === 'iniciar-entrenamiento') {
+        Store.iniciarEntrenamiento(btn.dataset.id, btn.dataset.ent);
+        refrescar();
+        avisar('Entrenamiento en curso. Revisá la fecha de fin tentativa.');
+      }
+
+      if (a === 'cerrar-proceso') {
+        Store.cerrarEntrenamiento(btn.dataset.id, btn.dataset.ent, { resultado: 'efectivo' });
+        refrescar();
+        avisar('Proceso cerrado. Elegí cómo cerró si no quedó efectivo.');
+      }
+
+      if (a === 'guardar-evaluacion') {
+        const niveles = {};
+        document.querySelectorAll('[data-ev-nivel]').forEach(sel => {
+          if (sel.value) niveles[sel.dataset.evNivel] = Number(sel.value);
+        });
+        const como = (document.getElementById('ev-como') || {}).value || '';
+        const paso = (document.getElementById('ev-paso') || {}).value || '';
+        if (!Object.keys(niveles).length && !como.trim()) {
+          avisar('Anotá al menos un nivel o cómo le fue.', 'error');
+          return;
+        }
+        Store.agregarEvaluacionEntrenamiento(btn.dataset.id, btn.dataset.ent, {
+          fecha: valorDe('#ev-fecha') || hoyISO(),
+          instancia: valorDe('#ev-instancia') || 'mensual',
+          evaluadaCon: valorDe('#ev-con'),
+          niveles,
+          comoLeFue: como.trim(),
+          proximoPaso: paso.trim()
+        });
+        refrescar();
+        avisar('Evaluación anotada.');
+      }
+
+      if (a === 'borrar-evaluacion') {
+        Store.quitarEvaluacionEntrenamiento(btn.dataset.id, btn.dataset.ent, btn.dataset.ev);
+        refrescar();
+      }
+
+      if (a === 'borrar-entrenamiento') {
+        const ok = await confirmar('Borrar el entrenamiento',
+          'Se pierde la propuesta y todas las evaluaciones que le cargaste. Si terminó, cerralo en vez de borrarlo.',
+          'Borrar');
+        if (ok) {
+          Store.quitarEntrenamiento(btn.dataset.id, btn.dataset.ent);
+          entrenamientoAbierto = null;
+          refrescar();
+        }
+      }
+
+      if (a === 'ir-a-ficha') {
+        perfilAbierto = btn.dataset.id;
+        location.hash = '#/nomina';
+        setTimeout(() => {
+          const el = document.getElementById('perfil-colaborador');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 120);
+      }
 
       /* --- sucursales --- */
       if (a === 'agregar-sucursal') { Store.agregarSucursal(); refrescar(); }

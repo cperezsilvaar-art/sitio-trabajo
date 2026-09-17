@@ -229,6 +229,10 @@ const Store = (() => {
         /* Ausencias con certificado: desde cuándo, hasta cuándo, y qué pasa
            cuando esa fecha llega. Nada que ver con las novedades del mes. */
         if (!Array.isArray(c.ausencias)) c.ausencias = [];
+        /* Entrenamientos al rol de Senior. También cuelgan de la persona: la
+           propuesta la hizo un gerente en una tienda, pero la trazabilidad
+           tiene que seguirla si la trasladan a otra. */
+        if (!Array.isArray(c.entrenamientos)) c.entrenamientos = [];
         /* La nómina no trae cargas de familia y los plazos del art. 208 se
            duplican con ellas: se carga a mano y por eso arranca sin definir. */
         if (c.cargasFamilia === undefined) c.cargasFamilia = null;
@@ -628,6 +632,7 @@ const Store = (() => {
         sanciones: [],                    // el legajo disciplinario de la persona
         movimientos: [],                  // cesiones de contrato y modificaciones de puesto
         ausencias: [],                    // las que tienen certificado, con desde y hasta
+        entrenamientos: [],               // la ruta al rol de Senior, con sus evaluaciones
         cargasFamilia: null,              // null = sin definir; duplica los plazos del art. 208
         desempeno: null, potencial: null, fechaEvaluacion: '', evaluadoCon: '',
         estudia: '', carrera: '', avanceEstudio: '', formacionPrevia: '',
@@ -1422,6 +1427,136 @@ const Store = (() => {
       const c = this.colaboradorPorId(colabId);
       if (!c) return;
       c.ausencias = (c.ausencias || []).filter(a => a.id !== ausenciaId);
+      guardar();
+    },
+
+    /* ------------------ entrenamientos a Senior ------------------- *
+       Lo que se guarda es la trazabilidad: quién lo propuso y cuándo, cuándo
+       arrancó, hasta cuándo se estima, y cada evaluación con el nivel de
+       competencia que se le reconoció. Nada se pisa: una evaluación nueva se
+       suma, no reemplaza a la anterior. */
+
+    proponerEntrenamiento(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      if (!Array.isArray(c.entrenamientos)) c.entrenamientos = [];
+      const hoy = new Date().toISOString().slice(0, 10);
+      const ent = Object.assign({
+        id: uid(),
+        rol: 'APV Senior',
+        estado: 'propuesto',
+        propuestoPor: '',
+        fechaPropuesta: hoy,
+        /* La tienda donde lo propusieron. Se guarda como dato del
+           entrenamiento porque la persona puede mudarse antes de cerrarlo y
+           entonces la ficha ya no dice dónde empezó esto. */
+        sucursalIdPropuesta: (this.sucursalDe(colabId) || {}).id || '',
+        fechaInicio: '',
+        finTentativo: '',
+        motivo: '',
+        fechaCierre: '',
+        resultado: '',
+        notaCierre: '',
+        evaluaciones: [],
+        registradoEl: new Date().toISOString()
+      }, datos || {});
+      c.entrenamientos.push(ent);
+      guardar();
+      return ent;
+    },
+
+    entrenamiento(colabId, entId) {
+      const c = this.colaboradorPorId(colabId);
+      return c ? ((c.entrenamientos || []).find(x => x.id === entId) || null) : null;
+    },
+
+    /** Busca el entrenamiento en toda el área: la pantalla lo abre por su id. */
+    entrenamientoPorId(entId) {
+      let hallado = null;
+      this.get().sucursales.forEach(s =>
+        (s.colaboradores || []).forEach(c =>
+          (c.entrenamientos || []).forEach(x => {
+            if (x.id === entId) hallado = { colaborador: c, sucursal: s, entrenamiento: x };
+          })));
+      return hallado;
+    },
+
+    actualizarEntrenamiento(colabId, entId, datos) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return null;
+      Object.assign(ent, datos || {});
+      guardar();
+      return ent;
+    },
+
+    /**
+     * Arranca el entrenamiento. Si no se aclara hasta cuándo, propone tres
+     * meses: es el plazo con el que se viene trabajando y una fecha tentativa
+     * puesta es lo que después hace que el panel avise; sin ella el
+     * entrenamiento se estira sin que nadie lo note.
+     */
+    iniciarEntrenamiento(colabId, entId, fechaInicio, finTentativo) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return null;
+      ent.estado = 'entrenamiento';
+      ent.fechaInicio = fechaInicio || ent.fechaInicio || new Date().toISOString().slice(0, 10);
+      ent.finTentativo = finTentativo || ent.finTentativo ||
+        _sumarMeses(ent.fechaInicio, MESES_ENTRENAMIENTO);
+      guardar();
+      return ent;
+    },
+
+    cerrarEntrenamiento(colabId, entId, datos) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return null;
+      ent.estado = 'cerrado';
+      ent.resultado = (datos && datos.resultado) || 'efectivo';
+      ent.fechaCierre = (datos && datos.fecha) || new Date().toISOString().slice(0, 10);
+      ent.notaCierre = (datos && datos.nota) || ent.notaCierre || '';
+      guardar();
+      return ent;
+    },
+
+    /** Vuelve a abrir un entrenamiento cerrado por error. */
+    reabrirEntrenamiento(colabId, entId) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return null;
+      ent.estado = ent.fechaInicio ? 'entrenamiento' : 'propuesto';
+      ent.resultado = '';
+      ent.fechaCierre = '';
+      guardar();
+      return ent;
+    },
+
+    agregarEvaluacionEntrenamiento(colabId, entId, datos) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return null;
+      if (!Array.isArray(ent.evaluaciones)) ent.evaluaciones = [];
+      const ev = Object.assign({
+        id: uid(),
+        fecha: new Date().toISOString().slice(0, 10),
+        instancia: 'mensual',
+        evaluadaCon: '',            // el gerente con quien se hizo la conversación
+        niveles: {},                // { competenciaId: nivel alcanzado }
+        comoLeFue: '',
+        proximoPaso: ''
+      }, datos || {});
+      ent.evaluaciones.push(ev);
+      guardar();
+      return ev;
+    },
+
+    quitarEvaluacionEntrenamiento(colabId, entId, evId) {
+      const ent = this.entrenamiento(colabId, entId);
+      if (!ent) return;
+      ent.evaluaciones = (ent.evaluaciones || []).filter(x => x.id !== evId);
+      guardar();
+    },
+
+    quitarEntrenamiento(colabId, entId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return;
+      c.entrenamientos = (c.entrenamientos || []).filter(x => x.id !== entId);
       guardar();
     },
 

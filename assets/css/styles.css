@@ -310,11 +310,17 @@ button.b.sec, a.b.sec { background: transparent; color: var(--azul); border: 1px
 button.b.sec:hover, a.b.sec:hover { background: var(--panel-alt); }
 button.b.peligro { background: transparent; color: var(--rojo-alerta); border: 1px solid var(--rojo-alerta); }
 button.b.peligro:hover { background: rgba(192,57,43,.08); }
-button.mini {
+/* El enlace también, porque algunas de estas acciones son navegar a otra
+   pantalla y no un botón que hace algo acá. */
+button.mini, a.mini {
   background: transparent; border: 1px solid var(--borde-fuerte); color: var(--texto-suave);
   border-radius: 6px; padding: 3px 8px; font-size: 12px; cursor: pointer;
+  display: inline-block; text-decoration: none; white-space: nowrap;
 }
 button.mini:hover { color: var(--rojo-alerta); border-color: var(--rojo-alerta); }
+/* El enlace no se pone rojo al pasar por encima: el rojo del botón chico avisa
+   que la acción saca algo, y navegar a otra pantalla no saca nada. */
+a.mini:hover { color: var(--azul); border-color: var(--azul); }
 .acciones { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
 
 /* ------------------------------ Etiquetas ------------------------------ */
@@ -864,3 +870,43 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   .nom-ingreso::before { content: 'Ingreso: '; }
   .nom-ant::before     { content: 'Antigüedad: '; }
 }
+
+/* ---- Desarrollo al rol de Senior ----
+   Los tres cuadrantes son tres tarjetas de la misma grilla, y adentro cada
+   persona es una línea entera clickeable: en una lista de nombres el blanco
+   de al lado del nombre es donde la gente hace clic. */
+.lista-desarrollo { list-style: none; margin: 10px 0 0; padding: 0; }
+.lista-desarrollo li { margin-bottom: 6px; }
+
+.fila-desarrollo {
+  display: grid; gap: 2px 8px; width: 100%; text-align: left;
+  grid-template-columns: 1fr auto;
+  padding: 9px 11px; border: 1px solid var(--borde); border-radius: 10px;
+  background: var(--panel); cursor: pointer; font: inherit; color: inherit;
+}
+.fila-desarrollo:hover { border-color: var(--azul); background: var(--panel-alt); }
+.fila-desarrollo strong { font-size: 14px; }
+.fila-desarrollo em { font-size: 12px; color: var(--texto-suave); font-style: normal; }
+.fila-desarrollo .chip { justify-self: end; }
+.fila-desarrollo .avance-nota { grid-column: 1 / -1; }
+
+/* La barra de avance cuenta competencias alcanzadas, no un promedio: mezclar
+   escalas de 4 y de 6 en un porcentaje daría un número que no significa nada. */
+.avance-comp {
+  grid-column: 1 / -1; height: 5px; border-radius: 3px;
+  background: var(--panel-alt); border: 1px solid var(--borde); overflow: hidden; margin-top: 4px;
+}
+.avance-comp i { display: block; height: 100%; background: var(--verde); }
+
+/* La trazabilidad se lee de arriba hacia abajo, lo último primero. */
+.linea-tiempo { list-style: none; margin: 10px 0 0; padding: 0 0 0 16px; border-left: 2px solid var(--borde); }
+.linea-tiempo li { position: relative; padding: 0 0 14px 12px; }
+.linea-tiempo li::before {
+  content: ''; position: absolute; left: -21px; top: 6px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--azul); border: 2px solid var(--panel);
+}
+.linea-tiempo .lt-cabeza { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.linea-tiempo .lt-cabeza em { font-size: 12px; color: var(--texto-suave); font-style: normal; }
+.linea-tiempo p { margin: 4px 0 0; }
+.linea-tiempo .crece { flex: 1; }
