@@ -233,6 +233,15 @@ se corrige en la ficha de la persona —donde `nombre` y `fechaIngreso` son ahor
 campos, no `dato()`— porque sacarlos de la tabla los dejaba sin ningún lugar
 donde arreglarlos.
 
+**El plantel tampoco se arma acá.** La tabla es `d.activos`, la misma lista que
+dibuja la matriz: el plantel activo de esa sucursal, así que una baja desaparece
+sola. Iba por su cuenta sobre `s.colaboradores` y listaba a los de baja mientras
+el contador de «sin evaluar» ya los excluía. Se sacaron el alta y el ✕ de la
+fila: sumar gente es el alta de `#/nomina`, y `borrar-colaborador` se movió a la
+ficha de la persona. **Borrar no es dar de baja**: borrar elimina a la persona con
+su evaluación, sus ausencias y su historial y es para el que se cargó por error;
+el que dejó de trabajar va a la baja, que lo conserva. El diálogo lo aclara.
+
 La matriz de FTE de la estadística usa el **cabezal de dos niveles de la planilla
 TD01**: *Heads* (todo el mes · ingreso · total) y *F.T.U.* (todo el mes · egreso ·
 ingreso · total días · hs. extras · ausent + vaca · total). Las cabezas y los

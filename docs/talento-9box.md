@@ -28,6 +28,28 @@ apellido y nombre y la fecha de ingreso como campos editables: antes solo se
 leían, así que sacarlos de esta tabla habría dejado un dato sin ningún lugar
 donde arreglarlo —el caso concreto es un tipeo en el alta a mano—.
 
+## El plantel no se arma acá
+
+La tabla tenía **+ Agregar colaborador** al pie y un **✕** por fila. Las dos cosas
+sobran: el plantel de una tienda sale de su nómina, y desde que la identidad de
+la fila se lee, el botón de agregar creaba una fila vacía que ni siquiera se
+podía completar ahí.
+
+Ahora la tabla es **el plantel activo de esa sucursal**, la misma lista que
+dibuja la matriz. Para sumar a alguien está el alta de *Nómina*; el pie de la
+tabla lo dice y lleva.
+
+Dos consecuencias que se ven:
+
+- **Una baja desaparece sola de la tabla y del contador de sin evaluar.** Antes
+  la tabla iba por su cuenta sobre `s.colaboradores` y listaba a los de baja
+  —en gris, pero listados y evaluables— mientras el contador ya los excluía.
+- **Borrar del padrón se hace desde la ficha de la persona**, que es a donde se
+  llega desde cualquier pantalla. Ojo con la diferencia: *borrar* elimina a la
+  persona con su evaluación, sus ausencias y su historial, y es para el que se
+  cargó por error; **para el que dejó de trabajar lo que corresponde es la
+  baja**, que lo conserva con su registro. El diálogo lo dice.
+
 ## Las dos escalas
 
 **Desempeño** — qué resultados da hoy en su posición:

@@ -1918,6 +1918,8 @@ const App = (() => {
               ? `<span class="chip ambar" title="No cubre turno: no cuenta para la dotación de piso">${esc(esNoPresencial(c).motivo)}</span>` : ''}
             ${q ? `<span class="chip azul">${esc(q.nombre)}</span>` : ''}
             ${c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO' ? `<span class="chip ambar">${esc(c.estatus)}</span>` : ''}
+            <button class="mini" data-accion="borrar-colaborador" data-id="${c.id}"
+              title="Borrar del padrón. Si dejó de trabajar, cargale la baja.">Borrar</button>
             <button class="mini" data-accion="cerrar-perfil">Cerrar</button>
           </div>
         </div>
@@ -3694,7 +3696,10 @@ const App = (() => {
 
   function panelTalento(v, s) {
     const d = distribucion9Box(s.colaboradores);
-    const equipo = s.colaboradores || [];
+    /* La misma lista que usa la matriz: el plantel activo de la tienda. Antes
+       la tabla iba por su cuenta sobre `s.colaboradores` y listaba a los de
+       baja, mientras el contador de «sin evaluar» ya los excluía. */
+    const equipo = d.activos;
 
     const chip = c => {
       const q = cuadranteDe(c.potencial, c.desempeno);
@@ -3726,7 +3731,7 @@ const App = (() => {
         </p>
         <div class="tabla-scroll"><table>
           <thead><tr>
-            <th>Colaborador</th><th>Posición</th><th>Ingreso</th><th class="num">Antig.</th>
+            <th>Colaborador</th><th>Puesto</th><th>Ingreso</th><th class="num">Antig.</th>
             <th>Desempeño</th><th>Potencial</th><th>Cuadrante</th><th>Último movimiento</th><th></th>
           </tr></thead>
           <tbody>
@@ -3751,7 +3756,6 @@ const App = (() => {
               <td style="font-size:12px;color:var(--texto-suave)">${ult ? `${fmtFecha(ult.fecha)}${ult.desde ? ` · desde ${ult.desde.desempeno || '—'}/${ult.desde.potencial || '—'}` : ''}` : '—'}</td>
               <td class="num" style="white-space:nowrap">
                 <button class="mini" data-accion="ficha" data-id="${c.id}" style="color:var(--azul);border-color:var(--azul)">${fichaAbierta === c.id ? 'Cerrar' : 'Ficha'}</button>
-                <button class="mini" data-accion="borrar-colaborador" data-id="${c.id}">✕</button>
               </td>
             </tr>
             ${fichaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${talentCard(c, s)}</td></tr>` : ''}`;
@@ -3759,7 +3763,11 @@ const App = (() => {
           </tbody>
         </table></div>
         <div class="acciones">
-          <button class="b sec" data-accion="agregar-colaborador">+ Agregar colaborador</button>
+          <span class="ayuda" style="margin:0">
+            La lista sale sola de la nómina de ${esc(s.nombre || s.codigo)}: ${equipo.length}
+            persona${equipo.length === 1 ? '' : 's'} activa${equipo.length === 1 ? '' : 's'}.
+            Para sumar o quitar a alguien, <a href="#/nomina">Nómina</a>.
+          </span>
           ${d.sinEvaluar.length ? `<span class="chip ambar">${d.sinEvaluar.length} sin evaluar</span>` : ''}
         </div>
       </section>
@@ -4647,21 +4655,29 @@ const App = (() => {
         contexto.movimientos.push({ tipo: 'baja', nombre: '', fecha: '', puesto: '', categoria: '', motivo: '', causa: '' });
         Store.save(); refrescar();
       }
-      if (a === 'agregar-colaborador') {
-        Store.agregarColaborador(visitaEnCurso.sucursalId, {});
-        refrescar();
-      }
       if (a === 'ficha') {
         fichaAbierta = fichaAbierta === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
       }
+      /* Se borra desde la ficha de la persona, que es desde donde se llega a
+         cualquier pantalla. Ojo: esto borra, no da de baja. La baja conserva a
+         la persona con su historial y se carga en «Cesiones y bajas»; esto es
+         para el que se cargó por error. */
       if (a === 'borrar-colaborador') {
-        const suc = Store.sucursal(visitaEnCurso.sucursalId);
-        const c = suc.colaboradores.find(x => x.id === btn.dataset.id);
-        const ok = await confirmar('Quitar del plantel',
-          `${c && c.nombre ? c.nombre : 'El colaborador'} se elimina junto con su evaluación y su historial.`,
-          'Quitar');
-        if (ok) { Store.eliminarColaborador(suc.id, btn.dataset.id); refrescar(); avisar('Colaborador eliminado.'); }
+        const c = Store.colaboradorPorId(btn.dataset.id);
+        const suc = Store.sucursalDe(btn.dataset.id);
+        if (!c || !suc) return;
+        const ok = await confirmar('Borrar del padrón',
+          `${c.nombre || 'La persona'} se borra junto con su evaluación, sus ausencias y su historial. ` +
+          'Si dejó de trabajar, lo que corresponde es cargarle la baja en su ficha: así queda el registro.',
+          'Borrar del padrón');
+        if (ok) {
+          Store.eliminarColaborador(suc.id, btn.dataset.id);
+          perfilAbierto = null;
+          fichaAbierta = null;
+          refrescar();
+          avisar('Borrado del padrón.');
+        }
       }
       if (a === 'agregar-sancion') {
         contexto.sanciones.push({ nombre: '', fecha: '', tipo: '', motivo: '', puesto: '', observaciones: '' });
