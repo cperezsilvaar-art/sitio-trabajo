@@ -188,9 +188,9 @@ const Store = (() => {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
     }
     /* Corrección de campos que se cargaron mal la primera vez: el área tiene un
-       solo Gerente de Operaciones —Eduardo José Páez Márquez—, todas las
-       tiendas operan bajo la marca Farmatodo, y los dos nombres que traía la
-       tercera columna del padrón no son referentes de ninguna sucursal. */
+       solo Gerente de Operaciones, todas las tiendas operan bajo la marca
+       Farmatodo, y los dos nombres que traía la tercera columna del padrón no
+       son referentes de ninguna sucursal. */
     if (e.config.gerentesOperaciones.every(g => NOMBRES_A_LIMPIAR.includes(g.nombre) && !String(g.email || '').trim())) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
     }

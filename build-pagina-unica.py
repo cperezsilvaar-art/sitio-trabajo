@@ -17,9 +17,11 @@ scripts = re.findall(r'<script src="([^"]+\.js)"></script>', html)
 if not scripts:
     sys.exit('No se encontró ningún <script src> en index.html')
 
-# El plantel del área lleva nombre, tienda y cargo de gente real. Va en la
-# versión que se abre desde el equipo; con --sin-plantel se arma la que se
-# publica como página, donde esos datos no corresponde que viajen.
+# `--sin-plantel` deja el padrón vacío. Existe para cuando `plantel-area3.js`
+# lleva gente real, que no corresponde que viaje a una página publicada. Hoy ese
+# archivo tiene cinco personas inventadas y la página se publica con ellas, que
+# es lo que permite mostrar el panel funcionando. Si alguna vez vuelve el plantel
+# real, publicar sin este flag pasa a ser una fuga de datos.
 if '--sin-plantel' in sys.argv:
     scripts = [x for x in scripts if 'plantel-area3' not in x]
 

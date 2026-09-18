@@ -2,8 +2,16 @@
  * sucursales-area3.js — Padrón de las sucursales del Área 3.
  *
  * Toda el área opera bajo la marca Farmatodo y reporta a un único Gerente de
- * Operaciones: Eduardo José Páez Márquez. Lo que el padrón original traía por
- * tienda —La Sante, Vassallo, Independiente— es el grupo que la opera.
+ * Operaciones. Lo que el padrón original traía por tienda —La Sante, Vassallo,
+ * Independiente— es el grupo que la opera.
+ *
+ * **Los nombres de personas de este archivo son inventados**, igual que los de
+ * `plantel-area3.js`: gerentes, directores técnicos, contactos administrativos
+ * y referentes de RRHH. Se cambiaron para poder mostrar el panel y publicarlo
+ * sin exponer a nadie. Las tiendas sí son las reales —código, dirección, CUIT,
+ * horario—, que es dato de la empresa y no de una persona. Los de verdad se
+ * cargan en la ficha de cada tienda, en `#/sucursal/<id>`, y se quedan en el
+ * navegador.
  *
  * Los códigos `rvd` son el "#País" del reporte diario de ventas: son los que
  * permiten cruzar este padrón con la venta de cada tienda sin depender del
@@ -15,14 +23,14 @@
  */
 
 const GERENTES_OPERACIONES_AREA3 = [
-  { nombre: 'Eduardo José Páez Márquez', email: 'eduardo.paez@farmatodo.com' }
+  { nombre: 'Rubén Etchegaray', email: 'gerencia.operaciones@ejemplo.com' }
 ];
 
 /* Los nombres que el padrón traía en su tercera columna no son un referente de
    las sucursales: el Área 3 reporta a un único Gerente de Operaciones y el
    coordinador de RRHH es Christian Pérez. Se conservan solo para poder
    limpiarlos de los datos ya guardados, no se asignan a ninguna tienda. */
-const NOMBRES_A_LIMPIAR = ['Reinaldo Contreras', 'Mariano Murta'];
+const NOMBRES_A_LIMPIAR = ['Alberto Sanguinetti', 'Esteban Roldán V.'];
 
 const SUCURSALES_AREA3 = [
   {
@@ -30,18 +38,18 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMATODO ARGENTINA S.A.', cuit: '30716227339',
     direccion: 'Av. Santa Fe 3601, C1425GY', localidad: 'CABA',
     horario: 'Lunes a domingo + feriados: 08:00 a 24:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Ana Antury', directorTecnico: 'Yessica Santos',
-    contactoAdmin: 'Camila Mendoza', emailContactoAdmin: 'cm@estudioeka.com.ar',
-    referenteRRHH: 'Yael Peluso'
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Paula Iriarte', directorTecnico: 'Julieta Ramallo',
+    contactoAdmin: 'Agustina Rivas', emailContactoAdmin: 'ar@estudiodemo.com.ar',
+    referenteRRHH: 'Mercedes Ugarte'
   },
   {
     codigo: 'DEVOTO', rvd: '019', nombre: 'Devoto', marca: 'Farmatodo', operador: 'Farmatodo',
     razonSocial: 'MA TECH S.R.L.', cuit: '30711817685',
     direccion: 'José Pedro Varela 4720', localidad: 'CABA',
     horario: 'Lunes a domingo + feriados: 08:00 a 21:00',
-    art: 'ANDINA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Omar Gomez', directorTecnico: 'Gonzalo Abad',
+    art: 'ANDINA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Damián Ferreyra', directorTecnico: 'Hernán Loyola',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
     notas: 'El padrón trae dos domicilios distintos: "Av. de Mayo" y "José Pedro Varela 4720". Confirmar cuál corresponde.'
   },
@@ -50,8 +58,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA LA NOBLEZA SCS', cuit: '30684783684',
     direccion: 'Av. San Martín 420 (loc. 16)', localidad: 'San Martín',
     horario: 'Lunes a domingo + feriados: 08:00 a 21:00',
-    art: 'ANDINA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Lorena Arrieta', directorTecnico: 'Christian Mancuso',
+    art: 'ANDINA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Silvina Ocampo R.', directorTecnico: 'Federico Aguirre',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
     notas: 'En el RVD figura como "25 DE MAYO (NOBLEZA)".'
   },
@@ -60,10 +68,10 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA MARK S.C.S.', cuit: '30711024499',
     direccion: 'Vicente F. López 1076, B1640 Martínez', localidad: 'San Isidro',
     horario: 'Lunes a domingo + feriados: 08:00 a 22:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Deildre María Barroso', directorTecnico: 'Deildre María Barroso',
-    contactoAdmin: 'Rocio Pacci', emailContactoAdmin: 'rp@estudioeka.com.ar',
-    referenteRRHH: 'Amanda Luz Barassi',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Marisa Quiroga', directorTecnico: 'Marisa Quiroga',
+    contactoAdmin: 'Micaela Duarte', emailContactoAdmin: 'md@estudiodemo.com.ar',
+    referenteRRHH: 'Inés Carranza',
     notas: 'La misma persona figura como gerente y como director técnico. Verificar.'
   },
   {
@@ -71,18 +79,18 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA VASSALLO OLIVOS SCS', cuit: '33663846839',
     direccion: 'Ricardo Gutiérrez 1202', localidad: 'San Isidro',
     horario: 'Lunes a sábado: 08:00 a 21:00 · Domingo y feriados: 10:00 a 18:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Cristian Diaz', directorTecnico: 'Bialostocky, Noemí B.',
-    contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: 'Amanda Luz Barassi'
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Nicolás Bengochea', directorTecnico: 'Noelia Bianchi',
+    contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: 'Inés Carranza'
   },
   {
     codigo: 'OLLEROS', rvd: '022', nombre: 'Olleros', marca: 'Farmatodo', operador: 'Farmatodo',
     razonSocial: 'FARMACIA BARCELONA S.R.L.', cuit: '30710793472',
     direccion: 'Av. Cabildo 701', localidad: 'CABA',
     horario: 'Lunes a domingo + feriados: 08:00 a 22:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Wilson Trejo', directorTecnico: 'Natalia Fiore',
-    contactoAdmin: 'Antonella Diaz', emailContactoAdmin: 'add@estudioeka.com.ar',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Tomás Alderete', directorTecnico: 'Lucía Stagnaro',
+    contactoAdmin: 'Florencia Bazán', emailContactoAdmin: 'fb@estudiodemo.com.ar',
     referenteRRHH: ''
   },
   {
@@ -90,8 +98,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMATODO ARGENTINA S.A.', cuit: '30716227339',
     direccion: 'Emilio Mitre 1404', localidad: 'CABA',
     horario: 'Lunes a viernes: 10:00 a 18:00 · Sábado: 10:00 a 18:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Helen Afanador Villasmil', directorTecnico: '',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Carla Vignoli', directorTecnico: '',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
     notas: 'En el RVD del 06-09 esta tienda figura en el Área 2, no en la 3. Confirmar a qué área corresponde.'
   },
@@ -100,8 +108,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA RIVADAVIA 5892 SCS', cuit: '30642901997',
     direccion: 'Av. Rivadavia 5892', localidad: 'CABA',
     horario: 'Lunes a domingo + feriados: 08:00 a 21:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Gustavo Enriquez', directorTecnico: 'Gabriela Crisci',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Fabián Urquiza', directorTecnico: 'Mariana Toledo',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: ''
   },
   {
@@ -109,8 +117,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'IRON LYNX SAS', cuit: '30716704366',
     direccion: 'Scalabrini Ortiz 361', localidad: 'CABA',
     horario: 'Lunes a domingo + feriados: 08:00 a 24:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Horacio Martinez', directorTecnico: 'Laura Kaplan',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Gustavo Peralta L.', directorTecnico: 'Sabrina Kuperman',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: ''
   },
   {
@@ -118,8 +126,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA SAN MARTIN CENTER', cuit: '30662516224',
     direccion: 'San Lorenzo 3773, San Martín', localidad: 'San Martín',
     horario: 'Lunes a domingo + feriados: 08:00 a 21:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Mariela Gonzalez', directorTecnico: 'Marcelo Vasallo',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Verónica Lastra', directorTecnico: 'Rodrigo Massa',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
     notas: 'En el RVD figura como "SAN MARTIN".'
   },
@@ -128,9 +136,9 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMACIA VASSALLO VILLA DEL PARQUE SRL', cuit: '30709040800',
     direccion: 'Cuenca 2719', localidad: 'CABA',
     horario: 'Lunes a sábado: 08:00 a 21:00 · Domingo y feriados: 10:00 a 18:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Mónica Noemí Salvatierra', directorTecnico: 'Andrea Verónica Trinidad Ibarra',
-    contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: 'Yael Peluso',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Andrea Solís', directorTecnico: 'Patricia Olivera',
+    contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: 'Mercedes Ugarte',
     notas: 'En el RVD figura como "VILLA DEL PARQUE II".'
   },
   {
@@ -138,8 +146,8 @@ const SUCURSALES_AREA3 = [
     razonSocial: 'FARMATODO ARGENTINA S.A.', cuit: '30716227339',
     direccion: 'Habana 3806, C1419', localidad: 'CABA',
     horario: 'Lunes a viernes: 10:00 a 18:00 · Sábado: 10:00 a 18:00',
-    art: 'PARANA ART', gerenteOperaciones: 'Eduardo José Páez Márquez',
-    gerente: 'Helen Afanador Villasmil', directorTecnico: 'Nadia Roldan',
+    art: 'PARANA ART', gerenteOperaciones: 'Rubén Etchegaray',
+    gerente: 'Carla Vignoli', directorTecnico: 'Belén Sarmiento',
     contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: ''
   }
 ];

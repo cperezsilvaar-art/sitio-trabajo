@@ -341,13 +341,30 @@ y Chromium headless, que viven en el directorio de trabajo temporal de la sesió
 ## Privacidad
 
 Los datos personales del padrón viven **solo en el navegador del usuario**,
-cifrables con clave, con una excepción acotada: `assets/js/plantel-area3.js`
-guarda en el proyecto lo **operativo** de las 139 personas del área —nombre,
-tienda, cargo, categoría, nivel, jornada, fechas de ingreso, estatus y unidad de
-negocio—, para que el panel no abra vacío cuando el navegador se limpia.
-**Ese archivo no lleva CUIL, DNI, fecha de nacimiento, teléfono, domicilio,
-mails, banco ni CBU**, y no hay que agregárselos: esos campos entran al pegar la
-nómina y se quedan en el navegador. El banco y el CBU se importan desde septiembre
+cifrables con clave. **En el proyecto no hay ni una persona real.**
+
+`assets/js/plantel-area3.js` guardaba lo operativo de las 139 personas del área
+y hoy guarda **cinco personas inventadas** (Acuña, Beltrán, Corvalán, Dávalos y
+Espósito, todas en Botánico): el coordinador necesitaba mostrar el panel
+funcionando sin exponer a nadie. No reponer el plantel real ahí — el de verdad
+entra pegando la nómina en `#/nomina` y se queda en el navegador. El real sigue
+disponible en el historial de git si alguna vez hace falta.
+
+Las cinco están elegidas para que una sola tienda muestre cómo cuenta el panel:
+cinco cabezas pero **3,5 FTE de piso**, porque Espósito es media jornada y
+Dávalos tiene bloqueo de título y no cubre turno. Corvalán es la APV con menos
+antigüedad, que es la candidata natural para mostrar `#/desarrollo`.
+
+`assets/js/sucursales-area3.js` tenía el mismo problema por otro lado: gerentes,
+directores técnicos, contactos administrativos con su mail y referentes de RRHH,
+todos reales. **También son nombres inventados ahora.** Las tiendas siguen
+siendo las de verdad —código, `rvd`, dirección, CUIT, razón social, horario—,
+que es dato de la empresa y no de una persona. Los referentes reales se cargan
+en la ficha de cada tienda, en `#/sucursal/<id>`, y se quedan en el navegador.
+
+**Ninguno de los dos archivos lleva CUIL, DNI, fecha de nacimiento, teléfono,
+domicilio, mails, banco ni CBU**, y no hay que agregárselos: esos campos entran
+al pegar la nómina y se quedan en el navegador. El banco y el CBU se importan desde septiembre
 de 2026, a pedido del coordinador: se muestran plegados en la ficha y no
 aparecen en ningún reporte.
 
