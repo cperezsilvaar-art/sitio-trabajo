@@ -759,7 +759,6 @@ const App = (() => {
     return panelAsistente() + vistaAgenda({ sinTitulo: true });
   }
 
-  let diaEventos = null;      // { eventos } | { error } | null mientras se busca
 
   function panelAsistente() {
     const listo = Asistente.disponible();
@@ -769,7 +768,6 @@ const App = (() => {
         Preguntale por el área y te contesta con los números del panel. Abajo, tu agenda.
       </p>
 
-      ${tiraDelDia()}
 
       <section class="tarjeta" id="asistente">
         ${listo ? '' : `<div class="aviso-caja info" id="asistente-espera">
@@ -812,35 +810,6 @@ const App = (() => {
           cosas en la agenda si se lo pedís.
         </p>
       </section>`;
-  }
-
-  /* Las reuniones de hoy, del calendario de Google. Cada error tiene su propio
-     texto: esconderlos atrás de un “algo falló” deja al coordinador sin saber
-     que le alcanzaba con reconectar. */
-  function tiraDelDia() {
-    const est = Asistente.estadoCalendario();
-    if (!est.hay) {
-      if (est.motivo === 'sin-visor') return '';
-      const t = Asistente.explicarError({ code: est.motivo });
-      return `<div class="aviso-caja info"><strong>Tu día:</strong> ${esc(t.texto)}</div>`;
-    }
-    if (diaEventos === null) {
-      return '<div class="aviso-caja info"><strong>Tu día:</strong> buscando tus reuniones…</div>';
-    }
-    if (diaEventos.error) {
-      const t = Asistente.explicarError(diaEventos.error);
-      return `<div class="aviso-caja"><strong>Tu día:</strong> ${esc(t.texto)}
-        ${t.reintentar ? '<div class="acciones"><button class="b sec mini" data-accion="reintentar-dia">Probar de nuevo</button></div>' : ''}
-      </div>`;
-    }
-    if (!diaEventos.eventos.length) {
-      return '<div class="aviso-caja info"><strong>Tu día:</strong> no tenés reuniones agendadas para hoy.</div>';
-    }
-    return `<div class="aviso-caja info">
-      <strong>Tu día:</strong> ${diaEventos.eventos.length} ${diaEventos.eventos.length === 1 ? 'reunión' : 'reuniones'} en el calendario.
-      <ul>${diaEventos.eventos.map(x =>
-        `<li><strong>${esc(Asistente.horaDe(x))}</strong> · ${esc(x.titulo)}</li>`).join('')}</ul>
-    </div>`;
   }
 
   function vistaAgenda(opciones) {
@@ -4796,18 +4765,6 @@ const App = (() => {
    * parcial se pinta tocando un solo nodo: re-renderizar la vista en cada
    * fragmento borraría lo que el coordinador esté escribiendo en la agenda.
    */
-  async function cargarDiaDelCalendario() {
-    diaEventos = null;
-    refrescar();
-    try {
-      const { eventos } = await Asistente.eventosDelDia();
-      diaEventos = { eventos };
-    } catch (err) {
-      diaEventos = { error: err };
-    }
-    refrescar();
-  }
-
   async function preguntarAlAsistente(texto) {
     const q = String(texto || '').trim();
     if (!q || chatPensando) return;
@@ -5454,7 +5411,6 @@ const App = (() => {
       if (a === 'chat-enviar')     { preguntarAlAsistente(valorDe('#chat-entrada')); return; }
       if (a === 'chat-cortar')     { if (chatAbortar) chatAbortar.abort(); return; }
       if (a === 'chat-limpiar')    { chatMsgs = []; Asistente.limpiar(); refrescar(); return; }
-      if (a === 'reintentar-dia')  { cargarDiaDelCalendario(); return; }
 
       /* --- baja, cesión de contrato y modificación --- */
       if (a === 'form-mov') {
@@ -6266,11 +6222,6 @@ const App = (() => {
       if (ok && (location.hash || '').indexOf('asistente') >= 0) refrescar();
       if (ok) { const av = document.getElementById('asistente-espera'); if (av) av.remove(); }
     });
-    Asistente.iniciarConectores().then(() => {
-      if (Asistente.estadoCalendario().hay) cargarDiaDelCalendario();
-      else refrescar();
-    });
-
     const aplicados = Store.aplicarMovimientosVencidos();
     render();
     if (aplicados.length) {

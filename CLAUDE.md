@@ -163,15 +163,22 @@ Claude con la capacidad `sample` del visor de artifacts. Dos reglas que mandan:
 devuelve null, la agenda funciona igual y la pantalla lo dice—, y **lo que se
 manda es un resumen, nunca el padrón**: números por sucursal, visitas, reclamos,
 bajas y la agenda; jamás CUIL, DNI, teléfono, domicilio, mail, banco ni CBU.
-El asistente también lee **el calendario de Google** del visor con la capacidad
-`mcp` —solo `list_events`, nunca escribe—. Cada código de error del conector
-tiene su propio texto y su propio arreglo: un cartel único de “algo falló” es el
-anti-patrón, porque esconde la acción que lo destraba. Documentado en
-`docs/asistente.md`.
+Documentado en `docs/asistente.md`.
 
-**Nunca publicar una página que llame a una herramienta de un conector sin haber
-visto una request y una response reales.** Gmail quedó afuera por eso: el token
-venció y no se pudo observar.
+**El panel no se conecta a ningún servicio personal del coordinador.** Este es
+su tablero de trabajo, y su calendario y su correo son suyos. Leía el
+**calendario de Google** con la capacidad `mcp` y mostraba las reuniones del día
+arriba de la agenda: se eliminó entero —la tira, `eventosDelDia()`, `horaDe()`,
+`explicarError()`, la herramienta `ver_agenda_del_dia` del chat y la declaración
+de `mcp` al publicar— porque lo que aparecía ahí era la vida privada de una
+persona dentro de una herramienta de la empresa. El correo se evaluó y se
+descartó por lo mismo. **No reponer ninguno de los dos ni proponerlos de
+vuelta**: lo que tenga que entrar al panel se pega a mano, que es como el
+coordinador eligió trabajar.
+
+Queda en pie la regla que dejó a Gmail afuera la primera vez: **nunca publicar
+una página que llame a una herramienta de un conector sin haber visto una
+request y una response reales.**
 
 **`#/diario` (*Presentismo*) es solo las ausencias.** Nada más. Tenía además una
 carga manual por sucursal —planificados, mínimo, ausentes, novedades, todas las
