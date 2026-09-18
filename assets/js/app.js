@@ -203,21 +203,21 @@ const App = (() => {
       })()}
 
       ${(() => {
-        /* Arranque en frío: sin plantel, sin copias y con un plantel de
-           demostración disponible. Pasa cada vez que alguien abre la página
-           publicada por primera vez, y sin esto lo que ve es un tablero en
-           cero que parece roto. El botón está también al pie de Nómina; acá
-           está porque es la pantalla en la que se cae al entrar. */
+        /* Arranque en frío: sin plantel, sin copias y con el plantel del área
+           disponible. Es lo que ve cualquiera que abre el panel por primera vez
+           en un navegador limpio, y sin esto lo que ve es un tablero en cero
+           que parece roto. El botón está también al pie de Nómina; acá está
+           porque es la pantalla en la que se cae al entrar. */
         if (dot.personas || dot.flotantes) return '';
         if (Store.resguardos().length) return '';
         if (!PLANTEL_AREA3.length) return '';
         return `<div class="aviso-caja info" id="arranque-demo">
           <strong>El tablero está vacío.</strong>
-          Podés cargar ${PLANTEL_AREA3.length} personas inventadas para ver cómo funciona, o
-          pegar la nómina de verdad en <a href="#/nomina">Nómina</a>, que se queda solo en
-          este navegador.
+          Podés reponer las ${PLANTEL_AREA3.length} personas del área en un clic, o pegar la
+          nómina del mes en <a href="#/nomina">Nómina</a>, que además completa los datos de
+          contacto. Todo se queda solo en este navegador.
           <div class="acciones">
-            <button class="b" data-accion="cargar-plantel">Cargar plantel de demostración</button>
+            <button class="b" data-accion="cargar-plantel">Cargar el plantel del área</button>
           </div>
         </div>`;
       })()}
@@ -678,14 +678,14 @@ const App = (() => {
         <div class="acciones">
           <button class="b" data-accion="importar-nomina">Importar la nómina</button>
           ${PLANTEL_AREA3.length
-            ? `<button class="b sec" data-accion="cargar-plantel">Cargar plantel de demostración (${PLANTEL_AREA3.length})</button>`
+            ? `<button class="b sec" data-accion="cargar-plantel">Cargar el plantel del área (${PLANTEL_AREA3.length})</button>`
             : ''}
         </div>
-        ${PLANTEL_AREA3.length ? `<p class="ayuda">
-          <strong>Ese botón trae ${PLANTEL_AREA3.length} personas inventadas</strong>, para poder mostrar el panel
-          funcionando sin exponer a nadie. El plantel de verdad entra pegando la planilla acá
-          arriba y se queda solo en este navegador. Los dos caminos se complementan y ninguno
-          duplica a nadie.</p>` : ''}
+        ${PLANTEL_AREA3.length ? `<p class="ayuda">“Cargar el plantel del área” repone las ${PLANTEL_AREA3.length} personas de la nómina de
+          septiembre de 2026 con su tienda, su cargo, su categoría, su jornada y sus fechas de
+          ingreso, sin tener que pegar nada. No trae el CUIL, el DNI, el teléfono, el domicilio
+          ni los mails: eso vive solo en tu navegador y entra al pegar la planilla. Los dos
+          caminos se complementan y ninguno duplica a nadie.</p>` : ''}
         <div id="resultado-nomina"></div>
 
         ${(() => {

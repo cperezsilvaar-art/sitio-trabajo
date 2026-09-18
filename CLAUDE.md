@@ -341,32 +341,35 @@ y Chromium headless, que viven en el directorio de trabajo temporal de la sesió
 ## Privacidad
 
 Los datos personales del padrón viven **solo en el navegador del usuario**,
-cifrables con clave. **En el proyecto no hay ni una persona real.**
+cifrables con clave, con dos excepciones acotadas que sí están en el proyecto.
+La gerencia autorizó al coordinador a trabajar con la nómina real del Área 3, y
+esa autorización es para **el repositorio y el equipo, no para una página
+publicada**.
 
-`assets/js/plantel-area3.js` guardaba lo operativo de las 139 personas del área
-y hoy guarda **cinco personas inventadas** (Acuña, Beltrán, Corvalán, Dávalos y
-Espósito, todas en Botánico): el coordinador necesitaba mostrar el panel
-funcionando sin exponer a nadie. No reponer el plantel real ahí — el de verdad
-entra pegando la nómina en `#/nomina` y se queda en el navegador. El real sigue
-disponible en el historial de git si alguna vez hace falta.
+`assets/js/plantel-area3.js` guarda lo **operativo** de las 139 personas del área
+—nombre, tienda, cargo, categoría, nivel, jornada, fechas de ingreso, estatus y
+unidad de negocio—, para que el panel no abra vacío cuando el navegador se
+limpia. `assets/js/sucursales-area3.js` guarda los referentes de cada tienda:
+gerente, director técnico, contacto administrativo con su mail y referente de
+RRHH.
 
-Las cinco están elegidas para que una sola tienda muestre cómo cuenta el panel:
-cinco cabezas pero **3,5 FTE de piso**, porque Espósito es media jornada y
-Dávalos tiene bloqueo de título y no cubre turno. Corvalán es la APV con menos
-antigüedad, que es la candidata natural para mostrar `#/desarrollo`.
+**Ninguno de los dos lleva CUIL, DNI, fecha de nacimiento, teléfono, domicilio,
+mails del colaborador, banco ni CBU**, y no hay que agregárselos: esos campos
+entran al pegar la nómina y se quedan en el navegador. El banco y el CBU se
+importan desde septiembre de 2026, a pedido del coordinador: se muestran
+plegados en la ficha y no aparecen en ningún reporte.
 
-`assets/js/sucursales-area3.js` tenía el mismo problema por otro lado: gerentes,
-directores técnicos, contactos administrativos con su mail y referentes de RRHH,
-todos reales. **También son nombres inventados ahora.** Las tiendas siguen
-siendo las de verdad —código, `rvd`, dirección, CUIT, razón social, horario—,
-que es dato de la empresa y no de una persona. Los referentes reales se cargan
-en la ficha de cada tienda, en `#/sucursal/<id>`, y se quedan en el navegador.
-
-**Ninguno de los dos archivos lleva CUIL, DNI, fecha de nacimiento, teléfono,
-domicilio, mails, banco ni CBU**, y no hay que agregárselos: esos campos entran
-al pegar la nómina y se quedan en el navegador. El banco y el CBU se importan desde septiembre
-de 2026, a pedido del coordinador: se muestran plegados en la ficha y no
-aparecen en ningún reporte.
+**Lo que se publica como página se arma siempre con `--sin-plantel`**, que ahora
+hace dos cosas: vacía `PLANTEL_AREA3` y saca de `sucursales-area3.js` los
+nombres de personas —los referentes, sus mails y el comentario de cabecera, que
+también nombraba a alguien—. Ese segundo barrido no existía y las doce fichas de
+referentes viajaron a la página publicada durante meses, porque el archivo se
+llama «sucursales» y uno lo lee como datos de las tiendas. Las tiendas sí
+quedan —código, `rvd`, dirección, CUIT, razón social, horario—: eso es dato de
+la empresa y es lo que hace que la página publicada sirva para mostrarla.
+**Antes de publicar, verificar que no quedó ningún nombre** buscándolos en el
+HTML armado; que un campo esté vacío no alcanza si el nombre sigue tres líneas
+más arriba, en un comentario.
 
 El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
 datos adentro; la pantalla de Configuración lo advierte cuando hay alguno

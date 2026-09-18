@@ -17,17 +17,53 @@ scripts = re.findall(r'<script src="([^"]+\.js)"></script>', html)
 if not scripts:
     sys.exit('No se encontró ningún <script src> en index.html')
 
-# `--sin-plantel` deja el padrón vacío. Existe para cuando `plantel-area3.js`
-# lleva gente real, que no corresponde que viaje a una página publicada. Hoy ese
-# archivo tiene cinco personas inventadas y la página se publica con ellas, que
-# es lo que permite mostrar el panel funcionando. Si alguna vez vuelve el plantel
-# real, publicar sin este flag pasa a ser una fuga de datos.
-if '--sin-plantel' in sys.argv:
+# El plantel del área lleva nombre, tienda y cargo de gente real. Va en la
+# versión que se abre desde el equipo; con --sin-plantel se arma la que se
+# publica como página, donde esos datos no corresponde que viajen.
+sin_plantel = '--sin-plantel' in sys.argv
+if sin_plantel:
     scripts = [x for x in scripts if 'plantel-area3' not in x]
 
+
+def sin_personas(texto):
+    """Saca del padrón de sucursales los nombres de personas.
+
+    `--sin-plantel` sacaba el plantel y dejaba pasar esto, que también es gente
+    real: los doce gerentes, los doce directores técnicos, los contactos
+    administrativos con su mail y los referentes de RRHH. Viajaron a la página
+    publicada durante meses sin que nadie lo notara, porque el archivo se llama
+    "sucursales" y uno lo lee como datos de las tiendas.
+
+    Las tiendas sí quedan —código, dirección, CUIT, razón social, horario—: eso
+    es dato de la empresa y es lo que hace que la página sirva para mostrarla.
+    """
+    # El comentario de cabecera también nombra a una persona, y un comentario
+    # viaja al bundle igual que el código. Se va entero: es documentación para
+    # quien edita el archivo, no hace falta en la página publicada. Vaciar
+    # campos y dejar el nombre tres líneas más arriba sería peor que no hacer
+    # nada, porque parecería resuelto.
+    texto = re.sub(r'\A\s*/\*.*?\*/\s*', '', texto, count=1, flags=re.S)
+    texto = re.sub(
+        r"\b(gerente|directorTecnico|contactoAdmin|emailContactoAdmin|"
+        r"referenteRRHH|gerenteOperaciones):\s*'[^']*'",
+        r"\1: ''", texto)
+    texto = re.sub(r"\{\s*nombre:\s*'[^']*',\s*email:\s*'[^']*'\s*\}",
+                   "{ nombre: 'Gerencia de Operaciones', email: '' }", texto)
+    # Los dos nombres que el padrón traía mal cargados. Vaciar la lista sólo
+    # desactiva una corrección de datos ya guardados, que en una página recién
+    # abierta no tiene nada que corregir.
+    return re.sub(r"const NOMBRES_A_LIMPIAR = \[[^\]]*\]",
+                  "const NOMBRES_A_LIMPIAR = []", texto)
+
+
+def fuente(ruta):
+    texto = (raiz / ruta).read_text(encoding='utf-8')
+    return sin_personas(texto) if sin_plantel and 'sucursales-area3' in ruta else texto
+
+
 css = '\n'.join((raiz / h).read_text(encoding='utf-8') for h in hojas)
-js  = '\n'.join((raiz / s).read_text(encoding='utf-8') for s in scripts)
-if '--sin-plantel' in sys.argv:
+js  = '\n'.join(fuente(s) for s in scripts)
+if sin_plantel:
     js = 'const PLANTEL_AREA3 = [];\n' + js
 
 cuerpo = html.split('<body>', 1)[1].split('</body>', 1)[0]
