@@ -277,7 +277,8 @@ const Store = (() => {
       if (!Array.isArray(i.hitos)) i.hitos = [];
       if (!i.tema) i.tema = 'otros';
       if (!i.estado) i.estado = 'pendiente';
-      ['titulo', 'detalle', 'quien', 'sucursalId'].forEach(k => { if (i[k] === undefined) i[k] = ''; });
+      ['titulo', 'detalle', 'quien', 'sucursalId', 'liquidacion']
+        .forEach(k => { if (i[k] === undefined) i[k] = ''; });
     });
     e.diarios = Array.isArray(e.diarios) ? e.diarios : [];
     e.diarios.forEach(d => {
@@ -744,6 +745,9 @@ const Store = (() => {
         fecha: new Date().toISOString().slice(0, 10),
         hitos: [],
         avisarEnTienda: false,    // solo esto viaja al reporte diario
+        /* Período de liquidación al que hay que pasar esto, '2026-09'. Vacío
+           es lo normal: la mayoría de lo que se anota no toca un recibo. */
+        liquidacion: '',
         fijado: false,
         creado: new Date().toISOString()
       }, datos || {});
@@ -773,6 +777,7 @@ const Store = (() => {
         tema: temaDeTexto(texto),
         estado: estadoDeTexto(texto),
         fecha: ref,
+        liquidacion: liquidacionDeTexto(texto, ref, this.diaCierreNovedades()),
         hitos: fechasDeTexto(texto, ref)
       });
     },
@@ -798,8 +803,31 @@ const Store = (() => {
         tema: temaDeTexto(crudo),
         estado: estadoDeTexto(crudo),
         fecha: ref,
+        liquidacion: liquidacionDeTexto(crudo, ref, this.diaCierreNovedades()),
         hitos: fechasDeTexto(crudo, ref)
       });
+    },
+
+    /** El día de corte configurado, para no repetir el Object.assign en cada uso. */
+    diaCierreNovedades() {
+      const p = this.get().config.parametros || {};
+      return Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
+    },
+
+    /**
+     * Marca —o desmarca— un apunte como novedad a pasar a la liquidación.
+     * Se desmarca con la misma acción: un falso positivo del detector que no se
+     * pueda sacar ensucia el parte del cierre, que es justo lo que este bloque
+     * viene a evitar.
+     */
+    marcarParaLiquidacion(itemId, periodo) {
+      const i = this.item(itemId);
+      if (!i) return null;
+      i.liquidacion = periodo === undefined
+        ? (i.liquidacion ? '' : periodoDeLiquidacion(i.fecha, this.diaCierreNovedades()))
+        : (periodo || '');
+      guardar();
+      return i;
     },
 
     /** Marca hecho o vuelve a abrir, dejando la fecha de cierre. */

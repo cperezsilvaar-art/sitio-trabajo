@@ -358,6 +358,10 @@ const PARAMETROS_DEFECTO = {
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
   horasJornada: 8,          // jornada de referencia, para el FTE del día
   coberturaMinima: 0.90,    // por debajo de este % de cobertura, la tienda opera en riesgo
+  /* Día del mes en que cierran las novedades de liquidación. Lo que aparece
+     después ya no entra en este recibo y va al mes siguiente; el panel lo usa
+     para no juntar en el parte del cierre algo que Nómina no va a tomar. */
+  diaCierreNovedades: 25,
   moneda: '$'
 };
 

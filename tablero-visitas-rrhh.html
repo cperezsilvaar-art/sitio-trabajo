@@ -1373,6 +1373,10 @@ const PARAMETROS_DEFECTO = {
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
   horasJornada: 8,          // jornada de referencia, para el FTE del día
   coberturaMinima: 0.90,    // por debajo de este % de cobertura, la tienda opera en riesgo
+  /* Día del mes en que cierran las novedades de liquidación. Lo que aparece
+     después ya no entra en este recibo y va al mes siguiente; el panel lo usa
+     para no juntar en el parte del cierre algo que Nómina no va a tomar. */
+  diaCierreNovedades: 25,
   moneda: '$'
 };
 
@@ -4716,6 +4720,110 @@ function estadoDeTexto(texto) {
     ? 'esperando' : 'pendiente';
 }
 
+/* ------------------------------------------------------------------ *
+ * Novedades que hay que pasar a la liquidación                         *
+ * ------------------------------------------------------------------ *
+ * Distinto de `c.novedades`, que es lo que la liquidación **devolvió** ya
+ * cerrado. Esto es lo de antes: las cosas que van apareciendo durante el mes
+ * —un franco trabajado, un faltante de caja, unas horas extras, un adelanto—
+ * y que hay que acordarse de pasar antes del cierre.
+ *
+ * Aparecen de a una, sueltas, en un mail o en un WhatsApp de un gerente, y el
+ * problema real no es anotarlas: es tenerlas todas juntas el día del cierre.
+ * Por eso no son una pantalla nueva sino una marca sobre la agenda, que ya es
+ * donde caen cuando se pegan.
+ */
+
+/** El día del mes en que cierran las novedades, si no se configuró otro. */
+const CIERRE_NOVEDADES_POR_DEFECTO = 25;
+
+/**
+ * Las palabras que delatan una novedad de liquidación. Son los conceptos de la
+ * planilla de Nómina, no una lista de sinónimos: si aparece uno de estos, lo
+ * que se está anotando termina en un recibo de sueldo.
+ */
+const PALABRAS_LIQUIDACION =
+  /\bhoras? extras?\b|\bhs\.? ?extras?\b|\bhe ?(50|100)\b|nocturn|feriado trabajado|franco trabajado|\badelanto\b|faltante de caja|faltante de cajero|dia del gremio|dias? de examen|\bmudanza\b|licencia por fallecimiento|\bplus\b|\bviatico|\bpresentismo\b|\bembargo\b|cambio de turno|\bsac\b|aguinaldo|reintegro/;
+
+/**
+ * A qué período de liquidación entra algo anotado hoy.
+ *
+ * Pasado el cierre, lo que aparece ya no llega a este mes y va al siguiente.
+ * Meterlo igual en el mes en curso es peor que no marcarlo: el día del cierre
+ * aparecería en la lista algo que Nómina no va a tomar.
+ */
+function periodoDeLiquidacion(fechaISO, diaCierre) {
+  const f = String(fechaISO || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return '';
+  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
+  let anio = Number(f.slice(0, 4));
+  let mes = Number(f.slice(5, 7));
+  if (Number(f.slice(8, 10)) > corte) {
+    mes += 1;
+    if (mes > 12) { mes = 1; anio += 1; }
+  }
+  return `${anio}-${String(mes).padStart(2, '0')}`;
+}
+
+/**
+ * Si el texto pegado parece una novedad para la liquidación, el período al que
+ * entra; si no, cadena vacía. Se ofrece, no se impone: la marca queda visible
+ * en la ficha y se saca con un clic, porque un falso positivo que no se puede
+ * desmarcar ensucia el parte del cierre.
+ */
+function liquidacionDeTexto(texto, fechaRef, diaCierre) {
+  return PALABRAS_LIQUIDACION.test(_sinTildes(texto))
+    ? periodoDeLiquidacion(fechaRef || new Date().toISOString().slice(0, 10), diaCierre)
+    : '';
+}
+
+/** El período en curso y cuántos días faltan para el cierre. */
+function cierreDeNovedades(hoyISO, diaCierre) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
+  const periodo = periodoDeLiquidacion(hoy, corte);
+  /* El cierre del período en curso: si hoy ya pasó el corte, el que viene es
+     el del mes siguiente, que es justamente el período que devolvió la cuenta
+     de arriba. */
+  const [anio, mes] = periodo.split('-').map(Number);
+  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  const dia = Math.min(corte, ultimo);
+  const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  return {
+    periodo,
+    fecha,
+    dias: Math.round((new Date(fecha + 'T00:00:00') - new Date(hoy + 'T00:00:00')) / 864e5),
+    diaCierre: corte
+  };
+}
+
+/** Las novedades anotadas para un período, las abiertas primero. */
+function novedadesDeLiquidacion(items, periodo) {
+  return (items || [])
+    .filter(i => i.liquidacion && (!periodo || i.liquidacion === periodo))
+    .sort((a, b) => {
+      const ca = (ESTADOS_AGENDA_POR_ID[a.estado] || {}).cerrado ? 1 : 0;
+      const cb = (ESTADOS_AGENDA_POR_ID[b.estado] || {}).cerrado ? 1 : 0;
+      return ca - cb || String(a.fecha || '').localeCompare(String(b.fecha || ''));
+    });
+}
+
+/** '2026-09' se lee «septiembre de 2026». En pantalla nunca va el ISO. */
+function nombreDePeriodo(periodo) {
+  const p = String(periodo || '');
+  if (!/^\d{4}-\d{2}$/.test(p)) return p || 'sin período';
+  const nombres = Object.keys(MESES_ES).filter(k => k !== 'setiembre');
+  const mes = nombres.find(k => MESES_ES[k] === Number(p.slice(5, 7)));
+  return mes ? `${mes} de ${p.slice(0, 4)}` : p;
+}
+
+/** Los períodos que tienen algo anotado, del más nuevo al más viejo. */
+function periodosDeLiquidacion(items) {
+  const set = {};
+  (items || []).forEach(i => { if (i.liquidacion) set[i.liquidacion] = true; });
+  return Object.keys(set).sort().reverse();
+}
+
 /** Título: la primera línea con texto, sin emojis ni viñetas. */
 function tituloDeTexto(texto) {
   const linea = String(texto || '').split('\n')
@@ -6332,7 +6440,8 @@ const Store = (() => {
       if (!Array.isArray(i.hitos)) i.hitos = [];
       if (!i.tema) i.tema = 'otros';
       if (!i.estado) i.estado = 'pendiente';
-      ['titulo', 'detalle', 'quien', 'sucursalId'].forEach(k => { if (i[k] === undefined) i[k] = ''; });
+      ['titulo', 'detalle', 'quien', 'sucursalId', 'liquidacion']
+        .forEach(k => { if (i[k] === undefined) i[k] = ''; });
     });
     e.diarios = Array.isArray(e.diarios) ? e.diarios : [];
     e.diarios.forEach(d => {
@@ -6799,6 +6908,9 @@ const Store = (() => {
         fecha: new Date().toISOString().slice(0, 10),
         hitos: [],
         avisarEnTienda: false,    // solo esto viaja al reporte diario
+        /* Período de liquidación al que hay que pasar esto, '2026-09'. Vacío
+           es lo normal: la mayoría de lo que se anota no toca un recibo. */
+        liquidacion: '',
         fijado: false,
         creado: new Date().toISOString()
       }, datos || {});
@@ -6828,6 +6940,7 @@ const Store = (() => {
         tema: temaDeTexto(texto),
         estado: estadoDeTexto(texto),
         fecha: ref,
+        liquidacion: liquidacionDeTexto(texto, ref, this.diaCierreNovedades()),
         hitos: fechasDeTexto(texto, ref)
       });
     },
@@ -6853,8 +6966,31 @@ const Store = (() => {
         tema: temaDeTexto(crudo),
         estado: estadoDeTexto(crudo),
         fecha: ref,
+        liquidacion: liquidacionDeTexto(crudo, ref, this.diaCierreNovedades()),
         hitos: fechasDeTexto(crudo, ref)
       });
+    },
+
+    /** El día de corte configurado, para no repetir el Object.assign en cada uso. */
+    diaCierreNovedades() {
+      const p = this.get().config.parametros || {};
+      return Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
+    },
+
+    /**
+     * Marca —o desmarca— un apunte como novedad a pasar a la liquidación.
+     * Se desmarca con la misma acción: un falso positivo del detector que no se
+     * pueda sacar ensucia el parte del cierre, que es justo lo que este bloque
+     * viene a evitar.
+     */
+    marcarParaLiquidacion(itemId, periodo) {
+      const i = this.item(itemId);
+      if (!i) return null;
+      i.liquidacion = periodo === undefined
+        ? (i.liquidacion ? '' : periodoDeLiquidacion(i.fecha, this.diaCierreNovedades()))
+        : (periodo || '');
+      guardar();
+      return i;
     },
 
     /** Marca hecho o vuelve a abrir, dejando la fecha de cierre. */
@@ -9259,9 +9395,84 @@ const Reporte = (() => {
     return L.join('\n');
   }
 
+  /* ========== DOCUMENTO: NOVEDADES PARA LA LIQUIDACIÓN ==========
+     El único documento que sale de la agenda. No va a Operaciones sino a
+     Nómina, y se manda una vez por mes: es la lista de lo que apareció
+     durante el mes y tiene que entrar en el recibo.
+
+     Va agrupado por sucursal porque así lo procesa Nómina —una hoja por
+     tienda— y porque es como el coordinador lo revisa antes de mandarlo:
+     tienda por tienda, para ver si no se olvidó de ninguna. */
+  function textoNovedadesLiquidacion(periodo, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const items = novedadesDeLiquidacion(e.agenda, periodo);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'NOVEDADES PARA LA LIQUIDACIÓN'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    L.push('Período: ' + nombreDePeriodo(periodo));
+    if (cfg.coordinador) L.push('Informa: ' + cfg.coordinador);
+    L.push(barra);
+    L.push('');
+
+    if (!items.length) {
+      L.push('Sin novedades anotadas para este período.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    /* Sin sucursal van juntas al final: son las del área o las que se anotaron
+       sin decir de qué tienda, y esconderlas entre las demás hace que se pasen
+       por alto justo cuando se está revisando tienda por tienda. */
+    const porSucursal = {};
+    const sueltas = [];
+    items.forEach(i => {
+      const s = i.sucursalId ? Store.sucursal(i.sucursalId) : null;
+      if (!s) { sueltas.push(i); return; }
+      const k = s.nombre || s.codigo;
+      (porSucursal[k] = porSucursal[k] || []).push(i);
+    });
+
+    const linea = i => {
+      const cerrada = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
+      const partes = ['   ' + (cerrada ? '[x]' : '[ ]') + ' ' + i.titulo];
+      if (i.quien) partes.push('       Con: ' + i.quien);
+      if (i.detalle) {
+        i.detalle.split('\n').map(x => x.trim()).filter(Boolean)
+          .forEach(x => partes.push('       ' + x));
+      }
+      return partes.join('\n');
+    };
+
+    Object.keys(porSucursal).sort().forEach(nombre => {
+      L.push(nombre.toUpperCase());
+      porSucursal[nombre].forEach(i => L.push(linea(i)));
+      L.push('');
+    });
+    if (sueltas.length) {
+      L.push('SIN SUCURSAL ASIGNADA');
+      sueltas.forEach(i => L.push(linea(i)));
+      L.push('');
+    }
+
+    L.push(`Total: ${items.length} novedad${items.length === 1 ? '' : 'es'}.`);
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoNovedadesLiquidacion(periodo, config) {
+    const cfg = config || Store.get().config;
+    const area = cfg.area ? ` ${cfg.area}` : '';
+    return `Novedades de liquidación${area} - ${nombreDePeriodo(periodo)}`;
+  }
+
   return {
     calcular, datosMensuales,
     textoVentasDia,
+    textoNovedadesLiquidacion, asuntoNovedadesLiquidacion,
     textoVisita, textoMensual, textoChecklist,
     asuntoVisita, asuntoMensual, asuntoChecklist,
     enviarVisita, enviarMensual, enviarChecklist,
@@ -10175,6 +10386,8 @@ const App = (() => {
         ${kpi('Abiertas', r.abiertas.length, `${r.hechas.length} cerradas`)}
       </div>
 
+      ${bloqueLiquidacion(e, hoy)}
+
       ${cajon('Vencidas', r.vencidas, 'Ya pasó la fecha y siguen abiertas.')}
       ${cajon('Hoy y mañana', r.urgentes)}
       ${cajon('Esta semana', r.semana)}
@@ -10193,11 +10406,88 @@ const App = (() => {
       </section>`;
   }
 
+  /* ---------- Novedades para la liquidación ----------
+     El problema no es anotarlas —caen solas al pegar el mail del gerente— sino
+     tenerlas todas juntas el día del cierre. Por eso esto no es una pantalla
+     aparte sino un bloque arriba de la agenda, que aparece con lo que hay. */
+
+  let periodoLiq = '';        // el período que se está mirando
+  let verParteLiq = false;    // el texto para mandar, desplegado
+
+  /** El período dado más el anterior y el siguiente: se corrigen a un clic. */
+  function periodosCercanos(periodo) {
+    if (!/^\d{4}-\d{2}$/.test(String(periodo || ''))) return [periodo];
+    const [a, m] = periodo.split('-').map(Number);
+    return [-1, 0, 1].map(d => {
+      const f = new Date(Date.UTC(a, m - 1 + d, 1));
+      return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
+  }
+
+  function bloqueLiquidacion(e, hoy) {
+    const cierre = cierreDeNovedades(hoy, (e.config.parametros || {}).diaCierreNovedades);
+    const periodos = periodosDeLiquidacion(e.agenda);
+    /* Se mira el período en curso aunque todavía no tenga nada anotado: en ese
+       caso el bloque dice que está vacío, que es información —faltan cuatro
+       días y no anotaste ninguna— y no un hueco. */
+    const lista = Array.from(new Set([cierre.periodo].concat(periodos)));
+    const periodo = lista.includes(periodoLiq) ? periodoLiq : cierre.periodo;
+    const items = novedadesDeLiquidacion(e.agenda, periodo);
+    const abiertas = items.filter(i => !(ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado);
+    const esElEnCurso = periodo === cierre.periodo;
+
+    /* El aviso se enciende solo cuando falta poco y hay algo sin cerrar. Un
+       cartel permanente deja de leerse a los dos días. */
+    const apura = esElEnCurso && cierre.dias <= 7 && abiertas.length > 0;
+
+    return `<section class="tarjeta" id="bloque-liquidacion">
+      <div class="cabecera-suc">
+        <h2>Novedades para la liquidación</h2>
+        <span class="chip ${abiertas.length ? 'azul' : 'verde'}">${items.length}</span>
+        ${esElEnCurso ? `<span class="chip ${apura ? 'ambar' : ''}">${
+          cierre.dias < 0 ? `cerró el ${fmtFecha(cierre.fecha)}`
+            : cierre.dias === 0 ? 'cierra hoy'
+            : `cierran en ${cierre.dias} día${cierre.dias === 1 ? '' : 's'}`}</span>` : ''}
+        <div class="crece"></div>
+        ${lista.length > 1 ? `<select id="liq-periodo" style="max-width:220px">
+          ${lista.map(p => `<option value="${p}"${p === periodo ? ' selected' : ''}>${esc(nombreDePeriodo(p))}</option>`).join('')}
+        </select>` : ''}
+      </div>
+
+      <p class="ayuda">
+        Lo que hay que pasarle a Nómina de ${esc(nombreDePeriodo(periodo))}, junto en un lugar.
+        Se marcan solas cuando pegás algo que habla de horas extras, francos, adelantos o
+        faltantes; cualquier apunte se puede marcar a mano desde su ficha.
+        El corte está puesto el ${cierre.diaCierre} de cada mes y se cambia en
+        <a href="#/config">Configuración</a>.
+      </p>
+
+      ${items.length ? `
+        ${items.map(i => fichaItem({ item: i, estado: estadoItem(i, hoy) }, hoy, e, { plegado: true })).join('')}
+        <div class="acciones">
+          <button class="b" data-accion="ver-parte-liq">${verParteLiq ? 'Ocultar el parte' : 'Armar el parte para Nómina'}</button>
+          ${verParteLiq ? `<button class="b sec" data-accion="copiar-liq">Copiar</button>
+            <button class="b sec" data-accion="descargar-liq">Descargar .txt</button>` : ''}
+        </div>
+        ${verParteLiq ? `<pre class="reporte" id="vista-liquidacion">${
+          esc(Reporte.textoNovedadesLiquidacion(periodo, e.config))}</pre>` : ''}`
+      : `<p class="vacio">
+          Todavía no anotaste ninguna para ${esc(nombreDePeriodo(periodo))}.
+          ${esElEnCurso && cierre.dias >= 0
+            ? `Quedan ${cierre.dias} día${cierre.dias === 1 ? '' : 's'} hasta el cierre.` : ''}
+        </p>`}
+    </section>`;
+  }
+
   /** Una línea de la agenda, plegada hasta que se la abre. */
-  function fichaItem(x, hoy, e) {
+  function fichaItem(x, hoy, e, opciones) {
     const i = x.item, est = x.estado;
     const tema = TEMAS_AGENDA_POR_ID[i.tema] || TEMAS_AGENDA_POR_ID.otros;
-    const abierto = itemAbierto === i.id;
+    /* El bloque del cierre lista apuntes que también están en su cajón por
+       fecha. Ahí se muestran siempre plegados: la misma ficha editable abierta
+       dos veces en la misma pantalla es un lugar de más donde escribir, y no se
+       sabe cuál de las dos quedó bien. Se edita en el cajón, como siempre. */
+    const abierto = itemAbierto === i.id && !(opciones || {}).plegado;
     const cerrado = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
     const chip = { vencido: 'rojo', urgente: 'ambar', semana: 'azul',
                    adelante: '', sinFecha: '', hecho: 'verde' }[est.clase];
@@ -10209,6 +10499,7 @@ const App = (() => {
       <span class="aviso-icono">${tema.icono}</span>
       <span class="aviso-titulo" data-accion="abrir-item" data-id="${i.id}">${esc(i.titulo || 'Sin título')}</span>
       ${i.estado === 'esperando' ? '<span class="chip ambar">⏳ esperando</span>' : ''}
+      ${i.liquidacion ? `<span class="chip azul" title="Hay que pasarla en la liquidación de ${esc(nombreDePeriodo(i.liquidacion))}">💵 liquidación</span>` : ''}
       ${est.clase !== 'sinFecha' && est.clase !== 'hecho' ? `<span class="chip ${chip}">${esc(est.texto)}</span>` : ''}
       <span class="aviso-meta">${esc(tema.nombre)}${i.quien ? ' · ' + esc(i.quien) : ''}${suc ? ' · ' + esc(suc.nombre || suc.codigo) : ''}</span>
     </div>`;
@@ -10260,6 +10551,18 @@ const App = (() => {
         <input type="checkbox" data-item-check="${i.id}|avisarEnTienda"${i.avisarEnTienda ? ' checked' : ''}>
         Hay que avisarlo en la tienda
       </label>
+
+      <div class="linea-item" style="margin-top:10px">
+        <label class="marca-check" style="margin:0"
+          title="Queda en la lista que se le pasa a Nómina antes del cierre">
+          <input type="checkbox" data-accion="marcar-liquidacion" data-id="${i.id}"${i.liquidacion ? ' checked' : ''}>
+          Hay que pasarla en la liquidación
+        </label>
+        ${i.liquidacion ? `<select data-item="${i.id}|liquidacion" style="flex:0 1 200px">
+          ${periodosCercanos(i.liquidacion).map(p =>
+            `<option value="${p}"${p === i.liquidacion ? ' selected' : ''}>${esc(nombreDePeriodo(p))}</option>`).join('')}
+        </select>` : ''}
+      </div>
 
       <div class="acciones" style="margin-top:16px">
         <button class="b sec" data-accion="copiar-item" data-id="${i.id}">Copiar para mandar</button>
@@ -12146,8 +12449,16 @@ const App = (() => {
           ${campo('Objetivo tickets/hora', 'parametros.ticketsHoraObjetivo', { tipo: 'number', step: '0.5', calc: true })}
           ${campo('Umbral de ausentismo', 'parametros.umbralAusentismo', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Umbral de horas extras', 'parametros.umbralHorasExtras', { tipo: 'number', step: '0.01', calc: true })}
+          ${campo('Cierre de novedades (día del mes)', 'parametros.diaCierreNovedades',
+                  { tipo: 'number', step: '1', calc: true })}
           ${campo('Símbolo de moneda', 'parametros.moneda', { calc: true })}
         </div>
+        <p class="ayuda">
+          El <strong>cierre de novedades</strong> es el día en que Nómina deja de tomar
+          novedades del mes. Lo que se anote después entra en el recibo siguiente, y es lo que
+          usa <a href="#/asistente">la agenda</a> para no juntar en el parte del cierre algo
+          que ya no va a entrar.
+        </p>
       </section>
 
       <section class="tarjeta">
@@ -14219,7 +14530,14 @@ const App = (() => {
       Store.save();
       /* El estado, el tema y las fechas cambian el cajón donde cae el apunte:
          se redibuja. El título y el detalle no, para no perder el foco. */
-      if (el.dataset.hito || /\|(estado|tema|sucursalId)$/.test(el.dataset.item || '')) refrescar();
+      if (el.dataset.hito || /\|(estado|tema|sucursalId|liquidacion)$/.test(el.dataset.item || '')) refrescar();
+    });
+
+    /* El período que se está mirando en el bloque del cierre. */
+    cont.addEventListener('change', ev => {
+      if (ev.target.id !== 'liq-periodo') return;
+      periodoLiq = ev.target.value;
+      refrescar();
     });
 
     /* Enter en el campo de alta rápida: anotar sin sacar la mano del teclado. */
@@ -14883,6 +15201,29 @@ const App = (() => {
         const texto = textoParaTiendas(Store.item(btn.dataset.id), hoyISO());
         try { await navigator.clipboard.writeText(texto); avisar('Copiado, listo para reenviar.'); }
         catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
+      }
+
+      /* --- novedades para la liquidación --- */
+      if (a === 'marcar-liquidacion') {
+        const i = Store.marcarParaLiquidacion(btn.dataset.id);
+        refrescar();
+        avisar(i && i.liquidacion
+          ? `Queda para la liquidación de ${nombreDePeriodo(i.liquidacion)}.`
+          : 'Sacada de las novedades de liquidación.');
+      }
+
+      if (a === 'ver-parte-liq') { verParteLiq = !verParteLiq; refrescar(); }
+
+      if (a === 'copiar-liq' || a === 'descargar-liq') {
+        const cierre = cierreDeNovedades(hoyISO(), (e.config.parametros || {}).diaCierreNovedades);
+        const periodo = periodoLiq || cierre.periodo;
+        const texto = Reporte.textoNovedadesLiquidacion(periodo, e.config);
+        if (a === 'copiar-liq') {
+          try { await navigator.clipboard.writeText(texto); avisar('Parte copiado.'); }
+          catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
+        } else {
+          guardarArchivo(`novedades-liquidacion-${periodo}.txt`, texto);
+        }
       }
 
       if (a === 'borrar-item') {

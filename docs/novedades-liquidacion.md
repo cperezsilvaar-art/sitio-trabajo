@@ -1,78 +1,91 @@
-# El libro de novedades de liquidación
+# Novedades para la liquidación
 
-Es la planilla que arma Nómina todos los meses: **una hoja por sucursal, una
-fila por persona**, con las horas extras y los días de ausencia que van a
-liquidación. Es la fuente más confiable que hay para tres cosas del panel, y
-hasta ahora se cargaban a mano.
+Bloque al tope de `#/asistente` (*Mi agenda*). Código en `assets/js/agenda.js`
+(los períodos y el detector), `store.js` (la marca sobre el apunte),
+`reporte.js` (`textoNovedadesLiquidacion`) y `app.js` (`bloqueLiquidacion`).
 
-## Qué trae y qué no
+## Qué pregunta responde
 
-**Sí trae:**
+«¿Qué tengo que pasarle a Nómina antes del cierre?»
 
-| Columna de la planilla | Adónde va en el panel |
+Durante el mes van apareciendo cosas que terminan en un recibo de sueldo: unas
+horas extras, un franco trabajado, un adelanto, un faltante de caja. Llegan de a
+una, sueltas, en un mail o en un WhatsApp de un gerente. **Anotarlas nunca fue el
+problema: el problema es tenerlas todas juntas el día del cierre**, que es cuando
+hay que mandarlas y cuando uno se acuerda de la que se olvidó.
+
+Por eso no es una pantalla nueva sino una marca sobre la agenda, que ya es donde
+caen cuando se pegan.
+
+## No confundir con las otras dos cosas
+
+| Dónde | Qué es |
 |---|---|
-| `APELLIDO`, `NOMBRE`, `CUIL`, `LEGAJO` | El plantel de la sucursal |
-| `HORAS EXTRAS 50%` + `HORAS EXTRAS 100%` | Horas extras de la matriz de FTE |
-| `DIAS ENFERMEDAD` | Ausentismo, concepto **085 Enfermedad** |
-| `DÍAS DE VACACIONES` | Ausentismo, concepto **071 Vacaciones** |
-| `DÍAS DE AUSENCIA NO JUSTIFICADA` | Ausentismo, concepto **081 Ausente sin aviso** |
-| `AUSENCIA POR FALLECIMIENTO` | Ausentismo, concepto **052 Fallecimiento 1er grado** |
-| `MUDANZA` | Ausentismo, concepto **054 Mudanza** |
-| `DIAS EXAMEN` | Ausentismo, concepto **056 Examen universitario** |
+| **Esto** (`item.liquidacion`) | Lo que **hay que pasar**, antes del cierre. |
+| `c.novedades` | Lo que la liquidación **devolvió**, ya cerrado. El pasado agregado. |
+| `c.ausencias` | La persona que hoy no está, con su certificado. |
 
-De esos seis conceptos, **solo la ausencia no justificada es evitable**. El
-resto son licencias y enfermedad comprobada: se planifican, no se gestionan.
+## Cómo se marcan
 
-`HORAS NOCTURNAS`, `TURNO`, `FERIADO TRABAJADO`, `DIA DEL GREMIO`, `FALTANTE DE
-CAJERO` y `OBSERVACIONES` se guardan con la persona pero todavía no alimentan
-ningún indicador.
+**Solas.** `liquidacionDeTexto()` mira el texto que se pega contra
+`PALABRAS_LIQUIDACION` —los conceptos de la planilla de Nómina: horas extras,
+nocturnas, feriado y franco trabajado, adelanto, faltante de caja, día del
+gremio, días de examen, mudanza, plus, viáticos, presentismo, embargo, SAC—. Si
+aparece uno, el apunte queda marcado con el período que corresponde.
 
-**No trae la posición de cada persona.** No hay ninguna columna con el puesto:
-la que más se le acerca es `SECTOR` (TIENDA / LAB / ADM), y solo aparece en dos
-hojas. Por eso el puesto se asigna una vez, a mano, en la solapa *Talento y
-9-box*, y de ahí en más los meses siguientes lo conservan.
+**Y a mano**, desde la ficha del apunte, con la misma casilla para marcar y para
+desmarcar. Eso último no es un detalle: el detector se equivoca, y un falso
+positivo que no se puede sacar ensucia el parte del cierre, que es justo lo que
+este bloque viene a evitar.
 
-## Cómo se importa
+## El período no es «el mes en curso»
 
-1. Abrí el libro del mes en Excel y andá a la hoja de la sucursal.
-2. Seleccioná **desde la fila de encabezados hasta la última persona** y copiá.
-3. En el panel: **Estadística mensual** → elegí la sucursal y el mes → pegá en
-   *Novedades de liquidación* → **Importar**.
+`periodoDeLiquidacion(fecha, corte)` usa el **día de cierre**, que se configura
+en `#/config` (`parametros.diaCierreNovedades`, 25 por defecto). Lo que aparece
+después del corte **no llega a este recibo y va al siguiente**. Meterlo igual en
+el mes en curso sería peor que no marcarlo: el día del cierre aparecería en la
+lista algo que Nómina no va a tomar.
 
-Se repite por cada hoja. La importación es acumulativa por sucursal y mes: si
-volvés a importar la misma hoja no duplica a nadie, actualiza sus novedades y
-respeta todo lo que hayas cargado a mano —posición, evaluación, talent card—.
+Los bordes están resueltos: el 30 de diciembre entra en enero del año siguiente,
+y un corte puesto el 30 se ajusta al último día de febrero.
 
-Después, en la visita de ese período, la solapa *FTE y Costo* ofrece **Traer la
-dotación del padrón**: llena mes completo, ausencias y horas extras por
-posición, y completa el ausentismo por concepto. Los sueldos y las altas y bajas
-quedan como estén: eso la planilla no lo trae.
+## El parte
 
-## Dos rarezas del archivo que el importador resuelve solo
+`Reporte.textoNovedadesLiquidacion(periodo)` arma el texto que se manda, **agrupado
+por sucursal**: así lo procesa Nómina —una hoja por tienda— y así se revisa antes
+de mandarlo, tienda por tienda, para ver si no falta ninguna. Lo que no tiene
+sucursal asignada va junto al final en vez de mezclado, porque esconderlo entre
+las demás hace que se pase por alto justo cuando se está revisando.
 
-**Filas corridas.** En algunas hojas —en el libro de agosto, *LA NOBLEZA* y *SM
-CENTER*— el bloque de identidad quedó desplazado una columna a la izquierda: el
-legajo cayó bajo el encabezado `TIENDA` y el CUIL bajo `LEGAJO`. Las columnas de
-novedades **no** están corridas. El importador ubica a la persona por el CUIL,
-fila por fila, y lee las novedades por su encabezado; avisa cuántas filas venían
-así.
+Se copia o se descarga. **No se envía por mail desde el panel**: el correo no
+está conectado y no lo va a estar (ver abajo).
 
-Vale la pena saberlo porque leerlas mal cambia el número que más importa: con el
-corrimiento aplicado a todo, los 23 días de vacaciones de SM CENTER se leen como
-23 días de ausencia injustificada.
+## Una cosa que se ve y no se edita
 
-**Encabezados repetidos o distintos.** Alguna hoja repite `HORAS NOCTURNAS`, y
-`DÍAS DE AUSENCIA NO JUSTIFICADA` aparece a veces abreviado. Los encabezados se
-comparan sin acentos, sin espacios y en mayúsculas, y de cada campo se toma la
-primera aparición.
+El bloque lista apuntes que **también** están en su cajón por fecha. Ahí se
+muestran siempre plegados (`fichaItem(..., { plegado: true })`): la misma ficha
+editable abierta dos veces en la misma pantalla es un lugar de más donde
+escribir y después no se sabe cuál de las dos quedó bien. Se edita en el cajón,
+como cualquier otro apunte; el bloque es la lista de control del cierre.
 
-## Qué revisar antes de dar los números por buenos
+El aviso de «cierran en N días» se enciende solo cuando falta poco **y** hay algo
+sin cerrar. Un cartel permanente deja de leerse a los dos días.
 
-- **La hoja `RIVADAVIA`** del libro de agosto tiene `TIENDA = OLLEROS` en todas
-  sus filas. El importador usa la sucursal que elegís en pantalla, no esa
-  columna, así que no afecta la carga; pero conviene avisarle a Nómina.
-- **Faltan dos sucursales**: el libro de agosto trae diez hojas, y el Área 3
-  tiene doce. No están *Parque Chacabuco* ni *Villa Devoto*.
-- **Quien no vino en la hoja del mes** y sigue activo en el plantel se lista
-  después de importar: puede ser una baja que no registraste, o una hoja
-  incompleta.
+## Por qué no se conecta al correo
+
+Se evaluó leer el correo para detectar solo lo que requiere una novedad, y **el
+coordinador decidió que no**: prefiere entrar a leer los mails él y pegar lo que
+corresponda. Es una decisión suya, no una limitación técnica, y hay que
+respetarla — no proponer la integración de vuelta.
+
+Se apoya además en la regla del proyecto: *nunca publicar una página que llame a
+una herramienta de un conector sin haber visto una request y una response
+reales*. Con Gmail eso nunca se pudo observar.
+
+## Alineación con el marco conceptual
+
+- **Vosburgh:** es exactamente lo transaccional que hay que resolver rápido. El
+  dato entra pegando el mail tal como llegó, sin tipearlo dos veces.
+- **Ulrich:** el entregable lo recibe Nómina, y se juzga por si le sirve — por eso
+  va agrupado por tienda, en el formato en que lo procesan, y no como una lista
+  cronológica que sería más cómoda de generar.

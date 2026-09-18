@@ -903,6 +903,8 @@ const App = (() => {
         ${kpi('Abiertas', r.abiertas.length, `${r.hechas.length} cerradas`)}
       </div>
 
+      ${bloqueLiquidacion(e, hoy)}
+
       ${cajon('Vencidas', r.vencidas, 'Ya pasó la fecha y siguen abiertas.')}
       ${cajon('Hoy y mañana', r.urgentes)}
       ${cajon('Esta semana', r.semana)}
@@ -921,11 +923,88 @@ const App = (() => {
       </section>`;
   }
 
+  /* ---------- Novedades para la liquidación ----------
+     El problema no es anotarlas —caen solas al pegar el mail del gerente— sino
+     tenerlas todas juntas el día del cierre. Por eso esto no es una pantalla
+     aparte sino un bloque arriba de la agenda, que aparece con lo que hay. */
+
+  let periodoLiq = '';        // el período que se está mirando
+  let verParteLiq = false;    // el texto para mandar, desplegado
+
+  /** El período dado más el anterior y el siguiente: se corrigen a un clic. */
+  function periodosCercanos(periodo) {
+    if (!/^\d{4}-\d{2}$/.test(String(periodo || ''))) return [periodo];
+    const [a, m] = periodo.split('-').map(Number);
+    return [-1, 0, 1].map(d => {
+      const f = new Date(Date.UTC(a, m - 1 + d, 1));
+      return `${f.getUTCFullYear()}-${String(f.getUTCMonth() + 1).padStart(2, '0')}`;
+    });
+  }
+
+  function bloqueLiquidacion(e, hoy) {
+    const cierre = cierreDeNovedades(hoy, (e.config.parametros || {}).diaCierreNovedades);
+    const periodos = periodosDeLiquidacion(e.agenda);
+    /* Se mira el período en curso aunque todavía no tenga nada anotado: en ese
+       caso el bloque dice que está vacío, que es información —faltan cuatro
+       días y no anotaste ninguna— y no un hueco. */
+    const lista = Array.from(new Set([cierre.periodo].concat(periodos)));
+    const periodo = lista.includes(periodoLiq) ? periodoLiq : cierre.periodo;
+    const items = novedadesDeLiquidacion(e.agenda, periodo);
+    const abiertas = items.filter(i => !(ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado);
+    const esElEnCurso = periodo === cierre.periodo;
+
+    /* El aviso se enciende solo cuando falta poco y hay algo sin cerrar. Un
+       cartel permanente deja de leerse a los dos días. */
+    const apura = esElEnCurso && cierre.dias <= 7 && abiertas.length > 0;
+
+    return `<section class="tarjeta" id="bloque-liquidacion">
+      <div class="cabecera-suc">
+        <h2>Novedades para la liquidación</h2>
+        <span class="chip ${abiertas.length ? 'azul' : 'verde'}">${items.length}</span>
+        ${esElEnCurso ? `<span class="chip ${apura ? 'ambar' : ''}">${
+          cierre.dias < 0 ? `cerró el ${fmtFecha(cierre.fecha)}`
+            : cierre.dias === 0 ? 'cierra hoy'
+            : `cierran en ${cierre.dias} día${cierre.dias === 1 ? '' : 's'}`}</span>` : ''}
+        <div class="crece"></div>
+        ${lista.length > 1 ? `<select id="liq-periodo" style="max-width:220px">
+          ${lista.map(p => `<option value="${p}"${p === periodo ? ' selected' : ''}>${esc(nombreDePeriodo(p))}</option>`).join('')}
+        </select>` : ''}
+      </div>
+
+      <p class="ayuda">
+        Lo que hay que pasarle a Nómina de ${esc(nombreDePeriodo(periodo))}, junto en un lugar.
+        Se marcan solas cuando pegás algo que habla de horas extras, francos, adelantos o
+        faltantes; cualquier apunte se puede marcar a mano desde su ficha.
+        El corte está puesto el ${cierre.diaCierre} de cada mes y se cambia en
+        <a href="#/config">Configuración</a>.
+      </p>
+
+      ${items.length ? `
+        ${items.map(i => fichaItem({ item: i, estado: estadoItem(i, hoy) }, hoy, e, { plegado: true })).join('')}
+        <div class="acciones">
+          <button class="b" data-accion="ver-parte-liq">${verParteLiq ? 'Ocultar el parte' : 'Armar el parte para Nómina'}</button>
+          ${verParteLiq ? `<button class="b sec" data-accion="copiar-liq">Copiar</button>
+            <button class="b sec" data-accion="descargar-liq">Descargar .txt</button>` : ''}
+        </div>
+        ${verParteLiq ? `<pre class="reporte" id="vista-liquidacion">${
+          esc(Reporte.textoNovedadesLiquidacion(periodo, e.config))}</pre>` : ''}`
+      : `<p class="vacio">
+          Todavía no anotaste ninguna para ${esc(nombreDePeriodo(periodo))}.
+          ${esElEnCurso && cierre.dias >= 0
+            ? `Quedan ${cierre.dias} día${cierre.dias === 1 ? '' : 's'} hasta el cierre.` : ''}
+        </p>`}
+    </section>`;
+  }
+
   /** Una línea de la agenda, plegada hasta que se la abre. */
-  function fichaItem(x, hoy, e) {
+  function fichaItem(x, hoy, e, opciones) {
     const i = x.item, est = x.estado;
     const tema = TEMAS_AGENDA_POR_ID[i.tema] || TEMAS_AGENDA_POR_ID.otros;
-    const abierto = itemAbierto === i.id;
+    /* El bloque del cierre lista apuntes que también están en su cajón por
+       fecha. Ahí se muestran siempre plegados: la misma ficha editable abierta
+       dos veces en la misma pantalla es un lugar de más donde escribir, y no se
+       sabe cuál de las dos quedó bien. Se edita en el cajón, como siempre. */
+    const abierto = itemAbierto === i.id && !(opciones || {}).plegado;
     const cerrado = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
     const chip = { vencido: 'rojo', urgente: 'ambar', semana: 'azul',
                    adelante: '', sinFecha: '', hecho: 'verde' }[est.clase];
@@ -937,6 +1016,7 @@ const App = (() => {
       <span class="aviso-icono">${tema.icono}</span>
       <span class="aviso-titulo" data-accion="abrir-item" data-id="${i.id}">${esc(i.titulo || 'Sin título')}</span>
       ${i.estado === 'esperando' ? '<span class="chip ambar">⏳ esperando</span>' : ''}
+      ${i.liquidacion ? `<span class="chip azul" title="Hay que pasarla en la liquidación de ${esc(nombreDePeriodo(i.liquidacion))}">💵 liquidación</span>` : ''}
       ${est.clase !== 'sinFecha' && est.clase !== 'hecho' ? `<span class="chip ${chip}">${esc(est.texto)}</span>` : ''}
       <span class="aviso-meta">${esc(tema.nombre)}${i.quien ? ' · ' + esc(i.quien) : ''}${suc ? ' · ' + esc(suc.nombre || suc.codigo) : ''}</span>
     </div>`;
@@ -988,6 +1068,18 @@ const App = (() => {
         <input type="checkbox" data-item-check="${i.id}|avisarEnTienda"${i.avisarEnTienda ? ' checked' : ''}>
         Hay que avisarlo en la tienda
       </label>
+
+      <div class="linea-item" style="margin-top:10px">
+        <label class="marca-check" style="margin:0"
+          title="Queda en la lista que se le pasa a Nómina antes del cierre">
+          <input type="checkbox" data-accion="marcar-liquidacion" data-id="${i.id}"${i.liquidacion ? ' checked' : ''}>
+          Hay que pasarla en la liquidación
+        </label>
+        ${i.liquidacion ? `<select data-item="${i.id}|liquidacion" style="flex:0 1 200px">
+          ${periodosCercanos(i.liquidacion).map(p =>
+            `<option value="${p}"${p === i.liquidacion ? ' selected' : ''}>${esc(nombreDePeriodo(p))}</option>`).join('')}
+        </select>` : ''}
+      </div>
 
       <div class="acciones" style="margin-top:16px">
         <button class="b sec" data-accion="copiar-item" data-id="${i.id}">Copiar para mandar</button>
@@ -2874,8 +2966,16 @@ const App = (() => {
           ${campo('Objetivo tickets/hora', 'parametros.ticketsHoraObjetivo', { tipo: 'number', step: '0.5', calc: true })}
           ${campo('Umbral de ausentismo', 'parametros.umbralAusentismo', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Umbral de horas extras', 'parametros.umbralHorasExtras', { tipo: 'number', step: '0.01', calc: true })}
+          ${campo('Cierre de novedades (día del mes)', 'parametros.diaCierreNovedades',
+                  { tipo: 'number', step: '1', calc: true })}
           ${campo('Símbolo de moneda', 'parametros.moneda', { calc: true })}
         </div>
+        <p class="ayuda">
+          El <strong>cierre de novedades</strong> es el día en que Nómina deja de tomar
+          novedades del mes. Lo que se anote después entra en el recibo siguiente, y es lo que
+          usa <a href="#/asistente">la agenda</a> para no juntar en el parte del cierre algo
+          que ya no va a entrar.
+        </p>
       </section>
 
       <section class="tarjeta">
@@ -4947,7 +5047,14 @@ const App = (() => {
       Store.save();
       /* El estado, el tema y las fechas cambian el cajón donde cae el apunte:
          se redibuja. El título y el detalle no, para no perder el foco. */
-      if (el.dataset.hito || /\|(estado|tema|sucursalId)$/.test(el.dataset.item || '')) refrescar();
+      if (el.dataset.hito || /\|(estado|tema|sucursalId|liquidacion)$/.test(el.dataset.item || '')) refrescar();
+    });
+
+    /* El período que se está mirando en el bloque del cierre. */
+    cont.addEventListener('change', ev => {
+      if (ev.target.id !== 'liq-periodo') return;
+      periodoLiq = ev.target.value;
+      refrescar();
     });
 
     /* Enter en el campo de alta rápida: anotar sin sacar la mano del teclado. */
@@ -5611,6 +5718,29 @@ const App = (() => {
         const texto = textoParaTiendas(Store.item(btn.dataset.id), hoyISO());
         try { await navigator.clipboard.writeText(texto); avisar('Copiado, listo para reenviar.'); }
         catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
+      }
+
+      /* --- novedades para la liquidación --- */
+      if (a === 'marcar-liquidacion') {
+        const i = Store.marcarParaLiquidacion(btn.dataset.id);
+        refrescar();
+        avisar(i && i.liquidacion
+          ? `Queda para la liquidación de ${nombreDePeriodo(i.liquidacion)}.`
+          : 'Sacada de las novedades de liquidación.');
+      }
+
+      if (a === 'ver-parte-liq') { verParteLiq = !verParteLiq; refrescar(); }
+
+      if (a === 'copiar-liq' || a === 'descargar-liq') {
+        const cierre = cierreDeNovedades(hoyISO(), (e.config.parametros || {}).diaCierreNovedades);
+        const periodo = periodoLiq || cierre.periodo;
+        const texto = Reporte.textoNovedadesLiquidacion(periodo, e.config);
+        if (a === 'copiar-liq') {
+          try { await navigator.clipboard.writeText(texto); avisar('Parte copiado.'); }
+          catch (_) { avisar('No se pudo copiar. Seleccioná el texto a mano.', 'error'); }
+        } else {
+          guardarArchivo(`novedades-liquidacion-${periodo}.txt`, texto);
+        }
       }
 
       if (a === 'borrar-item') {

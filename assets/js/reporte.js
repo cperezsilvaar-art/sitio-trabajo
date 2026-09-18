@@ -1156,9 +1156,84 @@ const Reporte = (() => {
     return L.join('\n');
   }
 
+  /* ========== DOCUMENTO: NOVEDADES PARA LA LIQUIDACIÓN ==========
+     El único documento que sale de la agenda. No va a Operaciones sino a
+     Nómina, y se manda una vez por mes: es la lista de lo que apareció
+     durante el mes y tiene que entrar en el recibo.
+
+     Va agrupado por sucursal porque así lo procesa Nómina —una hoja por
+     tienda— y porque es como el coordinador lo revisa antes de mandarlo:
+     tienda por tienda, para ver si no se olvidó de ninguna. */
+  function textoNovedadesLiquidacion(periodo, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const items = novedadesDeLiquidacion(e.agenda, periodo);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'NOVEDADES PARA LA LIQUIDACIÓN'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    L.push('Período: ' + nombreDePeriodo(periodo));
+    if (cfg.coordinador) L.push('Informa: ' + cfg.coordinador);
+    L.push(barra);
+    L.push('');
+
+    if (!items.length) {
+      L.push('Sin novedades anotadas para este período.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    /* Sin sucursal van juntas al final: son las del área o las que se anotaron
+       sin decir de qué tienda, y esconderlas entre las demás hace que se pasen
+       por alto justo cuando se está revisando tienda por tienda. */
+    const porSucursal = {};
+    const sueltas = [];
+    items.forEach(i => {
+      const s = i.sucursalId ? Store.sucursal(i.sucursalId) : null;
+      if (!s) { sueltas.push(i); return; }
+      const k = s.nombre || s.codigo;
+      (porSucursal[k] = porSucursal[k] || []).push(i);
+    });
+
+    const linea = i => {
+      const cerrada = (ESTADOS_AGENDA_POR_ID[i.estado] || {}).cerrado;
+      const partes = ['   ' + (cerrada ? '[x]' : '[ ]') + ' ' + i.titulo];
+      if (i.quien) partes.push('       Con: ' + i.quien);
+      if (i.detalle) {
+        i.detalle.split('\n').map(x => x.trim()).filter(Boolean)
+          .forEach(x => partes.push('       ' + x));
+      }
+      return partes.join('\n');
+    };
+
+    Object.keys(porSucursal).sort().forEach(nombre => {
+      L.push(nombre.toUpperCase());
+      porSucursal[nombre].forEach(i => L.push(linea(i)));
+      L.push('');
+    });
+    if (sueltas.length) {
+      L.push('SIN SUCURSAL ASIGNADA');
+      sueltas.forEach(i => L.push(linea(i)));
+      L.push('');
+    }
+
+    L.push(`Total: ${items.length} novedad${items.length === 1 ? '' : 'es'}.`);
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoNovedadesLiquidacion(periodo, config) {
+    const cfg = config || Store.get().config;
+    const area = cfg.area ? ` ${cfg.area}` : '';
+    return `Novedades de liquidación${area} - ${nombreDePeriodo(periodo)}`;
+  }
+
   return {
     calcular, datosMensuales,
     textoVentasDia,
+    textoNovedadesLiquidacion, asuntoNovedadesLiquidacion,
     textoVisita, textoMensual, textoChecklist,
     asuntoVisita, asuntoMensual, asuntoChecklist,
     enviarVisita, enviarMensual, enviarChecklist,

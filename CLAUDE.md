@@ -206,6 +206,28 @@ números distintos para lo mismo, uno al lado del otro, es peor que no mostrarlo
 No confundir ese bloque con *Ausencias mes a mes*, que sale de `c.novedades` (lo
 liquidado). `#/diario/<colaboradorId>` abre el alta con esa persona ya elegida.
 
+**Las novedades que hay que pasarle a Nómina** viven como una marca sobre la
+agenda (`item.liquidacion`, un período `'2026-09'`), en un bloque al tope de
+`#/asistente`. Documentado en `docs/novedades-liquidacion.md`. Es la tercera cosa
+distinta: `c.novedades` es lo que la liquidación **devolvió** ya cerrado, y esto
+es lo de antes —lo que **hay que pasar**—. Se marcan solas al pegar un texto que
+habla de horas extras, francos, adelantos o faltantes, y se marcan y **desmarcan**
+a mano con la misma casilla: el detector se equivoca y un falso positivo que no
+se puede sacar ensucia el parte del cierre.
+
+El período **no es el mes en curso** sino el que sale de
+`periodoDeLiquidacion(fecha, corte)`: lo que aparece después del día de cierre
+—`parametros.diaCierreNovedades`, 25 por defecto, editable en `#/config`— va al
+recibo siguiente. Juntar en el parte algo que Nómina no va a tomar es peor que no
+marcarlo. El bloque lista apuntes que también están en su cajón por fecha y por
+eso los muestra **siempre plegados**: la misma ficha editable abierta dos veces
+en una pantalla es un lugar de más donde escribir.
+
+**El correo no se conecta y no hay que proponerlo de vuelta.** Se evaluó leerlo
+para detectar solo lo que requiere una novedad y el coordinador decidió que
+prefiere entrar a leer los mails él y pegar lo que corresponda. Es una decisión
+suya, no una limitación técnica.
+
 **La venta va en su propia pantalla**, `#/operacion` (*Ventas*), y es la única que
 genera documento (`Reporte.textoVentasDia()`). Los totales van sobre
 `calc.filasVenta`, **no sobre `calc.filas`**: el RDV llega completo todas las

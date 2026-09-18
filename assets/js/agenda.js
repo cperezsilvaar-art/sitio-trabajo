@@ -238,6 +238,110 @@ function estadoDeTexto(texto) {
     ? 'esperando' : 'pendiente';
 }
 
+/* ------------------------------------------------------------------ *
+ * Novedades que hay que pasar a la liquidación                         *
+ * ------------------------------------------------------------------ *
+ * Distinto de `c.novedades`, que es lo que la liquidación **devolvió** ya
+ * cerrado. Esto es lo de antes: las cosas que van apareciendo durante el mes
+ * —un franco trabajado, un faltante de caja, unas horas extras, un adelanto—
+ * y que hay que acordarse de pasar antes del cierre.
+ *
+ * Aparecen de a una, sueltas, en un mail o en un WhatsApp de un gerente, y el
+ * problema real no es anotarlas: es tenerlas todas juntas el día del cierre.
+ * Por eso no son una pantalla nueva sino una marca sobre la agenda, que ya es
+ * donde caen cuando se pegan.
+ */
+
+/** El día del mes en que cierran las novedades, si no se configuró otro. */
+const CIERRE_NOVEDADES_POR_DEFECTO = 25;
+
+/**
+ * Las palabras que delatan una novedad de liquidación. Son los conceptos de la
+ * planilla de Nómina, no una lista de sinónimos: si aparece uno de estos, lo
+ * que se está anotando termina en un recibo de sueldo.
+ */
+const PALABRAS_LIQUIDACION =
+  /\bhoras? extras?\b|\bhs\.? ?extras?\b|\bhe ?(50|100)\b|nocturn|feriado trabajado|franco trabajado|\badelanto\b|faltante de caja|faltante de cajero|dia del gremio|dias? de examen|\bmudanza\b|licencia por fallecimiento|\bplus\b|\bviatico|\bpresentismo\b|\bembargo\b|cambio de turno|\bsac\b|aguinaldo|reintegro/;
+
+/**
+ * A qué período de liquidación entra algo anotado hoy.
+ *
+ * Pasado el cierre, lo que aparece ya no llega a este mes y va al siguiente.
+ * Meterlo igual en el mes en curso es peor que no marcarlo: el día del cierre
+ * aparecería en la lista algo que Nómina no va a tomar.
+ */
+function periodoDeLiquidacion(fechaISO, diaCierre) {
+  const f = String(fechaISO || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return '';
+  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
+  let anio = Number(f.slice(0, 4));
+  let mes = Number(f.slice(5, 7));
+  if (Number(f.slice(8, 10)) > corte) {
+    mes += 1;
+    if (mes > 12) { mes = 1; anio += 1; }
+  }
+  return `${anio}-${String(mes).padStart(2, '0')}`;
+}
+
+/**
+ * Si el texto pegado parece una novedad para la liquidación, el período al que
+ * entra; si no, cadena vacía. Se ofrece, no se impone: la marca queda visible
+ * en la ficha y se saca con un clic, porque un falso positivo que no se puede
+ * desmarcar ensucia el parte del cierre.
+ */
+function liquidacionDeTexto(texto, fechaRef, diaCierre) {
+  return PALABRAS_LIQUIDACION.test(_sinTildes(texto))
+    ? periodoDeLiquidacion(fechaRef || new Date().toISOString().slice(0, 10), diaCierre)
+    : '';
+}
+
+/** El período en curso y cuántos días faltan para el cierre. */
+function cierreDeNovedades(hoyISO, diaCierre) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
+  const periodo = periodoDeLiquidacion(hoy, corte);
+  /* El cierre del período en curso: si hoy ya pasó el corte, el que viene es
+     el del mes siguiente, que es justamente el período que devolvió la cuenta
+     de arriba. */
+  const [anio, mes] = periodo.split('-').map(Number);
+  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+  const dia = Math.min(corte, ultimo);
+  const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  return {
+    periodo,
+    fecha,
+    dias: Math.round((new Date(fecha + 'T00:00:00') - new Date(hoy + 'T00:00:00')) / 864e5),
+    diaCierre: corte
+  };
+}
+
+/** Las novedades anotadas para un período, las abiertas primero. */
+function novedadesDeLiquidacion(items, periodo) {
+  return (items || [])
+    .filter(i => i.liquidacion && (!periodo || i.liquidacion === periodo))
+    .sort((a, b) => {
+      const ca = (ESTADOS_AGENDA_POR_ID[a.estado] || {}).cerrado ? 1 : 0;
+      const cb = (ESTADOS_AGENDA_POR_ID[b.estado] || {}).cerrado ? 1 : 0;
+      return ca - cb || String(a.fecha || '').localeCompare(String(b.fecha || ''));
+    });
+}
+
+/** '2026-09' se lee «septiembre de 2026». En pantalla nunca va el ISO. */
+function nombreDePeriodo(periodo) {
+  const p = String(periodo || '');
+  if (!/^\d{4}-\d{2}$/.test(p)) return p || 'sin período';
+  const nombres = Object.keys(MESES_ES).filter(k => k !== 'setiembre');
+  const mes = nombres.find(k => MESES_ES[k] === Number(p.slice(5, 7)));
+  return mes ? `${mes} de ${p.slice(0, 4)}` : p;
+}
+
+/** Los períodos que tienen algo anotado, del más nuevo al más viejo. */
+function periodosDeLiquidacion(items) {
+  const set = {};
+  (items || []).forEach(i => { if (i.liquidacion) set[i.liquidacion] = true; });
+  return Object.keys(set).sort().reverse();
+}
+
 /** Título: la primera línea con texto, sin emojis ni viñetas. */
 function tituloDeTexto(texto) {
   const linea = String(texto || '').split('\n')
