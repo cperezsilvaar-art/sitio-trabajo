@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trivia Farmatodo</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' font-size='26'>&#127942;</text></svg>">
+<link rel="stylesheet" href="assets/trivia.css">
+</head>
+<body>
+
+<main id="escena">
+  <header class="cabecera">
+    <div class="marca" id="marca" title="Mantén presionado para configurar">
+      <img id="logo" alt="" hidden>
+      <span id="marca-texto">Farmatodo</span>
+    </div>
+  </header>
+
+  <!-- Pantalla 1: bienvenida -->
+  <section class="pantalla" id="p-inicio">
+    <h1 id="titulo">Responde y gana</h1>
+    <p class="regla" id="regla"></p>
+    <button class="btn btn-primario btn-gigante" id="empezar" type="button">Comenzar</button>
+    <p class="stock" id="stock-inicio"></p>
+  </section>
+
+  <!-- Pantalla 2: pregunta -->
+  <section class="pantalla" id="p-pregunta" hidden>
+    <p class="contador" id="contador"></p>
+    <h2 class="pregunta-texto" id="pregunta-texto"></h2>
+
+    <div class="opciones-lista" id="opciones" hidden></div>
+
+    <div class="juez" id="juez" hidden>
+      <button class="btn btn-mal" data-juez="no" type="button">Incorrecta</button>
+      <button class="btn btn-bien" data-juez="si" type="button">Correcta</button>
+    </div>
+
+    <div class="revelar">
+      <button class="btn btn-fantasma btn-chico" id="ver-respuesta" type="button">Ver respuesta</button>
+      <p class="respuesta" id="respuesta" hidden></p>
+    </div>
+
+    <div class="puntos" id="puntos" role="status" aria-live="polite"></div>
+  </section>
+
+  <!-- Pantalla 3: resultado -->
+  <section class="pantalla" id="p-resultado" hidden>
+    <p class="premio-rotulo" id="resultado-rotulo"></p>
+    <h2 class="premio-nombre" id="resultado-titulo"></h2>
+    <p class="premio-nota" id="resultado-nota"></p>
+    <button class="btn btn-primario btn-gigante" id="siguiente" type="button">Siguiente visitante</button>
+  </section>
+
+  <p class="pie" id="pie"></p>
+</main>
+
+<!-- Registro del participante, opcional -->
+<div class="capa" id="capa-datos" hidden>
+  <form class="tarjeta" id="form-datos">
+    <h2>Antes de empezar</h2>
+    <label class="campo"><span>Nombre y apellido</span>
+      <input type="text" id="p-nombre" required autocomplete="off" maxlength="60"></label>
+    <label class="campo"><span>Teléfono o correo <em>(opcional)</em></span>
+      <input type="text" id="p-contacto" autocomplete="off" maxlength="60"></label>
+    <div class="acciones">
+      <button class="btn btn-fantasma" type="button" data-cerrar="capa-datos">Cancelar</button>
+      <button class="btn btn-primario" type="submit">Comenzar</button>
+    </div>
+  </form>
+</div>
+
+<!-- Exportación -->
+<div class="capa" id="capa-export" hidden>
+  <div class="tarjeta">
+    <h2>Participantes registrados</h2>
+    <p class="ayuda">Copia el texto y pégalo en Excel o Google Sheets: los campos van separados por punto y coma.</p>
+    <textarea id="export-texto" rows="8" readonly></textarea>
+    <div class="acciones">
+      <button class="btn btn-fantasma" type="button" data-cerrar="capa-export">Cerrar</button>
+      <button class="btn" type="button" id="export-descargar">Descargar archivo</button>
+      <button class="btn btn-primario" type="button" id="export-copiar">Copiar</button>
+    </div>
+  </div>
+</div>
+
+<canvas id="confeti" aria-hidden="true"></canvas>
+
+<!-- Panel de configuración -->
+<dialog id="panel" class="panel">
+  <div class="panel-cabecera">
+    <h2>Configuración de la trivia</h2>
+    <button class="btn btn-fantasma" type="button" id="panel-cerrar">Cerrar</button>
+  </div>
+
+  <section class="bloque">
+    <h3>Identidad</h3>
+    <div class="reja">
+      <label class="campo"><span>Marca</span><input type="text" id="c-marca" maxlength="40"></label>
+      <label class="campo"><span>Título</span><input type="text" id="c-titulo" maxlength="60"></label>
+      <label class="campo"><span>Color principal</span><input type="color" id="c-acento"></label>
+      <label class="campo"><span>Color secundario</span><input type="color" id="c-acento2"></label>
+      <div class="campo ancho">
+        <span>Logo (PNG o SVG, hasta 500 KB)</span>
+        <div class="acciones-fila">
+          <input type="file" id="c-logo" accept="image/png,image/svg+xml,image/jpeg">
+          <button class="btn btn-fantasma btn-chico" type="button" id="c-logo-quitar">Quitar logo</button>
+        </div>
+        <span class="ayuda">Usa el archivo oficial del manual de marca. Sin logo se muestra el nombre en texto.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="bloque">
+    <h3>El premio</h3>
+    <div class="reja">
+      <label class="campo"><span>Premio</span><input type="text" id="c-premio" maxlength="40"></label>
+      <label class="campo"><span>Unidades disponibles</span><input type="number" id="c-stock" min="0" step="1"><span class="ayuda">Pon la cantidad real que llevas al stand.</span></label>
+      <label class="campo"><span>Preguntas por visitante</span><input type="number" id="c-cuantas" min="1" step="1"></label>
+      <label class="campo"><span>Aciertos para ganar</span><input type="number" id="c-necesarios" min="1" step="1"></label>
+    </div>
+    <p class="ayuda">Si el banco tiene más preguntas de las que haces por visitante, se eligen al azar en cada ronda.</p>
+  </section>
+
+  <section class="bloque">
+    <h3>Preguntas</h3>
+    <p class="ayuda">La <strong>respuesta</strong> es tu machete: solo se ve al tocar "Ver respuesta", nunca queda a la vista del visitante. Las <strong>opciones</strong> son opcionales: si las cargas, el visitante toca la suya en pantalla y el juego decide solo. Sepáralas con <code>|</code> y marca la correcta con <code>*</code> adelante, por ejemplo <code>*Venezuela | Colombia | Panamá</code>. Sin opciones, tú marcas Correcta o Incorrecta.</p>
+    <div id="lista-preguntas" class="lista-preguntas"></div>
+    <button class="btn btn-fantasma btn-chico" type="button" id="c-agregar">+ Agregar pregunta</button>
+  </section>
+
+  <section class="bloque">
+    <h3>Operación en el stand</h3>
+    <div class="opciones">
+      <label class="interruptor"><input type="checkbox" id="c-pedir"> Pedir nombre del participante antes de empezar</label>
+      <label class="interruptor"><input type="checkbox" id="c-sonido"> Sonido</label>
+      <label class="interruptor"><input type="checkbox" id="c-confeti"> Confeti al ganar</label>
+      <label class="interruptor"><input type="checkbox" id="c-mezclar"> Mezclar el orden de las opciones</label>
+      <label class="interruptor"><input type="checkbox" id="c-mostrar-stock"> Mostrar en pantalla cuántas unidades quedan</label>
+    </div>
+    <div class="acciones-fila">
+      <button class="btn" type="button" id="c-pantalla">Pantalla completa</button>
+    </div>
+  </section>
+
+  <section class="bloque">
+    <h3>Participantes</h3>
+    <p class="ayuda" id="c-resumen"></p>
+    <div class="acciones-fila">
+      <button class="btn" type="button" id="c-csv">Exportar participantes</button>
+      <button class="btn btn-peligro" type="button" id="c-borrar-log">Borrar registro</button>
+      <button class="btn btn-peligro" type="button" id="c-reset">Restablecer todo</button>
+    </div>
+    <div class="tabla-envoltorio" id="c-tabla"></div>
+  </section>
+</dialog>
+
+<div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+
+<script src="assets/trivia.js"></script>
+</body>
+</html>

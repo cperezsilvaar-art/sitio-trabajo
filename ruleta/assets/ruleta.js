@@ -27,16 +27,29 @@ const CFG_BASE = () => ({
   sonido: true,
   confeti: true,
   premios: [
-    { id: uid(), nombre: 'Alcohol en gel', porciones: 4, stock: null, reintento: false },
-    { id: uid(), nombre: 'Descuento 15%', porciones: 4, stock: null, reintento: false },
-    { id: uid(), nombre: 'Bolso ecológico', porciones: 3, stock: 30, reintento: false },
-    { id: uid(), nombre: 'Termo', porciones: 2, stock: 12, reintento: false },
-    { id: uid(), nombre: 'Kit de cuidado facial', porciones: 1, stock: 6, reintento: false },
-    { id: uid(), nombre: 'Girá de nuevo', porciones: 2, stock: null, reintento: true },
+    { id: uid(), nombre: 'Botella', porciones: 2, stock: 12, tipo: 'premio' },
+    { id: uid(), nombre: 'Gracias por participar', porciones: 5, stock: null, tipo: 'nada' },
+    { id: uid(), nombre: 'Gira de nuevo', porciones: 1, stock: null, tipo: 'reintento' },
   ],
 });
 
+const TIPOS = {
+  premio: 'Premio',
+  nada: 'Gracias por participar',
+  reintento: 'Gira de nuevo',
+};
+
+/* Las configuraciones guardadas antes usaban un campo booleano */
+function migrarPremios(lista) {
+  lista.forEach((p) => {
+    if (!p.tipo) p.tipo = p.reintento ? 'reintento' : 'premio';
+    delete p.reintento;
+  });
+  return lista;
+}
+
 let cfg = cargar(CFG_KEY, CFG_BASE());
+migrarPremios(cfg.premios);
 let registro = cargar(LOG_KEY, []);
 let porciones = [];       // una entrada por porción de la rueda
 let rotacion = 0;
@@ -382,28 +395,32 @@ function girar() {
   requestAnimationFrame(paso);
 }
 
+let ultimoTipo = 'premio';
+
 function resolver(indice) {
   const premio = porciones[indice];
   if (!premio) { $('#girar').disabled = false; return; }
+  ultimoTipo = premio.tipo || 'premio';
 
-  $('#premio-rotulo').textContent = premio.reintento ? '¡Otra oportunidad!' : '¡Felicitaciones!';
   $('#premio-nombre').textContent = premio.nombre;
 
-  if (premio.reintento) {
-    $('#premio-nota').textContent = 'Volvé a girar la ruleta.';
+  if (ultimoTipo === 'reintento') {
+    $('#premio-rotulo').textContent = '¡Otra oportunidad!';
+    $('#premio-nota').textContent = 'Vuelve a girar la ruleta.';
     $('#premio-cerrar').textContent = 'Girar otra vez';
+  } else if (ultimoTipo === 'nada') {
+    $('#premio-rotulo').textContent = 'Gracias por participar';
+    $('#premio-nota').textContent = '¡Te esperamos en la próxima!';
+    $('#premio-cerrar').textContent = 'Siguiente visitante';
+    registrar(premio.nombre, false);
   } else {
     const real = cfg.premios.find((p) => p.id === premio.id);
     if (real && real.stock !== null) real.stock = Math.max(0, real.stock - 1);
-    registro.push({
-      fecha: new Date().toISOString(),
-      premio: premio.nombre,
-      nombre: participante?.nombre || '',
-      contacto: participante?.contacto || '',
-    });
     guardarCfg();
-    guardarLog();
-    $('#premio-nota').textContent = real && real.stock !== null ? `Quedan ${real.stock} unidades.` : '';
+    registrar(premio.nombre, true);
+    $('#premio-rotulo').textContent = '¡Felicitaciones!';
+    $('#premio-nota').textContent = real && real.stock !== null
+      ? `Quedan ${real.stock} ${real.stock === 1 ? 'unidad' : 'unidades'}.` : '';
     $('#premio-cerrar').textContent = 'Siguiente visitante';
     fanfarria();
     lanzarConfeti();
@@ -413,10 +430,20 @@ function resolver(indice) {
   $('#premio-cerrar').focus();
 }
 
+function registrar(premio, entregado) {
+  registro.push({
+    fecha: new Date().toISOString(),
+    premio,
+    entregado,
+    nombre: participante?.nombre || '',
+    contacto: participante?.contacto || '',
+  });
+  guardarLog();
+}
+
 function cerrarPremio() {
-  const eraReintento = $('#premio-rotulo').textContent === '¡Otra oportunidad!';
   $('#capa-premio').hidden = true;
-  if (!eraReintento) participante = null;
+  if (ultimoTipo !== 'reintento') participante = null;
   reconstruir();
   dibujar();
   $('#girar').disabled = false;
@@ -424,12 +451,14 @@ function cerrarPremio() {
 }
 
 function actualizarPie() {
-  const conStock = cfg.premios.filter((p) => !p.reintento && p.stock !== null);
+  const reales = cfg.premios.filter((p) => (p.tipo || 'premio') === 'premio');
+  const conStock = reales.filter((p) => p.stock !== null);
   const restantes = conStock.reduce((s, p) => s + p.stock, 0);
-  const ilimitados = cfg.premios.some((p) => !p.reintento && p.stock === null);
+  const ilimitados = reales.some((p) => p.stock === null);
   const partes = [];
   if (conStock.length) partes.push(`${num(restantes)} unidades con stock${ilimitados ? ' (más premios sin límite)' : ''}`);
-  partes.push(`${num(registro.length)} ${registro.length === 1 ? 'entrega' : 'entregas'} registradas`);
+  const entregas = registro.filter((r) => r.entregado !== false).length;
+  partes.push(`${num(entregas)} ${entregas === 1 ? 'entrega' : 'entregas'} registradas`);
   $('#pie').textContent = partes.join(' · ');
 }
 
@@ -473,7 +502,8 @@ function pintarPremios() {
       <input type="number" data-k="porciones" value="${Math.max(1, p.porciones | 0)}" min="1" max="20" step="1">
       <input type="number" data-k="stock" value="${p.stock === null ? '' : p.stock}" min="0" step="1" placeholder="∞">
       <span class="prob">${probabilidad(p)}</span>
-      <span class="centro"><input type="checkbox" data-k="reintento"${p.reintento ? ' checked' : ''}></span>
+      <select data-k="tipo">${Object.entries(TIPOS).map(([v, t]) =>
+        `<option value="${v}"${(p.tipo || 'premio') === v ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>
       <button class="quitar" type="button" data-quitar="${p.id}" aria-label="Quitar premio">×</button>
     </div>`).join('');
 }
@@ -497,13 +527,14 @@ function pintarRegistro() {
     return `<tr>
       <td>${esc(d.toLocaleString('es', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</td>
       <td>${esc(r.premio)}</td>
+      <td>${r.entregado === false ? 'No' : 'Sí'}</td>
       <td>${esc(r.nombre || '—')}</td>
       <td>${esc(r.contacto || '—')}</td>
     </tr>`;
   }).join('');
 
   $('#c-tabla').innerHTML = `<table>
-    <thead><tr><th>Fecha</th><th>Premio</th><th>Participante</th><th>Contacto</th></tr></thead>
+    <thead><tr><th>Fecha</th><th>Resultado</th><th>Entregado</th><th>Participante</th><th>Contacto</th></tr></thead>
     <tbody>${filas}</tbody></table>`;
 }
 
@@ -550,9 +581,10 @@ function textoCSV() {
   const celda = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const filas = registro.map((r) => {
     const d = new Date(r.fecha);
-    return [d.toLocaleDateString('es'), d.toLocaleTimeString('es'), r.premio, r.nombre, r.contacto].map(celda).join(';');
+    return [d.toLocaleDateString('es'), d.toLocaleTimeString('es'), r.premio,
+      r.entregado === false ? 'No' : 'Sí', r.nombre, r.contacto].map(celda).join(';');
   });
-  return [['Fecha', 'Hora', 'Premio', 'Participante', 'Contacto'].map(celda).join(';'), ...filas].join('\r\n');
+  return [['Fecha', 'Hora', 'Resultado', 'Premio entregado', 'Participante', 'Contacto'].map(celda).join(';'), ...filas].join('\r\n');
 }
 
 /* Muestra el texto en pantalla además de ofrecer la descarga: dentro de una
@@ -619,7 +651,7 @@ $('#c-pedir').addEventListener('change', (e) => { cfg.pedirNombre = e.target.che
 $('#c-sonido').addEventListener('change', (e) => { cfg.sonido = e.target.checked; guardarCfg(); });
 $('#c-confeti').addEventListener('change', (e) => { cfg.confeti = e.target.checked; guardarCfg(); });
 
-$('#lista-premios').addEventListener('input', (ev) => {
+['input', 'change'].forEach((evento) => $('#lista-premios').addEventListener(evento, (ev) => {
   const fila = ev.target.closest('.fila-premio');
   const clave = ev.target.dataset.k;
   if (!fila || !clave) return;
@@ -629,13 +661,13 @@ $('#lista-premios').addEventListener('input', (ev) => {
   if (clave === 'nombre') p.nombre = ev.target.value;
   else if (clave === 'porciones') p.porciones = Math.max(1, Math.min(20, parseInt(ev.target.value, 10) || 1));
   else if (clave === 'stock') p.stock = ev.target.value === '' ? null : Math.max(0, parseInt(ev.target.value, 10) || 0);
-  else if (clave === 'reintento') p.reintento = ev.target.checked;
+  else if (clave === 'tipo') p.tipo = ev.target.value;
 
   guardarCfg();
   reconstruir();
   dibujar();
   refrescarProbabilidades();
-});
+}));
 
 $('#c-agregar').addEventListener('click', () => {
   cfg.premios.push({ id: uid(), nombre: '', porciones: 1, stock: null, reintento: false });
@@ -674,7 +706,7 @@ $('#c-pantalla').addEventListener('click', async () => {
     if (document.fullscreenElement) await document.exitFullscreen();
     else await document.documentElement.requestFullscreen();
   } catch {
-    avisar('Si la ruleta está dentro de otra página, abrila en una pestaña aparte. En una notebook también sirve F11.');
+    avisar('Si la ruleta está dentro de otra página, ábrela en una pestaña aparte. En una notebook también sirve F11.');
   }
 });
 
@@ -687,7 +719,7 @@ $('#export-copiar').addEventListener('click', async () => {
     avisar('Copiado al portapapeles');
   } catch {
     caja.select();
-    avisar('Texto seleccionado: copialo con Ctrl+C');
+    avisar('Texto seleccionado: cópialo con Ctrl+C');
   }
 });
 
