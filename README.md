@@ -22,6 +22,18 @@ Recursos Humanos.
 
 ---
 
+## Qué hay en este repositorio
+
+| Ruta | Qué es |
+|---|---|
+| `/` | **Gestión de Talento**: aplicación interna de RRHH con acceso por clave y datos cifrados. |
+| `/ruleta/` | **Ruleta de premios** para el stand de la expo. Ver [`ruleta/README.md`](ruleta/README.md). |
+
+Con GitHub Pages activado, cada una queda en su propia dirección:
+`.../sitio-trabajo/` y `.../sitio-trabajo/ruleta/`.
+
+---
+
 ## Cómo publicarla en GitHub Pages
 
 1. En GitHub, entra al repositorio → **Settings** → **Pages**.

@@ -1,0 +1,280 @@
+/* ============================================================
+   Ruleta de premios para stand de expo
+   Diseñada para pantalla grande, táctil y sin conexión.
+   ============================================================ */
+
+:root {
+  --acento:  #382a63;   /* violeta del logo */
+  --acento2: #1565c0;  /* azul Farmatodo */
+  --tinta:   #10151c;
+  --tinta-2: #4a5462;
+  --plano:   #f4f6f9;
+  --blanco:  #ffffff;
+  --peligro: #c0392b;
+  --sombra:  0 2px 6px rgba(16, 21, 28, .08), 0 18px 48px rgba(16, 21, 28, .12);
+  --fuente:  system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--fuente);
+  color: var(--tinta);
+  background:
+    radial-gradient(1200px 700px at 50% -20%, color-mix(in srgb, var(--acento) 22%, transparent), transparent 70%),
+    var(--plano);
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ---------- Escena principal ---------- */
+
+#escena {
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  justify-items: center;
+  gap: clamp(8px, 1.6vh, 22px);
+  padding: clamp(12px, 2.4vh, 28px) 16px;
+  text-align: center;
+}
+
+.cabecera { display: grid; justify-items: center; gap: 4px; }
+
+.marca {
+  display: flex; align-items: center; gap: 10px;
+  cursor: pointer; user-select: none;
+  padding: 4px 10px; border-radius: 10px;
+}
+.marca img { height: clamp(34px, 6vh, 64px); width: auto; display: block; }
+#marca-texto {
+  font-size: clamp(1.1rem, 2.6vh, 1.7rem);
+  font-weight: 800; letter-spacing: -.02em;
+  color: var(--acento);
+}
+.marca:has(img:not([hidden])) #marca-texto { display: none; }
+
+h1#titulo {
+  margin: 0;
+  font-size: clamp(1.5rem, 4.6vh, 3rem);
+  font-weight: 800; letter-spacing: -.03em; line-height: 1.05;
+}
+#subtitulo {
+  margin: 0;
+  font-size: clamp(.85rem, 1.9vh, 1.1rem);
+  color: var(--tinta-2);
+}
+
+/* ---------- Ruleta ---------- */
+
+.ruleta-zona {
+  display: grid; place-items: center;
+  width: 100%; min-height: 0;
+}
+
+/* Se ajusta al tamaño del lienzo, de modo que el puntero quede
+   siempre pegado al borde de la rueda y no al del contenedor. */
+.rueda { position: relative; display: grid; place-items: center; }
+
+#lienzo {
+  display: block;
+  max-width: 100%; max-height: 100%;
+  filter: drop-shadow(0 12px 32px rgba(16, 21, 28, .22));
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.puntero {
+  position: absolute; z-index: 3;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: clamp(11px, 1.5vh, 16px) solid transparent;
+  border-right: clamp(11px, 1.5vh, 16px) solid transparent;
+  border-top: clamp(24px, 3.4vh, 38px) solid #ffffff;
+  filter: drop-shadow(0 0 2px rgba(0, 0, 0, .75)) drop-shadow(0 3px 5px rgba(0, 0, 0, .45));
+}
+
+#girar {
+  position: absolute; z-index: 4;
+  width: clamp(88px, 15vh, 150px); aspect-ratio: 1;
+  border-radius: 50%;
+  border: clamp(4px, .7vh, 7px) solid var(--blanco);
+  background: var(--acento); color: var(--blanco);
+  font-family: inherit; font-weight: 800;
+  font-size: clamp(.8rem, 1.9vh, 1.2rem); letter-spacing: .06em;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(16, 21, 28, .3);
+  transition: transform .12s ease, filter .12s ease;
+}
+#girar:hover:not(:disabled) { filter: brightness(1.1); }
+#girar:active:not(:disabled) { transform: scale(.95); }
+#girar:disabled { opacity: .55; cursor: default; }
+#girar:focus-visible { outline: 4px solid var(--acento2); outline-offset: 3px; }
+
+.pie {
+  margin: 0;
+  font-size: clamp(.75rem, 1.7vh, .95rem);
+  color: var(--tinta-2);
+  min-height: 1.2em;
+}
+
+/* ---------- Capas superpuestas ---------- */
+
+.capa {
+  position: fixed; inset: 0; z-index: 30;
+  display: grid; place-items: center;
+  padding: 20px;
+  background: rgba(16, 21, 28, .62);
+  backdrop-filter: blur(3px);
+}
+
+.tarjeta {
+  width: min(460px, 100%);
+  background: var(--blanco);
+  border-radius: 18px;
+  box-shadow: var(--sombra);
+  padding: 26px;
+  display: grid; gap: 14px;
+}
+.tarjeta h2 { margin: 0; font-size: 1.25rem; }
+
+.tarjeta-premio { text-align: center; padding: 34px 26px; gap: 10px; }
+.premio-rotulo {
+  margin: 0; font-size: clamp(.95rem, 2.2vh, 1.15rem);
+  font-weight: 700; color: var(--tinta-2);
+  text-transform: uppercase; letter-spacing: .08em;
+}
+.premio-nombre {
+  margin: 0;
+  font-size: clamp(1.7rem, 5.4vh, 3.1rem);
+  font-weight: 800; line-height: 1.05; letter-spacing: -.03em;
+  color: var(--acento);
+}
+.premio-nota { margin: 0; color: var(--tinta-2); font-size: .95rem; min-height: 1.2em; }
+
+/* ---------- Formularios y botones ---------- */
+
+.campo { display: grid; gap: 5px; text-align: left; }
+.campo > span { font-size: .8rem; font-weight: 650; color: var(--tinta-2); }
+.campo em { font-weight: 400; font-style: normal; color: #8a929d; }
+.campo input[type="text"], .campo input[type="number"] {
+  font: inherit; padding: .6rem .7rem;
+  border: 1px solid #c8cfd8; border-radius: 9px; background: var(--blanco); width: 100%;
+}
+.campo input[type="color"] {
+  width: 100%; height: 42px; padding: 2px;
+  border: 1px solid #c8cfd8; border-radius: 9px; background: var(--blanco);
+}
+.campo input:focus-visible { outline: 2px solid var(--acento); outline-offset: 1px; }
+#export-texto {
+  font: 400 .8rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  width: 100%; padding: .6rem .7rem; resize: vertical;
+  border: 1px solid #c8cfd8; border-radius: 9px; background: #f8fafc; color: var(--tinta);
+}
+
+.ayuda { font-size: .78rem; color: #8a929d; margin: 0; line-height: 1.45; }
+
+.btn {
+  font: inherit; font-weight: 650;
+  padding: .6rem 1rem; border-radius: 9px;
+  border: 1px solid #c8cfd8; background: var(--blanco); color: var(--tinta);
+  cursor: pointer;
+}
+.btn:hover { background: #eef1f5; }
+.btn:focus-visible { outline: 2px solid var(--acento); outline-offset: 2px; }
+.btn-primario { background: var(--acento); border-color: transparent; color: var(--blanco); }
+.btn-primario:hover { filter: brightness(1.08); background: var(--acento); }
+.btn-fantasma { background: transparent; }
+.btn-peligro { color: var(--peligro); border-color: var(--peligro); }
+.btn-peligro:hover { background: color-mix(in srgb, var(--peligro) 10%, transparent); }
+.btn-grande { padding: .9rem 1.6rem; font-size: 1.05rem; margin-top: 8px; }
+.btn-chico { padding: .35rem .6rem; font-size: .8rem; }
+
+.acciones { display: flex; justify-content: flex-end; gap: 8px; }
+.acciones-fila { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---------- Panel de configuración ---------- */
+
+.panel {
+  border: 0; border-radius: 16px; padding: 0;
+  width: min(820px, calc(100vw - 24px));
+  max-height: calc(100dvh - 40px);
+  box-shadow: var(--sombra);
+  color: var(--tinta); font-family: var(--fuente);
+}
+.panel::backdrop { background: rgba(16, 21, 28, .55); }
+.panel-cabecera {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; padding: 18px 22px;
+  border-bottom: 1px solid #e3e8ee;
+  position: sticky; top: 0; background: var(--blanco); z-index: 2;
+}
+.panel-cabecera h2 { margin: 0; font-size: 1.1rem; }
+.bloque { padding: 20px 22px; border-bottom: 1px solid #e3e8ee; }
+.bloque:last-child { border-bottom: 0; }
+.bloque h3 { margin: 0 0 12px; font-size: .95rem; }
+.reja { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.reja .ancho { grid-column: 1 / -1; }
+
+.tabla-premios { display: grid; gap: 6px; margin-bottom: 12px; }
+.fila-premio {
+  display: grid; align-items: center; gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 84px 84px 78px 92px 40px;
+}
+.fila-premio.encabezado {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+  color: #8a929d; font-weight: 650;
+}
+.fila-premio input[type="text"], .fila-premio input[type="number"] {
+  font: inherit; font-size: .88rem; padding: .4rem .5rem;
+  border: 1px solid #c8cfd8; border-radius: 7px; width: 100%;
+}
+.fila-premio .prob { font-size: .85rem; font-variant-numeric: tabular-nums; color: var(--tinta-2); }
+.fila-premio .centro { display: grid; place-items: center; }
+.quitar {
+  font: inherit; font-size: 1rem; line-height: 1;
+  width: 32px; height: 32px; border-radius: 7px;
+  border: 1px solid #c8cfd8; background: var(--blanco); color: var(--peligro); cursor: pointer;
+}
+.quitar:hover { background: color-mix(in srgb, var(--peligro) 10%, transparent); }
+
+.opciones { display: grid; gap: 8px; margin-bottom: 14px; }
+.interruptor { display: flex; align-items: center; gap: .55rem; font-size: .92rem; cursor: pointer; }
+
+.tabla-envoltorio { margin-top: 14px; max-height: 240px; overflow: auto; }
+.tabla-envoltorio table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.tabla-envoltorio th, .tabla-envoltorio td {
+  text-align: left; padding: .45rem .6rem; border-bottom: 1px solid #e3e8ee; white-space: nowrap;
+}
+.tabla-envoltorio th {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .05em;
+  color: #8a929d; background: #f4f6f9; position: sticky; top: 0;
+}
+
+/* ---------- Confeti y avisos ---------- */
+
+#confeti {
+  position: fixed; inset: 0; z-index: 40;
+  pointer-events: none;
+}
+
+.aviso {
+  position: fixed; inset-inline: 0; bottom: 22px; margin-inline: auto;
+  width: max-content; max-width: calc(100vw - 32px); z-index: 50;
+  background: var(--tinta); color: var(--blanco);
+  padding: .6rem 1.1rem; border-radius: 999px;
+  font-size: .88rem; font-weight: 600;
+  box-shadow: var(--sombra);
+}
+
+/* ---------- Pantallas angostas ---------- */
+
+@media (max-width: 620px) {
+  .reja { grid-template-columns: 1fr; }
+  .fila-premio { grid-template-columns: minmax(0, 1fr) 64px 64px; row-gap: 4px; }
+  .fila-premio .prob, .fila-premio .centro, .fila-premio .quitar { grid-column: auto; }
+  .fila-premio.encabezado span:nth-child(n+4) { display: none; }
+}
