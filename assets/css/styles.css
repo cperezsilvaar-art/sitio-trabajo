@@ -949,3 +949,29 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .lista-tramites .marca-check em { display: block; font-style: normal; }
 .lista-tramites .marca-check em.chip { display: inline-block; margin-top: 2px; }
 .nota-tramite { font-size: 13px; }
+
+/* ---- La pregunta de la cesión, adentro del traspaso ----
+   Es la única decisión del formulario que no se puede dejar en blanco, así que
+   se separa del resto de los campos con un recuadro en vez de quedar como un
+   par de casillas más abajo de los desplegables. */
+.pregunta-cesion {
+  margin: 4px 0 0; padding: 12px 14px;
+  border: 1px solid var(--borde-fuerte); border-radius: 10px; background: var(--panel);
+}
+.pregunta-cesion legend {
+  padding: 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .5px;
+  text-transform: uppercase; color: var(--texto-suave);
+}
+.opciones-cesion { display: flex; flex-wrap: wrap; gap: 8px; }
+.opciones-cesion label {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  flex: 1 1 220px; min-width: 0; padding: 9px 12px; font-size: 13.5px;
+  border: 1px solid var(--borde); border-radius: 8px; background: var(--panel-alt);
+}
+.opciones-cesion label:hover { border-color: var(--azul-claro); }
+.opciones-cesion input { width: auto; margin: 0; flex: 0 0 auto; }
+.opciones-cesion label:has(input:checked) {
+  border-color: var(--azul); background: var(--panel);
+  outline: 2px solid var(--azul-claro); outline-offset: -2px;
+}
+.pregunta-cesion .ayuda { margin: 8px 0 0; }

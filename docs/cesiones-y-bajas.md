@@ -1,8 +1,8 @@
-# Cesiones, modificaciones y bajas
+# Traspasos, modificaciones y bajas
 
 Tres cosas le pasan a una persona además de trabajar: se va, se muda de tienda o
 le cambia el puesto. Las tres se cargan en **su ficha**, dentro de la sucursal, y
-se leen juntas en **Cesiones y bajas** (`#/movimientos`).
+se leen juntas en **Movimientos y bajas** (`#/movimientos`).
 
 ## Baja
 
@@ -35,13 +35,41 @@ personas abajo. No confundirlo con **FTE del mes cerrado**, que sale de la
 estadística mensual y queda en `—` hasta que haya una visita cargada: son dos
 preguntas distintas —con cuánta gente cuento hoy, y cuánta usé el mes pasado—.
 
-## Cesión de contrato
+## Traspaso de sucursal
 
-Botón **Cesión de contrato**. Muestra la sucursal actual y pide la **nueva
-sucursal destino**, la **vigencia** y **observaciones** —la nota del empleado, la
+Botón **Traspaso de sucursal**. Muestra la sucursal actual y pide la **tienda a
+la que va**, la **vigencia** y **observaciones** —la nota del empleado, la
 conformidad del gerente que lo recibe, lo que corresponda—.
 
-Queda **pendiente de autorizar**. Al autorizarla:
+Se llamaba *cesión de contrato*, que es el instrumento legal y no la cosa que
+pasa: lo que pasa es que la persona se muda de tienda. La cesión aplica solo
+cuando además **cambia el empleador**, y por eso ahora es una pregunta adentro
+del traspaso y no el nombre del movimiento.
+
+### ¿Aplica cesión de contrato?
+
+El formulario lo pregunta y **no guarda hasta que se contesta**: la diferencia
+entre un movimiento interno y uno que necesita instrumento legal es de las que
+se descubren tarde. Queda en `m.conCesion` —`true`, `false`, o `null` mientras
+nadie contestó—.
+
+Al elegir la tienda de destino el panel **sugiere y precarga** la respuesta
+comparando la `razonSocial` de las dos tiendas: si son la misma, mismo empleador
+y suele ser un movimiento interno; si son distintas, cambia el empleador y suele
+instrumentarse la cesión. En el Área 3 conviven doce razones sociales, así que la
+pregunta no es retórica: Botánico, Parque Chacabuco y Villa Devoto son FARMATODO
+ARGENTINA S.A., y Devoto es MA TECH S.R.L.
+
+**Sugiere, no decide.** Si a una de las dos tiendas le falta la razón social el
+panel lo dice y no propone nada, y la respuesta siempre se puede cambiar: el
+padrón puede estar incompleto y el que sabe si hay que instrumentarla es el
+coordinador.
+
+Los movimientos guardados antes de este cambio tienen `tipo: 'cesion'`.
+`esTraspaso()` los sigue tratando como traspasos —se aplican igual y mueven a la
+persona— y se leen como *con cesión de contrato*, que es lo que eran.
+
+Queda **pendiente de autorizar**. Al autorizarlo:
 
 - si la vigencia ya llegó, la persona pasa al plantel de la tienda nueva;
 - si es futura, queda **autorizada** y se aplica sola el día que corresponde,
@@ -55,8 +83,8 @@ adelante la de origen (`tiendaQueAbsorbeElCosto()`).
 ## Modificación
 
 Botón **Modificación**, para el cambio de puesto o de jornada. Pide el cargo
-nuevo, la jornada nueva, la vigencia y observaciones. Funciona igual que la
-cesión: pendiente → autorizada → aplicada, y al aplicarse cambia el cargo, la
+nuevo, la jornada nueva, la vigencia y observaciones. Funciona igual que el
+traspaso: pendiente → autorizada → aplicada, y al aplicarse cambia el cargo, la
 posición del organigrama y la jornada.
 
 El panel es el registro del área, **no reemplaza la carga en RyR Online**, que
@@ -110,5 +138,6 @@ un check list incompleto pero sincero. Y se puede reabrir.
 - En la **ficha de la persona**, apenas se registra la baja.
 - En **`#/movimientos/bajas`**: una columna con *2 de 5* o *cerrada*, y el check
   list entero al abrir la fila.
-- En el **contador de _Cesiones y bajas_** del menú, junto con las cesiones sin
-  aplicar: las dos son trabajo pendiente en esa pantalla.
+- En el **contador de _Movimientos y bajas_** del menú, junto con los traspasos
+  y las modificaciones sin aplicar: las dos cosas son trabajo pendiente en esa
+  pantalla.

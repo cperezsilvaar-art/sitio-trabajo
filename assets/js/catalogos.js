@@ -261,11 +261,22 @@ function estadoTramitesBaja(baja) {
   };
 }
 
-/* Tipos de movimiento que el coordinador registra sobre una persona. */
+/* Tipos de movimiento que el coordinador registra sobre una persona.
+ *
+ * El traspaso se llamaba «cesión de contrato», que es el instrumento legal y
+ * no la cosa que pasa: lo que pasa es que la persona se muda de tienda. La
+ * cesión aplica solo cuando además cambia el empleador —otra razón social—, y
+ * por eso ahora es una pregunta adentro del traspaso (`m.conCesion`) y no el
+ * nombre del movimiento. Los guardados como `cesion` se leen como traspasos
+ * con cesión, que es lo que eran.
+ */
 const TIPOS_MOVIMIENTO = [
-  { id: 'cesion',       nombre: 'Cesión de contrato', detalle: 'Pasa a otra sucursal' },
-  { id: 'modificacion', nombre: 'Modificación',       detalle: 'Cambia de puesto o de jornada' }
+  { id: 'traspaso',     nombre: 'Traspaso de sucursal', detalle: 'Se muda a otra tienda' },
+  { id: 'modificacion', nombre: 'Modificación',         detalle: 'Cambia de puesto o de jornada' }
 ];
+
+/** Un movimiento viejo guardado como `cesion` es un traspaso con cesión. */
+const esTraspaso = tipo => tipo === 'traspaso' || tipo === 'cesion';
 
 const ESTADOS_MOVIMIENTO = {
   pendiente:  { nombre: 'Pendiente de autorizar', chip: 'ambar' },

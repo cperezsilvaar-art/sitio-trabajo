@@ -222,9 +222,9 @@ const Store = (() => {
            persona: los topes son por año y por persona, no por período. */
         if (!Array.isArray(c.licencias)) c.licencias = [];
         if (!Array.isArray(c.sanciones)) c.sanciones = [];
-        /* Cesiones de contrato y modificaciones de puesto. Viven en la ficha de
-           la persona y no en la sucursal, así el historial la acompaña cuando
-           se muda de tienda. */
+        /* Traspasos de sucursal y modificaciones de puesto. Viven en la ficha
+           de la persona y no en la sucursal, así el historial la acompaña
+           cuando se muda de tienda. */
         if (!Array.isArray(c.movimientos)) c.movimientos = [];
         /* Ausencias con certificado: desde cuándo, hasta cuándo, y qué pasa
            cuando esa fecha llega. Nada que ver con las novedades del mes. */
@@ -638,7 +638,7 @@ const Store = (() => {
         novedades: {},                    // { '2026-08': { he50, enfermedad, … } }
         licencias: [],                    // art. 25, con su tope anual
         sanciones: [],                    // el legajo disciplinario de la persona
-        movimientos: [],                  // cesiones de contrato y modificaciones de puesto
+        movimientos: [],                  // traspasos de sucursal y modificaciones de puesto
         ausencias: [],                    // las que tienen certificado, con desde y hasta
         entrenamientos: [],               // la ruta al rol de Senior, con sus evaluaciones
         cargasFamilia: null,              // null = sin definir; duplica los plazos del art. 208
@@ -1695,8 +1695,8 @@ const Store = (() => {
     },
 
     /**
-     * Anota una cesión de contrato o una modificación de puesto. Queda
-     * pendiente: recién al autorizarla se toca el plantel.
+     * Anota un traspaso de sucursal o una modificación de puesto. Queda
+     * pendiente: recién al autorizarlo se toca el plantel.
      */
     registrarMovimiento(colabId, datos) {
       const c = this.colaboradorPorId(colabId);
@@ -1707,11 +1707,16 @@ const Store = (() => {
       if (!Array.isArray(c.movimientos)) c.movimientos = [];
       const m = Object.assign({
         id: uid(),
-        tipo: 'cesion',
+        tipo: 'traspaso',
         fecha: new Date().toISOString().slice(0, 10),
         vigencia: '',
         desdeSucursalId: s ? s.id : '',
         haciaSucursalId: '',
+        /* Si el traspaso lleva cesión de contrato. Es una pregunta del alta y
+           no algo que el panel deduzca solo: la razón social de las dos
+           tiendas lo sugiere, pero quien sabe si hay que instrumentarla es el
+           coordinador. `null` es «todavía no se contestó». */
+        conCesion: null,
         cargoAnterior: c.cargo || '',
         cargoNuevo: '',
         jornadaAnterior: jornadaDeVinculo(c).fte,
@@ -1748,7 +1753,7 @@ const Store = (() => {
       const c = this.colaboradorPorId(colabId);
       if (!m || !c || m.estado === 'aplicada' || m.estado === 'anulada') return null;
 
-      if (m.tipo === 'cesion' && m.haciaSucursalId) {
+      if (esTraspaso(m.tipo) && m.haciaSucursalId) {
         const origen = this.sucursalDe(colabId);
         const destino = this.sucursal(m.haciaSucursalId);
         if (origen && destino && origen.id !== destino.id) {

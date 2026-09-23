@@ -106,7 +106,7 @@ del grupo que le corresponde, salvo que sea otro punto de partida.
 
 *Seguimiento* se llamaba *En la tienda* y tenía adentro a *Sucursales*. Estaba
 mezclado: la puerta de entrada a una tienda no es una tarea al lado de
-*Reclamos* y *Cesiones y bajas*, que son registros del área que se siguen en el
+*Reclamos* y *Movimientos y bajas*, que son registros del área que se siguen en el
 tiempo. Sacar *Sucursales* arriba dejó al grupo diciendo lo que es.
 
 La columna era una fila de solapas y dejó de entrar: en vertical el rótulo del
@@ -161,12 +161,24 @@ de consulta, no una tarea del día. **Las bajas se quedan en ese listado, con su
 fecha** —se las sigue buscando por nombre meses después—; lo que las separa de
 los activos es la dotación, no la visibilidad.
 
-La baja, la cesión de contrato y la modificación de puesto cuelgan de la
+La baja, el traspaso de sucursal y la modificación de puesto cuelgan de la
 **persona** (`c.baja`, `c.movimientos[]`), no de la sucursal, así el historial la
 acompaña cuando se muda de tienda. Se cargan en su ficha y se leen juntas en
-`#/movimientos`. Lo autorizado con vigencia futura **no se aplica antes de
-tiempo**: `aplicarMovimientosVencidos()` corre al abrir el panel. Documentado en
-`docs/cesiones-y-bajas.md`.
+`#/movimientos` (*Movimientos y bajas*). Lo autorizado con vigencia futura **no
+se aplica antes de tiempo**: `aplicarMovimientosVencidos()` corre al abrir el
+panel. Documentado en `docs/cesiones-y-bajas.md`.
+
+**Mover a alguien de tienda es un traspaso, y la cesión de contrato es una
+pregunta adentro.** Se llamaba *cesión* al movimiento entero, que es el
+instrumento legal y no lo que pasa; la cesión aplica solo cuando además cambia el
+empleador, y en el Área 3 conviven doce razones sociales. El formulario
+**no guarda hasta que la pregunta está contestada** (`m.conCesion`): descubrir
+después que hacía falta instrumento es tarde. Al elegir el destino el panel
+**sugiere y precarga** comparando la `razonSocial` de las dos tiendas, y lo dice
+cuando a alguna le falta en vez de inventar una respuesta — sugiere, no decide.
+Lo guardado como `tipo: 'cesion'` sigue funcionando: `esTraspaso()` lo trata como
+traspaso y se lee *con cesión*, que es lo que era. **No agregar un tipo de
+movimiento nuevo para la cesión**: es un atributo del traspaso.
 
 **Una baja es un proceso, no un evento.** La persona deja de venir el día de la
 baja —eso sale de la dotación en el momento y no espera a nadie— pero atrás
@@ -183,7 +195,7 @@ tildar los cinco**: a veces un trámite no aplica. `estadoTramitesBaja()` separa
 antes de dejar cerrar en vez de impedirlo**; bloquearlo llevaría a tildar
 cualquier cosa para poder seguir, que es peor que un check list incompleto pero
 sincero. Destildar un trámite **no borra su nota**. Una baja con el proceso
-abierto suma al contador de *Cesiones y bajas*, junto con las cesiones sin
+abierto suma al contador de *Movimientos y bajas*, junto con los traspasos sin
 aplicar: las dos son trabajo pendiente en esa pantalla.
 
 El **asistente** (`assets/js/asistente.js`, pantalla `#/asistente`) pregunta a
@@ -372,7 +384,7 @@ staff, no se los mide por visitas y no aparecen en el selector para registrar
 una. Están en la lista porque ahí hay gente que hay que poder alcanzar.
 
 **`#/sucursal/<id>` es el final del camino** y por eso tiene el bloque *De esta
-tienda*: atajos a Presentismo, Reclamos, Desarrollo y Cesiones y bajas, cada uno
+tienda*: atajos a Presentismo, Reclamos, Desarrollo y Movimientos y bajas, cada uno
 con el número que dice si hace falta ir. **No son pantallas nuevas ni copias**:
 son las del área, filtradas o posicionadas en esa tienda. Lo que aportan es no
 tener que acordarse del nombre de la tienda para volver a buscarla del otro
