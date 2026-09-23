@@ -276,6 +276,26 @@ números distintos para lo mismo, uno al lado del otro, es peor que no mostrarlo
 No confundir ese bloque con *Ausencias mes a mes*, que sale de `c.novedades` (lo
 liquidado). `#/diario/<colaboradorId>` abre el alta con esa persona ya elegida.
 
+**Lo que quedó a medias en cualquier pantalla aparece en la agenda.** Un proceso
+de baja sigue quince días después de que la persona dejó de venir, en cinco
+lugares distintos; una ausencia sin certificado no se resuelve sola; un traspaso
+espera el visto bueno. Cada cosa está bien guardada donde está, pero ninguna de
+esas pantallas es la que se abre a la mañana: esa es la agenda. El bloque *Lo que
+quedó pendiente*, arriba de los cajones por fecha, lo junta con
+`pendientesDelArea()` (`agenda.js`): trámites de baja, ausencias que piden algo,
+reclamos abiertos, movimientos sin autorizar, desarrollo y compromisos de la
+última visita. Documentado en `docs/agenda.md`.
+
+**Lee, no copia.** Nada de eso se convierte en un ítem de `e.agenda`: cada línea
+es un enlace a donde la cosa se resuelve, no una casilla. Es la misma regla que
+dejó los reclamos con una sola alta — dos casillas para lo mismo terminan
+diciendo cosas distintas, y tildar una dejaría a la otra como un pendiente
+fantasma. Una fuente nueva de pendientes se agrega adentro de
+`pendientesDelArea()` y no escribiendo en la agenda. Cada línea dice hace cuánto
+está abierta y a los 15 días (`DIAS_PARA_INSISTIR`) pasa a rojo: no es un plazo
+legal, es cuando el coordinador ya no se acuerda solo. Sin pendientes el bloque
+no aparece, por lo mismo que los contadores se esconden en cero.
+
 **Las novedades que hay que pasarle a Nómina** viven como una marca sobre la
 agenda (`item.liquidacion`, un período `'2026-09'`), en un bloque al tope de
 `#/asistente`. Documentado en `docs/novedades-liquidacion.md`. Es la tercera cosa

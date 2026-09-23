@@ -987,6 +987,43 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
    la tira. Va pegada a ella porque es su pie, no un párrafo aparte. */
 .kpis-vacios { margin: -6px 0 0; font-size: 12.5px; }
 
+/* ---- Lo que quedó pendiente, arriba de la agenda ----
+   Una línea por cosa a medias, con cuánto hace que está abierta a la derecha.
+   El número va en su propia columna porque es lo que se barre con la vista
+   cuando la lista pasa de cinco. */
+.pend-grupo {
+  display: flex; align-items: center; gap: 8px;
+  margin: 18px 0 6px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--texto-suave);
+}
+.pend-grupo a { color: inherit; text-decoration: none; }
+.pend-grupo a:hover { color: var(--azul); text-decoration: underline; }
+
+.lista-pendientes { list-style: none; margin: 0; padding: 0; }
+.pendiente {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 8px 0 8px 11px; border-bottom: 1px solid var(--borde);
+  border-left: 3px solid transparent;
+}
+.pendiente:last-child { border-bottom: 0; }
+.pendiente.ambar { border-left-color: var(--ambar); }
+.pendiente.rojo  { border-left-color: var(--rojo-alerta); }
+.pendiente > a { flex: 1; min-width: 0; text-decoration: none; color: inherit; }
+.pendiente > a:hover strong { color: var(--azul); text-decoration: underline; }
+.pendiente strong { font-size: 13.5px; font-weight: 600; }
+.pendiente em {
+  font-style: normal; font-size: 12px; color: var(--texto-suave);
+  margin-left: 8px;
+}
+.pendiente span { display: block; font-size: 12.5px; color: var(--texto-suave); margin-top: 2px; }
+/* Los días van a la derecha, en cifras tabulares: la columna se lee como una
+   columna aunque los números tengan distinto largo. */
+.pendiente > b {
+  flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--texto-suave);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pendiente.rojo > b { color: var(--rojo-alerta); }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -5065,11 +5102,167 @@ function textoParaTiendas(item, hoyISO) {
   return L.join('\n').trim();
 }
 
+/* ---------------- Lo que quedó pendiente, junto en la agenda ----------------
+ *
+ * Un proceso de baja empieza el día que la persona deja de venir y sigue
+ * quince días más, en cinco lugares distintos. Lo mismo la ausencia sin
+ * certificado, el reclamo sin cerrar, el traspaso sin autorizar. Cada cosa
+ * está bien guardada en su pantalla, pero ninguna de esas pantallas es la que
+ * se abre a la mañana para ver qué hay que hacer: esa es la agenda.
+ *
+ * Esto **no copia nada**. Lee dónde vive cada cosa y arma la lista; el tilde
+ * se sigue poniendo en su lugar. Copiarlo a `e.agenda` daría dos casillas para
+ * lo mismo, y a la semana una diría una cosa y la otra, otra.
+ */
+
+/** Días entre dos fechas ISO, o null si falta alguna. */
+function _diasDesde(iso, hoyISO) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
+  const a = Date.UTC(...iso.split('-').map(Number).map((n, i) => i === 1 ? n - 1 : n));
+  const h = hoyISO || _diaHoy();
+  const b = Date.UTC(...h.split('-').map(Number).map((n, i) => i === 1 ? n - 1 : n));
+  return Math.round((b - a) / 86400000);
+}
+
+/* Cuántos días puede quedar algo abierto antes de que pase de «en curso» a
+   «esto se te está yendo». No es un plazo legal: es el punto en que el
+   coordinador ya no se acuerda solo. */
+const DIAS_PARA_INSISTIR = 15;
+
+/**
+ * Todo lo que quedó a medias en el área, de dónde vive cada cosa.
+ * Devuelve grupos `{ id, titulo, ruta, items[] }`, sin los grupos vacíos.
+ * Cada ítem: `{ que, quien, detalle, desde, dias, ruta, tono }`.
+ */
+function pendientesDelArea(estado, hoyISO) {
+  const hoy = hoyISO || _diaHoy();
+  const e = estado || {};
+  const grupos = [];
+  const tono = d => d === null ? '' : d >= DIAS_PARA_INSISTIR ? 'rojo' : 'ambar';
+
+  /* 1. Los trámites de una baja. El que se olvida aparece solo semanas
+        después: alguien que conserva accesos, un recibo liquidado de más. */
+  const bajas = [];
+  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    if (!c.baja) return;
+    const est = estadoTramitesBaja(c.baja);
+    if (!est.pendiente || est.completa) return;
+    const dias = _diasDesde(c.baja.fecha, hoy);
+    bajas.push({
+      que: `Baja de ${c.nombre}`,
+      quien: s.nombre || s.codigo,
+      detalle: `faltan ${est.faltan.length} de ${est.total}: ` +
+               est.faltan.map(x => x.nombre).join(' · '),
+      desde: c.baja.fecha, dias, tono: tono(dias),
+      ruta: '#/movimientos/bajas'
+    });
+  }));
+  if (bajas.length) grupos.push({
+    id: 'bajas', titulo: 'Trámites de baja sin terminar',
+    ruta: '#/movimientos/bajas', items: bajas
+  });
+
+  /* 2. Ausencias que piden algo hoy: casi siempre, reclamar el certificado. */
+  const aus = (typeof alertasDeAusencias === 'function' ? alertasDeAusencias(e, hoy) : [])
+    .map(a => {
+      const dias = _diasDesde(a.ausencia.desde, hoy);
+      return {
+        que: a.nombre, quien: a.sucursal, detalle: a.estado.texto || '',
+        desde: a.ausencia.desde, dias,
+        tono: a.estado.clase === 'pendienteJustificar' ? tono(dias) : 'ambar',
+        ruta: `#/diario/${a.colaboradorId}`
+      };
+    });
+  if (aus.length) grupos.push({
+    id: 'ausencias', titulo: 'Ausencias que piden algo', ruta: '#/diario', items: aus
+  });
+
+  /* 3. Reclamos abiertos: son de plata y el que los hizo está esperando. */
+  const rec = (e.reclamos || [])
+    .filter(r => !((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
+                    && ESTADOS_RECLAMO_POR_ID[r.estado]) || {}).cerrado)
+    .map(r => {
+      const s = (e.sucursales || []).find(x => x.id === r.sucursalId);
+      const dias = _diasDesde(r.fecha, hoy);
+      return {
+        que: r.colaborador || 'Sin nombre', quien: s ? (s.nombre || s.codigo) : '',
+        detalle: r.detalle || r.tipo || '', desde: r.fecha, dias, tono: tono(dias),
+        ruta: r.sucursalId ? `#/reclamos/${r.sucursalId}` : '#/reclamos'
+      };
+    });
+  if (rec.length) grupos.push({
+    id: 'reclamos', titulo: 'Reclamos abiertos', ruta: '#/reclamos', items: rec
+  });
+
+  /* 4. Traspasos y modificaciones esperando tu visto bueno. Los autorizados
+        con vigencia futura no van: ésos se aplican solos el día que toca. */
+  const movs = [];
+  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    (c.movimientos || []).forEach(m => {
+      if (m.estado !== 'pendiente') return;
+      const dias = _diasDesde(m.fecha, hoy);
+      movs.push({
+        que: c.nombre, quien: s.nombre || s.codigo,
+        detalle: (typeof esTraspaso === 'function' && esTraspaso(m.tipo))
+          ? 'traspaso de sucursal sin autorizar' : 'modificación de puesto sin autorizar',
+        desde: m.fecha, dias, tono: tono(dias), ruta: '#/movimientos'
+      });
+    });
+  }));
+  if (movs.length) grupos.push({
+    id: 'movimientos', titulo: 'Movimientos sin autorizar',
+    ruta: '#/movimientos', items: movs
+  });
+
+  /* 5. Desarrollo: el mes que se fue sin la conversación con el gerente es
+        justo el que no se recupera. */
+  const dev = (typeof alertasDeDesarrollo === 'function' ? alertasDeDesarrollo(e, hoy) : [])
+    .map(a => ({
+      que: a.fila.colaborador ? a.fila.colaborador.nombre : 'Sin nombre',
+      quien: a.fila.sucursal ? (a.fila.sucursal.nombre || a.fila.sucursal.codigo) : '',
+      detalle: a.texto, desde: '', dias: null, tono: a.tono,
+      ruta: `#/desarrollo/${a.fila.colaborador ? a.fila.colaborador.id : ''}`
+    }));
+  if (dev.length) grupos.push({
+    id: 'desarrollo', titulo: 'Desarrollo al rol de Senior',
+    ruta: '#/desarrollo', items: dev
+  });
+
+  /* 6. Lo que quedó comprometido en una visita y sigue sin cumplirse. */
+  const plan = [];
+  (e.sucursales || []).forEach(s => {
+    const visitas = (e.visitas || []).filter(v => v.sucursalId === s.id);
+    const ultima = visitas.slice().sort((a, b) =>
+      String(b.fecha || '').localeCompare(String(a.fecha || '')))[0];
+    if (!ultima) return;
+    ((ultima.diagnostico || {}).plan || []).forEach(x => {
+      if (x.estado === 'Cumplido' || !String(x.compromiso || '').trim()) return;
+      const dias = _diasDesde(x.plazo || ultima.fecha, hoy);
+      plan.push({
+        que: x.compromiso.trim(), quien: s.nombre || s.codigo,
+        detalle: x.responsable ? `a cargo de ${x.responsable}` : '',
+        desde: x.plazo || ultima.fecha, dias,
+        tono: x.plazo && dias > 0 ? 'rojo' : tono(dias),
+        ruta: `#/visita/${ultima.id}/diagnostico`
+      });
+    });
+  });
+  if (plan.length) grupos.push({
+    id: 'plan', titulo: 'Compromisos de la última visita',
+    ruta: '#/sucursales', items: plan
+  });
+
+  /* Lo más viejo primero, adentro de cada grupo: es lo que más urge. */
+  grupos.forEach(g => g.items.sort((a, b) => (b.dias || 0) - (a.dias || 0)));
+  return grupos;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ESTADOS_AGENDA, ESTADOS_AGENDA_POR_ID, TEMAS_AGENDA, TEMAS_AGENDA_POR_ID,
     fechasDeTexto, temaDeTexto, estadoDeTexto, tituloDeTexto,
-    estadoItem, repartirAgenda, textoParaTiendas
+    estadoItem, repartirAgenda, textoParaTiendas,
+    pendientesDelArea, DIAS_PARA_INSISTIR
   };
 }
 
@@ -10526,6 +10719,7 @@ const App = (() => {
         ${kpi('Abiertas', r.abiertas.length, `${r.hechas.length} cerradas`)}
       </div>
 
+      ${bloquePendientes(e, hoy)}
       ${bloqueLiquidacion(e, hoy)}
 
       ${cajon('Vencidas', r.vencidas, 'Ya pasó la fecha y siguen abiertas.')}
@@ -10544,6 +10738,57 @@ const App = (() => {
                              : '<p class="vacio">Todavía no cerraste nada.</p>')
           : '<p class="ayuda">El historial de lo que ya resolviste.</p>'}
       </section>`;
+  }
+
+  /* ---------- Lo que quedó pendiente ----------
+     Un proceso de baja sigue quince días después de que la persona dejó de
+     venir, en cinco lugares distintos; una ausencia sin certificado no se
+     resuelve sola. Cada cosa está bien guardada en su pantalla, pero ninguna
+     de esas pantallas es la que se abre a la mañana: esa es la agenda.
+
+     No copia nada. Lee dónde vive cada cosa y la nombra, con cuánto hace que
+     está abierta y el camino para ir a resolverla. El tilde se sigue poniendo
+     en su lugar: dos casillas para lo mismo terminan diciendo cosas
+     distintas. */
+
+  let verPendientes = {};     // qué grupos están desplegados enteros
+  const PENDIENTES_A_LA_VISTA = 4;
+
+  function bloquePendientes(e, hoy) {
+    const grupos = pendientesDelArea(e, hoy);
+    if (!grupos.length) return '';
+    const total = grupos.reduce((n, g) => n + g.items.length, 0);
+
+    const linea = x => `<li class="pendiente${x.tono ? ' ' + x.tono : ''}">
+      <a href="${x.ruta}">
+        <strong>${esc(x.que)}</strong>
+        ${x.quien ? `<em>${esc(x.quien)}</em>` : ''}
+        ${x.detalle ? `<span>${esc(x.detalle)}</span>` : ''}
+      </a>
+      ${x.dias === null ? '' : `<b title="${x.desde ? 'desde el ' + fmtFecha(x.desde) : ''}">${
+        x.dias <= 0 ? 'hoy' : `hace ${x.dias} día${x.dias === 1 ? '' : 's'}`}</b>`}
+    </li>`;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Lo que quedó pendiente</h2>
+        <span class="chip${total ? ' ambar' : ''}">${total}</span>
+      </div>
+      <p class="ayuda">De las otras pantallas, junto acá para verlo de una. Se tilda en su
+        lugar: tocá la línea y te lleva.</p>
+      ${grupos.map(g => {
+        const abierto = verPendientes[g.id];
+        const muestra = abierto ? g.items : g.items.slice(0, PENDIENTES_A_LA_VISTA);
+        const resto = g.items.length - muestra.length;
+        return `<h3 class="pend-grupo">
+            <a href="${g.ruta}">${esc(g.titulo)}</a>
+            <span class="chip">${g.items.length}</span>
+          </h3>
+          <ul class="lista-pendientes">${muestra.map(linea).join('')}</ul>
+          ${resto > 0 || abierto ? `<button class="b sec mini" data-accion="ver-pendientes"
+            data-grupo="${g.id}">${abierto ? 'Mostrar menos' : `Ver ${resto} más`}</button>` : ''}`;
+      }).join('')}
+    </section>`;
   }
 
   /* ---------- Novedades para la liquidación ----------
@@ -15561,6 +15806,12 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'ver-pendientes') {
+        const g = btn.dataset.grupo;
+        verPendientes[g] = !verPendientes[g];
+        refrescar();
+      }
 
       if (a === 'agregar-hito') {
         const i = Store.item(btn.dataset.id);

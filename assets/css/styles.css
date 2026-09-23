@@ -984,3 +984,40 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 /* La línea que nombra los indicadores que todavía no tienen número, abajo de
    la tira. Va pegada a ella porque es su pie, no un párrafo aparte. */
 .kpis-vacios { margin: -6px 0 0; font-size: 12.5px; }
+
+/* ---- Lo que quedó pendiente, arriba de la agenda ----
+   Una línea por cosa a medias, con cuánto hace que está abierta a la derecha.
+   El número va en su propia columna porque es lo que se barre con la vista
+   cuando la lista pasa de cinco. */
+.pend-grupo {
+  display: flex; align-items: center; gap: 8px;
+  margin: 18px 0 6px; font-size: 12px; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--texto-suave);
+}
+.pend-grupo a { color: inherit; text-decoration: none; }
+.pend-grupo a:hover { color: var(--azul); text-decoration: underline; }
+
+.lista-pendientes { list-style: none; margin: 0; padding: 0; }
+.pendiente {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 8px 0 8px 11px; border-bottom: 1px solid var(--borde);
+  border-left: 3px solid transparent;
+}
+.pendiente:last-child { border-bottom: 0; }
+.pendiente.ambar { border-left-color: var(--ambar); }
+.pendiente.rojo  { border-left-color: var(--rojo-alerta); }
+.pendiente > a { flex: 1; min-width: 0; text-decoration: none; color: inherit; }
+.pendiente > a:hover strong { color: var(--azul); text-decoration: underline; }
+.pendiente strong { font-size: 13.5px; font-weight: 600; }
+.pendiente em {
+  font-style: normal; font-size: 12px; color: var(--texto-suave);
+  margin-left: 8px;
+}
+.pendiente span { display: block; font-size: 12.5px; color: var(--texto-suave); margin-top: 2px; }
+/* Los días van a la derecha, en cifras tabulares: la columna se lee como una
+   columna aunque los números tengan distinto largo. */
+.pendiente > b {
+  flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--texto-suave);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pendiente.rojo > b { color: var(--rojo-alerta); }

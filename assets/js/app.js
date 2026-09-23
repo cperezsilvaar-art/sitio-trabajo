@@ -958,6 +958,7 @@ const App = (() => {
         ${kpi('Abiertas', r.abiertas.length, `${r.hechas.length} cerradas`)}
       </div>
 
+      ${bloquePendientes(e, hoy)}
       ${bloqueLiquidacion(e, hoy)}
 
       ${cajon('Vencidas', r.vencidas, 'Ya pasó la fecha y siguen abiertas.')}
@@ -976,6 +977,57 @@ const App = (() => {
                              : '<p class="vacio">Todavía no cerraste nada.</p>')
           : '<p class="ayuda">El historial de lo que ya resolviste.</p>'}
       </section>`;
+  }
+
+  /* ---------- Lo que quedó pendiente ----------
+     Un proceso de baja sigue quince días después de que la persona dejó de
+     venir, en cinco lugares distintos; una ausencia sin certificado no se
+     resuelve sola. Cada cosa está bien guardada en su pantalla, pero ninguna
+     de esas pantallas es la que se abre a la mañana: esa es la agenda.
+
+     No copia nada. Lee dónde vive cada cosa y la nombra, con cuánto hace que
+     está abierta y el camino para ir a resolverla. El tilde se sigue poniendo
+     en su lugar: dos casillas para lo mismo terminan diciendo cosas
+     distintas. */
+
+  let verPendientes = {};     // qué grupos están desplegados enteros
+  const PENDIENTES_A_LA_VISTA = 4;
+
+  function bloquePendientes(e, hoy) {
+    const grupos = pendientesDelArea(e, hoy);
+    if (!grupos.length) return '';
+    const total = grupos.reduce((n, g) => n + g.items.length, 0);
+
+    const linea = x => `<li class="pendiente${x.tono ? ' ' + x.tono : ''}">
+      <a href="${x.ruta}">
+        <strong>${esc(x.que)}</strong>
+        ${x.quien ? `<em>${esc(x.quien)}</em>` : ''}
+        ${x.detalle ? `<span>${esc(x.detalle)}</span>` : ''}
+      </a>
+      ${x.dias === null ? '' : `<b title="${x.desde ? 'desde el ' + fmtFecha(x.desde) : ''}">${
+        x.dias <= 0 ? 'hoy' : `hace ${x.dias} día${x.dias === 1 ? '' : 's'}`}</b>`}
+    </li>`;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Lo que quedó pendiente</h2>
+        <span class="chip${total ? ' ambar' : ''}">${total}</span>
+      </div>
+      <p class="ayuda">De las otras pantallas, junto acá para verlo de una. Se tilda en su
+        lugar: tocá la línea y te lleva.</p>
+      ${grupos.map(g => {
+        const abierto = verPendientes[g.id];
+        const muestra = abierto ? g.items : g.items.slice(0, PENDIENTES_A_LA_VISTA);
+        const resto = g.items.length - muestra.length;
+        return `<h3 class="pend-grupo">
+            <a href="${g.ruta}">${esc(g.titulo)}</a>
+            <span class="chip">${g.items.length}</span>
+          </h3>
+          <ul class="lista-pendientes">${muestra.map(linea).join('')}</ul>
+          ${resto > 0 || abierto ? `<button class="b sec mini" data-accion="ver-pendientes"
+            data-grupo="${g.id}">${abierto ? 'Mostrar menos' : `Ver ${resto} más`}</button>` : ''}`;
+      }).join('')}
+    </section>`;
   }
 
   /* ---------- Novedades para la liquidación ----------
@@ -5993,6 +6045,12 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'ver-pendientes') {
+        const g = btn.dataset.grupo;
+        verPendientes[g] = !verPendientes[g];
+        refrescar();
+      }
 
       if (a === 'agregar-hito') {
         const i = Store.item(btn.dataset.id);

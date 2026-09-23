@@ -103,3 +103,52 @@ preguntan.
 Si se corrige el texto, las fechas **no se recalculan solas**: eso pisaría las
 que se editaron a mano. El botón *Leer las fechas del texto* las reemplaza
 cuando se lo pide explícitamente, y avisa cuáles encontró antes de hacerlo.
+
+## Lo que quedó pendiente
+
+Un proceso de baja empieza el día que la persona deja de venir y sigue quince
+días más, repartido en cinco lugares distintos. Una ausencia sin certificado no
+se resuelve sola. Un traspaso espera tu visto bueno. Cada una de esas cosas está
+bien guardada en su pantalla —y ahí es donde tiene que estar— pero **ninguna de
+esas pantallas es la que se abre a la mañana para ver qué hay que hacer**: esa
+es la agenda.
+
+El bloque **Lo que quedó pendiente**, arriba de los cajones por fecha, junta seis
+cosas de donde vive cada una:
+
+| Grupo | De dónde sale | Lleva a |
+|---|---|---|
+| Trámites de baja sin terminar | `c.baja.tramites`, proceso sin cerrar | `#/movimientos/bajas` |
+| Ausencias que piden algo | `alertasDeAusencias()` | `#/diario/<persona>` |
+| Reclamos abiertos | `e.reclamos` sin estado cerrado | `#/reclamos/<tienda>` |
+| Movimientos sin autorizar | `c.movimientos[]` en `pendiente` | `#/movimientos` |
+| Desarrollo al rol de Senior | `alertasDeDesarrollo()` | `#/desarrollo/<persona>` |
+| Compromisos de la última visita | `v.diagnostico.plan`, sin cumplir | la visita |
+
+### No copia nada
+
+`pendientesDelArea()` (`agenda.js`) **lee y arma la lista; no escribe**. Lo
+pendiente no se convierte en un ítem de `e.agenda`.
+
+Es la misma razón por la que los reclamos se dan de alta en un solo lado: dos
+casillas para la misma cosa terminan diciendo cosas distintas. Tildar el cuarto
+trámite de una baja en `#/movimientos/bajas` hace desaparecer esa línea de la
+agenda sin tocar nada acá; si en cambio hubiera un ítem copiado, quedaría un
+pendiente fantasma que hay que cerrar dos veces.
+
+Por eso cada línea es un enlace a donde la cosa se resuelve, y no una casilla.
+
+### Los días
+
+Cada línea dice hace cuánto está abierta —desde la fecha de la baja, del
+certificado, del reclamo, del movimiento— y las más viejas van primero adentro
+de su grupo. A los **15 días** (`DIAS_PARA_INSISTIR`) la línea pasa de ámbar a
+rojo: no es un plazo legal, es el punto en el que el coordinador ya no se
+acuerda solo. Un compromiso de visita con plazo vencido va en rojo desde el día
+siguiente al plazo, porque ahí sí hay una fecha comprometida con alguien.
+
+### Cuando no hay nada
+
+El bloque **no aparece**, igual que los contadores del menú se esconden en cero
+y que un indicador sin número sale de la tira. Un «0 pendientes» permanente deja
+de leerse a los dos días.

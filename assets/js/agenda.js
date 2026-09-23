@@ -452,10 +452,166 @@ function textoParaTiendas(item, hoyISO) {
   return L.join('\n').trim();
 }
 
+/* ---------------- Lo que quedó pendiente, junto en la agenda ----------------
+ *
+ * Un proceso de baja empieza el día que la persona deja de venir y sigue
+ * quince días más, en cinco lugares distintos. Lo mismo la ausencia sin
+ * certificado, el reclamo sin cerrar, el traspaso sin autorizar. Cada cosa
+ * está bien guardada en su pantalla, pero ninguna de esas pantallas es la que
+ * se abre a la mañana para ver qué hay que hacer: esa es la agenda.
+ *
+ * Esto **no copia nada**. Lee dónde vive cada cosa y arma la lista; el tilde
+ * se sigue poniendo en su lugar. Copiarlo a `e.agenda` daría dos casillas para
+ * lo mismo, y a la semana una diría una cosa y la otra, otra.
+ */
+
+/** Días entre dos fechas ISO, o null si falta alguna. */
+function _diasDesde(iso, hoyISO) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || ''))) return null;
+  const a = Date.UTC(...iso.split('-').map(Number).map((n, i) => i === 1 ? n - 1 : n));
+  const h = hoyISO || _diaHoy();
+  const b = Date.UTC(...h.split('-').map(Number).map((n, i) => i === 1 ? n - 1 : n));
+  return Math.round((b - a) / 86400000);
+}
+
+/* Cuántos días puede quedar algo abierto antes de que pase de «en curso» a
+   «esto se te está yendo». No es un plazo legal: es el punto en que el
+   coordinador ya no se acuerda solo. */
+const DIAS_PARA_INSISTIR = 15;
+
+/**
+ * Todo lo que quedó a medias en el área, de dónde vive cada cosa.
+ * Devuelve grupos `{ id, titulo, ruta, items[] }`, sin los grupos vacíos.
+ * Cada ítem: `{ que, quien, detalle, desde, dias, ruta, tono }`.
+ */
+function pendientesDelArea(estado, hoyISO) {
+  const hoy = hoyISO || _diaHoy();
+  const e = estado || {};
+  const grupos = [];
+  const tono = d => d === null ? '' : d >= DIAS_PARA_INSISTIR ? 'rojo' : 'ambar';
+
+  /* 1. Los trámites de una baja. El que se olvida aparece solo semanas
+        después: alguien que conserva accesos, un recibo liquidado de más. */
+  const bajas = [];
+  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    if (!c.baja) return;
+    const est = estadoTramitesBaja(c.baja);
+    if (!est.pendiente || est.completa) return;
+    const dias = _diasDesde(c.baja.fecha, hoy);
+    bajas.push({
+      que: `Baja de ${c.nombre}`,
+      quien: s.nombre || s.codigo,
+      detalle: `faltan ${est.faltan.length} de ${est.total}: ` +
+               est.faltan.map(x => x.nombre).join(' · '),
+      desde: c.baja.fecha, dias, tono: tono(dias),
+      ruta: '#/movimientos/bajas'
+    });
+  }));
+  if (bajas.length) grupos.push({
+    id: 'bajas', titulo: 'Trámites de baja sin terminar',
+    ruta: '#/movimientos/bajas', items: bajas
+  });
+
+  /* 2. Ausencias que piden algo hoy: casi siempre, reclamar el certificado. */
+  const aus = (typeof alertasDeAusencias === 'function' ? alertasDeAusencias(e, hoy) : [])
+    .map(a => {
+      const dias = _diasDesde(a.ausencia.desde, hoy);
+      return {
+        que: a.nombre, quien: a.sucursal, detalle: a.estado.texto || '',
+        desde: a.ausencia.desde, dias,
+        tono: a.estado.clase === 'pendienteJustificar' ? tono(dias) : 'ambar',
+        ruta: `#/diario/${a.colaboradorId}`
+      };
+    });
+  if (aus.length) grupos.push({
+    id: 'ausencias', titulo: 'Ausencias que piden algo', ruta: '#/diario', items: aus
+  });
+
+  /* 3. Reclamos abiertos: son de plata y el que los hizo está esperando. */
+  const rec = (e.reclamos || [])
+    .filter(r => !((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
+                    && ESTADOS_RECLAMO_POR_ID[r.estado]) || {}).cerrado)
+    .map(r => {
+      const s = (e.sucursales || []).find(x => x.id === r.sucursalId);
+      const dias = _diasDesde(r.fecha, hoy);
+      return {
+        que: r.colaborador || 'Sin nombre', quien: s ? (s.nombre || s.codigo) : '',
+        detalle: r.detalle || r.tipo || '', desde: r.fecha, dias, tono: tono(dias),
+        ruta: r.sucursalId ? `#/reclamos/${r.sucursalId}` : '#/reclamos'
+      };
+    });
+  if (rec.length) grupos.push({
+    id: 'reclamos', titulo: 'Reclamos abiertos', ruta: '#/reclamos', items: rec
+  });
+
+  /* 4. Traspasos y modificaciones esperando tu visto bueno. Los autorizados
+        con vigencia futura no van: ésos se aplican solos el día que toca. */
+  const movs = [];
+  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    (c.movimientos || []).forEach(m => {
+      if (m.estado !== 'pendiente') return;
+      const dias = _diasDesde(m.fecha, hoy);
+      movs.push({
+        que: c.nombre, quien: s.nombre || s.codigo,
+        detalle: (typeof esTraspaso === 'function' && esTraspaso(m.tipo))
+          ? 'traspaso de sucursal sin autorizar' : 'modificación de puesto sin autorizar',
+        desde: m.fecha, dias, tono: tono(dias), ruta: '#/movimientos'
+      });
+    });
+  }));
+  if (movs.length) grupos.push({
+    id: 'movimientos', titulo: 'Movimientos sin autorizar',
+    ruta: '#/movimientos', items: movs
+  });
+
+  /* 5. Desarrollo: el mes que se fue sin la conversación con el gerente es
+        justo el que no se recupera. */
+  const dev = (typeof alertasDeDesarrollo === 'function' ? alertasDeDesarrollo(e, hoy) : [])
+    .map(a => ({
+      que: a.fila.colaborador ? a.fila.colaborador.nombre : 'Sin nombre',
+      quien: a.fila.sucursal ? (a.fila.sucursal.nombre || a.fila.sucursal.codigo) : '',
+      detalle: a.texto, desde: '', dias: null, tono: a.tono,
+      ruta: `#/desarrollo/${a.fila.colaborador ? a.fila.colaborador.id : ''}`
+    }));
+  if (dev.length) grupos.push({
+    id: 'desarrollo', titulo: 'Desarrollo al rol de Senior',
+    ruta: '#/desarrollo', items: dev
+  });
+
+  /* 6. Lo que quedó comprometido en una visita y sigue sin cumplirse. */
+  const plan = [];
+  (e.sucursales || []).forEach(s => {
+    const visitas = (e.visitas || []).filter(v => v.sucursalId === s.id);
+    const ultima = visitas.slice().sort((a, b) =>
+      String(b.fecha || '').localeCompare(String(a.fecha || '')))[0];
+    if (!ultima) return;
+    ((ultima.diagnostico || {}).plan || []).forEach(x => {
+      if (x.estado === 'Cumplido' || !String(x.compromiso || '').trim()) return;
+      const dias = _diasDesde(x.plazo || ultima.fecha, hoy);
+      plan.push({
+        que: x.compromiso.trim(), quien: s.nombre || s.codigo,
+        detalle: x.responsable ? `a cargo de ${x.responsable}` : '',
+        desde: x.plazo || ultima.fecha, dias,
+        tono: x.plazo && dias > 0 ? 'rojo' : tono(dias),
+        ruta: `#/visita/${ultima.id}/diagnostico`
+      });
+    });
+  });
+  if (plan.length) grupos.push({
+    id: 'plan', titulo: 'Compromisos de la última visita',
+    ruta: '#/sucursales', items: plan
+  });
+
+  /* Lo más viejo primero, adentro de cada grupo: es lo que más urge. */
+  grupos.forEach(g => g.items.sort((a, b) => (b.dias || 0) - (a.dias || 0)));
+  return grupos;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ESTADOS_AGENDA, ESTADOS_AGENDA_POR_ID, TEMAS_AGENDA, TEMAS_AGENDA_POR_ID,
     fechasDeTexto, temaDeTexto, estadoDeTexto, tituloDeTexto,
-    estadoItem, repartirAgenda, textoParaTiendas
+    estadoItem, repartirAgenda, textoParaTiendas,
+    pendientesDelArea, DIAS_PARA_INSISTIR
   };
 }
