@@ -339,29 +339,80 @@ const App = (() => {
   /* ========================= VISTA: VISITAS ======================== *
      El ritmo semanal, separado del mensual. Acá se decide a dónde ir hoy:
      las sucursales ordenadas por cuánto hace que no se las visita. */
-  function vistaVisitas() {
+  /* ====================== VISTA: SUCURSALES ======================
+     La puerta de entrada a las doce tiendas. Reemplazó a «Visitas», que era la
+     misma lista mirada desde otro lado: el coordinador no piensa «voy a
+     registrar una visita» sino «voy a Botánico», y la visita es algo que pasa
+     adentro de la tienda, no al revés.
+
+     Sigue siendo **una sola lista más** que las tarjetas de `#/red`: esa mira
+     el área de conjunto —KPIs y una tarjeta por tienda—, y esta mira tienda por
+     tienda, con lo que hay que resolver en cada una y ordenable por lo que se
+     esté buscando. La regla de no agregar una tercera lista sigue en pie. */
+
+  let sucursalesOrden = 'atencion';
+
+  const ORDENES_SUCURSALES = [
+    { id: 'atencion', nombre: 'Lo que pide atención' },
+    { id: 'nombre',   nombre: 'Nombre' },
+    { id: 'visita',   nombre: 'Hace más que no la visito' },
+    { id: 'dotacion', nombre: 'Dotación, de menor a mayor' }
+  ];
+
+  function vistaSucursales() {
     const e = Store.get();
     contexto = e;
     const hoy = hoyISO();
     const dias = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
+    const ausentes = ausentesHoy(e, hoy);
+    const entrenando = cuadrantesDeDesarrollo(e, hoy);
+
     const filas = e.sucursales.map(s => {
+      /* Los flotantes del área no son una tienda: no abren, no tienen
+         cobertura propia y no se los visita. Aparecen en la lista porque ahí
+         hay gente que hay que poder alcanzar, pero nada de lo que mide una
+         visita corre para ellos. */
+      const tienda = s.tipo !== 'staff';
       const vs = Store.visitasDe(s.id);
       const ult = vs[0] || null;
       const desde = ult && ult.fecha ? dias(ult.fecha, hoy) : null;
       const r = ult ? evaluarChecklist(ult.checklist.checks).total : null;
       const pend = vs.reduce((a2, v) => a2 + (v.diagnostico.plan || [])
         .filter(x => x.estado !== 'Cumplido').length, 0);
-      return { s, ult, desde, r, pend, visitas: vs.length };
-    }).sort((a, b) => {
-      if (a.desde === null) return -1;          // sin visitar, primero
-      if (b.desde === null) return 1;
-      return b.desde - a.desde;
+      const dp = Store.dotacionPlantel(s.id) || { personas: 0, fte: 0, parciales: 0 };
+      const aus = ausentes.filter(x => x.sucursalId === s.id);
+      const sinPapel = aus.filter(x => !tieneCertificado(x.ausencia)).length;
+      const rec = Store.reclamosDe(s.id, true);
+      const dev = entrenando.todas.filter(f => f.sucursalId === s.id && f.estado.abierto);
+
+      /* Cuánto pide esta tienda, para poder ordenarlas por eso. No es un
+         indicador que se muestre: es el orden. Pesa distinto una ausencia sin
+         certificado —que es trabajo de hoy— que una visita atrasada. */
+      const atencion =
+        (tienda ? (desde === null ? 40 : desde > 14 ? 25 : desde > 7 ? 10 : 0) : 0) +
+        sinPapel * 15 + (aus.length - sinPapel) * 4 +
+        rec.length * 8 + pend * 2 +
+        (tienda && !dp.personas ? 30 : 0);
+
+      return { s, tienda, ult, desde, r, pend, visitas: vs.length, dp, aus, sinPapel, rec, dev, atencion };
     });
+    const tiendas = filas.filter(f => f.tienda);
+
+    const orden = {
+      atencion: (a, b) => b.atencion - a.atencion ||
+        String(Store.etiquetaSucursal(a.s)).localeCompare(String(Store.etiquetaSucursal(b.s)), 'es'),
+      nombre: (a, b) => String(Store.etiquetaSucursal(a.s))
+        .localeCompare(String(Store.etiquetaSucursal(b.s)), 'es'),
+      visita: (a, b) => (b.desde === null ? 1e6 : b.desde) - (a.desde === null ? 1e6 : a.desde),
+      dotacion: (a, b) => a.dp.fte - b.dp.fte
+    }[sucursalesOrden] || ((a, b) => b.atencion - a.atencion);
+    filas.sort(orden);
 
     const estaSemana = e.visitas.filter(v => v.fecha && dias(v.fecha, hoy) <= 7 && v.fecha <= hoy);
-    const sinVisitar = filas.filter(f => f.desde === null).length;
-    const atrasadas = filas.filter(f => f.desde !== null && f.desde > 7).length;
+    const sinVisitar = tiendas.filter(f => f.desde === null).length;
+    const atrasadas = tiendas.filter(f => f.desde !== null && f.desde > 7).length;
+    const staff = filas.length - tiendas.length;
 
     const semaforo = d => d === null ? '<span class="chip rojo">nunca</span>'
       : d <= 7  ? `<span class="chip verde">hace ${d} día${d === 1 ? '' : 's'}</span>`
@@ -369,10 +420,74 @@ const App = (() => {
       : `<span class="chip rojo">hace ${d} días</span>`;
 
     return `
-      <h1 class="titulo">Visitas a sucursales</h1>
+      <h1 class="titulo">Sucursales</h1>
       <p class="subtitulo">
-        El trabajo de todas las semanas. Los números del mes están en <em>Estadística mensual</em>.
+        Las ${tiendas.length} tiendas del área${staff ? ' —y la gente que no es de ninguna—' : ''}, una por
+        fila, con lo que hay que resolver en cada una. Tocá el nombre para entrar. Los números
+        del mes cerrado están en <em>Estadística</em>.
       </p>
+
+      <div class="kpis">
+        ${kpi('Sin visitar nunca', sinVisitar, sinVisitar ? 'empezar por acá' : 'todas visitadas',
+              sinVisitar ? 'alerta' : 'ok')}
+        ${kpi('Con más de una semana', atrasadas, atrasadas ? 'se pasaron del ritmo semanal' : 'al día',
+              atrasadas ? 'aviso' : 'ok')}
+        ${kpi('Gente ausente hoy', ausentes.length,
+              (() => {
+                const sp = ausentes.filter(x => !tieneCertificado(x.ausencia)).length;
+                return sp ? `${sp} sin certificado` : 'todas con certificado';
+              })(),
+              ausentes.some(x => !tieneCertificado(x.ausencia)) ? 'alerta' : '')}
+        ${kpi('Reclamos abiertos', filas.reduce((a, f) => a + f.rec.length, 0), 'en toda el área',
+              filas.some(f => f.rec.length) ? 'aviso' : 'ok')}
+        ${kpi('Visitas en los últimos 7 días', estaSemana.length, 'el ritmo de la semana',
+              estaSemana.length ? 'ok' : 'aviso')}
+      </div>
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Tienda por tienda</h2>
+          <div class="crece"></div>
+          <label class="campo" style="max-width:260px;margin:0">
+            <span>Ordenar por</span>
+            <select id="suc-orden">
+              ${ORDENES_SUCURSALES.map(o =>
+                `<option value="${o.id}"${o.id === sucursalesOrden ? ' selected' : ''}>${esc(o.nombre)}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="tabla-scroll"><table id="tabla-sucursales">
+          <thead><tr>
+            <th>Sucursal</th><th class="num">Dotación</th><th>Hoy</th>
+            <th>Última visita</th><th class="num">Compromisos</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${filas.map(f => `<tr>
+              <td><a href="#/sucursal/${f.s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(f.s))}</a>
+                ${f.tienda ? '' : '<span class="chip" title="No es una tienda: gente del área que cubre donde hace falta">🏢 staff</span>'}
+                ${f.s.gerente ? `<div style="font-size:12px;color:var(--texto-suave)">${esc(f.s.gerente)}</div>` : ''}</td>
+              <td class="num">${f.dp.personas
+                ? `${fmtNum(f.dp.fte, 1)} FTE<div style="font-size:12px;color:var(--texto-suave)">${f.dp.personas} persona${f.dp.personas === 1 ? '' : 's'}</div>`
+                : (f.tienda ? '<span class="chip rojo">sin plantel</span>' : '—')}</td>
+              <td>${[
+                f.sinPapel ? `<span class="chip rojo">${f.sinPapel} sin certificado</span>` : '',
+                f.aus.length - f.sinPapel ? `<span class="chip ambar">${f.aus.length - f.sinPapel} ausente${f.aus.length - f.sinPapel === 1 ? '' : 's'}</span>` : '',
+                f.rec.length ? `<a class="chip ambar" href="#/reclamos/${f.s.id}" style="text-decoration:none">${f.rec.length} reclamo${f.rec.length === 1 ? '' : 's'}</a>` : '',
+                f.dev.length ? `<a class="chip azul" href="#/desarrollo" style="text-decoration:none">${f.dev.length} en desarrollo</a>` : ''
+              ].filter(Boolean).join(' ') || '<span class="ayuda">sin novedades</span>'}</td>
+              <td>${!f.tienda ? '<span class="ayuda">no se visita</span>'
+                : (f.ult ? `${fmtFecha(f.ult.fecha)} · ${semaforo(f.desde)}` : semaforo(null))}
+                ${f.r && f.r.pct !== null
+                  ? `<div style="font-size:12px;color:var(--texto-suave)">check list ${fmtPct(f.r.pct, 0)}${
+                      f.r.noAprobados ? ` · ${f.r.noAprobados} no aprobados` : ''}</div>` : ''}</td>
+              <td class="num">${f.pend || '—'}</td>
+              <td class="num" style="white-space:nowrap">
+                <a class="b sec" href="#/sucursal/${f.s.id}" style="text-decoration:none">Entrar</a>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>
+      </section>
 
       <section class="tarjeta">
         <h2>Registrar una visita</h2>
@@ -380,49 +495,11 @@ const App = (() => {
         <div class="acciones" style="margin-top:6px">
           <select id="visita-sucursal" style="max-width:340px">
             <option value="">Elegí la sucursal…</option>
-            ${filas.map(f => `<option value="${f.s.id}">${esc(Store.etiquetaSucursal(f.s))}${
+            ${tiendas.map(f => `<option value="${f.s.id}">${esc(Store.etiquetaSucursal(f.s))}${
               f.desde === null ? ' — sin visitar' : ` — hace ${f.desde} días`}</option>`).join('')}
           </select>
           <button class="b grande" data-accion="nueva-visita-desde-selector">+ Registrar visita</button>
         </div>
-      </section>
-
-      <div class="kpis">
-        ${kpi('Visitas en los últimos 7 días', estaSemana.length,
-              `${e.sucursales.length} sucursales en el área`,
-              estaSemana.length ? 'ok' : 'aviso')}
-        ${kpi('Sin visitar nunca', sinVisitar, sinVisitar ? 'empezar por acá' : 'todas visitadas',
-              sinVisitar ? 'alerta' : 'ok')}
-        ${kpi('Con más de una semana', atrasadas, atrasadas ? 'se pasaron del ritmo semanal' : 'al día',
-              atrasadas ? 'aviso' : 'ok')}
-        ${kpi('Compromisos abiertos', filas.reduce((a, f) => a + f.pend, 0), 'en toda el área')}
-      </div>
-
-      <section class="tarjeta">
-        <h2>A quién le toca</h2>
-        <p class="ayuda">Ordenadas por cuánto hace que no se las visita.</p>
-        <div class="tabla-scroll"><table>
-          <thead><tr>
-            <th>Sucursal</th><th>Última visita</th><th>Check list</th>
-            <th class="num">Compromisos abiertos</th><th class="num">Visitas</th><th></th>
-          </tr></thead>
-          <tbody>
-            ${filas.map(f => `<tr>
-              <td><a href="#/sucursal/${f.s.id}" style="font-weight:700;color:var(--azul)">${esc(Store.etiquetaSucursal(f.s))}</a>
-                ${f.s.gerente ? `<div style="font-size:12px;color:var(--texto-suave)">${esc(f.s.gerente)}</div>` : ''}</td>
-              <td>${f.ult ? `${fmtFecha(f.ult.fecha)} · ${semaforo(f.desde)}` : semaforo(null)}</td>
-              <td>${f.r && f.r.pct !== null
-                    ? `${fmtPct(f.r.pct, 0)}${f.r.noAprobados ? ` <span class="chip ambar">${f.r.noAprobados} no aprobados</span>` : ''}`
-                    : '—'}</td>
-              <td class="num">${f.pend || '—'}</td>
-              <td class="num">${f.visitas || '—'}</td>
-              <td class="num" style="white-space:nowrap">
-                <button class="b sec" data-accion="nueva-visita" data-id="${f.s.id}">Visitar</button>
-                ${f.ult ? `<a class="mini" href="#/visita/${f.ult.id}/checklist" style="text-decoration:none;display:inline-block;margin-left:6px">Última</a>` : ''}
-              </td>
-            </tr>`).join('')}
-          </tbody>
-        </table></div>
       </section>
 
       <section class="tarjeta">
@@ -4692,7 +4769,11 @@ const App = (() => {
     else if (ruta[0] === 'operacion' || ruta[0] === 'ventas') {
       vistaActual = vistaOperacion; html = vistaOperacion();
     }
-    else if (ruta[0] === 'visitas')  { vistaActual = vistaVisitas;   html = vistaVisitas(); }
+    /* `#/visitas` era el nombre de esta pantalla y sigue andando: hay enlaces
+       guardados y el botón de «Visitar» de la ficha de cada tienda. */
+    else if (ruta[0] === 'sucursales' || ruta[0] === 'visitas') {
+      vistaActual = vistaSucursales; html = vistaSucursales();
+    }
     else if (ruta[0] === 'desarrollo') {
       /* `#/desarrollo/<entrenamiento>` abre esa ficha: es como se llega desde
          el aviso del menú y desde la ficha de la persona. */
@@ -4719,12 +4800,6 @@ const App = (() => {
       const tab = ruta[1] || 'resumen';
       vistaActual = () => vistaEstadistica(tab);
       html = vistaEstadistica(tab);
-    }
-    else if (ruta[0] === 'sucursales') {
-      /* La solapa se eliminó, pero la ruta sigue viva: había enlaces guardados
-         y el panel ya es la lista de sucursales que servía para trabajar. */
-      location.replace(location.href.split('#')[0] + '#/red');
-      vistaActual = vistaRed; html = vistaRed();
     }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
@@ -5011,6 +5086,13 @@ const App = (() => {
     cont.addEventListener('change', ev => {
       if (ev.target.id !== 'liq-periodo') return;
       periodoLiq = ev.target.value;
+      refrescar();
+    });
+
+    /* Cómo se ordenan las doce tiendas. */
+    cont.addEventListener('change', ev => {
+      if (ev.target.id !== 'suc-orden') return;
+      sucursalesOrden = ev.target.value;
       refrescar();
     });
 

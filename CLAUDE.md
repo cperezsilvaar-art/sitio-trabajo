@@ -62,10 +62,9 @@ visita cargada.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
-  `#/visitas`, `#/desarrollo[/<id>]`, `#/reclamos`,
-  `#/movimientos[/cesiones|/bajas]`, `#/sucursal/<id>`,
+  `#/sucursales` (y `#/visitas`, que es la misma), `#/desarrollo[/<id>]`,
+  `#/reclamos`, `#/movimientos[/cesiones|/bajas]`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
-  `#/sucursales` ya no es una solapa: la ruta sobrevive y redirige a `#/red`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
 - **Trampa conocida:** todo lo que entra al panel se pega desde Excel, y Excel
   entrecomilla las celdas que tienen un salto de línea adentro —los encabezados
@@ -92,7 +91,7 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 |---|---|---|
 | El día | Presentismo | ¿Quién no está hoy y desde cuándo? |
 | Lo que llevo | Asistente (chat + agenda) | ¿Qué tengo que hacer y qué estoy esperando? |
-| La semana | Visitas (check list + talento) | ¿Qué está pasando en esta tienda? |
+| La semana | Sucursales → la tienda (check list + talento) | ¿Qué está pasando en esta tienda? |
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 
 La navegación es una **columna a la izquierda** (`aside.lateral` en
@@ -124,7 +123,7 @@ error clásico del patrón.
 **El encabezado es solo el botón de menú y dónde estás parado.** Tenía el
 selector «Ir a una sucursal…» y «+ Nueva visita», que aparecían en las trece
 pantallas, incluidas las que no tienen nada que ver con una visita. Registrar
-una visita se hace en `#/visitas` y en ningún otro lado. Una acción que sirve en
+una visita se hace en `#/sucursales` y en ningún otro lado. Una acción que sirve en
 una sola pantalla no va en el armazón.
 
 **Los cargos que existen hoy están en `CARGOS_NOMINA` (`catalogos.js`)**: los
@@ -321,11 +320,31 @@ con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó
 repetirlo—. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero
 no se muestra ni entra en ningún reporte.
 
-**Cada tienda se edita en su propia página.** La solapa *Sucursales* se eliminó:
-era una tercera lista de las mismas doce tiendas —las otras dos son las tarjetas
-de `#/red` y la tabla de `#/visitas`— y lo único propio que tenía era una ficha
-editable escondida en una fila desplegable, mientras los mismos campos se leían
-en `#/sucursal/<id>`. Lo que tenía se repartió donde ya vivía la mitad:
+**`#/sucursales` (*Sucursales*) es la puerta de entrada a las tiendas** y
+reemplazó a *Visitas* en el menú. Es la misma lista mirada desde donde el
+coordinador la mira: no piensa «voy a registrar una visita» sino «voy a
+Botánico», y la visita es algo que pasa adentro de la tienda, no al revés. Una
+fila por tienda con **la situación de cada una** —dotación en FTE, ausencias de
+hoy separando las que no tienen certificado, reclamos abiertos, gente en
+desarrollo, última visita con su semáforo y compromisos sin cerrar—, ordenable
+por lo que pide atención, por nombre, por antigüedad de la visita o por
+dotación. `#/visitas` sigue viva como ruta: hay enlaces guardados y el botón
+«Visitar» de cada ficha.
+
+**Siguen siendo dos listas de tiendas y no tres.** `#/red` mira el área de
+conjunto —KPIs y una tarjeta por tienda— y `#/sucursales` mira tienda por
+tienda. Una pantalla nueva que necesite listar las doce tiene que apoyarse en
+una de esas dos. La regla que eliminó la vieja solapa *Sucursales* no cambió;
+lo que cambió es cuál de las dos listas es la puerta de entrada.
+
+**Los flotantes no son una tienda** y la pantalla lo respeta: se los marca como
+staff, no se los mide por visitas y no aparecen en el selector para registrar
+una. Están en la lista porque ahí hay gente que hay que poder alcanzar.
+
+**Cada tienda se edita en su propia página.** La vieja solapa *Sucursales* era
+una tercera lista y lo único propio que tenía era una ficha editable escondida
+en una fila desplegable, mientras los mismos campos se leían en
+`#/sucursal/<id>`. Lo que tenía se repartió donde ya vivía la mitad:
 
 - **la ficha** (razón social, CUIT, ART, dirección, horario, referentes, notas)
   es ahora editable en `#/sucursal/<id>`, con un botón que alterna lectura y
@@ -333,9 +352,6 @@ en `#/sucursal/<id>`. Lo que tenía se repartió donde ya vivía la mitad:
 - **la importación de la nómina** está al pie de `#/nomina`;
 - **el alta, la baja y «Cargar padrón del Área 3»** están en `#/config`
   (`panelSucursalesConfig()`), que es donde vive el resto de la puesta a punto.
-
-Una pantalla nueva que necesite listar las doce tiendas tiene que apoyarse en
-una de las que ya existen, no agregar una cuarta.
 
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos
