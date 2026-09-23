@@ -168,6 +168,24 @@ acompaña cuando se muda de tienda. Se cargan en su ficha y se leen juntas en
 tiempo**: `aplicarMovimientosVencidos()` corre al abrir el panel. Documentado en
 `docs/cesiones-y-bajas.md`.
 
+**Una baja es un proceso, no un evento.** La persona deja de venir el día de la
+baja —eso sale de la dotación en el momento y no espera a nadie— pero atrás
+quedan cinco trámites, en cinco lugares distintos: `TRAMITES_BAJA`
+(`catalogos.js`) son carta al estudio, notificación al empleado, novedades y
+baja a Nómina, baja en PAC y baja en Sommer. Viven en `c.baja.tramites`, cada
+uno con su fecha y una nota —con quién se hizo, el número de trámite—, porque
+sin eso el tilde no dice nada dos semanas después. El que se olvida aparece
+solo: alguien que conserva accesos, un recibo liquidado de más.
+
+`c.baja.cerradaEl` cierra el proceso y **es una decisión, no la consecuencia de
+tildar los cinco**: a veces un trámite no aplica. `estadoTramitesBaja()` separa
+`completa` —están los cinco— de `cerrada`, y la pantalla **nombra lo que falta
+antes de dejar cerrar en vez de impedirlo**; bloquearlo llevaría a tildar
+cualquier cosa para poder seguir, que es peor que un check list incompleto pero
+sincero. Destildar un trámite **no borra su nota**. Una baja con el proceso
+abierto suma al contador de *Cesiones y bajas*, junto con las cesiones sin
+aplicar: las dos son trabajo pendiente en esa pantalla.
+
 El **asistente** (`assets/js/asistente.js`, pantalla `#/asistente`) pregunta a
 Claude con la capacidad `sample` del visor de artifacts. Dos reglas que mandan:
 **el panel tiene que seguir abriendo sin conexión** —si `claude.use('sample')`

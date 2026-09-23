@@ -935,6 +935,23 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .atajo-tienda.ambar { border-left: 3px solid var(--ambar); }
 .atajo-tienda.azul  { border-left: 3px solid var(--azul); }
 
+/* ---- Trámites de una baja ----
+   Cinco pasos en cinco lugares distintos. La nota al lado de cada uno es
+   donde va el número de trámite o con quién se hizo: sin eso, dos semanas
+   después el tilde no dice nada. */
+.lista-tramites { list-style: none; margin: 10px 0 0; padding: 0; counter-reset: tramite; }
+.lista-tramites li {
+  display: grid; gap: 6px 12px; align-items: center;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 1fr);
+  padding: 8px 0; border-bottom: 1px solid var(--borde);
+}
+.lista-tramites li:last-child { border-bottom: 0; }
+.lista-tramites li.hecho strong { color: var(--texto-suave); text-decoration: line-through; }
+.lista-tramites .marca-check span { display: block; }
+.lista-tramites .marca-check em { display: block; font-style: normal; }
+.lista-tramites .marca-check em.chip { display: inline-block; margin-top: 2px; }
+.nota-tramite { font-size: 13px; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -1248,6 +1265,55 @@ const MOTIVOS_BAJA = [
     ]
   }
 ];
+
+/* ------------------------------------------------------------------ *
+ * 3b. Los trámites de una baja                                         *
+ * ------------------------------------------------------------------ *
+ * Una baja no es un evento sino un proceso: la persona deja de venir el
+ * mismo día, pero atrás quedan cinco trámites que se hacen en distintos
+ * lugares y con distinta gente, y el que se olvida aparece semanas después
+ * —alguien que sigue teniendo acceso, un recibo que se liquida de más—.
+ *
+ * El orden es el que se sigue en la práctica. No están enumerados a
+ * propósito: si uno se adelanta no hay que pelearse con el panel.
+ */
+const TRAMITES_BAJA = [
+  { id: 'carta', nombre: 'Carta solicitada al estudio',
+    ayuda: 'El telegrama o la carta documento que prepara el estudio.' },
+  { id: 'notificacion', nombre: 'Notificación al empleado',
+    ayuda: 'Que la persona quede notificada y firme.' },
+  { id: 'nomina', nombre: 'Envío de novedades y baja a Nómina',
+    ayuda: 'Lo último que hay que pasarle a Nómina de esta persona.' },
+  { id: 'pac', nombre: 'Baja en PAC',
+    ayuda: 'Mientras siga activo ahí, conserva accesos.' },
+  { id: 'sommer', nombre: 'Baja en Sommer',
+    ayuda: 'Mientras siga activo ahí, conserva accesos.' }
+];
+
+/**
+ * Cómo viene el proceso de una baja.
+ *
+ * `cerrada` es una decisión del coordinador, no la consecuencia de tildar los
+ * cinco: a veces un trámite no aplica y el proceso igual terminó. Por eso
+ * `completa` —están los cinco— y `cerrada` son dos cosas distintas, y la
+ * pantalla avisa cuando se cierra sin completar en vez de impedirlo.
+ */
+function estadoTramitesBaja(baja) {
+  const t = (baja && baja.tramites) || {};
+  const hechos = TRAMITES_BAJA.filter(x => t[x.id] && t[x.id].hecho);
+  const faltan = TRAMITES_BAJA.filter(x => !(t[x.id] && t[x.id].hecho));
+  const cerrada = !!(baja && baja.cerradaEl);
+  return {
+    hechos: hechos.length,
+    total: TRAMITES_BAJA.length,
+    faltan,
+    completa: faltan.length === 0,
+    cerrada,
+    /* Lo que queda por hacer: si ya se cerró, nada, aunque falte un trámite. */
+    pendiente: !cerrada,
+    pct: TRAMITES_BAJA.length ? hechos.length / TRAMITES_BAJA.length : 0
+  };
+}
 
 /* Tipos de movimiento que el coordinador registra sobre una persona. */
 const TIPOS_MOVIMIENTO = [
@@ -6295,6 +6361,13 @@ const Store = (() => {
            propuesta la hizo un gerente en una tienda, pero la trazabilidad
            tiene que seguirla si la trasladan a otra. */
         if (!Array.isArray(c.entrenamientos)) c.entrenamientos = [];
+        /* Las bajas que se cargaron antes de que la baja fuera un proceso: se
+           les abre el check list vacío y quedan sin cerrar, que es la verdad
+           —nadie registró esos trámites— y no un cierre inventado. */
+        if (c.baja && typeof c.baja === 'object') {
+          if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+          if (c.baja.cerradaEl === undefined) c.baja.cerradaEl = '';
+        }
         /* La nómina no trae cargas de familia y los plazos del art. 208 se
            duplican con ellas: se carga a mano y por eso arranca sin definir. */
         if (c.cargasFamilia === undefined) c.cargasFamilia = null;
@@ -7665,9 +7738,66 @@ const Store = (() => {
         grupo: (datos && datos.grupo) || '',
         motivo: (datos && datos.motivo) || '',
         observaciones: (datos && datos.observaciones) || '',
+        /* Los trámites arrancan con la baja y no antes: son lo que hay que
+           hacer a partir de que la persona se va. Se guardan como objeto y no
+           como lista de los hechos para poder anotar la fecha y una nota en
+           cada uno. */
+        tramites: {},
+        cerradaEl: '',
         registradaEl: new Date().toISOString()
       };
       c.activo = false;
+      guardar();
+      return c.baja;
+    },
+
+    /* ------------------- los trámites de la baja ------------------ *
+       La persona deja de venir el día de la baja, pero el proceso sigue
+       abierto hasta que están los cinco. El que se olvida aparece semanas
+       después: alguien que conserva accesos, un recibo liquidado de más. */
+
+    marcarTramiteBaja(colabId, tramiteId, hecho) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+      const t = c.baja.tramites;
+      if (hecho === false || (hecho === undefined && t[tramiteId] && t[tramiteId].hecho)) {
+        /* Se destilda pero queda la nota: si alguien escribió «lo pidió Ana el
+           martes», esa frase sigue valiendo aunque el trámite se reabra. */
+        t[tramiteId] = Object.assign({}, t[tramiteId], { hecho: false, fecha: '' });
+      } else {
+        t[tramiteId] = Object.assign({ nota: '' }, t[tramiteId], {
+          hecho: true, fecha: new Date().toISOString().slice(0, 10)
+        });
+      }
+      guardar();
+      return t[tramiteId];
+    },
+
+    anotarTramiteBaja(colabId, tramiteId, nota) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+      const t = c.baja.tramites;
+      t[tramiteId] = Object.assign({ hecho: false, fecha: '' }, t[tramiteId], { nota });
+      guardar();
+      return t[tramiteId];
+    },
+
+    /** Cierra el proceso. Que falte algún trámite lo decide y lo avisa la
+        pantalla: acá no se bloquea, porque a veces un trámite no aplica. */
+    cerrarProcesoBaja(colabId, fecha) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      c.baja.cerradaEl = fecha || new Date().toISOString().slice(0, 10);
+      guardar();
+      return c.baja;
+    },
+
+    reabrirProcesoBaja(colabId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      c.baja.cerradaEl = '';
       guardar();
       return c.baja;
     },
@@ -10908,10 +11038,11 @@ const App = (() => {
       <div class="tabla-scroll"><table>
         <thead><tr>
           <th>Baja</th><th>Persona</th><th>Sucursal</th><th>Puesto</th>
-          <th>Tipo</th><th>Motivo</th><th class="num">Antigüedad</th><th></th>
+          <th>Tipo</th><th>Motivo</th><th>Trámites</th><th class="num">Antigüedad</th><th></th>
         </tr></thead>
         <tbody>${bajas.map(({ colaborador: c, sucursal: s, baja: b }) => {
           const anios = antiguedadAnios(c.fechaIngreso);
+          const est = estadoTramitesBaja(b);
           return `<tr>
             <td class="tipo"><strong>${fmtFecha(b.fecha)}</strong></td>
             <td><button class="mini" data-accion="ver-baja" data-id="${c.id}"
@@ -10920,10 +11051,13 @@ const App = (() => {
             <td class="tipo">${esc(c.cargo || c.posicion || '—')}</td>
             <td class="tipo">${esc(b.grupo || '—')}</td>
             <td>${esc(b.motivo || '—')}</td>
+            <td class="tipo">${est.cerrada
+              ? '<span class="chip verde">cerrada</span>'
+              : `<span class="chip ${est.completa ? 'azul' : 'ambar'}">${est.hechos} de ${est.total}</span>`}</td>
             <td class="num">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</td>
             <td class="tipo"><button class="mini" data-accion="revertir-baja" data-id="${c.id}">Deshacer</button></td>
           </tr>
-          ${bajaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="8">${detalleBaja(c, s, b)}</td></tr>` : ''}`;
+          ${bajaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${detalleBaja(c, s, b)}</td></tr>` : ''}`;
         }).join('')}</tbody>
       </table></div>
     </section>`;
@@ -10931,6 +11065,57 @@ const App = (() => {
 
   /* La ficha completa de quien se fue: es la que se mira cuando alguien
      pregunta por una liquidación final o por qué se fue. */
+  /* El check list de una baja.
+     Una baja no termina el día que la persona deja de venir: atrás quedan
+     cinco trámites, en cinco lugares distintos, y el que se olvida aparece
+     semanas después —alguien que conserva accesos, un recibo liquidado de
+     más—. Por eso el proceso se cierra aparte de la fecha de egreso.
+
+     Se puede cerrar con trámites pendientes: a veces alguno no aplica. Lo que
+     el panel hace es nombrar lo que falta antes de dejar cerrar, no impedirlo.
+     Bloquearlo llevaría a tildar cualquier cosa para poder seguir, que es peor
+     que un check list incompleto pero sincero. */
+  function checkListBaja(c, b) {
+    const est = estadoTramitesBaja(b);
+    const t = b.tramites || {};
+
+    return `<div class="tramites-baja">
+      <div class="cabecera-suc" style="margin-top:14px">
+        <h4 style="margin:0">Trámites de la baja</h4>
+        <span class="chip ${est.cerrada ? 'verde' : est.completa ? 'azul' : 'ambar'}">
+          ${est.hechos} de ${est.total}</span>
+        ${est.cerrada
+          ? `<span class="chip verde">proceso cerrado el ${fmtFecha(b.cerradaEl)}</span>`
+          : '<span class="chip ambar">en trámite</span>'}
+      </div>
+
+      <ol class="lista-tramites">
+        ${TRAMITES_BAJA.map(x => {
+          const d = t[x.id] || {};
+          return `<li class="${d.hecho ? 'hecho' : ''}">
+            <label class="marca-check" style="margin:0">
+              <input type="checkbox" data-tramite="${c.id}|${x.id}"${d.hecho ? ' checked' : ''}>
+              <span><strong>${esc(x.nombre)}</strong>
+                ${d.hecho && d.fecha ? `<em class="chip verde">${fmtFecha(d.fecha)}</em>` : ''}
+                <em class="ayuda">${esc(x.ayuda)}</em></span>
+            </label>
+            <input class="nota-tramite" data-tramite-nota="${c.id}|${x.id}"
+              value="${esc(d.nota || '')}" placeholder="Con quién, número de trámite, lo que haga falta">
+          </li>`;
+        }).join('')}
+      </ol>
+
+      <div class="acciones">
+        ${est.cerrada
+          ? `<button class="b sec" data-accion="reabrir-baja-proceso" data-id="${c.id}">Reabrir el proceso</button>`
+          : `<button class="b" data-accion="cerrar-baja-proceso" data-id="${c.id}">Cerrar el proceso</button>`}
+      </div>
+      ${!est.cerrada && !est.completa
+        ? `<p class="ayuda">Falta: ${est.faltan.map(x => esc(x.nombre)).join(' · ')}.</p>`
+        : ''}
+    </div>`;
+  }
+
   function detalleBaja(c, s, b) {
     const anios = antiguedadAnios(c.fechaIngreso);
     const jor = jornadaDeVinculo(c);
@@ -10955,6 +11140,8 @@ const App = (() => {
         ${dato('Vacaciones del año (art. 24)', `${vacacionesDe(anios).dias} días corridos`)}
       </div>
       ${b.observaciones ? `<p class="ayuda"><strong>Observaciones:</strong> ${esc(b.observaciones)}</p>` : ''}
+
+      ${checkListBaja(c, b)}
       ${(c.sanciones || []).length ? `<p class="ayuda"><strong>Sanciones:</strong> ${
         c.sanciones.map(x => `${esc(x.tipo || '')} ${x.fecha ? fmtFecha(x.fecha) : ''}`).join(' · ')}</p>` : ''}
       ${(c.movimientos || []).filter(m => m.estado === 'aplicada').length
@@ -11614,6 +11801,7 @@ const App = (() => {
         <strong>Baja el ${fmtFecha(c.baja.fecha)}.</strong>
         ${esc(c.baja.grupo || '')}${c.baja.motivo ? ' · ' + esc(c.baja.motivo) : ''}.
         ${c.baja.observaciones ? esc(c.baja.observaciones) : ''}
+        ${checkListBaja(c, c.baja)}
         <div class="acciones">
           <button class="b sec" data-accion="revertir-baja" data-id="${c.id}">Deshacer la baja</button>
         </div>
@@ -14144,9 +14332,12 @@ const App = (() => {
     const cuentas = {
       ausencias: alertasDeAusencias(e, hoyISO()).length,
       reclamos: (e.reclamos || []).filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado).length,
+      /* Cesiones sin aplicar y bajas cuyo proceso sigue abierto: las dos son
+         trabajo que le queda al coordinador en esa pantalla. */
       movimientos: (e.sucursales || []).reduce((n, s) => n + (s.colaboradores || [])
         .reduce((m, c) => m + (c.movimientos || [])
-          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length, 0), 0),
+          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
+          + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
       desarrollo: alertasDeDesarrollo(e, hoyISO()).length
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
@@ -14512,6 +14703,24 @@ const App = (() => {
       if (ev.target.id !== 'suc-orden') return;
       sucursalesOrden = ev.target.value;
       refrescar();
+    });
+
+    /* Los trámites de una baja. Tildar guarda la fecha del día. */
+    cont.addEventListener('change', ev => {
+      const el = ev.target.closest('[data-tramite]');
+      if (!el) return;
+      const [colabId, tramiteId] = el.dataset.tramite.split('|');
+      Store.marcarTramiteBaja(colabId, tramiteId, el.checked);
+      refrescar();
+    });
+
+    /* La nota de cada trámite guarda mientras se escribe, como el resto. */
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-tramite-nota]');
+      if (!el) return;
+      const [colabId, tramiteId] = el.dataset.tramiteNota.split('|');
+      Store.anotarTramiteBaja(colabId, tramiteId, el.value);
+      guardarDiferido();
     });
 
     /* Enter en el campo de alta rápida: anotar sin sacar la mano del teclado. */
@@ -14938,9 +15147,32 @@ const App = (() => {
 
       if (a === 'revertir-baja') {
         const ok = await confirmar('Deshacer la baja',
-          'La persona vuelve al plantel de su sucursal y se borra el registro de la baja.',
+          'La persona vuelve al plantel de su sucursal y se borra el registro de la baja, con sus trámites.',
           'Deshacer');
         if (ok) { Store.revertirBaja(btn.dataset.id); refrescar(); avisar('La persona volvió al plantel.'); }
+      }
+
+      if (a === 'cerrar-baja-proceso') {
+        const c = Store.colaboradorPorId(btn.dataset.id);
+        const est = estadoTramitesBaja(c && c.baja);
+        /* Cerrar con trámites pendientes es válido —a veces uno no aplica—
+           pero no puede pasar de largo: se nombran los que faltan. */
+        if (!est.completa) {
+          const ok = await confirmar('Cerrar con trámites pendientes',
+            `Falta:\n${est.faltan.map(x => '· ' + x.nombre).join('\n')}\n\n` +
+            'Si alguno no aplica a esta baja, cerrala igual. Se puede reabrir.',
+            'Cerrar igual');
+          if (!ok) return;
+        }
+        Store.cerrarProcesoBaja(btn.dataset.id);
+        refrescar();
+        avisar('Proceso de baja cerrado.');
+      }
+
+      if (a === 'reabrir-baja-proceso') {
+        Store.reabrirProcesoBaja(btn.dataset.id);
+        refrescar();
+        avisar('Proceso reabierto.');
       }
 
       if (a === 'guardar-mov') {

@@ -212,6 +212,55 @@ const MOTIVOS_BAJA = [
   }
 ];
 
+/* ------------------------------------------------------------------ *
+ * 3b. Los trámites de una baja                                         *
+ * ------------------------------------------------------------------ *
+ * Una baja no es un evento sino un proceso: la persona deja de venir el
+ * mismo día, pero atrás quedan cinco trámites que se hacen en distintos
+ * lugares y con distinta gente, y el que se olvida aparece semanas después
+ * —alguien que sigue teniendo acceso, un recibo que se liquida de más—.
+ *
+ * El orden es el que se sigue en la práctica. No están enumerados a
+ * propósito: si uno se adelanta no hay que pelearse con el panel.
+ */
+const TRAMITES_BAJA = [
+  { id: 'carta', nombre: 'Carta solicitada al estudio',
+    ayuda: 'El telegrama o la carta documento que prepara el estudio.' },
+  { id: 'notificacion', nombre: 'Notificación al empleado',
+    ayuda: 'Que la persona quede notificada y firme.' },
+  { id: 'nomina', nombre: 'Envío de novedades y baja a Nómina',
+    ayuda: 'Lo último que hay que pasarle a Nómina de esta persona.' },
+  { id: 'pac', nombre: 'Baja en PAC',
+    ayuda: 'Mientras siga activo ahí, conserva accesos.' },
+  { id: 'sommer', nombre: 'Baja en Sommer',
+    ayuda: 'Mientras siga activo ahí, conserva accesos.' }
+];
+
+/**
+ * Cómo viene el proceso de una baja.
+ *
+ * `cerrada` es una decisión del coordinador, no la consecuencia de tildar los
+ * cinco: a veces un trámite no aplica y el proceso igual terminó. Por eso
+ * `completa` —están los cinco— y `cerrada` son dos cosas distintas, y la
+ * pantalla avisa cuando se cierra sin completar en vez de impedirlo.
+ */
+function estadoTramitesBaja(baja) {
+  const t = (baja && baja.tramites) || {};
+  const hechos = TRAMITES_BAJA.filter(x => t[x.id] && t[x.id].hecho);
+  const faltan = TRAMITES_BAJA.filter(x => !(t[x.id] && t[x.id].hecho));
+  const cerrada = !!(baja && baja.cerradaEl);
+  return {
+    hechos: hechos.length,
+    total: TRAMITES_BAJA.length,
+    faltan,
+    completa: faltan.length === 0,
+    cerrada,
+    /* Lo que queda por hacer: si ya se cerró, nada, aunque falte un trámite. */
+    pendiente: !cerrada,
+    pct: TRAMITES_BAJA.length ? hechos.length / TRAMITES_BAJA.length : 0
+  };
+}
+
 /* Tipos de movimiento que el coordinador registra sobre una persona. */
 const TIPOS_MOVIMIENTO = [
   { id: 'cesion',       nombre: 'Cesión de contrato', detalle: 'Pasa a otra sucursal' },

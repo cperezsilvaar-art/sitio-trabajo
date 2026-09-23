@@ -932,3 +932,20 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .atajo-tienda.rojo  { border-left: 3px solid var(--rojo-alerta); }
 .atajo-tienda.ambar { border-left: 3px solid var(--ambar); }
 .atajo-tienda.azul  { border-left: 3px solid var(--azul); }
+
+/* ---- Trámites de una baja ----
+   Cinco pasos en cinco lugares distintos. La nota al lado de cada uno es
+   donde va el número de trámite o con quién se hizo: sin eso, dos semanas
+   después el tilde no dice nada. */
+.lista-tramites { list-style: none; margin: 10px 0 0; padding: 0; counter-reset: tramite; }
+.lista-tramites li {
+  display: grid; gap: 6px 12px; align-items: center;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 1fr);
+  padding: 8px 0; border-bottom: 1px solid var(--borde);
+}
+.lista-tramites li:last-child { border-bottom: 0; }
+.lista-tramites li.hecho strong { color: var(--texto-suave); text-decoration: line-through; }
+.lista-tramites .marca-check span { display: block; }
+.lista-tramites .marca-check em { display: block; font-style: normal; }
+.lista-tramites .marca-check em.chip { display: inline-block; margin-top: 2px; }
+.nota-tramite { font-size: 13px; }

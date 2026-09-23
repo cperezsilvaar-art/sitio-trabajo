@@ -70,3 +70,45 @@ que rija desde el mes siguiente.
 historial la acompaña cuando se muda de tienda. Un movimiento ya aplicado no se
 anula desde el panel — mover a alguien de vuelta es un movimiento nuevo, y queda
 registrado como tal.
+
+## La baja es un proceso, no un evento
+
+La persona deja de venir el día de la baja y sale de la dotación en ese
+momento: eso no espera a ningún trámite. Pero atrás quedan **cinco cosas que
+hacer en cinco lugares distintos**, y el que se olvida aparece solo semanas
+después —alguien que conserva accesos, un recibo que se liquida de más—.
+
+`TRAMITES_BAJA` (`catalogos.js`), en el orden en que se hacen:
+
+1. **Carta solicitada al estudio** — el telegrama o la carta documento.
+2. **Notificación al empleado** — que quede notificada y firme.
+3. **Envío de novedades y baja a Nómina** — lo último que se le pasa.
+4. **Baja en PAC** — mientras siga activo ahí, conserva accesos.
+5. **Baja en Sommer** — lo mismo.
+
+No están enumerados en la pantalla a propósito: si uno se adelanta, no hay que
+pelearse con el panel.
+
+Viven en `c.baja.tramites`, cada uno con `hecho`, la `fecha` en que se tildó y
+una `nota`. La nota es la mitad del valor: con quién se hizo, el número de
+trámite. Sin eso, dos semanas después el tilde no dice nada. **Destildar no
+borra la nota** — si alguien escribió «la pidió Ana el martes», esa frase sigue
+valiendo aunque el trámite se reabra.
+
+### Cerrar no es lo mismo que completar
+
+`c.baja.cerradaEl` cierra el proceso y **es una decisión del coordinador**, no
+la consecuencia automática de tildar los cinco: a veces un trámite no aplica a
+esa baja. `estadoTramitesBaja()` devuelve `completa` y `cerrada` por separado.
+
+La pantalla **nombra lo que falta antes de dejar cerrar, pero no lo impide**.
+Bloquearlo llevaría a tildar cualquier cosa para poder seguir, que es peor que
+un check list incompleto pero sincero. Y se puede reabrir.
+
+### Dónde se ve
+
+- En la **ficha de la persona**, apenas se registra la baja.
+- En **`#/movimientos/bajas`**: una columna con *2 de 5* o *cerrada*, y el check
+  list entero al abrir la fila.
+- En el **contador de _Cesiones y bajas_** del menú, junto con las cesiones sin
+  aplicar: las dos son trabajo pendiente en esa pantalla.

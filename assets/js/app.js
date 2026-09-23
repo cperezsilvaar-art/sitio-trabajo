@@ -1526,10 +1526,11 @@ const App = (() => {
       <div class="tabla-scroll"><table>
         <thead><tr>
           <th>Baja</th><th>Persona</th><th>Sucursal</th><th>Puesto</th>
-          <th>Tipo</th><th>Motivo</th><th class="num">Antigüedad</th><th></th>
+          <th>Tipo</th><th>Motivo</th><th>Trámites</th><th class="num">Antigüedad</th><th></th>
         </tr></thead>
         <tbody>${bajas.map(({ colaborador: c, sucursal: s, baja: b }) => {
           const anios = antiguedadAnios(c.fechaIngreso);
+          const est = estadoTramitesBaja(b);
           return `<tr>
             <td class="tipo"><strong>${fmtFecha(b.fecha)}</strong></td>
             <td><button class="mini" data-accion="ver-baja" data-id="${c.id}"
@@ -1538,10 +1539,13 @@ const App = (() => {
             <td class="tipo">${esc(c.cargo || c.posicion || '—')}</td>
             <td class="tipo">${esc(b.grupo || '—')}</td>
             <td>${esc(b.motivo || '—')}</td>
+            <td class="tipo">${est.cerrada
+              ? '<span class="chip verde">cerrada</span>'
+              : `<span class="chip ${est.completa ? 'azul' : 'ambar'}">${est.hechos} de ${est.total}</span>`}</td>
             <td class="num">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</td>
             <td class="tipo"><button class="mini" data-accion="revertir-baja" data-id="${c.id}">Deshacer</button></td>
           </tr>
-          ${bajaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="8">${detalleBaja(c, s, b)}</td></tr>` : ''}`;
+          ${bajaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${detalleBaja(c, s, b)}</td></tr>` : ''}`;
         }).join('')}</tbody>
       </table></div>
     </section>`;
@@ -1549,6 +1553,57 @@ const App = (() => {
 
   /* La ficha completa de quien se fue: es la que se mira cuando alguien
      pregunta por una liquidación final o por qué se fue. */
+  /* El check list de una baja.
+     Una baja no termina el día que la persona deja de venir: atrás quedan
+     cinco trámites, en cinco lugares distintos, y el que se olvida aparece
+     semanas después —alguien que conserva accesos, un recibo liquidado de
+     más—. Por eso el proceso se cierra aparte de la fecha de egreso.
+
+     Se puede cerrar con trámites pendientes: a veces alguno no aplica. Lo que
+     el panel hace es nombrar lo que falta antes de dejar cerrar, no impedirlo.
+     Bloquearlo llevaría a tildar cualquier cosa para poder seguir, que es peor
+     que un check list incompleto pero sincero. */
+  function checkListBaja(c, b) {
+    const est = estadoTramitesBaja(b);
+    const t = b.tramites || {};
+
+    return `<div class="tramites-baja">
+      <div class="cabecera-suc" style="margin-top:14px">
+        <h4 style="margin:0">Trámites de la baja</h4>
+        <span class="chip ${est.cerrada ? 'verde' : est.completa ? 'azul' : 'ambar'}">
+          ${est.hechos} de ${est.total}</span>
+        ${est.cerrada
+          ? `<span class="chip verde">proceso cerrado el ${fmtFecha(b.cerradaEl)}</span>`
+          : '<span class="chip ambar">en trámite</span>'}
+      </div>
+
+      <ol class="lista-tramites">
+        ${TRAMITES_BAJA.map(x => {
+          const d = t[x.id] || {};
+          return `<li class="${d.hecho ? 'hecho' : ''}">
+            <label class="marca-check" style="margin:0">
+              <input type="checkbox" data-tramite="${c.id}|${x.id}"${d.hecho ? ' checked' : ''}>
+              <span><strong>${esc(x.nombre)}</strong>
+                ${d.hecho && d.fecha ? `<em class="chip verde">${fmtFecha(d.fecha)}</em>` : ''}
+                <em class="ayuda">${esc(x.ayuda)}</em></span>
+            </label>
+            <input class="nota-tramite" data-tramite-nota="${c.id}|${x.id}"
+              value="${esc(d.nota || '')}" placeholder="Con quién, número de trámite, lo que haga falta">
+          </li>`;
+        }).join('')}
+      </ol>
+
+      <div class="acciones">
+        ${est.cerrada
+          ? `<button class="b sec" data-accion="reabrir-baja-proceso" data-id="${c.id}">Reabrir el proceso</button>`
+          : `<button class="b" data-accion="cerrar-baja-proceso" data-id="${c.id}">Cerrar el proceso</button>`}
+      </div>
+      ${!est.cerrada && !est.completa
+        ? `<p class="ayuda">Falta: ${est.faltan.map(x => esc(x.nombre)).join(' · ')}.</p>`
+        : ''}
+    </div>`;
+  }
+
   function detalleBaja(c, s, b) {
     const anios = antiguedadAnios(c.fechaIngreso);
     const jor = jornadaDeVinculo(c);
@@ -1573,6 +1628,8 @@ const App = (() => {
         ${dato('Vacaciones del año (art. 24)', `${vacacionesDe(anios).dias} días corridos`)}
       </div>
       ${b.observaciones ? `<p class="ayuda"><strong>Observaciones:</strong> ${esc(b.observaciones)}</p>` : ''}
+
+      ${checkListBaja(c, b)}
       ${(c.sanciones || []).length ? `<p class="ayuda"><strong>Sanciones:</strong> ${
         c.sanciones.map(x => `${esc(x.tipo || '')} ${x.fecha ? fmtFecha(x.fecha) : ''}`).join(' · ')}</p>` : ''}
       ${(c.movimientos || []).filter(m => m.estado === 'aplicada').length
@@ -2232,6 +2289,7 @@ const App = (() => {
         <strong>Baja el ${fmtFecha(c.baja.fecha)}.</strong>
         ${esc(c.baja.grupo || '')}${c.baja.motivo ? ' · ' + esc(c.baja.motivo) : ''}.
         ${c.baja.observaciones ? esc(c.baja.observaciones) : ''}
+        ${checkListBaja(c, c.baja)}
         <div class="acciones">
           <button class="b sec" data-accion="revertir-baja" data-id="${c.id}">Deshacer la baja</button>
         </div>
@@ -4762,9 +4820,12 @@ const App = (() => {
     const cuentas = {
       ausencias: alertasDeAusencias(e, hoyISO()).length,
       reclamos: (e.reclamos || []).filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado).length,
+      /* Cesiones sin aplicar y bajas cuyo proceso sigue abierto: las dos son
+         trabajo que le queda al coordinador en esa pantalla. */
       movimientos: (e.sucursales || []).reduce((n, s) => n + (s.colaboradores || [])
         .reduce((m, c) => m + (c.movimientos || [])
-          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length, 0), 0),
+          .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
+          + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
       desarrollo: alertasDeDesarrollo(e, hoyISO()).length
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
@@ -5130,6 +5191,24 @@ const App = (() => {
       if (ev.target.id !== 'suc-orden') return;
       sucursalesOrden = ev.target.value;
       refrescar();
+    });
+
+    /* Los trámites de una baja. Tildar guarda la fecha del día. */
+    cont.addEventListener('change', ev => {
+      const el = ev.target.closest('[data-tramite]');
+      if (!el) return;
+      const [colabId, tramiteId] = el.dataset.tramite.split('|');
+      Store.marcarTramiteBaja(colabId, tramiteId, el.checked);
+      refrescar();
+    });
+
+    /* La nota de cada trámite guarda mientras se escribe, como el resto. */
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-tramite-nota]');
+      if (!el) return;
+      const [colabId, tramiteId] = el.dataset.tramiteNota.split('|');
+      Store.anotarTramiteBaja(colabId, tramiteId, el.value);
+      guardarDiferido();
     });
 
     /* Enter en el campo de alta rápida: anotar sin sacar la mano del teclado. */
@@ -5556,9 +5635,32 @@ const App = (() => {
 
       if (a === 'revertir-baja') {
         const ok = await confirmar('Deshacer la baja',
-          'La persona vuelve al plantel de su sucursal y se borra el registro de la baja.',
+          'La persona vuelve al plantel de su sucursal y se borra el registro de la baja, con sus trámites.',
           'Deshacer');
         if (ok) { Store.revertirBaja(btn.dataset.id); refrescar(); avisar('La persona volvió al plantel.'); }
+      }
+
+      if (a === 'cerrar-baja-proceso') {
+        const c = Store.colaboradorPorId(btn.dataset.id);
+        const est = estadoTramitesBaja(c && c.baja);
+        /* Cerrar con trámites pendientes es válido —a veces uno no aplica—
+           pero no puede pasar de largo: se nombran los que faltan. */
+        if (!est.completa) {
+          const ok = await confirmar('Cerrar con trámites pendientes',
+            `Falta:\n${est.faltan.map(x => '· ' + x.nombre).join('\n')}\n\n` +
+            'Si alguno no aplica a esta baja, cerrala igual. Se puede reabrir.',
+            'Cerrar igual');
+          if (!ok) return;
+        }
+        Store.cerrarProcesoBaja(btn.dataset.id);
+        refrescar();
+        avisar('Proceso de baja cerrado.');
+      }
+
+      if (a === 'reabrir-baja-proceso') {
+        Store.reabrirProcesoBaja(btn.dataset.id);
+        refrescar();
+        avisar('Proceso reabierto.');
       }
 
       if (a === 'guardar-mov') {

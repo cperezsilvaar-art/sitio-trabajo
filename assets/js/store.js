@@ -233,6 +233,13 @@ const Store = (() => {
            propuesta la hizo un gerente en una tienda, pero la trazabilidad
            tiene que seguirla si la trasladan a otra. */
         if (!Array.isArray(c.entrenamientos)) c.entrenamientos = [];
+        /* Las bajas que se cargaron antes de que la baja fuera un proceso: se
+           les abre el check list vacío y quedan sin cerrar, que es la verdad
+           —nadie registró esos trámites— y no un cierre inventado. */
+        if (c.baja && typeof c.baja === 'object') {
+          if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+          if (c.baja.cerradaEl === undefined) c.baja.cerradaEl = '';
+        }
         /* La nómina no trae cargas de familia y los plazos del art. 208 se
            duplican con ellas: se carga a mano y por eso arranca sin definir. */
         if (c.cargasFamilia === undefined) c.cargasFamilia = null;
@@ -1603,9 +1610,66 @@ const Store = (() => {
         grupo: (datos && datos.grupo) || '',
         motivo: (datos && datos.motivo) || '',
         observaciones: (datos && datos.observaciones) || '',
+        /* Los trámites arrancan con la baja y no antes: son lo que hay que
+           hacer a partir de que la persona se va. Se guardan como objeto y no
+           como lista de los hechos para poder anotar la fecha y una nota en
+           cada uno. */
+        tramites: {},
+        cerradaEl: '',
         registradaEl: new Date().toISOString()
       };
       c.activo = false;
+      guardar();
+      return c.baja;
+    },
+
+    /* ------------------- los trámites de la baja ------------------ *
+       La persona deja de venir el día de la baja, pero el proceso sigue
+       abierto hasta que están los cinco. El que se olvida aparece semanas
+       después: alguien que conserva accesos, un recibo liquidado de más. */
+
+    marcarTramiteBaja(colabId, tramiteId, hecho) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+      const t = c.baja.tramites;
+      if (hecho === false || (hecho === undefined && t[tramiteId] && t[tramiteId].hecho)) {
+        /* Se destilda pero queda la nota: si alguien escribió «lo pidió Ana el
+           martes», esa frase sigue valiendo aunque el trámite se reabra. */
+        t[tramiteId] = Object.assign({}, t[tramiteId], { hecho: false, fecha: '' });
+      } else {
+        t[tramiteId] = Object.assign({ nota: '' }, t[tramiteId], {
+          hecho: true, fecha: new Date().toISOString().slice(0, 10)
+        });
+      }
+      guardar();
+      return t[tramiteId];
+    },
+
+    anotarTramiteBaja(colabId, tramiteId, nota) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      if (!c.baja.tramites || typeof c.baja.tramites !== 'object') c.baja.tramites = {};
+      const t = c.baja.tramites;
+      t[tramiteId] = Object.assign({ hecho: false, fecha: '' }, t[tramiteId], { nota });
+      guardar();
+      return t[tramiteId];
+    },
+
+    /** Cierra el proceso. Que falte algún trámite lo decide y lo avisa la
+        pantalla: acá no se bloquea, porque a veces un trámite no aplica. */
+    cerrarProcesoBaja(colabId, fecha) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      c.baja.cerradaEl = fecha || new Date().toISOString().slice(0, 10);
+      guardar();
+      return c.baja;
+    },
+
+    reabrirProcesoBaja(colabId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !c.baja) return null;
+      c.baja.cerradaEl = '';
       guardar();
       return c.baja;
     },
