@@ -423,8 +423,15 @@ entran al pegar la nómina y se quedan en el navegador. El banco y el CBU se
 importan desde septiembre de 2026, a pedido del coordinador: se muestran
 plegados en la ficha y no aparecen en ningún reporte.
 
-**Lo que se publica como página se arma siempre con `--sin-plantel`**, que ahora
-hace dos cosas: vacía `PLANTEL_AREA3` y saca de `sucursales-area3.js` los
+**Lo que se publica como página se arma con `--demo`** (o con `--sin-plantel`,
+que es lo mismo pero deja el padrón vacío). `--demo` pone en su lugar las cinco
+personas inventadas de `assets/js/plantel-demo.js` —Acuña, Beltrán, Corvalán,
+Dávalos y Espósito, todas en Botánico—, que **no existen**. Es la que hay que
+usar: una página publicada sin nadie adentro abre en cero y parece rota, porque
+no hay gente que cargar. `index.html` no carga `plantel-demo.js`; solo lo usa la
+build.
+
+Las dos barren lo mismo: vacían `PLANTEL_AREA3` y sacan de `sucursales-area3.js` los
 nombres de personas —los referentes, sus mails y el comentario de cabecera, que
 también nombraba a alguien—. Ese segundo barrido no existía y las doce fichas de
 referentes viajaron a la página publicada durante meses, porque el archivo se

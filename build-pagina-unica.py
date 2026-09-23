@@ -18,9 +18,18 @@ if not scripts:
     sys.exit('No se encontró ningún <script src> en index.html')
 
 # El plantel del área lleva nombre, tienda y cargo de gente real. Va en la
-# versión que se abre desde el equipo; con --sin-plantel se arma la que se
-# publica como página, donde esos datos no corresponde que viajen.
-sin_plantel = '--sin-plantel' in sys.argv
+# versión que se abre desde el equipo; las otras dos son para publicar:
+#
+#   --sin-plantel  el padrón queda vacío.
+#   --demo         en su lugar van las cinco personas inventadas de
+#                  `plantel-demo.js`.
+#
+# `--demo` existe porque una página publicada sin nadie adentro abre en cero y
+# parece rota: no se entiende qué hace el panel hasta que alguien carga gente,
+# y en la página publicada no hay gente que cargar. Las dos barren igual los
+# nombres de los referentes de las sucursales.
+demo = '--demo' in sys.argv
+sin_plantel = '--sin-plantel' in sys.argv or demo
 if sin_plantel:
     scripts = [x for x in scripts if 'plantel-area3' not in x]
 
@@ -63,7 +72,11 @@ def fuente(ruta):
 
 css = '\n'.join((raiz / h).read_text(encoding='utf-8') for h in hojas)
 js  = '\n'.join(fuente(s) for s in scripts)
-if sin_plantel:
+if demo:
+    # `plantel-demo.js` declara el mismo `PLANTEL_AREA3`, así que entra en el
+    # lugar que dejó vacío el archivo real y el resto del panel no se entera.
+    js = (raiz / 'assets/js/plantel-demo.js').read_text(encoding='utf-8') + '\n' + js
+elif sin_plantel:
     js = 'const PLANTEL_AREA3 = [];\n' + js
 
 cuerpo = html.split('<body>', 1)[1].split('</body>', 1)[0]
