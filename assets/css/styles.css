@@ -910,3 +910,25 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .linea-tiempo .lt-cabeza em { font-size: 12px; color: var(--texto-suave); font-style: normal; }
 .linea-tiempo p { margin: 4px 0 0; }
 .linea-tiempo .crece { flex: 1; }
+
+/* ---- Atajos de una tienda ----
+   Entrar a la tienda es el camino, así que su página tiene que poder llevarte
+   a todo lo suyo. No son pantallas nuevas: son las del área, filtradas o
+   posicionadas acá, con el número que dice si hace falta ir. */
+.atajos-tienda {
+  display: grid; gap: 10px; margin-top: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.atajo-tienda {
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px; border: 1px solid var(--borde); border-radius: 10px;
+  background: var(--panel-alt); text-decoration: none; color: inherit;
+}
+.atajo-tienda:hover { border-color: var(--azul); background: var(--panel); }
+.atajo-tienda .atajo-icono { font-size: 20px; line-height: 1; }
+.atajo-tienda strong { display: block; font-size: 14px; }
+.atajo-tienda em { font-style: normal; font-size: 12.5px; color: var(--texto-suave); }
+/* El borde de color avisa sin gritar: el número ya está escrito al lado. */
+.atajo-tienda.rojo  { border-left: 3px solid var(--rojo-alerta); }
+.atajo-tienda.ambar { border-left: 3px solid var(--ambar); }
+.atajo-tienda.azul  { border-left: 3px solid var(--azul); }

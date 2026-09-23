@@ -1883,6 +1883,42 @@ const App = (() => {
       </div>
 
       ${(() => {
+        /* Entrar a una tienda es el camino: Sucursales → esta página → lo que
+           haga falta. Las pantallas del área —Presentismo, Reclamos,
+           Desarrollo— son las mismas, filtradas o posicionadas en esta tienda;
+           no hay una copia acá. Lo que aporta esta barra es no tener que
+           acordarse del nombre de la tienda para buscarla del otro lado. */
+        const aus = ausentesHoy(e, hoyISO()).filter(x => x.sucursalId === s.id);
+        const sinPapel = aus.filter(x => !tieneCertificado(x.ausencia)).length;
+        const rec = Store.reclamosDe(s.id, true);
+        const dev = cuadrantesDeDesarrollo({ sucursales: [s] }, hoyISO())
+          .todas.filter(f => f.estado.abierto);
+        const item = (href, icono, titulo, nota, tono) => `
+          <a class="atajo-tienda${tono ? ' ' + tono : ''}" href="${href}">
+            <span class="atajo-icono">${icono}</span>
+            <span><strong>${esc(titulo)}</strong><em>${nota}</em></span>
+          </a>`;
+        return `<section class="tarjeta">
+          <h2>De esta tienda</h2>
+          <div class="atajos-tienda">
+            ${item(`#/diario`, '🩺', 'Presentismo',
+                   aus.length
+                     ? `${aus.length} ausente${aus.length === 1 ? '' : 's'} hoy${sinPapel ? ` · ${sinPapel} sin certificado` : ''}`
+                     : 'nadie ausente hoy',
+                   sinPapel ? 'rojo' : aus.length ? 'ambar' : '')}
+            ${item(`#/reclamos/${s.id}`, '💬', 'Reclamos',
+                   rec.length ? `${rec.length} abierto${rec.length === 1 ? '' : 's'}` : 'ninguno abierto',
+                   rec.length ? 'ambar' : '')}
+            ${item(`#/desarrollo`, '🎓', 'Desarrollo',
+                   dev.length ? `${dev.length} en proceso` : 'nadie propuesto',
+                   dev.length ? 'azul' : '')}
+            ${item(`#/movimientos`, '🔁', 'Cesiones y bajas',
+                   `${dp.bajas.length} baja${dp.bajas.length === 1 ? '' : 's'} registrada${dp.bajas.length === 1 ? '' : 's'}`, '')}
+          </div>
+        </section>`;
+      })()}
+
+      ${(() => {
         /* La ficha de la tienda se edita acá y no en otra pantalla. Estaba de
            las dos formas: de solo lectura en esta página y editable dentro de
            una fila desplegable de la tabla de Sucursales. Eran los mismos

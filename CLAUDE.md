@@ -95,11 +95,23 @@ Tres escalas de tiempo, tres pantallas, sin mezclarlas:
 | El mes cerrado | Estadística mensual | ¿Qué pasó, cuánto costó, contra qué lo comparo? |
 
 La navegación es una **columna a la izquierda** (`aside.lateral` en
-`index.html`), agrupada por ritmo de trabajo —*Cada día*, *En la tienda*,
-*Cierre del mes*, *La operación*— y no por módulo. Una entrada nueva va adentro
-del grupo que le corresponde. Era una fila de solapas y dejó de entrar: en
-vertical el rótulo del grupo se lee arriba de sus ítems en vez de pelear por el
-ancho, y entran el ícono y el contador sin empujar nada fuera de la pantalla.
+`index.html`). Arriba de todo, sueltos y sin rótulo, van los **tres niveles de
+zoom**: *Panel* (el área), *Sucursales* (una tienda), *Nómina* (una persona). No
+son tareas, son desde dónde se mira, y de ahí sale el camino de todos los días:
+**Sucursales → elegir la sucursal → lo que haga falta de esa tienda**.
+
+Debajo van los grupos, por ritmo de trabajo y no por módulo: *Cada día*,
+*Seguimiento*, *Cierre del mes*, *La operación*. Una entrada nueva va adentro
+del grupo que le corresponde, salvo que sea otro punto de partida.
+
+*Seguimiento* se llamaba *En la tienda* y tenía adentro a *Sucursales*. Estaba
+mezclado: la puerta de entrada a una tienda no es una tarea al lado de
+*Reclamos* y *Cesiones y bajas*, que son registros del área que se siguen en el
+tiempo. Sacar *Sucursales* arriba dejó al grupo diciendo lo que es.
+
+La columna era una fila de solapas y dejó de entrar: en vertical el rótulo del
+grupo se lee arriba de sus ítems en vez de pelear por el ancho, y entran el
+ícono y el contador sin empujar nada fuera de la pantalla.
 
 Tres cosas que hay que respetar al tocarla:
 
@@ -340,6 +352,13 @@ lo que cambió es cuál de las dos listas es la puerta de entrada.
 **Los flotantes no son una tienda** y la pantalla lo respeta: se los marca como
 staff, no se los mide por visitas y no aparecen en el selector para registrar
 una. Están en la lista porque ahí hay gente que hay que poder alcanzar.
+
+**`#/sucursal/<id>` es el final del camino** y por eso tiene el bloque *De esta
+tienda*: atajos a Presentismo, Reclamos, Desarrollo y Cesiones y bajas, cada uno
+con el número que dice si hace falta ir. **No son pantallas nuevas ni copias**:
+son las del área, filtradas o posicionadas en esa tienda. Lo que aportan es no
+tener que acordarse del nombre de la tienda para volver a buscarla del otro
+lado, que es exactamente el paso que sobraba.
 
 **Cada tienda se edita en su propia página.** La vieja solapa *Sucursales* era
 una tercera lista y lo único propio que tenía era una ficha editable escondida
