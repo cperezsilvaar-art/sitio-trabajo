@@ -253,8 +253,13 @@ h1.titulo { font-size: 22px; margin: 0 0 4px; }
 p.subtitulo { color: var(--texto-suave); margin: 0 0 18px; font-size: 14px; }
 
 /* ------------------------------- KPIs ---------------------------------- */
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
+/* Flex y no grilla: los indicadores sin número salen de la tira, y con una
+   grilla de columnas iguales los dos o tres que quedan se estiraban a media
+   pantalla cada uno. Con `flex` crecen hasta donde tiene sentido leer un
+   número y ahí paran. */
+.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
 .kpi {
+  flex: 1 1 190px; min-width: 0; max-width: 360px;
   background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--azul-claro);
   border-radius: var(--radio); padding: 14px 16px; box-shadow: var(--sombra);
 }
@@ -975,3 +980,7 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   outline: 2px solid var(--azul-claro); outline-offset: -2px;
 }
 .pregunta-cesion .ayuda { margin: 8px 0 0; }
+
+/* La línea que nombra los indicadores que todavía no tienen número, abajo de
+   la tira. Va pegada a ella porque es su pie, no un párrafo aparte. */
+.kpis-vacios { margin: -6px 0 0; font-size: 12.5px; }

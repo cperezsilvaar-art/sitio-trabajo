@@ -522,9 +522,17 @@ const Store = (() => {
     /* ------------------------- sucursales ------------------------- */
     sucursal(id) { return this.get().sucursales.find(s => s.id === id) || null; },
 
+    /* El código entre paréntesis solo cuando dice algo. «Botánico (BOTANICO)»
+       escribe el mismo nombre dos veces en cada fila de las listas; «San
+       Martín Center (SM CENTER)» sí avisa cómo se lo llama en el RVD y en la
+       nómina, que es distinto. */
     etiquetaSucursal(s) {
       if (!s) return '—';
-      return s.nombre && s.nombre.trim() ? `${s.nombre.trim()} (${s.codigo})` : s.codigo;
+      const nombre = (s.nombre || '').trim();
+      if (!nombre) return s.codigo;
+      const plano = x => String(x).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/\s+/g, ' ').trim();
+      return plano(nombre) === plano(s.codigo) ? nombre : `${nombre} (${s.codigo})`;
     },
 
     agregarSucursal() {

@@ -127,6 +127,28 @@ Tres cosas que hay que respetar al tocarla:
   aplicar. Se esconden en cero a propósito — un cero permanente deja de leerse a
   los dos días y ocupa el lugar de un número que importa.
 
+**Un indicador sin número no ocupa un lugar de indicador.** Es la misma regla
+que la de los contadores, una pantalla más adentro. El Panel abría con diez
+tarjetas de las que seis decían «—» —FTE y costo del mes cerrado, ausentismo,
+horas extras, costo sobre venta, venta neta— y entre las seis tapaban las cuatro
+que sí tenían un número; la ficha de una tienda, ocho de las que seis. Ninguno
+está roto: salen de la estadística del mes, que se carga cuando el mes cierra.
+`ordenarKpis()` (`app.js`) corre después de pintar, los saca de la tira y los
+nombra abajo en una línea —«Todavía sin número: …»—, que es lo único que hacía
+falta saber de ellos. **Un cero no es un vacío y se queda donde está**: «0
+reclamos abiertos» es una respuesta. Si están todos vacíos la tira queda entera,
+porque ahí el mensaje es justamente que todavía no hay nada. Como corre sobre el
+DOM vale para las dieciocho tiras y para las que se escriban después: **no hay
+que acordarse de nada al agregar un KPI nuevo**, alcanza con que el valor sea
+`'—'` cuando no hay dato. Por eso la tira es `flex` y no grilla: con columnas
+iguales, los dos que quedaban se estiraban a media pantalla cada uno.
+
+**El código de la tienda entre paréntesis solo cuando dice algo.**
+`Store.etiquetaSucursal()` escribía «Botánico (BOTANICO)» —el mismo nombre dos
+veces— en cada fila de cada lista. Ahora compara el nombre con el código sin
+acentos ni mayúsculas y lo agrega solo cuando difieren: queda «San Martín Center
+(SM CENTER)», que sí avisa cómo se la llama en el RVD y en la nómina.
+
 Abajo de 980px la columna se vuelve **cajón**: el botón del encabezado la abre y
 el velo, `Escape` o elegir un ítem la cierran. Cerrarla al elegir no es un
 detalle: dejarla abierta tapando la pantalla a la que acabás de entrar es el

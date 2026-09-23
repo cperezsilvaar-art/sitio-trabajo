@@ -151,6 +151,7 @@ const App = (() => {
     });
 
     const conDatos = filas.filter(f => f.c);
+    const hayMesCerrado = conDatos.some(f => f.c.matriz.total.fteReal);
     const sum = k => conDatos.reduce((a, f) => a + num(getPath(f.c, k)), 0);
     const fteVinculo = sum('matriz.total.fteVinculo');
     const fte = sum('matriz.total.fteReal');
@@ -246,13 +247,18 @@ const App = (() => {
         })()}
         ${kpi('Venta neta', ventaRed ? dinero(ventaRed) : '—', costo ? `costo laboral ${dinero(costo)}` : '')}
         
-        ${kpi('Reportes enviados', `${enviadas} / ${visitadas}`, 'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
+        ${/* Sin ninguna visita registrada, «0 / 0» es un vacío disfrazado de
+             número: ocupa un lugar en la tira y no contesta nada. */
+          kpi('Reportes enviados', visitadas ? `${enviadas} / ${visitadas}` : '—',
+              'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
       <section class="tarjeta">
         <h2>Sucursales</h2>
-        <p class="ayuda">Una tarjeta por tienda. Arriba lo que hay hoy —gente y FTE—, abajo lo del
-          último mes cerrado. Tocá el nombre para entrar a la sucursal.</p>
+        <p class="ayuda">Una tarjeta por tienda${hayMesCerrado
+          ? ': arriba lo que hay hoy —gente y FTE—, abajo lo del último mes cerrado'
+          : ', con la gente que hay hoy'}. Tocá el nombre para entrar a la sucursal.${hayMesCerrado
+          ? '' : ' Los números del mes cerrado aparecen acá cuando cargues la estadística del mes.'}</p>
         <div class="tarjetas-suc">
           ${e.sucursales.map(({ id }) => {
             const f = filas.find(x => x.s.id === id);
@@ -282,14 +288,17 @@ const App = (() => {
                 </ul>
               </div>
 
-              <div class="suc-mes">
+              ${/* Mientras no haya un solo mes cerrado en el área, este bloque es
+                     catorce veces la misma frase. Lo dice una vez el copete de
+                     la sección y las tarjetas se quedan con lo que sí tienen. */
+                hayMesCerrado ? `<div class="suc-mes">
                 ${cerrado ? `
                   <div><span>FTE real</span><b>${fmtNum(c.matriz.total.fteReal)}</b></div>
                   <div><span>Ausentismo</span><b>${c.ausentismo.pctTotal === null ? '—' : fmtPct(c.ausentismo.pctTotal)}</b></div>
                   <div><span>Hs. extras</span><b>${c.matriz.total.horasExtras ? fmtNum(c.matriz.total.horasExtras, 0) : '—'}</b></div>
                   <div><span>Costo / FTE</span><b>${c.matriz.total.costoPorFte ? dinero(c.matriz.total.costoPorFte) : '—'}</b></div>
                 ` : '<p class="suc-sinmes">Sin mes cerrado todavía.</p>'}
-              </div>
+              </div>` : ''}
 
               <footer>
                 <span>${v ? `Visita del ${fmtFecha(v.fecha)}` : '<span class="chip">sin visita</span>'}</span>
@@ -474,7 +483,7 @@ const App = (() => {
                 f.aus.length - f.sinPapel ? `<span class="chip ambar">${f.aus.length - f.sinPapel} ausente${f.aus.length - f.sinPapel === 1 ? '' : 's'}</span>` : '',
                 f.rec.length ? `<a class="chip ambar" href="#/reclamos/${f.s.id}" style="text-decoration:none">${f.rec.length} reclamo${f.rec.length === 1 ? '' : 's'}</a>` : '',
                 f.dev.length ? `<a class="chip azul" href="#/desarrollo" style="text-decoration:none">${f.dev.length} en desarrollo</a>` : ''
-              ].filter(Boolean).join(' ') || '<span class="ayuda">sin novedades</span>'}</td>
+              ].filter(Boolean).join(' ') || '<span class="ayuda">—</span>'}</td>
               <td>${!f.tienda ? '<span class="ayuda">no se visita</span>'
                 : (f.ult ? `${fmtFecha(f.ult.fecha)} · ${semaforo(f.desde)}` : semaforo(null))}
                 ${f.r && f.r.pct !== null
@@ -1459,13 +1468,16 @@ const App = (() => {
       <p class="subtitulo">Lo que le pasa a la gente además de trabajar: quién se mueve de tienda,
         a quién le cambia el puesto y quién se fue.</p>
 
+      ${/* Cero es la respuesta, no un dato que falta: «no tenés nada esperando
+            tu visto bueno» es lo que se viene a saber acá. El guión se guarda
+            para lo que todavía no se puede calcular. */''}
       <div class="kpis">
-        ${kpi('Pendientes de autorizar', pendientes.length || '—',
+        ${kpi('Pendientes de autorizar', pendientes.length,
               pendientes.length ? 'esperando tu visto bueno' : 'nada esperando', pendientes.length ? 'aviso' : 'ok')}
-        ${kpi('Autorizadas sin aplicar', porAplicar.length || '—',
+        ${kpi('Autorizadas sin aplicar', porAplicar.length,
               porAplicar.length ? 'con vigencia más adelante' : 'todo aplicado')}
-        ${kpi('Movimientos registrados', movs.length || '—', 'traspasos y modificaciones')}
-        ${kpi(`Bajas ${anio}`, bajasDelAnio.length || '—',
+        ${kpi('Movimientos registrados', movs.length, 'traspasos y modificaciones')}
+        ${kpi(`Bajas ${anio}`, bajasDelAnio.length,
               bajas.length > bajasDelAnio.length ? `${bajas.length} en total` : 'en el listado')}
       </div>
 
@@ -4859,6 +4871,52 @@ const App = (() => {
     });
   }
 
+  /* Un indicador sin número no ocupa un lugar de indicador.
+   *
+   * El Panel abría con diez tarjetas de las que seis decían «—»: el FTE y el
+   * costo del mes cerrado, el ausentismo, las horas extras, el costo sobre
+   * venta. Ninguno está roto —salen de la estadística del mes, que se carga
+   * cuando el mes cierra— pero entre los seis tapaban los cuatro que sí tenían
+   * un número. Es la misma razón por la que los contadores del menú se
+   * esconden en cero: un guión permanente deja de leerse a los dos días y se
+   * queda con el lugar de algo que importa.
+   *
+   * Así que los vacíos salen de la tira y se nombran abajo en una línea, que
+   * es lo que hacía falta saber de ellos: que existen y de dónde van a salir.
+   * Un cero no es un vacío y se queda donde está — «0 reclamos abiertos» es
+   * una respuesta.
+   *
+   * Corre después de pintar, sobre el DOM, y no en cada `kpi()`: son dieciocho
+   * tiras en el panel y así vale para todas, incluidas las que se escriban
+   * después. */
+  const SIN_NUMERO = /^(—|-|–|\s)*$/;
+
+  function ordenarKpis() {
+    document.querySelectorAll('#contenido .kpis').forEach(tira => {
+      const vacios = [...tira.querySelectorAll(':scope > .kpi')].filter(k => {
+        const v = k.querySelector('.valor');
+        return v && SIN_NUMERO.test(v.textContent.trim());
+      });
+      /* Si están todos vacíos no hay nada que despejar: la tira entera es el
+         mensaje de que todavía no hay datos, y dejarla es más claro que
+         reemplazarla por una línea de texto suelta. */
+      if (!vacios.length || vacios.length === tira.children.length) return;
+
+      /* Sin bajar a minúscula: «FTE del mes cerrado» es una sigla y
+         «fte» no se lee. */
+      const nombres = vacios.map(k => {
+        const et = k.querySelector('.etiqueta');
+        return et ? et.textContent.trim() : '';
+      }).filter(Boolean);
+      vacios.forEach(k => k.remove());
+
+      const pie = document.createElement('p');
+      pie.className = 'ayuda kpis-vacios';
+      pie.textContent = `Todavía sin número: ${nombres.join(' · ')}.`;
+      tira.insertAdjacentElement('afterend', pie);
+    });
+  }
+
   /* El cajón del teléfono. Se cierra solo al elegir un ítem: dejarlo abierto
      tapando la pantalla a la que acabás de entrar es el error clásico. */
   function menu(abierto) {
@@ -4935,6 +4993,7 @@ const App = (() => {
       a.classList.toggle('activo', activo);
     });
     contadoresDelMenu(e);
+    ordenarKpis();
 
     const lat = $('#lat-area');
     if (lat) lat.textContent = e.config.area || 'Farmatodo';
@@ -5004,6 +5063,10 @@ const App = (() => {
     if (!vistaActual) return;
     const y = window.scrollY;
     $('#contenido').innerHTML = vistaActual();
+    /* También acá: si no, deshacer una baja o cerrar un reclamo repinta la
+       pantalla y los indicadores vacíos vuelven a aparecer hasta el próximo
+       cambio de pantalla. */
+    ordenarKpis();
     window.scrollTo(0, y);
     completarCensoResguardos();
   }
@@ -6527,7 +6590,7 @@ const App = (() => {
     }
   }
 
-  return { iniciar, render, refrescar };
+  return { iniciar, render, refrescar, ordenarKpis };
 })();
 
 document.addEventListener('DOMContentLoaded', App.iniciar);
