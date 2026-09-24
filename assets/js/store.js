@@ -1053,6 +1053,7 @@ const Store = (() => {
         apellido: x.ap || '',
         nombre: x.no || '',
         nombreCompleto: [x.no, x.ap].filter(Boolean).join(' '),
+        sexo: x.sx || '',
         tienda: x.t || '',
         categoriaConvenio: x.cat || '',
         cargo: x.cargo || '',

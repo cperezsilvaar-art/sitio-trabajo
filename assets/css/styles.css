@@ -1021,3 +1021,45 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .pendiente.rojo > b { color: var(--rojo-alerta); }
+
+/* ---- Composición del plantel: mujeres y varones por tienda ----
+   Dos categorías, así que dos colores fijos —nunca por posición en la tabla—
+   y siempre con los dos números escritos al lado: el color no es lo único que
+   dice cuál es cuál. Los pasos del modo oscuro están elegidos contra el fondo
+   oscuro, no derivados del claro: los tokens de la interfaz son demasiado
+   claros y poco saturados para una marca de datos. */
+:root {
+  --sexo-f: #1e6fc4;
+  --sexo-m: #b7791f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --sexo-f: #4f97ea; --sexo-m: #c4850e; }
+}
+:root[data-theme="dark"] { --sexo-f: #4f97ea; --sexo-m: #c4850e; }
+
+.leyenda-sexo {
+  display: flex; gap: 16px; margin: 0 0 10px;
+  font-size: 12.5px; color: var(--texto-suave);
+}
+.leyenda-sexo span { display: flex; align-items: center; gap: 6px; }
+.leyenda-sexo i, .barra-sexo i { display: block; border-radius: 3px; }
+.leyenda-sexo i { width: 11px; height: 11px; }
+.seg-f { background: var(--sexo-f); }
+.seg-m { background: var(--sexo-m); }
+
+.celda-sexo { min-width: 230px; }
+/* 2px de aire entre los dos segmentos: pegados, el borde entre colores se lee
+   como un tercer valor. */
+.barra-sexo { display: flex; gap: 2px; height: 8px; margin-bottom: 4px; }
+.barra-sexo i { height: 100%; min-width: 3px; }
+.cifras-sexo { font-size: 12.5px; color: var(--texto-suave); }
+.cifras-sexo b { color: var(--texto); font-variant-numeric: tabular-nums; }
+.cifras-sexo em { font-style: normal; margin-left: 6px; }
+
+/* La unidad va pegada al número; la nota de sobre cuántos se calculó el
+   promedio va abajo, en su propio renglón. */
+#tabla-composicion td.num em {
+  font-style: normal; font-size: 11.5px; color: var(--texto-suave); font-weight: 400;
+}
+#tabla-composicion td.num em.sobre { display: block; margin-top: 1px; }
+#tabla-composicion .cabecera-suc { align-items: flex-end; }

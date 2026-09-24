@@ -415,6 +415,38 @@ por lo que pide atención, por nombre, por antigüedad de la visita o por
 dotación. `#/visitas` sigue viva como ruta: hay enlaces guardados y el botón
 «Visitar» de cada ficha.
 
+**El Panel abre con la composición del plantel, tienda por tienda**
+(`bloqueComposicion()` en `app.js`, sobre `composicionPorSucursal()` de
+`nomina.js`): cuántas mujeres y cuántos varones, antigüedad promedio y edad
+promedio. Son las tres que arman la conversación de capacidades con Operaciones
+—una tienda de gente nueva no se supervisa como una de quince años de casa— y es
+lo que McKinsey llama planificar capacidades y no headcount.
+
+**Cuenta personas, no FTE**: dos de media jornada son dos personas. El FTE
+contesta «cuánto turno cubro» y esto contesta «quiénes son», que es otra
+pregunta; por lo mismo los de bloqueo de título entran, que son plantel aunque
+no cubran piso.
+
+Es **una tabla y no un gráfico**, a propósito: con catorce tiendas y tres medidas
+de unidades distintas, cualquier gráfico único obliga a dos escalas en un mismo
+eje, que es la forma más común de mentir sin querer. La única marca es la barrita
+de composición —eso sí es parte de un todo— y **va siempre con los dos números al
+lado**: el color nunca es lo único que dice cuál es cuál. Los dos tonos
+(`--sexo-f`, `--sexo-m`) están validados para daltonismo y contraste, y los pasos
+del modo oscuro se eligieron contra el fondo oscuro, no derivados del claro: los
+tokens de la interfaz son demasiado claros y poco saturados para una marca de
+datos. **No colorear las filas por tienda**: son categorías sin orden y el largo
+de la barra ya dice lo que hay que ver.
+
+**La edad sale de `fechaNacimiento`, que no está en la semilla del repositorio**
+—la privacidad la deja afuera— así que aparece recién al pegar la nómina del mes.
+Mientras no haya ninguna, la columna entera **no se dibuja** y el copete dice de
+dónde va a salir, por lo mismo que un indicador sin número sale de la tira. El
+sexo **sí** está en la semilla (`sx`), porque si no el tablero abre vacío en un
+navegador limpio, que es justo lo que la semilla existe para evitar. Cuando un
+promedio sale de una parte del plantel, la celda dice **sobre cuántos** está
+hecho: «40,0 años · sobre 13 de 136».
+
 **Siguen siendo dos listas de tiendas y no tres.** `#/red` mira el área de
 conjunto —KPIs y una tarjeta por tienda— y `#/sucursales` mira tienda por
 tienda. Una pantalla nueva que necesite listar las doce tiene que apoyarse en
@@ -482,10 +514,11 @@ La gerencia autorizó al coordinador a trabajar con la nómina real del Área 3,
 esa autorización es para **el repositorio y el equipo, no para una página
 publicada**.
 
-`assets/js/plantel-area3.js` guarda lo **operativo** de las 139 personas del área
-—nombre, tienda, cargo, categoría, nivel, jornada, fechas de ingreso, estatus y
-unidad de negocio—, para que el panel no abra vacío cuando el navegador se
-limpia. `assets/js/sucursales-area3.js` guarda los referentes de cada tienda:
+`assets/js/plantel-area3.js` guarda lo **operativo** de las 136 personas del área
+—nombre, sexo, tienda, cargo, categoría, nivel, jornada, fechas de ingreso,
+estatus y unidad de negocio—, para que el panel no abra vacío cuando el navegador
+se limpia. El **sexo** (`sx`) está ahí porque sin él la composición por sucursal
+del Panel abre vacía; la **fecha de nacimiento no**, y no hay que agregarla. `assets/js/sucursales-area3.js` guarda los referentes de cada tienda:
 gerente, director técnico, contacto administrativo con su mail y referente de
 RRHH.
 

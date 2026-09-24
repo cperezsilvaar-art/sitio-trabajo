@@ -365,3 +365,49 @@ No los borra: casi siempre es gente que se fue, y hasta que se les cargue la
 baja siguen contando en la dotación de piso. El aviso es para ir a su ficha y
 cargarla. Pegando la nómina de septiembre sobre el listado corto de agosto
 aparecen dos: Diaz Romero y Herrero, las dos de Olivos.
+
+## Quiénes son, tienda por tienda
+
+El Panel (`#/red`) abre con una tabla de composición del plantel: **cuántas
+mujeres y cuántos varones** hay en cada tienda, la **antigüedad promedio** y la
+**edad promedio**. Sale de `composicionPorSucursal()` (`nomina.js`) y se dibuja
+con `bloqueComposicion()` (`app.js`).
+
+Son las tres preguntas que arman la conversación de capacidades con Operaciones:
+una tienda de gente nueva no se supervisa como una de quince años de casa, y una
+de once personas con cuatro mujeres no tiene el mismo problema de cobertura que
+una de once con nueve.
+
+### Cuenta personas, no FTE
+
+Dos personas de media jornada son **dos personas**, no una. El FTE contesta
+«cuánto turno cubro»; esto contesta «quiénes son», que es otra pregunta. Por lo
+mismo, quien tiene bloqueo de título entra: es parte del plantel aunque no cubra
+piso. Así que los números de esta tabla **no tienen que coincidir** con la
+dotación de piso, y está bien que no coincidan.
+
+### Por qué es una tabla y no un gráfico
+
+Catorce tiendas y tres medidas de unidades distintas. Cualquier gráfico único
+obligaría a dos escalas en un mismo eje, que es la forma más común de mentir sin
+querer, y con más de siete categorías que todas importan la tabla gana siempre.
+
+La única marca es la **barrita de composición**, que sí es parte de un todo, y va
+siempre con los dos números escritos al lado más una referencia de color arriba:
+la identidad nunca depende solo del color. Los dos tonos están validados para
+daltonismo y contraste contra los dos fondos; los del modo oscuro se eligieron
+contra el fondo oscuro y no se derivaron del claro.
+
+### Los datos que faltan se dicen, no se rellenan
+
+- La **edad** sale de la fecha de nacimiento, que por privacidad no está en la
+  semilla del repositorio: entra al pegar la nómina del mes. Mientras no haya
+  ninguna, la columna no se dibuja y el copete explica de dónde va a salir.
+- El **sexo** sí está en la semilla (`sx`), porque si no el tablero abriría vacío
+  en un navegador limpio.
+- Un promedio calculado sobre parte del plantel dice **sobre cuántos**: «40,0
+  años · sobre 13 de 136». Un promedio de trece fichas sobre ciento treinta y
+  seis leído como si fuera de todas es peor que no mostrarlo.
+- El porcentaje de mujeres se calcula **sobre quienes tienen el sexo cargado**,
+  no sobre el total: con diez fichas incompletas, sobre el total mentiría hacia
+  abajo.

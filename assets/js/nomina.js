@@ -278,3 +278,78 @@ function resumirNomina(filas) {
   });
   return { personas: (filas || []).length, porTienda, porPosicion };
 }
+
+/* ------------------- Composición del plantel por tienda -------------------
+ *
+ * Tres preguntas que el coordinador contesta de memoria y mal: cuántas mujeres
+ * y cuántos varones hay en cada tienda, cuánta antigüedad promedio tiene cada
+ * una y qué edad promedio. Son las tres que arman la conversación de
+ * capacidades con Operaciones —una tienda de gente nueva no se supervisa como
+ * una de quince años de casa— y ninguna estaba en el panel.
+ *
+ * Cuenta **personas y no FTE**: dos de media jornada son dos mujeres, no una.
+ * El FTE contesta «cuánto turno cubro» y esto contesta «quiénes son», que es
+ * otra pregunta. Los de bloqueo de título sí entran: son parte del plantel
+ * aunque no cubran piso.
+ *
+ * La edad sale de `fechaNacimiento`, que **no está en la semilla del
+ * repositorio** por privacidad: aparece recién cuando se pega la nómina del
+ * mes. Mientras no esté, la columna queda en `null` y la pantalla lo dice en
+ * vez de mostrar un cero que parece un dato.
+ */
+
+/** Años cumplidos a una fecha, o null si no hay fecha de nacimiento. */
+function edadAnios(fechaNacimiento, hoyISO) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(fechaNacimiento || ''))) return null;
+  const [a, m, d] = fechaNacimiento.split('-').map(Number);
+  const h = hoyISO && /^\d{4}-\d{2}-\d{2}$/.test(hoyISO)
+    ? hoyISO.split('-').map(Number)
+    : (x => [x.getFullYear(), x.getMonth() + 1, x.getDate()])(new Date());
+  let anios = h[0] - a;
+  if (h[1] < m || (h[1] === m && h[2] < d)) anios--;
+  return anios >= 0 && anios < 120 ? anios : null;
+}
+
+const _promedio = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+
+/**
+ * La composición de una lista de personas: sexo, antigüedad y edad.
+ * `sinEdad` y `sinSexo` cuentan a quién le falta el dato, para que un promedio
+ * sobre la mitad del plantel no se lea como si fuera sobre todos.
+ */
+function composicionDe(personas, hoyISO) {
+  const gente = (personas || []).filter(c => c && c.activo !== false);
+  const sx = c => String(c.sexo || '').trim().toUpperCase()[0] || '';
+  const mujeres = gente.filter(c => sx(c) === 'F').length;
+  const varones = gente.filter(c => sx(c) === 'M').length;
+
+  const ants = gente.map(c => antiguedadAnios(c.fechaIngreso)).filter(x => x !== null);
+  const edades = gente.map(c => edadAnios(c.fechaNacimiento, hoyISO)).filter(x => x !== null);
+
+  return {
+    personas: gente.length,
+    mujeres, varones,
+    sinSexo: gente.length - mujeres - varones,
+    /* Sobre los que tienen sexo cargado, no sobre el total: si faltan diez
+       fichas, el porcentaje sobre el total miente hacia abajo. */
+    pctMujeres: (mujeres + varones) ? mujeres / (mujeres + varones) : null,
+    antiguedad: _promedio(ants),
+    sinAntiguedad: gente.length - ants.length,
+    edad: _promedio(edades),
+    sinEdad: gente.length - edades.length
+  };
+}
+
+/** Una fila por tienda más el total del área, para el tablero del Panel. */
+function composicionPorSucursal(estado, hoyISO) {
+  const e = estado || {};
+  const filas = (e.sucursales || []).map(s => Object.assign(
+    { id: s.id, sucursal: s.nombre || s.codigo, staff: s.tipo === 'staff' },
+    composicionDe(s.colaboradores, hoyISO)));
+  const todas = (e.sucursales || []).flatMap(s => s.colaboradores || []);
+  return { filas, total: composicionDe(todas, hoyISO) };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { edadAnios, composicionDe, composicionPorSucursal };
+}

@@ -253,6 +253,8 @@ const App = (() => {
               'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
+      ${bloqueComposicion(e)}
+
       <section class="tarjeta">
         <h2>Sucursales</h2>
         <p class="ayuda">Una tarjeta por tienda${hayMesCerrado
@@ -977,6 +979,109 @@ const App = (() => {
                              : '<p class="vacio">Todavía no cerraste nada.</p>')
           : '<p class="ayuda">El historial de lo que ya resolviste.</p>'}
       </section>`;
+  }
+
+  /* ---------- Quiénes son, tienda por tienda ----------
+     Tres preguntas que se contestaban de memoria y mal: cuántas mujeres y
+     cuántos varones hay en cada tienda, cuánta antigüedad promedio y qué edad.
+     Son las que arman la conversación de capacidades con Operaciones —una
+     tienda de gente nueva no se supervisa como una de quince años de casa—.
+
+     Es una tabla y no un gráfico a propósito: con catorce tiendas y tres
+     medidas de unidades distintas, cualquier gráfico único obliga a dos
+     escalas en un mismo eje, que es la forma más común de mentir sin querer.
+     La única marca es la barrita de composición, que sí es parte-de-un-todo,
+     y va siempre con los dos números al lado: el color nunca es el único que
+     dice cuál es cuál. */
+
+  let ordenComposicion = 'personas';
+
+  const ORDENES_COMPOSICION = {
+    personas:   { nombre: 'Más gente primero',      cmp: (a, b) => b.personas - a.personas },
+    nombre:     { nombre: 'Por nombre',             cmp: (a, b) => a.sucursal.localeCompare(b.sucursal, 'es') },
+    mujeres:    { nombre: 'Más mujeres primero',    cmp: (a, b) => (b.pctMujeres || 0) - (a.pctMujeres || 0) },
+    antiguedad: { nombre: 'Más antigüedad primero', cmp: (a, b) => (b.antiguedad || 0) - (a.antiguedad || 0) },
+    edad:       { nombre: 'Más edad primero',       cmp: (a, b) => (b.edad || 0) - (a.edad || 0) }
+  };
+
+  function bloqueComposicion(e) {
+    const c = composicionPorSucursal(e, hoyISO());
+    const filas = c.filas.filter(f => f.personas)
+      .sort((ORDENES_COMPOSICION[ordenComposicion] || ORDENES_COMPOSICION.personas).cmp);
+    if (!filas.length) return '';
+
+    const anios = v => v === null ? '<span class="ayuda">—</span>'
+      : `${fmtNum(v, 1)} <em>años</em>`;
+
+    /* La barrita: dos segmentos con 2px de aire entre ellos, y los números
+       escritos al lado. Sin gente cargada no se dibuja nada. */
+    const barra = f => {
+      if (!(f.mujeres + f.varones)) return '<span class="ayuda">sin dato</span>';
+      const tot = f.mujeres + f.varones;
+      return `<span class="barra-sexo" role="img"
+        aria-label="${f.mujeres} mujeres y ${f.varones} varones">
+        ${f.mujeres ? `<i class="seg-f" style="flex:${f.mujeres}"></i>` : ''}
+        ${f.varones ? `<i class="seg-m" style="flex:${f.varones}"></i>` : ''}
+      </span><span class="cifras-sexo"><b>${f.mujeres}</b> M · <b>${f.varones}</b> V
+        <em>${fmtPct(f.mujeres / tot, 0)} mujeres</em></span>`;
+    };
+
+    /* Si nadie tiene fecha de nacimiento, la columna entera son catorce
+       guiones: se saca y el copete dice de dónde va a salir, igual que los
+       indicadores sin número salen de la tira. */
+    const sinEdad = c.total.sinEdad === c.total.personas;
+    const colEdad = sinEdad ? '' : '<th class="num">Edad promedio</th>';
+    /* Un promedio sacado de trece fichas sobre ciento treinta y seis se lee
+       como si fuera de todas. Cuando falta alguno, la celda dice sobre
+       cuántos está hecho. */
+    const celdaEdad = f => sinEdad ? '' : `<td class="num">${anios(f.edad)}${
+      f.edad !== null && f.sinEdad
+        ? `<em class="sobre">sobre ${f.personas - f.sinEdad} de ${f.personas}</em>` : ''}</td>`;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Quiénes son, tienda por tienda</h2>
+        <label class="campo" style="margin-left:auto;max-width:230px">
+          <span>Ordenar por</span>
+          <select data-orden-composicion>
+            ${Object.entries(ORDENES_COMPOSICION).filter(([k]) => k !== 'edad' || !sinEdad).map(([k, o]) =>
+              `<option value="${k}"${k === ordenComposicion ? ' selected' : ''}>${o.nombre}</option>`).join('')}
+          </select></label>
+      </div>
+      <p class="ayuda">Cuenta personas, no FTE: dos de media jornada son dos personas.
+        Los de bloqueo de título entran, porque son parte del plantel aunque no cubran piso.
+        ${sinEdad ? '<strong>La edad promedio sale de la fecha de nacimiento, que no viene con el '
+          + 'plantel del área: aparece cuando pegues la nómina del mes en Nómina.</strong>' : ''}</p>
+
+      <p class="leyenda-sexo">
+        <span><i class="seg-f"></i> Mujeres</span>
+        <span><i class="seg-m"></i> Varones</span>
+      </p>
+
+      <div class="tabla-scroll"><table id="tabla-composicion">
+        <thead><tr>
+          <th>Sucursal</th><th class="num">Personas</th><th>Mujeres y varones</th>
+          <th class="num">Antigüedad promedio</th>${colEdad}
+        </tr></thead>
+        <tbody>
+          ${filas.map(f => `<tr>
+            <td><a href="#/sucursal/${f.id}" style="font-weight:600;color:var(--azul)">${esc(f.sucursal)}</a>
+              ${f.staff ? '<span class="chip">staff</span>' : ''}</td>
+            <td class="num">${f.personas}</td>
+            <td class="celda-sexo">${barra(f)}</td>
+            <td class="num">${anios(f.antiguedad)}</td>
+            ${celdaEdad(f)}
+          </tr>`).join('')}
+        </tbody>
+        <tfoot><tr>
+          <td>Todo el área</td>
+          <td class="num">${c.total.personas}</td>
+          <td class="celda-sexo">${barra(c.total)}</td>
+          <td class="num">${anios(c.total.antiguedad)}</td>
+          ${celdaEdad(c.total)}
+        </tr></tfoot>
+      </table></div>
+    </section>`;
   }
 
   /* ---------- Lo que quedó pendiente ----------
@@ -5328,6 +5433,12 @@ const App = (() => {
     cont.addEventListener('change', ev => {
       if (ev.target.id !== 'suc-orden') return;
       sucursalesOrden = ev.target.value;
+      refrescar();
+    });
+
+    cont.addEventListener('change', ev => {
+      if (!ev.target.matches('[data-orden-composicion]')) return;
+      ordenComposicion = ev.target.value;
       refrescar();
     });
 
