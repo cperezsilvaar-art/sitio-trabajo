@@ -289,42 +289,48 @@ const App = (() => {
   function bloqueParticipacion(e) {
     const pa = participacionDeAusencias(e, null, hoyISO());
     if (!pa.eventos) return '';
-    const tope = pa.tiendas[0].eventos || 1;
+    const tope = pa.tiendas[0].dias || 1;
 
+    const meses = Math.round(pa.ventana / 30);
     return `<section class="tarjeta">
       <div class="cabecera-suc">
-        <h2>De dónde sale el ausentismo</h2>
-        <span class="chip ambar">${pa.eventos} en 3 meses</span>
+        <h2>Ausentismo: cuánto y de dónde sale</h2>
+        <span class="chip ${pa.tasa >= 0.05 ? 'rojo' : pa.tasa >= 0.03 ? 'ambar' : 'verde'}">${
+          pa.tasa === null ? '—' : fmtPct(pa.tasa, 1)} del área</span>
       </div>
-      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)},
-        ${pa.personas} persona${pa.personas === 1 ? '' : 's'} con al menos una ausencia.
-        Se cuenta en <strong>eventos</strong>: de ${pa.eventos},
-        <strong>${pa.conDias}</strong> dicen cuántos días duran y suman
-        ${fmtNum(pa.dias, 0)} días.${pa.sinDias ? ` Los otros ${pa.sinDias} llegaron sin
-        duración, así que los días son un piso y no el total.` : ''}
-        Las vacaciones no cuentan.</p>
+      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)}:
+        <strong>${fmtNum(pa.dias, 0)} días</strong> de ausencia de
+        ${pa.personas} persona${pa.personas === 1 ? '' : 's'}, sobre un plantel de
+        ${pa.plantel} en ${meses} mes${meses === 1 ? '' : 'es'}.
+        ${pa.supuestos ? `<strong>${fmtPct(pa.parteSupuesta, 0)} de esos días son supuestos</strong>:
+          ${pa.supuestos} de los ${pa.eventos} certificados no decían cuánto duraban y se
+          tomaron como un día. El resto sale del papel.` : 'Todos los días salen del papel.'}
+        Las vacaciones, la maternidad y el fallecimiento no cuentan.</p>
 
       <div class="lista-barras">
         ${pa.tiendas.map(t => `
           <button class="fila-tienda-aus" data-accion="ver-tienda-aus" data-id="${t.id}">
-            ${barraDato(t.eventos / tope,
-              `${esc(t.sucursal)} <b>${t.eventos}</b> <em>${fmtPct(t.parteDelArea, 0)} del área · ${
-                t.personas} persona${t.personas === 1 ? '' : 's'}${
-                t.conDias ? ` · ${fmtNum(t.dias, 0)} días conocidos` : ''}</em>`)}
+            ${barraDato(t.dias / tope,
+              `${esc(t.sucursal)} <b>${t.tasa === null ? '—' : fmtPct(t.tasa, 1)}</b>
+               <em>${fmtNum(t.dias, 0)} días · ${fmtPct(t.parteDelArea, 0)} del total del área ·
+               ${t.personas} de ${t.plantel} persona${t.plantel === 1 ? '' : 's'}${
+                 t.supuestos ? ` · ${t.supuestos} supuesto${t.supuestos === 1 ? '' : 's'}` : ''}</em>`)}
           </button>
           ${tiendaAbierta === t.id ? `<ul class="lista-pendientes" style="margin:2px 0 10px 14px">
-            ${t.gente.map(g => `<li class="pendiente">
+            ${t.gente.map(g => `<li class="pendiente${g.tasa >= 0.08 ? ' rojo' : g.tasa >= 0.04 ? ' ambar' : ''}">
               <a href="#/nomina">
                 <strong>${esc(g.nombre)}</strong>
-                <span>${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
-                  g.conDias ? ` · ${fmtNum(g.dias, 0)} días` : ''}${
-                  g.sinDias ? ` · ${g.sinDias} sin duración` : ''}</span>
+                <span>${fmtNum(g.dias, 0)} día${g.dias === 1 ? '' : 's'} en
+                  ${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
+                  g.supuestos ? ` · ${g.supuestos} sin duración en el papel` : ''}</span>
               </a>
-              <b>${fmtPct(g.parteDeLaTienda, 0)} de la tienda</b>
+              <b>${fmtPct(g.tasa, 1)}</b>
             </li>`).join('')}
           </ul>` : ''}`).join('')}
       </div>
-      <p class="ayuda" style="margin-top:12px">Tocá una tienda para ver quiénes la componen.</p>
+      <p class="ayuda" style="margin-top:12px">El porcentaje de cada tienda va sobre
+        <strong>su propio plantel</strong>, no sobre el del área: si no, una tienda chica con
+        mucha ausencia parecería sana. Tocá una para ver quiénes la componen.</p>
     </section>`;
   }
 
@@ -1805,9 +1811,11 @@ const App = (() => {
         ${r.porCuil} por CUIL y ${r.porNombre} por nombre.
         ${r.repetidas ? `${r.repetidas} ya estaban cargadas y no se duplicaron.` : ''}
         ${r.apercibimientos ? `${r.apercibimientos} apercibimiento${r.apercibimientos === 1 ? '' : 's'} salteado${r.apercibimientos === 1 ? '' : 's'}.` : ''}
+        ${r.completadas ? `${r.completadas} ya estaban cargadas sin duración y se completaron.` : ''}
         ${r.sinDuracion ? `<br><strong>${r.sinDuracion} no dicen cuántos días duran</strong>:
-          el certificado se cargó con la patología nada más. Quedan registradas —que la persona
-          faltó es un hecho— pero no suman días.` : ''}
+          el certificado se cargó con la patología nada más. Se tomaron como <strong>un día</strong>
+          y quedan marcadas como supuestas, así el ausentismo dice siempre qué parte de los días
+          se midió y qué parte se supuso.` : ''}
         ${r.sinPersona.length ? `<br>${r.sinPersona.length} no se pudieron atribuir a nadie del
           padrón: ${esc([...new Set(r.sinPersona)].slice(0, 8).join(' · '))}${
           new Set(r.sinPersona).size > 8 ? '…' : ''}. Suele ser gente que ya no está o un

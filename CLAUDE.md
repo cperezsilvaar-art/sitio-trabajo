@@ -272,17 +272,22 @@ más que Excel agrega al guardarlo como número— y por nombre solo si no hay
 ambigüedad. No duplica: la misma persona, el mismo día y el mismo motivo entra
 una vez, así que se puede volver a pegar la planilla entera cada mes.
 
-**La planilla no fue pensada para medir, y el panel no finge que sí.** El
-certificado se carga en un campo de texto libre: de los 148 certificados del
-Área 3, **82 traen solo la patología** y ninguna duración; de los que la traen,
-la mayoría la escribe en horas —«(24) HORAS»— y no en días, que
-`leerCertificado()` convierte. Por eso **no se muestra un porcentaje de
-ausentismo sobre días**: calculado sobre el 45% de los certificados no sería un
-porcentaje bajo sino uno falso, y va a una reunión con Operaciones como si fuera
-el del área. Se muestran **eventos**, que están completos, y **días conocidos**
-diciendo sobre cuántos certificados se saben. Una ausencia sin duración se
-guarda igual (`sinDuracion: true`): que faltó es un hecho y cuánto faltó es otro
-dato. Documentado en `docs/ausencias.md`.
+**La planilla no fue pensada para medir**, y de ahí sale el único supuesto del
+panel. El certificado se carga en un campo de texto libre: de los 148
+certificados del Área 3, **82 traen solo la patología** y ninguna duración; de
+los que la traen, la mayoría la escribe en horas —«(24) HORAS»— y no en días,
+que `leerCertificado()` convierte. **El que no dice cuánto dura se toma como un
+día** (`DIAS_SIN_DURACION`, `ausencias.js`), que es lo que decidió el
+coordinador y lo que dicen sus propios datos: de los 66 certificados con
+duración, 30 duran un día y 54 duran uno o dos. Es un supuesto, no una lectura
+del papel, así que **queda marcado en la ausencia para siempre**
+(`diasSupuestos: true`) y **el número nunca se muestra solo**:
+`participacionDeAusencias()` devuelve `diasSupuestos` y `parteSupuesta` junto al
+total, y la pantalla dice qué parte de los días se midió y qué parte se supuso
+—«33% de esos días son supuestos: 13 de los 22 certificados no decían cuánto
+duraban»—. Un porcentaje con su procedencia al lado se puede llevar a una
+reunión con Operaciones; el mismo número sin ella, no. Documentado en
+`docs/ausencias.md`.
 
 **Las vacaciones se importan pero no son ausentismo** —son tiempo planificado y
 meterlas infla el número con algo que no es un problema—, y tampoco la maternidad
@@ -291,9 +296,13 @@ ni el fallecimiento: `TIPOS_FORMULARIO` lo marca con `ausentismo: false` y
 
 **`participacionDeAusencias()` (`indicadores.js`) contesta de dónde sale**, en
 tres niveles: el área, cada tienda sobre el total del área y cada persona sobre
-su tienda. En eventos y no en días, por lo de arriba. Se ve en *Panel →
-Indicadores*; el historial de cada persona ya estaba en su ficha
-(`fichaAusenciasRegistradas`).
+su tienda. Los tres se cuentan **en días** y los tres traen su **tasa** —días de
+ausencia sobre plantel por días de la ventana—, la de cada tienda **sobre su
+propio plantel** y no sobre el del área: si no, una tienda de seis personas y
+una de veinte se leerían con la misma vara. Ordenar por eventos y repartir por
+días, o al revés, daba dos respuestas distintas a la misma pregunta una al lado
+de la otra. Se ve en *Panel → Indicadores*; el historial de cada persona ya
+estaba en su ficha (`fichaAusenciasRegistradas`).
 
 **El historial va en la ficha de la persona**, no en la de la sucursal: vive en
 `c.ausencias`, así que la acompaña cuando se muda de tienda. `ausenciasPorMes()`

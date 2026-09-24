@@ -159,17 +159,39 @@ libre que pide patología, fecha de inicio y días de reposo, y en la práctica:
 La mitad escribe la duración en **horas** —«(24) HORAS»— y no en días, así que
 `leerCertificado()` lee las dos formas y convierte: 24 horas es un día.
 
-**Por eso el panel no muestra un porcentaje de ausentismo sobre días.** Un
-porcentaje calculado sobre el 45% de los certificados no es un porcentaje bajo:
-es un porcentaje falso, y va a una reunión con Operaciones como si fuera el del
-área. Lo que se muestra es:
+### El certificado sin duración se toma como un día
 
-- **eventos**, que están completos y por eso permiten comparar tiendas y
-  personas con exactitud;
-- **días conocidos**, diciendo siempre sobre cuántos certificados se saben.
+La primera versión no mostraba ningún porcentaje sobre días, justamente por la
+tabla de arriba: calculado sobre el 45% de los certificados no sería un
+porcentaje bajo, sería uno falso. Pero tampoco servía: el coordinador necesita
+el ausentismo de los últimos tres meses y nómina todavía no tiene el documento
+de licencias, así que la planilla es lo único que hay.
 
-Una ausencia sin duración **se guarda igual**, con `sinDuracion: true`: que la
-persona faltó es un hecho, y cuántos días faltó es otro dato.
+La salida la eligió él: **el certificado que no dice cuánto dura se toma como un
+día** (`DIAS_SIN_DURACION` en `ausencias.js`). No es una lectura del papel, es un
+supuesto, y sus propios datos lo respaldan:
+
+| De los 66 certificados que sí traen duración | |
+|---|---|
+| Duran **un día** | **30 (45%)** |
+| Duran uno o dos días | 54 (82%) |
+| Duran más de una semana | 4 |
+
+Un día es la duración más frecuente y la más conservadora de las plausibles: si
+el supuesto se equivoca, subestima el ausentismo en vez de inflarlo.
+
+**El supuesto queda marcado para siempre.** La ausencia se guarda con
+`diasSupuestos: true`, y de ahí en adelante ningún número lo pierde:
+`participacionDeAusencias()` devuelve `diasSupuestos` y `parteSupuesta` al lado
+de los días totales, y la pantalla lo escribe en la misma oración que el
+porcentaje —«39 días de ausencia de 12 personas, sobre un plantel de 133 en 3
+meses. 33% de esos días son supuestos: 13 de los 22 certificados no decían
+cuánto duraban y se tomaron como un día»—. Eso es lo que hace que el número se
+pueda llevar a una reunión: no que sea exacto, sino que diga de qué está hecho.
+
+Una ausencia que se importó **antes** de tomar el supuesto quedó sin `hasta`.
+Volver a pegar la planilla **la completa** en vez de contarla como repetida, así
+no hay que borrar nada para recuperar los días.
 
 ### Cómo empareja
 
@@ -193,6 +215,19 @@ fallecimiento tampoco. Los apercibimientos no son una ausencia y se saltean.
 
 `participacionDeAusencias()` (`indicadores.js`) lo reparte en tres niveles: el
 área, cada tienda con su participación sobre el total, y adentro de cada tienda
-cada persona con su participación sobre esa tienda. Se cuenta en eventos
-—completos— y no en días —incompletos—. Se ve en *Panel → Indicadores*, y el
-historial de cada persona está en su ficha (`fichaAusenciasRegistradas`).
+cada persona con su participación sobre esa tienda. Los tres van **en días**, y
+los tres traen además su **tasa**: días de ausencia sobre plantel por días de la
+ventana.
+
+La tasa de cada tienda se calcula **sobre su propio plantel**, no sobre el del
+área. Una tienda de seis personas con cuatro días de ausencia y una de veinte
+con los mismos cuatro días aportan lo mismo al total del área y no tienen el
+mismo problema; la participación contesta «de dónde salen los días» y la tasa
+contesta «cuál está peor».
+
+Repartir por días pero ordenar por eventos —que es como quedó la primera
+versión— daba dos respuestas distintas a la misma pregunta, una al lado de la
+otra. Ahora las dos escalas usan días.
+
+Se ve en *Panel → Indicadores*, y el historial de cada persona está en su ficha
+(`fichaAusenciasRegistradas`).

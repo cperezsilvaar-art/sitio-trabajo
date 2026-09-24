@@ -379,6 +379,19 @@ if (typeof module !== 'undefined' && module.exports) {
  * porcentaje falso.
  */
 
+/* Cuántos días dura un certificado que no dice cuánto dura.
+ *
+ * El coordinador decidió tomarlos como **un día**, y los propios datos lo
+ * respaldan: de los 66 certificados del Área 3 que sí declaran duración, 30 son
+ * de un día y 54 de uno o dos. Suponer un día es la lectura más conservadora —
+ * la que menos infla el ausentismo— y es la única que permite tener un número.
+ *
+ * Lo que no se hace es **olvidar que es un supuesto**: la ausencia queda con
+ * `diasSupuestos: true` y todo lo que la cuenta separa los días medidos de los
+ * supuestos. El día que el formulario pida la duración en un campo aparte, el
+ * supuesto se apaga solo para las nuevas y las viejas siguen marcadas. */
+const DIAS_SIN_DURACION = 1;
+
 /** Qué es cada columna del formulario, por lo que dice su encabezado. */
 const COLUMNAS_FORMULARIO_AUSENCIAS = [
   { campo: 'marca',    claves: ['marca temporal'] },

@@ -324,12 +324,21 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
   const hasta = hastaISO || _diaHoy();
   const desde = desdeISO || _mesesAtras(hasta, 3);
 
-  const cuenta = () => ({ eventos: 0, dias: 0, conDias: 0, sinDias: 0, personas: new Set() });
+  /* El largo de la ventana es el denominador de la tasa: los días de ausencia
+     de una persona sobre los días que tuvo el período. */
+  const ventana = Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1);
+
+  const cuenta = () => ({ eventos: 0, dias: 0, diasSupuestos: 0,
+                          medidos: 0, supuestos: 0, personas: new Set() });
   const area = cuenta();
   const tiendas = [];
+  let plantel = 0;
 
   (e.sucursales || []).forEach(s => {
     const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
+    const activos = (s.colaboradores || []).filter(c => c.activo !== false).length;
+    t.plantel = activos;
+    plantel += activos;
     (s.colaboradores || []).forEach(c => {
       const suyas = (c.ausencias || []).filter(a => {
         if (a.cuentaAusentismo === false) return false;
@@ -337,39 +346,56 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
         return a.desde && a.desde >= desde && a.desde <= hasta;
       });
       if (!suyas.length) return;
-      const d = suyas.reduce((n, a) => n + (a.hasta ? (diasDeAusencia(a, hasta) || 0) : 0), 0);
-      const con = suyas.filter(a => a.hasta).length;
+      const d = suyas.reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
+      /* Cuántos de esos días salen del papel y cuántos del supuesto de un día:
+         el total se lee distinto según de dónde venga. */
+      const sup = suyas.filter(a => a.diasSupuestos)
+        .reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
+      const nSup = suyas.filter(a => a.diasSupuestos).length;
       t.gente.push({ id: c.id, nombre: c.nombre, eventos: suyas.length,
-                     dias: d, conDias: con, sinDias: suyas.length - con });
-      t.eventos += suyas.length; t.dias += d;
-      t.conDias += con; t.sinDias += suyas.length - con;
+                     dias: d, diasSupuestos: sup,
+                     medidos: suyas.length - nSup, supuestos: nSup,
+                     tasa: d / ventana });
+      t.eventos += suyas.length; t.dias += d; t.diasSupuestos += sup;
+      t.medidos += suyas.length - nSup; t.supuestos += nSup;
       t.personas.add(c.id);
     });
     if (!t.eventos) return;
     /* Adentro de la tienda, el que más falta primero: es con quien empieza la
        conversación del gerente. */
-    t.gente.sort((a, b) => b.eventos - a.eventos || b.dias - a.dias);
-    t.gente.forEach(g => { g.parteDeLaTienda = t.eventos ? g.eventos / t.eventos : 0; });
+    /* Se ordena y se reparte por días, igual que las tiendas sobre el área:
+       mezclar eventos en un nivel y días en el otro hace que los porcentajes
+       de arriba y los de abajo no hablen de lo mismo. */
+    t.gente.sort((a, b) => b.dias - a.dias || b.eventos - a.eventos);
+    t.gente.forEach(g => { g.parteDeLaTienda = t.dias ? g.dias / t.dias : 0; });
     tiendas.push(t);
     area.eventos += t.eventos; area.dias += t.dias;
-    area.conDias += t.conDias; area.sinDias += t.sinDias;
+    area.diasSupuestos += t.diasSupuestos;
+    area.medidos += t.medidos; area.supuestos += t.supuestos;
     t.personas.forEach(x => area.personas.add(x));
   });
 
-  tiendas.sort((a, b) => b.eventos - a.eventos);
+  tiendas.sort((a, b) => b.dias - a.dias || b.eventos - a.eventos);
   tiendas.forEach(t => {
-    t.parteDelArea = area.eventos ? t.eventos / area.eventos : 0;
+    t.parteDelArea = area.dias ? t.dias / area.dias : 0;
     t.personas = t.personas.size;
+    /* La tasa de la tienda va sobre su propio plantel, no sobre el del área:
+       si no, una tienda chica con mucha ausencia parecería sana. */
+    t.tasa = t.plantel ? t.dias / (t.plantel * ventana) : null;
   });
 
   return {
-    desde, hasta,
+    desde, hasta, ventana, plantel,
     eventos: area.eventos, dias: area.dias,
-    conDias: area.conDias, sinDias: area.sinDias,
+    diasSupuestos: area.diasSupuestos,
+    medidos: area.medidos, supuestos: area.supuestos,
     personas: area.personas.size,
-    /* Qué parte de los certificados dice cuántos días dura. Sin esto, el total
-       de días se lee como si fueran todos. */
-    cobertura: area.eventos ? area.conDias / area.eventos : null,
+    /* El porcentaje del área: días de ausencia sobre días-persona del período.
+       Se puede dar porque los certificados sin duración se toman como un día;
+       `parteSupuesta` dice cuánto del total viene de ese supuesto, para que el
+       número nunca se lea como si estuviera todo medido. */
+    tasa: plantel ? area.dias / (plantel * ventana) : null,
+    parteSupuesta: area.dias ? area.diasSupuestos / area.dias : null,
     tiendas
   };
 }

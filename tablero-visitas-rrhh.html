@@ -4093,6 +4093,19 @@ if (typeof module !== 'undefined' && module.exports) {
  * porcentaje falso.
  */
 
+/* Cuántos días dura un certificado que no dice cuánto dura.
+ *
+ * El coordinador decidió tomarlos como **un día**, y los propios datos lo
+ * respaldan: de los 66 certificados del Área 3 que sí declaran duración, 30 son
+ * de un día y 54 de uno o dos. Suponer un día es la lectura más conservadora —
+ * la que menos infla el ausentismo— y es la única que permite tener un número.
+ *
+ * Lo que no se hace es **olvidar que es un supuesto**: la ausencia queda con
+ * `diasSupuestos: true` y todo lo que la cuenta separa los días medidos de los
+ * supuestos. El día que el formulario pida la duración en un campo aparte, el
+ * supuesto se apaga solo para las nuevas y las viejas siguen marcadas. */
+const DIAS_SIN_DURACION = 1;
+
 /** Qué es cada columna del formulario, por lo que dice su encabezado. */
 const COLUMNAS_FORMULARIO_AUSENCIAS = [
   { campo: 'marca',    claves: ['marca temporal'] },
@@ -4924,12 +4937,21 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
   const hasta = hastaISO || _diaHoy();
   const desde = desdeISO || _mesesAtras(hasta, 3);
 
-  const cuenta = () => ({ eventos: 0, dias: 0, conDias: 0, sinDias: 0, personas: new Set() });
+  /* El largo de la ventana es el denominador de la tasa: los días de ausencia
+     de una persona sobre los días que tuvo el período. */
+  const ventana = Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1);
+
+  const cuenta = () => ({ eventos: 0, dias: 0, diasSupuestos: 0,
+                          medidos: 0, supuestos: 0, personas: new Set() });
   const area = cuenta();
   const tiendas = [];
+  let plantel = 0;
 
   (e.sucursales || []).forEach(s => {
     const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
+    const activos = (s.colaboradores || []).filter(c => c.activo !== false).length;
+    t.plantel = activos;
+    plantel += activos;
     (s.colaboradores || []).forEach(c => {
       const suyas = (c.ausencias || []).filter(a => {
         if (a.cuentaAusentismo === false) return false;
@@ -4937,39 +4959,56 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
         return a.desde && a.desde >= desde && a.desde <= hasta;
       });
       if (!suyas.length) return;
-      const d = suyas.reduce((n, a) => n + (a.hasta ? (diasDeAusencia(a, hasta) || 0) : 0), 0);
-      const con = suyas.filter(a => a.hasta).length;
+      const d = suyas.reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
+      /* Cuántos de esos días salen del papel y cuántos del supuesto de un día:
+         el total se lee distinto según de dónde venga. */
+      const sup = suyas.filter(a => a.diasSupuestos)
+        .reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
+      const nSup = suyas.filter(a => a.diasSupuestos).length;
       t.gente.push({ id: c.id, nombre: c.nombre, eventos: suyas.length,
-                     dias: d, conDias: con, sinDias: suyas.length - con });
-      t.eventos += suyas.length; t.dias += d;
-      t.conDias += con; t.sinDias += suyas.length - con;
+                     dias: d, diasSupuestos: sup,
+                     medidos: suyas.length - nSup, supuestos: nSup,
+                     tasa: d / ventana });
+      t.eventos += suyas.length; t.dias += d; t.diasSupuestos += sup;
+      t.medidos += suyas.length - nSup; t.supuestos += nSup;
       t.personas.add(c.id);
     });
     if (!t.eventos) return;
     /* Adentro de la tienda, el que más falta primero: es con quien empieza la
        conversación del gerente. */
-    t.gente.sort((a, b) => b.eventos - a.eventos || b.dias - a.dias);
-    t.gente.forEach(g => { g.parteDeLaTienda = t.eventos ? g.eventos / t.eventos : 0; });
+    /* Se ordena y se reparte por días, igual que las tiendas sobre el área:
+       mezclar eventos en un nivel y días en el otro hace que los porcentajes
+       de arriba y los de abajo no hablen de lo mismo. */
+    t.gente.sort((a, b) => b.dias - a.dias || b.eventos - a.eventos);
+    t.gente.forEach(g => { g.parteDeLaTienda = t.dias ? g.dias / t.dias : 0; });
     tiendas.push(t);
     area.eventos += t.eventos; area.dias += t.dias;
-    area.conDias += t.conDias; area.sinDias += t.sinDias;
+    area.diasSupuestos += t.diasSupuestos;
+    area.medidos += t.medidos; area.supuestos += t.supuestos;
     t.personas.forEach(x => area.personas.add(x));
   });
 
-  tiendas.sort((a, b) => b.eventos - a.eventos);
+  tiendas.sort((a, b) => b.dias - a.dias || b.eventos - a.eventos);
   tiendas.forEach(t => {
-    t.parteDelArea = area.eventos ? t.eventos / area.eventos : 0;
+    t.parteDelArea = area.dias ? t.dias / area.dias : 0;
     t.personas = t.personas.size;
+    /* La tasa de la tienda va sobre su propio plantel, no sobre el del área:
+       si no, una tienda chica con mucha ausencia parecería sana. */
+    t.tasa = t.plantel ? t.dias / (t.plantel * ventana) : null;
   });
 
   return {
-    desde, hasta,
+    desde, hasta, ventana, plantel,
     eventos: area.eventos, dias: area.dias,
-    conDias: area.conDias, sinDias: area.sinDias,
+    diasSupuestos: area.diasSupuestos,
+    medidos: area.medidos, supuestos: area.supuestos,
     personas: area.personas.size,
-    /* Qué parte de los certificados dice cuántos días dura. Sin esto, el total
-       de días se lee como si fueran todos. */
-    cobertura: area.eventos ? area.conDias / area.eventos : null,
+    /* El porcentaje del área: días de ausencia sobre días-persona del período.
+       Se puede dar porque los certificados sin duración se toman como un día;
+       `parteSupuesta` dice cuánto del total viene de ese supuesto, para que el
+       número nunca se lea como si estuviera todo medido. */
+    tasa: plantel ? area.dias / (plantel * ventana) : null,
+    parteSupuesta: area.dias ? area.diasSupuestos / area.dias : null,
     tiendas
   };
 }
@@ -8173,8 +8212,9 @@ const Store = (() => {
         .replace(/[\u0300-\u036f]/g, '').toUpperCase()
         .split(/[^A-Z]+/).filter(w => w.length > 2));
 
-      const out = { cargadas: 0, repetidas: 0, sinDuracion: 0, sinPersona: [],
-                    porCuil: 0, porNombre: 0, fueraDelArea: 0, apercibimientos: 0 };
+      const out = { cargadas: 0, repetidas: 0, completadas: 0, sinDuracion: 0,
+                    sinPersona: [], porCuil: 0, porNombre: 0, fueraDelArea: 0,
+                    apercibimientos: 0 };
 
       filas.forEach(f => {
         const tipo = motivoDeFormulario(f.tipo);
@@ -8207,13 +8247,27 @@ const Store = (() => {
            tiempo. Queda marcado en `fechaAproximada`. */
         const desde = leido.desde || (String(f.marca || '').slice(0, 10) || '');
         if (!desde) return;
-        const hasta = leido.dias ? _diaMas(desde, leido.dias - 1) : '';
+        /* El certificado que no dice cuánto dura se toma como un día. Es una
+           decisión del coordinador, no una lectura del papel, y por eso queda
+           marcada: `diasSupuestos` acompaña a la ausencia para siempre. */
+        const dias = leido.dias || DIAS_SIN_DURACION;
+        const hasta = _diaMas(desde, dias - 1);
 
         /* La misma persona, el mismo día y el mismo motivo es la misma
-           ausencia: el formulario se completa dos veces seguido. */
+           ausencia: el formulario se completa dos veces seguido. Si la que ya
+           estaba quedó sin duración —se importó antes de tomar el supuesto—
+           se le completa ahora en vez de dejarla a medias. */
         if (!Array.isArray(g.c.ausencias)) g.c.ausencias = [];
-        if (g.c.ausencias.some(a => a.desde === desde && a.motivo === tipo.motivo)) {
-          out.repetidas++; return;
+        const ya = g.c.ausencias.find(a => a.desde === desde && a.motivo === tipo.motivo);
+        if (ya) {
+          if (!ya.hasta) {
+            ya.hasta = hasta;
+            ya.diasSupuestos = !leido.dias;
+            out.completadas++;
+          } else {
+            out.repetidas++;
+          }
+          return;
         }
 
         g.c.ausencias.push({
@@ -8224,7 +8278,8 @@ const Store = (() => {
           notas: '', reincorporado: false, fechaReincorporacion: '',
           origen: 'formulario',
           fechaAproximada: !leido.desde,
-          sinDuracion: !leido.dias,
+          /* El papel no decía cuántos días: se tomó uno. */
+          diasSupuestos: !leido.dias,
           cuentaAusentismo: tipo.ausentismo,
           registradaEl: new Date().toISOString()
         });
@@ -10855,42 +10910,48 @@ const App = (() => {
   function bloqueParticipacion(e) {
     const pa = participacionDeAusencias(e, null, hoyISO());
     if (!pa.eventos) return '';
-    const tope = pa.tiendas[0].eventos || 1;
+    const tope = pa.tiendas[0].dias || 1;
 
+    const meses = Math.round(pa.ventana / 30);
     return `<section class="tarjeta">
       <div class="cabecera-suc">
-        <h2>De dónde sale el ausentismo</h2>
-        <span class="chip ambar">${pa.eventos} en 3 meses</span>
+        <h2>Ausentismo: cuánto y de dónde sale</h2>
+        <span class="chip ${pa.tasa >= 0.05 ? 'rojo' : pa.tasa >= 0.03 ? 'ambar' : 'verde'}">${
+          pa.tasa === null ? '—' : fmtPct(pa.tasa, 1)} del área</span>
       </div>
-      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)},
-        ${pa.personas} persona${pa.personas === 1 ? '' : 's'} con al menos una ausencia.
-        Se cuenta en <strong>eventos</strong>: de ${pa.eventos},
-        <strong>${pa.conDias}</strong> dicen cuántos días duran y suman
-        ${fmtNum(pa.dias, 0)} días.${pa.sinDias ? ` Los otros ${pa.sinDias} llegaron sin
-        duración, así que los días son un piso y no el total.` : ''}
-        Las vacaciones no cuentan.</p>
+      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)}:
+        <strong>${fmtNum(pa.dias, 0)} días</strong> de ausencia de
+        ${pa.personas} persona${pa.personas === 1 ? '' : 's'}, sobre un plantel de
+        ${pa.plantel} en ${meses} mes${meses === 1 ? '' : 'es'}.
+        ${pa.supuestos ? `<strong>${fmtPct(pa.parteSupuesta, 0)} de esos días son supuestos</strong>:
+          ${pa.supuestos} de los ${pa.eventos} certificados no decían cuánto duraban y se
+          tomaron como un día. El resto sale del papel.` : 'Todos los días salen del papel.'}
+        Las vacaciones, la maternidad y el fallecimiento no cuentan.</p>
 
       <div class="lista-barras">
         ${pa.tiendas.map(t => `
           <button class="fila-tienda-aus" data-accion="ver-tienda-aus" data-id="${t.id}">
-            ${barraDato(t.eventos / tope,
-              `${esc(t.sucursal)} <b>${t.eventos}</b> <em>${fmtPct(t.parteDelArea, 0)} del área · ${
-                t.personas} persona${t.personas === 1 ? '' : 's'}${
-                t.conDias ? ` · ${fmtNum(t.dias, 0)} días conocidos` : ''}</em>`)}
+            ${barraDato(t.dias / tope,
+              `${esc(t.sucursal)} <b>${t.tasa === null ? '—' : fmtPct(t.tasa, 1)}</b>
+               <em>${fmtNum(t.dias, 0)} días · ${fmtPct(t.parteDelArea, 0)} del total del área ·
+               ${t.personas} de ${t.plantel} persona${t.plantel === 1 ? '' : 's'}${
+                 t.supuestos ? ` · ${t.supuestos} supuesto${t.supuestos === 1 ? '' : 's'}` : ''}</em>`)}
           </button>
           ${tiendaAbierta === t.id ? `<ul class="lista-pendientes" style="margin:2px 0 10px 14px">
-            ${t.gente.map(g => `<li class="pendiente">
+            ${t.gente.map(g => `<li class="pendiente${g.tasa >= 0.08 ? ' rojo' : g.tasa >= 0.04 ? ' ambar' : ''}">
               <a href="#/nomina">
                 <strong>${esc(g.nombre)}</strong>
-                <span>${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
-                  g.conDias ? ` · ${fmtNum(g.dias, 0)} días` : ''}${
-                  g.sinDias ? ` · ${g.sinDias} sin duración` : ''}</span>
+                <span>${fmtNum(g.dias, 0)} día${g.dias === 1 ? '' : 's'} en
+                  ${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
+                  g.supuestos ? ` · ${g.supuestos} sin duración en el papel` : ''}</span>
               </a>
-              <b>${fmtPct(g.parteDeLaTienda, 0)} de la tienda</b>
+              <b>${fmtPct(g.tasa, 1)}</b>
             </li>`).join('')}
           </ul>` : ''}`).join('')}
       </div>
-      <p class="ayuda" style="margin-top:12px">Tocá una tienda para ver quiénes la componen.</p>
+      <p class="ayuda" style="margin-top:12px">El porcentaje de cada tienda va sobre
+        <strong>su propio plantel</strong>, no sobre el del área: si no, una tienda chica con
+        mucha ausencia parecería sana. Tocá una para ver quiénes la componen.</p>
     </section>`;
   }
 
@@ -12371,9 +12432,11 @@ const App = (() => {
         ${r.porCuil} por CUIL y ${r.porNombre} por nombre.
         ${r.repetidas ? `${r.repetidas} ya estaban cargadas y no se duplicaron.` : ''}
         ${r.apercibimientos ? `${r.apercibimientos} apercibimiento${r.apercibimientos === 1 ? '' : 's'} salteado${r.apercibimientos === 1 ? '' : 's'}.` : ''}
+        ${r.completadas ? `${r.completadas} ya estaban cargadas sin duración y se completaron.` : ''}
         ${r.sinDuracion ? `<br><strong>${r.sinDuracion} no dicen cuántos días duran</strong>:
-          el certificado se cargó con la patología nada más. Quedan registradas —que la persona
-          faltó es un hecho— pero no suman días.` : ''}
+          el certificado se cargó con la patología nada más. Se tomaron como <strong>un día</strong>
+          y quedan marcadas como supuestas, así el ausentismo dice siempre qué parte de los días
+          se midió y qué parte se supuso.` : ''}
         ${r.sinPersona.length ? `<br>${r.sinPersona.length} no se pudieron atribuir a nadie del
           padrón: ${esc([...new Set(r.sinPersona)].slice(0, 8).join(' · '))}${
           new Set(r.sinPersona).size > 8 ? '…' : ''}. Suele ser gente que ya no está o un

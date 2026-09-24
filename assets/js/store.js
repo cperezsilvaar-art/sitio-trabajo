@@ -1110,8 +1110,9 @@ const Store = (() => {
         .replace(/[\u0300-\u036f]/g, '').toUpperCase()
         .split(/[^A-Z]+/).filter(w => w.length > 2));
 
-      const out = { cargadas: 0, repetidas: 0, sinDuracion: 0, sinPersona: [],
-                    porCuil: 0, porNombre: 0, fueraDelArea: 0, apercibimientos: 0 };
+      const out = { cargadas: 0, repetidas: 0, completadas: 0, sinDuracion: 0,
+                    sinPersona: [], porCuil: 0, porNombre: 0, fueraDelArea: 0,
+                    apercibimientos: 0 };
 
       filas.forEach(f => {
         const tipo = motivoDeFormulario(f.tipo);
@@ -1144,13 +1145,27 @@ const Store = (() => {
            tiempo. Queda marcado en `fechaAproximada`. */
         const desde = leido.desde || (String(f.marca || '').slice(0, 10) || '');
         if (!desde) return;
-        const hasta = leido.dias ? _diaMas(desde, leido.dias - 1) : '';
+        /* El certificado que no dice cuánto dura se toma como un día. Es una
+           decisión del coordinador, no una lectura del papel, y por eso queda
+           marcada: `diasSupuestos` acompaña a la ausencia para siempre. */
+        const dias = leido.dias || DIAS_SIN_DURACION;
+        const hasta = _diaMas(desde, dias - 1);
 
         /* La misma persona, el mismo día y el mismo motivo es la misma
-           ausencia: el formulario se completa dos veces seguido. */
+           ausencia: el formulario se completa dos veces seguido. Si la que ya
+           estaba quedó sin duración —se importó antes de tomar el supuesto—
+           se le completa ahora en vez de dejarla a medias. */
         if (!Array.isArray(g.c.ausencias)) g.c.ausencias = [];
-        if (g.c.ausencias.some(a => a.desde === desde && a.motivo === tipo.motivo)) {
-          out.repetidas++; return;
+        const ya = g.c.ausencias.find(a => a.desde === desde && a.motivo === tipo.motivo);
+        if (ya) {
+          if (!ya.hasta) {
+            ya.hasta = hasta;
+            ya.diasSupuestos = !leido.dias;
+            out.completadas++;
+          } else {
+            out.repetidas++;
+          }
+          return;
         }
 
         g.c.ausencias.push({
@@ -1161,7 +1176,8 @@ const Store = (() => {
           notas: '', reincorporado: false, fechaReincorporacion: '',
           origen: 'formulario',
           fechaAproximada: !leido.desde,
-          sinDuracion: !leido.dias,
+          /* El papel no decía cuántos días: se tomó uno. */
+          diasSupuestos: !leido.dias,
           cuentaAusentismo: tipo.ausentismo,
           registradaEl: new Date().toISOString()
         });
