@@ -528,6 +528,23 @@ entran al pegar la nómina y se quedan en el navegador. El banco y el CBU se
 importan desde septiembre de 2026, a pedido del coordinador: se muestran
 plegados en la ficha y no aparecen en ningún reporte.
 
+**La página publicada dice que es una demostración y carga sus cinco personas
+sola.** Abrir el link y encontrarse con cinco nombres desconocidos —o con el
+tablero en cero— se lee como que se perdieron los datos. `--demo` inyecta
+`PAGINA_DE_DEMOSTRACION = true`, que es lo único que el panel necesita saber:
+con eso muestra un cartel arriba del Panel aclarando que las personas están
+inventadas y que el panel de trabajo es el que se abre desde el archivo, y carga
+la semilla al entrar.
+
+**Solo la de demostración carga sola.** En el panel de trabajo reponer el
+plantel sigue siendo **un clic a propósito**: la semilla es la nómina de un mes
+concreto y meterla sola en un navegador nuevo se adelanta a lo que el
+coordinador iba a pegar. En una página publicada no hay nada que adelantarse y
+el clic es puro estorbo. Las dos respetan `Store.arrancoEnFrio()` —cierto solo
+cuando nunca se guardó nada— así que un tablero vaciado a mano se queda vacío en
+vez de repoblarse a espaldas de quien lo borró; ahí lo que aparece es el aviso
+de las copias automáticas, que es mejor que reponer a ciegas.
+
 **Lo que se publica como página se arma con `--demo`** (o con `--sin-plantel`,
 que es lo mismo pero deja el padrón vacío). `--demo` pone en su lugar las cinco
 personas inventadas de `assets/js/plantel-demo.js` —Acuña, Beltrán, Corvalán,

@@ -75,7 +75,12 @@ js  = '\n'.join(fuente(s) for s in scripts)
 if demo:
     # `plantel-demo.js` declara el mismo `PLANTEL_AREA3`, así que entra en el
     # lugar que dejó vacío el archivo real y el resto del panel no se entera.
-    js = (raiz / 'assets/js/plantel-demo.js').read_text(encoding='utf-8') + '\n' + js
+    #
+    # `PAGINA_DE_DEMOSTRACION` es lo único que el panel sí necesita saber: sin
+    # eso, la página publicada abre con cinco personas inventadas y parece que
+    # el padrón de verdad se perdió. Con eso lo dice en un cartel.
+    js = ('const PAGINA_DE_DEMOSTRACION = true;\n'
+          + (raiz / 'assets/js/plantel-demo.js').read_text(encoding='utf-8') + '\n' + js)
 elif sin_plantel:
     js = 'const PLANTEL_AREA3 = [];\n' + js
 

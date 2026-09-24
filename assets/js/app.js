@@ -203,6 +203,18 @@ const App = (() => {
         </div>`;
       })()}
 
+      ${/* La página publicada lleva cinco personas inventadas en lugar del
+            padrón. Sin decirlo, abrir el link y ver cinco nombres que no
+            conocés se lee como que se perdieron los datos. */
+        typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+        ? `<div class="aviso-caja" id="aviso-demo">
+            <strong>Ésta es la página de demostración.</strong> Las personas que ves acá están
+            inventadas y las tiendas no tienen cargados sus referentes: una página publicada es
+            pública y por eso no lleva la nómina del Área 3.
+            <br>Tu panel de trabajo, con el padrón de verdad, es el que abrís desde el archivo
+            en tu computadora. Los datos viven en ese navegador y no viajan a ningún lado.
+          </div>` : ''}
+
       ${(() => {
         /* Arranque en frío: sin plantel, sin copias y con el plantel del área
            disponible. Es lo que ve cualquiera que abre el panel por primera vez
@@ -6736,6 +6748,28 @@ const App = (() => {
     }
 
     conectar();
+
+    /* La página de demostración carga sus cinco personas sola.
+     *
+     * Solo la de demostración. En el panel de trabajo, reponer el plantel es
+     * un clic a propósito: la semilla es la nómina de un mes concreto y meterla
+     * sola en un navegador nuevo se adelanta a lo que el coordinador iba a
+     * pegar. En una página publicada no hay nada que adelantarse —las cinco
+     * son inventadas y no hay otra cosa que cargar— y el clic es puro estorbo:
+     * nadie abre una demostración para apretar «cargar la demostración».
+     *
+     * La condición de arranque en frío igual manda: si alguien vació la página
+     * publicada a mano, se queda vacía en vez de repoblarse a sus espaldas. */
+    const esDemo = typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION;
+    if (esDemo && Store.arrancoEnFrio() && PLANTEL_AREA3.length && !Store.resguardos().length) {
+      const r = Store.cargarPlantelArea3();
+      render();
+      if (r && r.cargadas !== 0) {
+        avisar(`Cargamos las ${PLANTEL_AREA3.length} personas inventadas de la demostración `
+             + 'para que la página no abra en cero.');
+      }
+    }
+
     /* Lo autorizado con vigencia futura se vuelca el día que corresponde, no
        antes: si no, el plantel de hoy mostraría a alguien en una tienda a la
        que todavía no fue. */

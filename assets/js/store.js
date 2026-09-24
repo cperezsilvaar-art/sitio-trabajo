@@ -355,6 +355,8 @@ const Store = (() => {
    * @throws si hay contenido cifrado que no se puede descifrar, para no pisar
    *         datos que todavía se pueden recuperar con la clave correcta.
    */
+  let arrancoSinNada = false;
+
   async function cargar(cif) {
     cifrador = cif || null;
     let crudo = null;
@@ -363,7 +365,12 @@ const Store = (() => {
     } catch (err) {
       console.warn('No se pudo leer el almacenamiento local.', err);
     }
-    if (!crudo) { estado = estadoInicial(); return estado; }
+    /* Nunca se guardó nada en este navegador. No es lo mismo que un tablero
+       vaciado a propósito —ése sí tiene algo guardado, aunque esté vacío— y la
+       diferencia importa: en el primer caso corresponde reponer el plantel
+       solo, y en el segundo sería devolverle al usuario lo que acaba de
+       borrar. */
+    if (!crudo) { arrancoSinNada = true; estado = estadoInicial(); return estado; }
 
     let leido = false;
     try {
@@ -517,6 +524,9 @@ const Store = (() => {
     falloAlGuardar: () => falloAlGuardar,
     get: () => estado,
     save: guardar,
+
+    /** ¿Este navegador nunca guardó nada? Es el arranque en frío. */
+    arrancoEnFrio: () => arrancoSinNada,
     onChange: fn => suscriptores.push(fn),
 
     /* ------------------------- sucursales ------------------------- */
