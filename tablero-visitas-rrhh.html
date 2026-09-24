@@ -13861,7 +13861,8 @@ const App = (() => {
     if (!todas.length) {
       return `<h4>Licencias y ausencias registradas</h4>
         <p class="vacio">No tiene ninguna cargada.
-          <a href="#/diario/${c.id}">Registrar una</a>.</p>`;
+          <a href="#/diario/${c.id}">Registrar una</a>, o traer de una vez todas las del área
+          <a href="#/diario">pegando la planilla del formulario de recepción</a>.</p>`;
     }
 
     const r = ausenciasPorMes(c, hoy);
