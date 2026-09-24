@@ -1808,18 +1808,27 @@ const App = (() => {
         son tiempo planificado. Los apercibimientos no son una ausencia y se saltean.</p>
       ${r ? `<div class="aviso-caja ${r.cargadas ? 'info' : ''}" style="margin-top:14px">
         <strong>Entraron ${r.cargadas} ausencia${r.cargadas === 1 ? '' : 's'}.</strong>
-        ${r.porCuil} por CUIL y ${r.porNombre} por nombre.
+        ${r.porCuil} por CUIL, ${r.porDni} por DNI y ${r.porNombre} por nombre.
         ${r.repetidas ? `${r.repetidas} ya estaban cargadas y no se duplicaron.` : ''}
+        ${r.completadas ? `${r.completadas} estaban sin duración y se completaron.` : ''}
         ${r.apercibimientos ? `${r.apercibimientos} apercibimiento${r.apercibimientos === 1 ? '' : 's'} salteado${r.apercibimientos === 1 ? '' : 's'}.` : ''}
-        ${r.completadas ? `${r.completadas} ya estaban cargadas sin duración y se completaron.` : ''}
         ${r.sinDuracion ? `<br><strong>${r.sinDuracion} no dicen cuántos días duran</strong>:
           el certificado se cargó con la patología nada más. Se tomaron como <strong>un día</strong>
           y quedan marcadas como supuestas, así el ausentismo dice siempre qué parte de los días
           se midió y qué parte se supuso.` : ''}
-        ${r.sinPersona.length ? `<br>${r.sinPersona.length} no se pudieron atribuir a nadie del
-          padrón: ${esc([...new Set(r.sinPersona)].slice(0, 8).join(' · '))}${
-          new Set(r.sinPersona).size > 8 ? '…' : ''}. Suele ser gente que ya no está o un
-          nombre escrito distinto.` : ''}
+        ${r.otrasAreas ? `<br>${r.otrasAreas} son de tiendas de otras áreas y se saltearon, que es
+          lo que tiene que pasar: la planilla del formulario trae las respuestas de toda la
+          empresa.` : ''}
+        ${r.sinPersona.length ? `<br><strong>${r.sinPersona.length} son de tus tiendas y no caen en
+          nadie del padrón de hoy</strong>: ${esc([...new Set(r.sinPersona)].slice(0, 10).join(' · '))}${
+          new Set(r.sinPersona).size > 10 ? '…' : ''}. Casi siempre es gente que ya se fue —la
+          planilla arranca mucho antes que la nómina que tenés cargada—. Si alguno sigue
+          trabajando, pegá la nómina del mes y volvé a importar.` : ''}
+        ${r.enConflicto.length ? `<br><strong>${r.enConflicto.length} traen el número de una persona
+          y el nombre de otra</strong>: ${esc(r.enConflicto.slice(0, 6).join(' · '))}${
+          r.enConflicto.length > 6 ? '…' : ''}. No se cargaron: es un error de carga del
+          formulario y adivinar cuál de los dos vale le cuelga el certificado a alguien que no
+          faltó. Hay que verlo con el gerente.` : ''}
       </div>` : ''}
     </section>`;
   }

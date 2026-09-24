@@ -482,9 +482,28 @@ function cuilDelFormulario(v) {
   return d.length === 11 ? d : '';
 }
 
+/* El formulario pide el CUIL y una cuarta parte de las respuestas trae el DNI.
+   No es un error que valga la pena pelear: el DNI identifica igual de bien y el
+   padrón lo tiene. De las 193 filas del Área 3, 47 traen un número de 7 u 8
+   dígitos, y leerlo como documento en vez de descartarlo ubica 22 ausencias que
+   antes dependían de que el nombre estuviera bien escrito. */
+function documentoDelFormulario(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  /* Excel guarda el número como tal y al exportarlo le deja un `.0`, que al
+     sacar los no-dígitos queda como un cero de más al final. Se prueban las dos
+     lecturas porque un DNI que termina en 0 es perfectamente posible. */
+  const formas = d.length > 1 && d.endsWith('0') ? [d, d.slice(0, -1)] : [d];
+  const out = { cuil: '', dni: '' };
+  formas.forEach(x => {
+    if (!out.cuil && x.length === 11) out.cuil = x;
+    if (!out.dni && x.length >= 7 && x.length <= 8) out.dni = x;
+  });
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = Object.assign(module.exports || {}, {
-    COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO,
-    motivoDeFormulario, leerCertificado, cuilDelFormulario
+    COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO, DIAS_SIN_DURACION,
+    motivoDeFormulario, leerCertificado, cuilDelFormulario, documentoDelFormulario
   });
 }

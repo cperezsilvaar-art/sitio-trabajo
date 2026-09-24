@@ -193,13 +193,67 @@ Una ausencia que se importó **antes** de tomar el supuesto quedó sin `hasta`.
 Volver a pegar la planilla **la completa** en vez de contarla como repetida, así
 no hay que borrar nada para recuperar los días.
 
+### Lo que se pega es la planilla entera
+
+La planilla de respuestas es de **toda la empresa**: 734 filas de 28 tiendas
+desde marzo de 2025, de las que **193 son del Área 3**. No hay que filtrarla
+antes —se pega completa y el panel se queda con lo suyo—, y eso cambia cómo
+tiene que emparejar.
+
 ### Cómo empareja
 
-Por **CUIL**, que es lo único unívoco. Excel guarda el CUIL como número y al
-exportarlo le deja un `.0` que se lee como un dígito de más:
-`cuilDelFormulario()` lo saca. El nombre es el respaldo y solo vale si no hay
-ambigüedad —el formulario lo escribe a mano y aparecen «luciana ortellano» y
-«luiciana ortellano» para la misma persona—.
+**Primero el número.** `documentoDelFormulario()` devuelve CUIL y DNI, porque el
+formulario pide el CUIL y una parte de los gerentes escribe el DNI:
+
+| De las 193 filas del Área 3 | |
+|---|---|
+| Traen un CUIL de 11 dígitos | 146 |
+| Traen un DNI de 7 u 8 | **47** |
+
+El DNI identifica igual de bien y el padrón lo tiene desde que se pega la nómina,
+así que leerlo en vez de descartarlo **ubica 22 ausencias** que antes dependían de
+que el nombre estuviera bien escrito. Las dos lecturas se prueban con y sin el
+último dígito: Excel guarda el número como número y al exportarlo le deja un `.0`
+que queda como un cero de más al final, y un DNI terminado en 0 es perfectamente
+posible.
+
+**Después el nombre, y solo si no hay ambigüedad.** El formulario lo escribe a
+mano y aparecen «luciana ortellano» y «luiciana ortellano» para la misma persona.
+
+**Fuera de las tiendas del área, el nombre no alcanza.** Con las 734 filas
+adentro, dos palabras iguales dejan de ser una identidad: «Martinez Maria Eugenia»
+de Walker comparte MARIA y EUGENIA con «PEREZ, MARIA EUGENIA» de Scalabrini y no
+es la misma persona. Una fila cuya tienda no es del área **entra solo si el número
+coincide**. Eso no pierde a nadie que importe: quien se mudó al área trae su CUIL
+en las filas de la tienda anterior —Airoldi, Briceño, Díaz, Miglio— y esas siguen
+entrando, que es justo lo que hay que conservar, porque el historial acompaña a la
+persona y no a la tienda.
+
+### Cuando el número y el nombre se contradicen
+
+El número manda. Un nombre ambiguo o mal escrito simplemente pierde.
+
+Lo que no se resuelve solo es cuando **los dos apuntan, cada uno sin ninguna duda,
+a personas distintas**: «Luis Toro» con el número de Juan Gabriel Luna. Eso es un
+error de carga del formulario, y hay cuatro en el archivo. La fila **no entra** y
+se nombra en `enConflicto`, porque adivinar cuál de los dos vale le cuelga un
+certificado a alguien que no faltó —y ese alguien aparece después con ausentismo
+en una reunión con Operaciones—. Se resuelve con el gerente, no en el panel.
+
+### Lo que el resultado informa
+
+El aviso separa tres cosas que antes iban en un solo número:
+
+- **`otrasAreas`** (521): filas de tiendas de otras áreas. Es ruido esperable y el
+  aviso lo dice sin alarmar.
+- **`sinPersona`** (70): filas **de sus tiendas** que no caen en nadie del padrón
+  de hoy. Van con nombre y son la lista que importa. Casi siempre es gente que ya
+  se fue: la planilla arranca en marzo de 2025 y el padrón es el de hoy.
+- **`enConflicto`** (4): las de arriba.
+
+Las dos primeras iban juntas en un solo «615 no se pudieron atribuir», y el número
+que pedía algo quedaba tapado por el que no pedía nada. Es la misma regla que
+esconde los contadores en cero.
 
 **No duplica**: la misma persona, el mismo día y el mismo motivo entra una sola
 vez, así que se puede volver a pegar la planilla entera cada mes.

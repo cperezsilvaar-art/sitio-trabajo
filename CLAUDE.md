@@ -267,10 +267,40 @@ y por el mismo motivo: el campo llega como texto y un `!!` a secas daría verdad
 para `'no'`.
 
 **Las ausencias entran pegando la planilla del formulario de recepción**, al pie
-de `#/diario`. Empareja por **CUIL** —`cuilDelFormulario()` le saca el dígito de
-más que Excel agrega al guardarlo como número— y por nombre solo si no hay
-ambigüedad. No duplica: la misma persona, el mismo día y el mismo motivo entra
-una vez, así que se puede volver a pegar la planilla entera cada mes.
+de `#/diario`, y lo que se pega es la planilla **entera**: son las respuestas de
+toda la empresa —734 filas de 28 tiendas—, de las que 193 son del Área 3.
+Empareja por **número** y solo después por nombre. No duplica: la misma persona,
+el mismo día y el mismo motivo entra una vez, así que se puede volver a pegar
+todos los meses.
+
+El número es `documentoDelFormulario()`, que devuelve CUIL **y** DNI: el
+formulario pide el CUIL y una cuarta parte de las respuestas trae el DNI —47 de
+las 193—, que identifica igual de bien y que el padrón tiene. Leerlo en vez de
+descartarlo ubica 22 ausencias más. Las dos lecturas se prueban con y sin el
+último dígito, porque Excel guarda el número como tal y al exportarlo le deja un
+`.0` que queda como un cero de más —y un DNI terminado en 0 es posible—.
+
+**Fuera de las tiendas del área, el nombre no alcanza.** Con la planilla entera
+adentro, dos palabras iguales dejan de ser una identidad: «Martinez Maria
+Eugenia» de Walker no es «PEREZ, MARIA EUGENIA» de Scalabrini. Una fila cuya
+tienda no es del área **entra solo si el número coincide**, que es lo que
+conserva a quien se mudó al área —Airoldi, Briceño, Díaz y Miglio traen su CUIL
+de la tienda anterior— y descarta al homónimo.
+
+**El número manda sobre el nombre, y cuando los dos se contradicen sin ninguna
+duda la fila no entra.** El nombre se escribe a mano, así que «diaz cyntia» no
+tiene por qué encontrar a «DIAZ, CYNTHIA» y un nombre ambiguo simplemente pierde
+contra el número. Pero si el número apunta a una persona y el nombre apunta,
+unívocamente, a otra —«Luis Toro» con el número de Juan Gabriel Luna— es un error
+de carga del formulario: se deja afuera y se nombra en `enConflicto`, porque
+adivinar cuál de los dos vale le cuelga el certificado a alguien que no faltó.
+
+**El resultado separa lo que es ruido de lo que es trabajo.** Las 521 filas de
+otras áreas se cuentan aparte (`otrasAreas`) y el aviso lo dice sin alarmar; las
+que **sí son de sus tiendas y no caen en nadie** (`sinPersona`) van con nombre y
+son la lista que importa —casi siempre gente que ya se fue, porque la planilla
+arranca en marzo de 2025 y el padrón es el de hoy—. Antes las dos iban juntas en
+un solo número de 615 y el útil quedaba tapado por el que no pedía nada.
 
 **La planilla no fue pensada para medir**, y de ahí sale el único supuesto del
 panel. El certificado se carga en un campo de texto libre: de los 148

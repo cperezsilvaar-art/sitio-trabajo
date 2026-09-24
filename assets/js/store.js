@@ -1086,14 +1086,21 @@ const Store = (() => {
      * las respuestas no lo trae: el certificado se carga en un campo de texto
      * libre y mucha gente escribe solo la patología.
      *
-     * Por eso la ausencia se guarda igual sin duración, con `dias: null`, en
-     * vez de suponerle un día. Lo que se sabe se cuenta y lo que no, también:
-     * el resultado dice cuántas quedaron sin duración, para que nadie lea un
-     * porcentaje calculado sobre la mitad como si fuera el del área.
+     * El que no la trae se toma como un día (`DIAS_SIN_DURACION`) y queda
+     * marcado con `diasSupuestos`, así el porcentaje siempre puede decir qué
+     * parte de los días se midió y qué parte se supuso.
      *
-     * Empareja por CUIL, que es lo único unívoco. El nombre es el respaldo:
-     * el formulario lo escribe a mano y aparece «luciana ortellano» y
-     * «luiciana ortellano» para la misma persona.
+     * Empareja por **número** —CUIL o DNI, lo que la respuesta traiga—, que es
+     * lo único unívoco. El nombre es el respaldo y solo vale si no hay
+     * ambigüedad: el formulario lo escribe a mano y aparece «luciana
+     * ortellano» y «luiciana ortellano» para la misma persona.
+     *
+     * La planilla trae las respuestas de **todas las áreas**, y ahí el nombre
+     * deja de alcanzar: «Martinez Maria Eugenia» de Walker no es «PEREZ, MARIA
+     * EUGENIA» de Scalabrini, pero comparten dos palabras. Por eso una fila
+     * cuya tienda no es del área **solo entra si el número coincide**. Eso
+     * conserva a quien se mudó al área —Airoldi, Briceño, Díaz, Miglio traen su
+     * CUIL— y descarta al homónimo.
      */
     importarAusenciasFormulario(filas) {
       const e = this.get();
@@ -1101,38 +1108,74 @@ const Store = (() => {
       e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => gente.push({ c, s })));
 
       const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
-      const porCuil = {};
+      const porCuil = {}, porDni = {};
       gente.forEach(g => {
-        const k = soloDigitos(g.c.cuil);
-        if (k.length === 11) porCuil[k] = g;
+        const cu = soloDigitos(g.c.cuil);
+        if (cu.length === 11) porCuil[cu] = g;
+        const dn = soloDigitos(g.c.dni);
+        if (dn.length >= 7 && dn.length <= 8) porDni[dn] = g;
       });
       const tokens = x => new Set(String(x || '').normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '').toUpperCase()
         .split(/[^A-Z]+/).filter(w => w.length > 2));
 
+      /* Las tiendas del área, por código y por nombre: es como el gerente las
+         escribe en el formulario. */
+      const clave = x => String(x || '').trim().toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const misTiendas = new Set();
+      e.sucursales.forEach(su => {
+        if (clave(su.codigo)) misTiendas.add(clave(su.codigo));
+        if (clave(su.nombre)) misTiendas.add(clave(su.nombre));
+      });
+
       const out = { cargadas: 0, repetidas: 0, completadas: 0, sinDuracion: 0,
-                    sinPersona: [], porCuil: 0, porNombre: 0, fueraDelArea: 0,
-                    apercibimientos: 0 };
+                    sinPersona: [], porCuil: 0, porDni: 0, porNombre: 0,
+                    tipoDesconocido: 0, apercibimientos: 0,
+                    otrasAreas: 0, enConflicto: [] };
 
       filas.forEach(f => {
         const tipo = motivoDeFormulario(f.tipo);
-        if (!tipo) { out.fueraDelArea++; return; }
+        if (!tipo) { out.tipoDesconocido++; return; }
         if (!tipo.motivo) { out.apercibimientos++; return; }
 
-        /* 1. por CUIL. 2. por nombre, y solo si no hay ambigüedad. */
-        let g = null;
-        const cuil = cuilDelFormulario(f.cuil);
-        if (cuil && porCuil[cuil]) { g = porCuil[cuil]; out.porCuil++; }
-        if (!g) {
-          const t = tokens(f.nombre);
-          const cand = gente.filter(x => {
-            const k = tokens(x.c.nombre);
-            let n = 0; t.forEach(w => { if (k.has(w)) n++; });
-            return n >= 2;
-          });
-          if (cand.length === 1) { g = cand[0]; out.porNombre++; }
+        /* 1. por número —CUIL, y si no, DNI—. 2. por nombre, y solo si no hay
+           ambigüedad y la fila es de una tienda del área. */
+        const doc = documentoDelFormulario(f.cuil);
+        let g = null, porNumero = false;
+        if (doc.cuil && porCuil[doc.cuil]) { g = porCuil[doc.cuil]; porNumero = true; out.porCuil++; }
+        if (!g && doc.dni && porDni[doc.dni]) { g = porDni[doc.dni]; porNumero = true; out.porDni++; }
+
+        const t = tokens(f.nombre);
+        const cand = gente.filter(x => {
+          const k = tokens(x.c.nombre);
+          let n = 0; t.forEach(w => { if (k.has(w)) n++; });
+          return n >= 2;
+        });
+        const propia = misTiendas.has(clave(f.tienda));
+
+        /* El número manda sobre el nombre: el nombre viene escrito a mano y
+           «diaz cyntia» no tiene por qué encontrar a «DIAZ, CYNTHIA». Lo único
+           que no se resuelve solo es cuando los dos apuntan, cada uno sin
+           ninguna duda, a personas distintas —«Luis Toro» con el número de Juan
+           Gabriel Luna—: ahí es un error de carga del formulario, y adivinar
+           cuál de los dos vale le cuelga el certificado a alguien que no faltó.
+           Se deja afuera y se nombra. Un nombre ambiguo, en cambio, no
+           contradice nada: pierde contra el número y la fila entra. */
+        if (porNumero && cand.length === 1 && cand[0].c.id !== g.c.id) {
+          out.enConflicto.push(String(f.nombre || '').trim() + ' → ' + g.c.nombre);
+          return;
         }
-        if (!g) { out.sinPersona.push(String(f.nombre || '').trim()); return; }
+        if (!g && cand.length === 1 && propia) { g = cand[0]; out.porNombre++; }
+        if (!g) {
+          /* Sin número que coincida y sin nombre unívoco: si la tienda no es del
+             área, es de otra área y no hay nada que hacer. Si es del área, es
+             alguien que el padrón de hoy no tiene —casi siempre una baja— y eso
+             sí vale nombrarlo. */
+          if (propia) out.sinPersona.push(String(f.nombre || '').trim());
+          else out.otrasAreas++;
+          return;
+        }
 
         const anio = /^\d{4}/.test(String(f.marca)) ? +String(f.marca).slice(0, 4)
                    : new Date().getFullYear();
