@@ -1194,6 +1194,17 @@ const Store = (() => {
         const dias = leido.dias || DIAS_SIN_DURACION;
         const hasta = _diaMas(desde, dias - 1);
 
+        /* La planilla es un **registro de lo que ya pasó** —arranca en marzo de
+           2025— y no una carga en vivo. Una licencia cuyo certificado terminó
+           antes de hoy está terminada: la persona volvió hace meses. Sin esto
+           las 125 entraban como abiertas y el panel anunciaba 125 ausentes,
+           cada una «vencida hace 400 días».
+           No se inventa la fecha de reincorporación: `diasDeAusencia()` con
+           `reincorporado` y sin fecha se queda con `hasta`, que es exactamente
+           lo que dice el papel, así que el ausentismo no cambia. La que sigue
+           abierta hoy entra abierta y aparece en el Panel, que es su lugar. */
+        const cerrada = !!hasta && hasta < _diaHoy();
+
         /* La misma persona, el mismo día y el mismo motivo es la misma
            ausencia: el formulario se completa dos veces seguido. Si la que ya
            estaba quedó sin duración —se importó antes de tomar el supuesto—
@@ -1204,6 +1215,7 @@ const Store = (() => {
           if (!ya.hasta) {
             ya.hasta = hasta;
             ya.diasSupuestos = !leido.dias;
+            if (cerrada) ya.reincorporado = true;
             out.completadas++;
           } else {
             out.repetidas++;
@@ -1216,7 +1228,7 @@ const Store = (() => {
           diagnostico: leido.patologia || '',
           /* Vino con el certificado adjunto: el formulario lo pide. */
           certificado: tipo.clave === 'certificado' ? 'si' : '',
-          notas: '', reincorporado: false, fechaReincorporacion: '',
+          notas: '', reincorporado: cerrada, fechaReincorporacion: '',
           origen: 'formulario',
           fechaAproximada: !leido.desde,
           /* El papel no decía cuántos días: se tomó uno. */

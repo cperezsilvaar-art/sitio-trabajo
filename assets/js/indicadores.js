@@ -152,6 +152,19 @@ function indicadoresDelArea(estado, hoyISO) {
  * cargar para que aparezcan. Solo se listan los que todavía no tienen con qué:
  * el que ya se puede calcular sale de la lista solo.
  */
+/**
+ * El ausentismo de una persona y el de su tienda, sacados del **mismo** cálculo
+ * que el del área. Es un buscador, no una cuenta nueva: dos funciones que
+ * cuentan lo mismo terminan dando números distintos el día que una cambia, y
+ * acá los tres niveles se miran uno al lado del otro.
+ */
+function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
+  const pa = participacionDeAusencias(estado, null, hastaISO);
+  const t = pa.tiendas.find(x => x.id === sucursalId) || null;
+  const g = t ? (t.gente.find(x => x.id === colaboradorId) || null) : null;
+  return { area: pa, tienda: t, persona: g };
+}
+
 function loQueFaltaParaMedir(estado, hoyISO) {
   const e = estado || {};
   /* Cada renglón pregunta por **su propio cálculo**, no por si existe el dato
@@ -311,10 +324,12 @@ function reclamosDelArea(estado, hoyISO) {
  * sale**: qué tiendas aportan la mayor parte y, adentro de una tienda, quiénes.
  * Es lo que convierte un número en una conversación con un gerente.
  *
- * Se cuenta en **eventos** y no en días, y no es una elección estética: más de
- * la mitad de los certificados que llegan por el formulario no dicen cuántos
- * días son. Los eventos están completos, así que la participación es exacta;
- * los días se informan aparte, diciendo sobre cuántos certificados se saben.
+ * Se cuenta en **días** en los tres niveles, y cada uno trae además su
+ * **tasa**: días de ausencia sobre plantel por días de la ventana. La de cada
+ * tienda va sobre su propio plantel y no sobre el del área, porque si no una
+ * tienda de seis y una de veinte se leerían con la misma vara. Los certificados
+ * que no declaran duración se toman como un día, y `diasSupuestos` y
+ * `parteSupuesta` dicen qué parte del total viene de ese supuesto.
  *
  * Las **vacaciones no cuentan**: son tiempo planificado y meterlas adentro
  * infla el número con algo que no es un problema.
@@ -406,6 +421,6 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
     rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
-    participacionDeAusencias
+    participacionDeAusencias, ausentismoDe
   };
 }

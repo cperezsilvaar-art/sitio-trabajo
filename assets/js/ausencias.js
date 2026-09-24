@@ -333,6 +333,38 @@ function alertasDeAusencias(estado, hoy, avisarDias) {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
+/**
+ * Toda ausencia empezada y sin cerrar, con su estado. Es «quién no está», que
+ * es una pregunta más ancha que `ausentesHoy`: incluye a quien ya debería haber
+ * vuelto y nadie marcó la reincorporación, que sigue sin aparecer en la tienda
+ * y es justamente el caso que hay que resolver.
+ *
+ * Sale ordenada por lo que pide acción primero —el mismo orden que
+ * `alertasDeAusencias`, que es el subconjunto urgente de esto mismo—.
+ */
+function ausenciasEnCurso(estado, hoy) {
+  const h = hoy || _diaHoy();
+  const out = [];
+  (estado.sucursales || []).forEach(s => {
+    (s.colaboradores || []).forEach(c => {
+      (c.ausencias || []).forEach(a => {
+        if (a.reincorporado || !a.desde || a.desde > h) return;
+        const est = estadoDeAusencia(a, h);
+        out.push({
+          colaboradorId: c.id, nombre: c.nombre,
+          sucursalId: s.id, sucursal: s.nombre || s.codigo,
+          ausencia: a, estado: est,
+          orden: est.clase === 'pendienteJustificar' ? 0
+               : est.clase === 'vencida' ? 1 : est.clase === 'vence' ? 2
+               : est.clase === 'sinAlta' ? 3 : 4 + (est.diasParaVencer || 0)
+        });
+      });
+    });
+  });
+  return out.sort((a, b) => a.orden - b.orden ||
+    String(a.ausencia.desde).localeCompare(String(b.ausencia.desde)));
+}
+
 /** Quién está ausente hoy, para no contarlo en el piso del día. */
 function ausentesHoy(estado, hoy) {
   const h = hoy || _diaHoy();
@@ -355,7 +387,7 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     diasDeAusencia, ausenciasPorMes,
-    alertasDeAusencias, ausentesHoy
+    alertasDeAusencias, ausentesHoy, ausenciasEnCurso
   };
 }
 
@@ -371,12 +403,12 @@ if (typeof module !== 'undefined' && module.exports) {
  * «dolor de espalda». De las que traen duración, la mayoría la escribe en horas
  * —«(24) HORAS»— y no en días.
  *
- * Por eso esto **parsea lo que puede y dice lo que no pudo**, en vez de
- * completar con supuestos. Una ausencia sin duración se guarda igual: que la
- * persona faltó es un hecho, y cuántos días faltó es otro dato. El que falta se
- * cuenta aparte y la pantalla lo muestra, porque un porcentaje de ausentismo
- * calculado sobre la mitad de los certificados no es un porcentaje bajo: es un
- * porcentaje falso.
+ * Por eso esto **parsea lo que puede y marca lo que tuvo que suponer**. El
+ * certificado que no dice cuánto dura se toma como un día —`DIAS_SIN_DURACION`,
+ * más abajo— y la ausencia queda con `diasSupuestos: true`, así el porcentaje
+ * se puede dar y al mismo tiempo se puede decir qué parte de los días viene del
+ * papel y qué parte del supuesto. Un número sin esa aclaración al lado sería
+ * uno falso; con ella, es el mejor que la planilla permite.
  */
 
 /* Cuántos días dura un certificado que no dice cuánto dura.

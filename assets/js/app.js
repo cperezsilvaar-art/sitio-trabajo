@@ -231,6 +231,67 @@ const App = (() => {
       ${bloqueFalta(e)}`;
   }
 
+  /* Quién no está, arriba de todo en el Panel.
+     Antes acá había un aviso de «Certificados que vencen» que listaba solo lo
+     urgente. Pero la pregunta de la mañana no es «qué vence» sino «quién me
+     falta hoy y desde cuándo»: lo urgente es una columna de esa lista, no una
+     lista aparte. Se unieron en una sola, con el estado al lado de cada
+     nombre, que es lo que el aviso aportaba.
+     Va sobre `ausenciasEnCurso()` y no sobre `ausentesHoy()` porque el que ya
+     debería haber vuelto y nadie marcó tampoco está en la tienda. */
+  function bloqueQuienNoEsta(e) {
+    const enCurso = ausenciasEnCurso(e, hoyISO());
+    /* Sin ninguna ausencia cargada el bloque no va, como los contadores en
+       cero. Pero con el historial cargado y nadie ausente hoy, el cero **es**
+       la respuesta —«hoy no falta nadie» es lo que se vino a buscar—, y
+       esconderlo se lee como que la pantalla se rompió. */
+    const hay = (e.sucursales || []).some(su =>
+      (su.colaboradores || []).some(c => (c.ausencias || []).length));
+    if (!hay) return '';
+    if (!enCurso.length) {
+      return `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Quién no está hoy</h2>
+          <span class="chip verde">nadie</span>
+        </div>
+        <p class="ayuda" style="margin:0">Hoy está todo el mundo. Las licencias que ya
+          terminaron quedan en el historial de cada persona y en
+          <a href="#/red/indicadores">el ausentismo del área</a>.</p>
+      </section>`;
+    }
+    const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
+    const piden = enCurso.filter(x => x.orden <= 3).length;
+    const tope = verAusentes ? enCurso.length : AUSENTES_A_LA_VISTA;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Quién no está hoy</h2>
+        <span class="chip ${piden ? 'rojo' : 'azul'}">${enCurso.length} ausente${
+          enCurso.length === 1 ? '' : 's'}${piden ? ` · ${piden} pide${piden === 1 ? '' : 'n'} algo` : ''}</span>
+      </div>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Quién</th><th>Tienda</th><th>Licencia</th><th>Desde</th>
+          <th class="num">Días</th><th>Situación</th></tr></thead>
+        <tbody>${enCurso.slice(0, tope).map(x => `<tr>
+          <td><button class="como-enlace" data-accion="ir-al-perfil" data-id="${x.colaboradorId}"
+            >${esc(x.nombre)}</button></td>
+          <td>${esc(x.sucursal)}</td>
+          <td>${esc(nombreMotivo(x.ausencia.motivo))}</td>
+          <td class="tipo">${fmtFecha(x.ausencia.desde)}</td>
+          <td class="num">${x.estado.diasLlevados || '—'}</td>
+          <td><span class="chip ${x.estado.tono}">${esc(x.estado.texto)}</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      ${enCurso.length > AUSENTES_A_LA_VISTA ? `<div class="acciones">
+        <button class="b sec" data-accion="ver-ausentes">${verAusentes
+          ? 'Ver solo los primeros' : `Ver los ${enCurso.length}`}</button>
+      </div>` : ''}
+      <p class="ayuda">Se cierran marcando la reincorporación en
+        <a href="#/diario">Presentismo</a>. El que figura pendiente de justificar
+        es el único que dice qué hacer hoy: reclamar el certificado.</p>
+    </section>`;
+  }
+
   /* Los tres que necesitan historia. Aparecen recién cuando hay con qué, y
      mientras tanto viven en la lista del pie: nunca en los dos lados ni en
      ninguno. */
@@ -458,20 +519,7 @@ const App = (() => {
 
       ${solapasDelPanel('situacion')}
 
-      ${(() => {
-        /* Los certificados que vencen van en la portada porque la decisión es
-           de mañana a la mañana: o la persona vuelve, o hay que cubrir el
-           turno. Enterarse tarde es enterarse cuando la tienda ya abrió. */
-        const al = alertasDeAusencias(e, hoyISO());
-        if (!al.length) return '';
-        return `<div class="aviso-caja">
-          <strong>Certificados que vencen</strong>
-          <ul>${al.slice(0, 6).map(x => `<li>
-            <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
-          </li>`).join('')}</ul>
-          <a href="#/diario">Resolverlas en Presentismo</a>
-        </div>`;
-      })()}
+      ${bloqueQuienNoEsta(e)}
 
       ${Store.falloAlGuardar() ? `<div class="aviso-caja">
         <strong>Ojo: lo que cargues no se está guardando.</strong>
@@ -1398,6 +1446,11 @@ const App = (() => {
 
   let verPendientes = {};     // qué grupos están desplegados enteros
   const PENDIENTES_A_LA_VISTA = 4;
+  /* Con doce tiendas, la lista entera de ausentes empuja fuera de la pantalla
+     todo lo demás del Panel. Se muestran los que piden algo y el resto se
+     despliega. */
+  const AUSENTES_A_LA_VISTA = 6;
+  let verAusentes = false;
 
   function bloquePendientes(e, hoy) {
     const grupos = pendientesDelArea(e, hoy);
@@ -2474,8 +2527,24 @@ const App = (() => {
             <span class="atajo-icono">${icono}</span>
             <span><strong>${esc(titulo)}</strong><em>${nota}</em></span>
           </a>`;
+        /* El ausentismo de la tienda, contra el del área. El atajo de al lado
+           contesta «quién falta hoy»; esto contesta «cómo viene esta tienda»,
+           que es la conversación con el gerente y no la del turno de mañana. */
+        const au = ausentismoDe(e, null, s.id, hoyISO());
+        const meses = Math.round(au.area.ventana / 30);
         return `<section class="tarjeta">
           <h2>De esta tienda</h2>
+          ${au.tienda && au.tienda.tasa !== null ? `<p class="ind-lectura" style="margin:0 0 14px">
+            <strong>Ausentismo ${fmtPct(au.tienda.tasa, 1)}</strong> en los últimos ${meses} meses
+            —${au.tienda.dias} día${au.tienda.dias === 1 ? '' : 's'} de ${au.tienda.personas}
+            persona${au.tienda.personas === 1 ? '' : 's'}, sobre un plantel de ${au.tienda.plantel}—,
+            contra ${fmtPct(au.area.tasa, 1)} del área.
+            ${au.tienda.gente.length ? `El que más faltó es
+              <strong>${esc(au.tienda.gente[0].nombre)}</strong>, con ${au.tienda.gente[0].dias}
+              día${au.tienda.gente[0].dias === 1 ? '' : 's'}
+              (${fmtPct(au.tienda.gente[0].parteDeLaTienda, 0)} de los de la tienda).` : ''}
+            <a href="#/red/indicadores"> Ver el desglose del área</a>
+          </p>` : ''}
           <div class="atajos-tienda">
             ${item(`#/diario`, '🩺', 'Presentismo',
                    aus.length
@@ -3184,6 +3253,14 @@ const App = (() => {
 
     const r = ausenciasPorMes(c, hoy);
     const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
+
+    /* Su ausentismo, con la tienda y el área al lado: un 2% no dice nada suelto
+       y dice bastante contra el 0,5% de su tienda. Sale del mismo cálculo que
+       el tablero del Panel, no de una cuenta propia. */
+    const suc = Store.sucursalDe(c.id);
+    const au = suc ? ausentismoDe(Store.get(), c.id, suc.id, hoy) : null;
+    const suyo = au && au.persona ? au.persona : null;
+    const meses = au ? Math.round(au.area.ventana / 30) : 3;
     /* Solo las columnas que esta persona usó: una tabla con seis licencias en
        cero no dice nada que el «—» no diga mejor. */
     const motivos = MOTIVOS_AUSENCIA_LARGA.filter(m => r.porMotivo[m.id]);
@@ -3191,6 +3268,18 @@ const App = (() => {
     return `<h4>Licencias y ausencias registradas
         <span class="chip${r.abiertas ? ' ambar' : ''}">${r.total} día${r.total === 1 ? '' : 's'} en total</span>
         ${r.sinJustificar ? `<span class="chip rojo">${r.sinJustificar} sin justificar</span>` : ''}</h4>
+
+      ${suyo ? `<p class="ind-lectura" style="margin:0 0 12px">
+        <strong>Faltó ${suyo.dias} día${suyo.dias === 1 ? '' : 's'} en los últimos ${meses} meses</strong>
+        —${fmtPct(suyo.tasa, 1)} de su turno—, en ${suyo.eventos}
+        ${suyo.eventos === 1 ? 'licencia' : 'licencias'}.
+        Es el ${fmtPct(suyo.parteDeLaTienda, 0)} de los días de ausencia de
+        ${esc(au.tienda.sucursal)}, que está en ${fmtPct(au.tienda.tasa, 1)} contra
+        ${fmtPct(au.area.tasa, 1)} del área.
+        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos} de
+          esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron como un
+          día.</span>` : ''}
+      </p>` : ''}
 
       <div class="tabla-scroll"><table>
         <thead><tr><th>Mes</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
@@ -6544,6 +6633,21 @@ const App = (() => {
         tiendaAbierta = tiendaAbierta === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
       }
+
+      /* Desde el Panel el nombre tiene que abrir la ficha, que vive en
+         `#/nomina`: `ver-perfil` solo marca cuál está abierta y la dibuja esa
+         pantalla, así que acá además hay que ir hasta ella. */
+      if (a === 'ir-al-perfil') {
+        formMovimiento = null;
+        perfilAbierto = btn.dataset.id;
+        location.hash = '#/nomina';
+        setTimeout(() => {
+          const el = document.getElementById('perfil-colaborador');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 200);
+      }
+
+      if (a === 'ver-ausentes') { verAusentes = !verAusentes; refrescar(); }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;

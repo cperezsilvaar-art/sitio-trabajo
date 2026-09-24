@@ -1144,6 +1144,17 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 }
 .fila-tienda-aus:hover .barra-rot { color: var(--azul); }
 
+/* Un botón que se lee como un enlace: sirve para el nombre de una persona
+   adentro de una tabla, donde lo que hay que abrir es su ficha y no una página
+   nueva. Hereda la tipografía de la celda a propósito. */
+.como-enlace {
+  background: none; border: 0; padding: 0; margin: 0;
+  font: inherit; color: var(--azul-claro); text-align: left;
+  cursor: pointer; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.como-enlace:hover { text-decoration-thickness: 2px; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -4047,6 +4058,38 @@ function alertasDeAusencias(estado, hoy, avisarDias) {
   return out.sort((a, b) => a.orden - b.orden);
 }
 
+/**
+ * Toda ausencia empezada y sin cerrar, con su estado. Es «quién no está», que
+ * es una pregunta más ancha que `ausentesHoy`: incluye a quien ya debería haber
+ * vuelto y nadie marcó la reincorporación, que sigue sin aparecer en la tienda
+ * y es justamente el caso que hay que resolver.
+ *
+ * Sale ordenada por lo que pide acción primero —el mismo orden que
+ * `alertasDeAusencias`, que es el subconjunto urgente de esto mismo—.
+ */
+function ausenciasEnCurso(estado, hoy) {
+  const h = hoy || _diaHoy();
+  const out = [];
+  (estado.sucursales || []).forEach(s => {
+    (s.colaboradores || []).forEach(c => {
+      (c.ausencias || []).forEach(a => {
+        if (a.reincorporado || !a.desde || a.desde > h) return;
+        const est = estadoDeAusencia(a, h);
+        out.push({
+          colaboradorId: c.id, nombre: c.nombre,
+          sucursalId: s.id, sucursal: s.nombre || s.codigo,
+          ausencia: a, estado: est,
+          orden: est.clase === 'pendienteJustificar' ? 0
+               : est.clase === 'vencida' ? 1 : est.clase === 'vence' ? 2
+               : est.clase === 'sinAlta' ? 3 : 4 + (est.diasParaVencer || 0)
+        });
+      });
+    });
+  });
+  return out.sort((a, b) => a.orden - b.orden ||
+    String(a.ausencia.desde).localeCompare(String(b.ausencia.desde)));
+}
+
 /** Quién está ausente hoy, para no contarlo en el piso del día. */
 function ausentesHoy(estado, hoy) {
   const h = hoy || _diaHoy();
@@ -4069,7 +4112,7 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     diasDeAusencia, ausenciasPorMes,
-    alertasDeAusencias, ausentesHoy
+    alertasDeAusencias, ausentesHoy, ausenciasEnCurso
   };
 }
 
@@ -4085,12 +4128,12 @@ if (typeof module !== 'undefined' && module.exports) {
  * «dolor de espalda». De las que traen duración, la mayoría la escribe en horas
  * —«(24) HORAS»— y no en días.
  *
- * Por eso esto **parsea lo que puede y dice lo que no pudo**, en vez de
- * completar con supuestos. Una ausencia sin duración se guarda igual: que la
- * persona faltó es un hecho, y cuántos días faltó es otro dato. El que falta se
- * cuenta aparte y la pantalla lo muestra, porque un porcentaje de ausentismo
- * calculado sobre la mitad de los certificados no es un porcentaje bajo: es un
- * porcentaje falso.
+ * Por eso esto **parsea lo que puede y marca lo que tuvo que suponer**. El
+ * certificado que no dice cuánto dura se toma como un día —`DIAS_SIN_DURACION`,
+ * más abajo— y la ausencia queda con `diasSupuestos: true`, así el porcentaje
+ * se puede dar y al mismo tiempo se puede decir qué parte de los días viene del
+ * papel y qué parte del supuesto. Un número sin esa aclaración al lado sería
+ * uno falso; con ella, es el mejor que la planilla permite.
  */
 
 /* Cuántos días dura un certificado que no dice cuánto dura.
@@ -4784,6 +4827,19 @@ function indicadoresDelArea(estado, hoyISO) {
  * cargar para que aparezcan. Solo se listan los que todavía no tienen con qué:
  * el que ya se puede calcular sale de la lista solo.
  */
+/**
+ * El ausentismo de una persona y el de su tienda, sacados del **mismo** cálculo
+ * que el del área. Es un buscador, no una cuenta nueva: dos funciones que
+ * cuentan lo mismo terminan dando números distintos el día que una cambia, y
+ * acá los tres niveles se miran uno al lado del otro.
+ */
+function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
+  const pa = participacionDeAusencias(estado, null, hastaISO);
+  const t = pa.tiendas.find(x => x.id === sucursalId) || null;
+  const g = t ? (t.gente.find(x => x.id === colaboradorId) || null) : null;
+  return { area: pa, tienda: t, persona: g };
+}
+
 function loQueFaltaParaMedir(estado, hoyISO) {
   const e = estado || {};
   /* Cada renglón pregunta por **su propio cálculo**, no por si existe el dato
@@ -4943,10 +4999,12 @@ function reclamosDelArea(estado, hoyISO) {
  * sale**: qué tiendas aportan la mayor parte y, adentro de una tienda, quiénes.
  * Es lo que convierte un número en una conversación con un gerente.
  *
- * Se cuenta en **eventos** y no en días, y no es una elección estética: más de
- * la mitad de los certificados que llegan por el formulario no dicen cuántos
- * días son. Los eventos están completos, así que la participación es exacta;
- * los días se informan aparte, diciendo sobre cuántos certificados se saben.
+ * Se cuenta en **días** en los tres niveles, y cada uno trae además su
+ * **tasa**: días de ausencia sobre plantel por días de la ventana. La de cada
+ * tienda va sobre su propio plantel y no sobre el del área, porque si no una
+ * tienda de seis y una de veinte se leerían con la misma vara. Los certificados
+ * que no declaran duración se toman como un día, y `diasSupuestos` y
+ * `parteSupuesta` dicen qué parte del total viene de ese supuesto.
  *
  * Las **vacaciones no cuentan**: son tiempo planificado y meterlas adentro
  * infla el número con algo que no es un problema.
@@ -5038,7 +5096,7 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
     rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
-    participacionDeAusencias
+    participacionDeAusencias, ausentismoDe
   };
 }
 
@@ -8315,6 +8373,17 @@ const Store = (() => {
         const dias = leido.dias || DIAS_SIN_DURACION;
         const hasta = _diaMas(desde, dias - 1);
 
+        /* La planilla es un **registro de lo que ya pasó** —arranca en marzo de
+           2025— y no una carga en vivo. Una licencia cuyo certificado terminó
+           antes de hoy está terminada: la persona volvió hace meses. Sin esto
+           las 125 entraban como abiertas y el panel anunciaba 125 ausentes,
+           cada una «vencida hace 400 días».
+           No se inventa la fecha de reincorporación: `diasDeAusencia()` con
+           `reincorporado` y sin fecha se queda con `hasta`, que es exactamente
+           lo que dice el papel, así que el ausentismo no cambia. La que sigue
+           abierta hoy entra abierta y aparece en el Panel, que es su lugar. */
+        const cerrada = !!hasta && hasta < _diaHoy();
+
         /* La misma persona, el mismo día y el mismo motivo es la misma
            ausencia: el formulario se completa dos veces seguido. Si la que ya
            estaba quedó sin duración —se importó antes de tomar el supuesto—
@@ -8325,6 +8394,7 @@ const Store = (() => {
           if (!ya.hasta) {
             ya.hasta = hasta;
             ya.diasSupuestos = !leido.dias;
+            if (cerrada) ya.reincorporado = true;
             out.completadas++;
           } else {
             out.repetidas++;
@@ -8337,7 +8407,7 @@ const Store = (() => {
           diagnostico: leido.patologia || '',
           /* Vino con el certificado adjunto: el formulario lo pide. */
           certificado: tipo.clave === 'certificado' ? 'si' : '',
-          notas: '', reincorporado: false, fechaReincorporacion: '',
+          notas: '', reincorporado: cerrada, fechaReincorporacion: '',
           origen: 'formulario',
           fechaAproximada: !leido.desde,
           /* El papel no decía cuántos días: se tomó uno. */
@@ -10914,6 +10984,67 @@ const App = (() => {
       ${bloqueFalta(e)}`;
   }
 
+  /* Quién no está, arriba de todo en el Panel.
+     Antes acá había un aviso de «Certificados que vencen» que listaba solo lo
+     urgente. Pero la pregunta de la mañana no es «qué vence» sino «quién me
+     falta hoy y desde cuándo»: lo urgente es una columna de esa lista, no una
+     lista aparte. Se unieron en una sola, con el estado al lado de cada
+     nombre, que es lo que el aviso aportaba.
+     Va sobre `ausenciasEnCurso()` y no sobre `ausentesHoy()` porque el que ya
+     debería haber vuelto y nadie marcó tampoco está en la tienda. */
+  function bloqueQuienNoEsta(e) {
+    const enCurso = ausenciasEnCurso(e, hoyISO());
+    /* Sin ninguna ausencia cargada el bloque no va, como los contadores en
+       cero. Pero con el historial cargado y nadie ausente hoy, el cero **es**
+       la respuesta —«hoy no falta nadie» es lo que se vino a buscar—, y
+       esconderlo se lee como que la pantalla se rompió. */
+    const hay = (e.sucursales || []).some(su =>
+      (su.colaboradores || []).some(c => (c.ausencias || []).length));
+    if (!hay) return '';
+    if (!enCurso.length) {
+      return `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Quién no está hoy</h2>
+          <span class="chip verde">nadie</span>
+        </div>
+        <p class="ayuda" style="margin:0">Hoy está todo el mundo. Las licencias que ya
+          terminaron quedan en el historial de cada persona y en
+          <a href="#/red/indicadores">el ausentismo del área</a>.</p>
+      </section>`;
+    }
+    const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
+    const piden = enCurso.filter(x => x.orden <= 3).length;
+    const tope = verAusentes ? enCurso.length : AUSENTES_A_LA_VISTA;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Quién no está hoy</h2>
+        <span class="chip ${piden ? 'rojo' : 'azul'}">${enCurso.length} ausente${
+          enCurso.length === 1 ? '' : 's'}${piden ? ` · ${piden} pide${piden === 1 ? '' : 'n'} algo` : ''}</span>
+      </div>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Quién</th><th>Tienda</th><th>Licencia</th><th>Desde</th>
+          <th class="num">Días</th><th>Situación</th></tr></thead>
+        <tbody>${enCurso.slice(0, tope).map(x => `<tr>
+          <td><button class="como-enlace" data-accion="ir-al-perfil" data-id="${x.colaboradorId}"
+            >${esc(x.nombre)}</button></td>
+          <td>${esc(x.sucursal)}</td>
+          <td>${esc(nombreMotivo(x.ausencia.motivo))}</td>
+          <td class="tipo">${fmtFecha(x.ausencia.desde)}</td>
+          <td class="num">${x.estado.diasLlevados || '—'}</td>
+          <td><span class="chip ${x.estado.tono}">${esc(x.estado.texto)}</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      ${enCurso.length > AUSENTES_A_LA_VISTA ? `<div class="acciones">
+        <button class="b sec" data-accion="ver-ausentes">${verAusentes
+          ? 'Ver solo los primeros' : `Ver los ${enCurso.length}`}</button>
+      </div>` : ''}
+      <p class="ayuda">Se cierran marcando la reincorporación en
+        <a href="#/diario">Presentismo</a>. El que figura pendiente de justificar
+        es el único que dice qué hacer hoy: reclamar el certificado.</p>
+    </section>`;
+  }
+
   /* Los tres que necesitan historia. Aparecen recién cuando hay con qué, y
      mientras tanto viven en la lista del pie: nunca en los dos lados ni en
      ninguno. */
@@ -11141,20 +11272,7 @@ const App = (() => {
 
       ${solapasDelPanel('situacion')}
 
-      ${(() => {
-        /* Los certificados que vencen van en la portada porque la decisión es
-           de mañana a la mañana: o la persona vuelve, o hay que cubrir el
-           turno. Enterarse tarde es enterarse cuando la tienda ya abrió. */
-        const al = alertasDeAusencias(e, hoyISO());
-        if (!al.length) return '';
-        return `<div class="aviso-caja">
-          <strong>Certificados que vencen</strong>
-          <ul>${al.slice(0, 6).map(x => `<li>
-            <strong>${esc(x.nombre)}</strong> (${esc(x.sucursal)}) — ${esc(x.estado.texto)}.
-          </li>`).join('')}</ul>
-          <a href="#/diario">Resolverlas en Presentismo</a>
-        </div>`;
-      })()}
+      ${bloqueQuienNoEsta(e)}
 
       ${Store.falloAlGuardar() ? `<div class="aviso-caja">
         <strong>Ojo: lo que cargues no se está guardando.</strong>
@@ -12081,6 +12199,11 @@ const App = (() => {
 
   let verPendientes = {};     // qué grupos están desplegados enteros
   const PENDIENTES_A_LA_VISTA = 4;
+  /* Con doce tiendas, la lista entera de ausentes empuja fuera de la pantalla
+     todo lo demás del Panel. Se muestran los que piden algo y el resto se
+     despliega. */
+  const AUSENTES_A_LA_VISTA = 6;
+  let verAusentes = false;
 
   function bloquePendientes(e, hoy) {
     const grupos = pendientesDelArea(e, hoy);
@@ -13157,8 +13280,24 @@ const App = (() => {
             <span class="atajo-icono">${icono}</span>
             <span><strong>${esc(titulo)}</strong><em>${nota}</em></span>
           </a>`;
+        /* El ausentismo de la tienda, contra el del área. El atajo de al lado
+           contesta «quién falta hoy»; esto contesta «cómo viene esta tienda»,
+           que es la conversación con el gerente y no la del turno de mañana. */
+        const au = ausentismoDe(e, null, s.id, hoyISO());
+        const meses = Math.round(au.area.ventana / 30);
         return `<section class="tarjeta">
           <h2>De esta tienda</h2>
+          ${au.tienda && au.tienda.tasa !== null ? `<p class="ind-lectura" style="margin:0 0 14px">
+            <strong>Ausentismo ${fmtPct(au.tienda.tasa, 1)}</strong> en los últimos ${meses} meses
+            —${au.tienda.dias} día${au.tienda.dias === 1 ? '' : 's'} de ${au.tienda.personas}
+            persona${au.tienda.personas === 1 ? '' : 's'}, sobre un plantel de ${au.tienda.plantel}—,
+            contra ${fmtPct(au.area.tasa, 1)} del área.
+            ${au.tienda.gente.length ? `El que más faltó es
+              <strong>${esc(au.tienda.gente[0].nombre)}</strong>, con ${au.tienda.gente[0].dias}
+              día${au.tienda.gente[0].dias === 1 ? '' : 's'}
+              (${fmtPct(au.tienda.gente[0].parteDeLaTienda, 0)} de los de la tienda).` : ''}
+            <a href="#/red/indicadores"> Ver el desglose del área</a>
+          </p>` : ''}
           <div class="atajos-tienda">
             ${item(`#/diario`, '🩺', 'Presentismo',
                    aus.length
@@ -13867,6 +14006,14 @@ const App = (() => {
 
     const r = ausenciasPorMes(c, hoy);
     const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
+
+    /* Su ausentismo, con la tienda y el área al lado: un 2% no dice nada suelto
+       y dice bastante contra el 0,5% de su tienda. Sale del mismo cálculo que
+       el tablero del Panel, no de una cuenta propia. */
+    const suc = Store.sucursalDe(c.id);
+    const au = suc ? ausentismoDe(Store.get(), c.id, suc.id, hoy) : null;
+    const suyo = au && au.persona ? au.persona : null;
+    const meses = au ? Math.round(au.area.ventana / 30) : 3;
     /* Solo las columnas que esta persona usó: una tabla con seis licencias en
        cero no dice nada que el «—» no diga mejor. */
     const motivos = MOTIVOS_AUSENCIA_LARGA.filter(m => r.porMotivo[m.id]);
@@ -13874,6 +14021,18 @@ const App = (() => {
     return `<h4>Licencias y ausencias registradas
         <span class="chip${r.abiertas ? ' ambar' : ''}">${r.total} día${r.total === 1 ? '' : 's'} en total</span>
         ${r.sinJustificar ? `<span class="chip rojo">${r.sinJustificar} sin justificar</span>` : ''}</h4>
+
+      ${suyo ? `<p class="ind-lectura" style="margin:0 0 12px">
+        <strong>Faltó ${suyo.dias} día${suyo.dias === 1 ? '' : 's'} en los últimos ${meses} meses</strong>
+        —${fmtPct(suyo.tasa, 1)} de su turno—, en ${suyo.eventos}
+        ${suyo.eventos === 1 ? 'licencia' : 'licencias'}.
+        Es el ${fmtPct(suyo.parteDeLaTienda, 0)} de los días de ausencia de
+        ${esc(au.tienda.sucursal)}, que está en ${fmtPct(au.tienda.tasa, 1)} contra
+        ${fmtPct(au.area.tasa, 1)} del área.
+        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos} de
+          esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron como un
+          día.</span>` : ''}
+      </p>` : ''}
 
       <div class="tabla-scroll"><table>
         <thead><tr><th>Mes</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
@@ -17227,6 +17386,21 @@ const App = (() => {
         tiendaAbierta = tiendaAbierta === btn.dataset.id ? null : btn.dataset.id;
         refrescar();
       }
+
+      /* Desde el Panel el nombre tiene que abrir la ficha, que vive en
+         `#/nomina`: `ver-perfil` solo marca cuál está abierta y la dibuja esa
+         pantalla, así que acá además hay que ir hasta ella. */
+      if (a === 'ir-al-perfil') {
+        formMovimiento = null;
+        perfilAbierto = btn.dataset.id;
+        location.hash = '#/nomina';
+        setTimeout(() => {
+          const el = document.getElementById('perfil-colaborador');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 200);
+      }
+
+      if (a === 'ver-ausentes') { verAusentes = !verAusentes; refrescar(); }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;
