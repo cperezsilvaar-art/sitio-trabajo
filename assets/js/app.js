@@ -223,10 +223,59 @@ const App = (() => {
         </div>
       </section>
 
+      ${bloqueMovimiento(ind)}
       ${bloqueEstructura(ind)}
       ${bloqueAntiguedad(ind)}
       ${bloqueCobertura(ind)}
       ${bloqueFalta(e)}`;
+  }
+
+  /* Los tres que necesitan historia. Aparecen recién cuando hay con qué, y
+     mientras tanto viven en la lista del pie: nunca en los dos lados ni en
+     ninguno. */
+  function bloqueMovimiento(ind) {
+    const r = ind.rotacion, a = ind.ausentismo, re = ind.reclamos;
+    if (!r && !a && !re) return '';
+
+    const tarjetas = [];
+    if (r) tarjetas.push(`<article class="ind-tarjeta ${r.tasa >= 0.3 ? 'alerta' : r.tasa >= 0.15 ? 'aviso' : ''}">
+      <span class="ind-rotulo">Rotación de los últimos 12 meses</span>
+      <strong class="ind-valor">${r.tasa === null ? '—' : fmtPct(r.tasa, 1)}</strong>
+      <p class="ind-lectura"><strong>${r.bajas}</strong> baja${r.bajas === 1 ? '' : 's'}
+        —${r.renuncias} renuncia${r.renuncias === 1 ? '' : 's'} y ${r.despidos}
+        despido${r.despidos === 1 ? '' : 's'}— sobre una dotación media de
+        ${fmtNum(r.media, 1)}. La media es aproximada: el panel guarda el plantel de hoy,
+        no la foto de cada mes.</p>
+    </article>`);
+
+    if (a) tarjetas.push(`<article class="ind-tarjeta ${a.tasa >= 0.05 ? 'aviso' : ''}">
+      <span class="ind-rotulo">Ausentismo de los últimos 12 meses</span>
+      <strong class="ind-valor">${a.tasa === null ? '—' : fmtPct(a.tasa, 1)}</strong>
+      <p class="ind-lectura"><strong>${fmtNum(a.dias, 0)}</strong> días de ausencia
+        de ${a.personas} persona${a.personas === 1 ? '' : 's'}, que son
+        <strong>${fmtNum(a.fte, 1)} FTE</strong> de trabajo que no se prestó.</p>
+    </article>`);
+
+    if (re) tarjetas.push(`<article class="ind-tarjeta ${re.abiertos ? 'aviso' : ''}">
+      <span class="ind-rotulo">Reclamos abiertos</span>
+      <strong class="ind-valor">${re.abiertos}</strong>
+      <p class="ind-lectura">${re.demora === null
+        ? `De ${re.total} cargado${re.total === 1 ? '' : 's'}. Todavía no cerraste ninguno, así que no hay demora promedio.`
+        : `Los cerrados tardaron <strong>${fmtNum(re.demora, 0)} días</strong> en promedio.`}${
+        re.masViejo ? ` El más viejo sin resolver lleva <strong>${re.masViejo} días</strong>.` : ''}</p>
+    </article>`);
+
+    return `<section class="tarjeta">
+      <h2>Lo que se mueve</h2>
+      <p class="ayuda">Los tres que necesitan historia. Se calculan sobre los últimos doce
+        meses y se van afinando a medida que cargues.</p>
+      <div class="ind-grilla">${tarjetas.join('')}</div>
+      ${r && r.ultimas.length ? `<h3 style="margin-top:18px;font-size:14px">Últimas bajas</h3>
+        <ul class="ayuda" style="margin:6px 0 0;padding-left:18px">
+          ${r.ultimas.map(b => `<li>${fmtFecha(b.fecha)} — ${esc(b.nombre)}
+            (${esc(b.grupo)}${b.motivo ? `: ${esc(b.motivo)}` : ''})</li>`).join('')}
+        </ul>` : ''}
+    </section>`;
   }
 
   function bloqueEstructura(ind) {
@@ -291,13 +340,11 @@ const App = (() => {
   }
 
   function bloqueFalta(e) {
-    const lista = loQueFaltaParaMedir(e).filter(x => !x.listo);
-    if (!lista.length) return '';
+    const lista = loQueFaltaParaMedir(e, hoyISO()).filter(x => !x.listo);
     return `<section class="tarjeta">
-      <h2>Lo que todavía no se puede medir</h2>
-      <p class="ayuda">Estos seis indicadores son los de siempre en RRHH y el panel los va a
-        calcular solo. Hoy no están porque necesitan historia que todavía no cargaste: cada
-        uno dice con qué se enciende. No son una promesa vacía — aparecen cuando el dato existe.</p>
+      ${lista.length ? `<h2>Lo que todavía no se puede medir</h2>
+      <p class="ayuda">Necesitan historia que todavía no cargaste. Cada uno dice con qué se
+        enciende, y aparece arriba —como indicador, con su número— apenas el dato existe.</p>
       <div class="tabla-scroll"><table id="tabla-falta">
         <thead><tr><th>Indicador</th><th>Qué va a decir</th><th>Qué le falta</th></tr></thead>
         <tbody>${lista.map(x => `<tr>
@@ -305,7 +352,15 @@ const App = (() => {
           <td>${esc(x.que)}</td>
           <td>${esc(x.necesita)} <a href="${x.donde}">Ir a cargarlo</a></td>
         </tr>`).join('')}</tbody>
-      </table></div>
+      </table></div>` : '<h2>Dónde está el resto</h2>'}
+
+      <p class="ayuda" style="margin-top:${lista.length ? '16px' : '0'}">
+        Otros tres indicadores de siempre <strong>no se repiten acá</strong>: ya viven donde se
+        cargan, y traerlos sería el sexto lugar con los mismos números.</p>
+      <ul class="ayuda" style="margin:0;padding-left:18px">
+        ${DONDE_VIVEN_LOS_OTROS.map(x => `<li><strong>${esc(x.nombre)}</strong> —
+          ${esc(x.texto)} <a href="${x.donde}">Ir</a></li>`).join('')}
+      </ul>
     </section>`;
   }
 

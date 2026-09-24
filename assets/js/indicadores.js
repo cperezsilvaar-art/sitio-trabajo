@@ -133,6 +133,12 @@ function indicadoresDelArea(estado, hoyISO) {
     antiguedadFTD: antiguedadPorBanda(todas, 'fechaIngresoFTD'),
     estructura: estructuraDelPlantel(todas),
     cobertura: cobertura(e),
+    /* Los tres que necesitan historia. Devuelven null mientras no haya con
+       qué, y la pantalla los lista como pendientes; en cuanto hay un dato,
+       aparecen como indicador. Nunca las dos cosas ni ninguna. */
+    rotacion: rotacionDelArea(e, hoyISO),
+    ausentismo: ausentismoDelArea(e, hoyISO),
+    reclamos: reclamosDelArea(e, hoyISO),
     parciales: gente.filter(c => jornadaDeVinculo(c).fte === 0.5).length,
     /* `.noPresencial` y no `esNoPresencial(c)` a secas: devuelve un objeto con
        el motivo adentro, y un objeto siempre es verdadero. Sin el campo, el
@@ -146,48 +152,164 @@ function indicadoresDelArea(estado, hoyISO) {
  * cargar para que aparezcan. Solo se listan los que todavía no tienen con qué:
  * el que ya se puede calcular sale de la lista solo.
  */
-function loQueFaltaParaMedir(estado) {
+function loQueFaltaParaMedir(estado, hoyISO) {
   const e = estado || {};
-  const gente = (e.sucursales || []).flatMap(s => s.colaboradores || []);
-  const hay = {
-    bajas: gente.filter(c => c.baja).length,
-    ausencias: gente.reduce((n, c) => n + (c.ausencias || []).length, 0),
-    visitas: (e.visitas || []).length,
-    evaluados: gente.filter(c => c.desempeno && c.potencial).length,
-    reclamos: (e.reclamos || []).length
-  };
+  /* Cada renglón pregunta por **su propio cálculo**, no por si existe el dato
+     suelto. Así no puede pasar lo de antes: que el renglón desapareciera de
+     acá porque había una baja cargada, sin que apareciera ningún número en su
+     lugar. Si el indicador da null, está pendiente; si da número, no. */
   return [
     { id: 'rotacion', nombre: 'Rotación anualizada',
       que: 'Cuánta gente se fue en los últimos doce meses sobre la dotación media, separando renuncias de despidos.',
       necesita: 'Bajas cargadas en la ficha de cada persona.',
-      donde: '#/movimientos/bajas', listo: hay.bajas > 0, tiene: hay.bajas },
+      donde: '#/movimientos/bajas', listo: !!rotacionDelArea(e, hoyISO) },
     { id: 'ausentismo', nombre: 'Ausentismo',
-      que: 'Días de ausencia sobre días de vínculo, y cuánto FTE se pierde por eso.',
+      que: 'Días de ausencia sobre días-persona, y cuánto FTE se pierde por eso.',
       necesita: 'Ausencias anotadas con su certificado.',
-      donde: '#/diario', listo: hay.ausencias > 0, tiene: hay.ausencias },
-    { id: 'checklist', nombre: 'Cumplimiento del check list',
-      que: 'Qué porcentaje de los 30 puntos aprueba cada tienda y cuáles fallan siempre.',
-      necesita: 'Visitas registradas con su check list.',
-      donde: '#/sucursales', listo: hay.visitas > 0, tiene: hay.visitas },
-    { id: 'talento', nombre: 'Distribución del 9-box',
-      que: 'Cuánta gente hay en cada cuadrante y cuántos quedan sin evaluar.',
-      necesita: 'Desempeño y potencial cargados en la visita.',
-      donde: '#/sucursales', listo: hay.evaluados > 0, tiene: hay.evaluados },
+      donde: '#/diario', listo: !!ausentismoDelArea(e, hoyISO) },
     { id: 'reclamos', nombre: 'Reclamos y cuánto tardan',
-      que: 'Cuántos se abren por mes, de qué tipo y cuántos días tardan en cerrarse.',
+      que: 'Cuántos hay abiertos, cuánto tarda en promedio cerrarlos y cuál es el más viejo sin resolver.',
       necesita: 'Reclamos cargados.',
-      donde: '#/reclamos', listo: hay.reclamos > 0, tiene: hay.reclamos },
-    { id: 'costo', nombre: 'Costo laboral sobre venta',
-      que: 'El costo del mes cerrado contra la venta neta, con el objetivo y el techo de alerta.',
-      necesita: 'La estadística del mes, con costos y venta.',
-      donde: '#/estadistica', listo: false, tiene: 0 }
+      donde: '#/reclamos', listo: !!reclamosDelArea(e, hoyISO) }
   ];
+}
+
+/* El cumplimiento del check list, la distribución del 9-box y el costo sobre
+   venta **no se prometen acá**: ya viven donde se cargan —la visita de cada
+   tienda y la estadística del mes— y repetirlos en este tablero sería el sexto
+   lugar con los mismos números. Lo que sí corresponde es decir dónde están. */
+const DONDE_VIVEN_LOS_OTROS = [
+  { nombre: 'Cumplimiento del check list', donde: '#/sucursales',
+    texto: 'En la visita de cada tienda, con sus 30 puntos y el semáforo.' },
+  { nombre: 'Distribución del 9-box', donde: '#/sucursales',
+    texto: 'En la solapa Talento y 9-box de la visita.' },
+  { nombre: 'Costo laboral sobre venta', donde: '#/estadistica',
+    texto: 'En la estadística del mes, con el objetivo y el techo de alerta.' }
+];
+
+/* ------------------------ Los que necesitan historia ---------------------- *
+ *
+ * Éstos también se calculan acá, pero solo dan número cuando hay con qué. La
+ * regla que los ordena: **un indicador o está implementado y aparece cuando el
+ * dato existe, o no se promete**. La primera versión de esta pantalla los
+ * listaba como «ya viene» y, al cargar la primera baja, el renglón desaparecía
+ * de la lista sin que apareciera nada en su lugar. Eso es peor que el guión que
+ * la lista venía a evitar.
+ */
+
+/** Los mismos días del mes, `n` meses atrás. */
+function _mesesAtras(iso, n) {
+  const [a, m, d] = String(iso).split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1 - n, d)).toISOString().slice(0, 10);
+}
+
+function _diasEntreISO(a, b) {
+  const ok = x => /^\d{4}-\d{2}-\d{2}$/.test(String(x));
+  if (!ok(a) || !ok(b)) return null;
+  const d = x => Date.UTC(...x.split('-').map(Number).map((n, i) => i === 1 ? n - 1 : n));
+  return Math.round((d(b) - d(a)) / 86400000);
+}
+
+/**
+ * Rotación de los últimos doce meses: bajas del período sobre la dotación
+ * media. Separa renuncias de despidos porque **no son el mismo problema**: una
+ * se previene con condiciones de trabajo y la otra es una decisión propia.
+ *
+ * La dotación media es aproximada —los activos de hoy más la mitad de los que
+ * se fueron— porque el panel guarda el plantel de hoy y no la foto de cada mes.
+ * La pantalla lo dice: un promedio inventado sobre una serie que no existe
+ * sería peor que un número aproximado y anunciado como tal.
+ */
+function rotacionDelArea(estado, hoyISO) {
+  const hoy = hoyISO || _diaHoy();
+  const desde = _mesesAtras(hoy, 12);
+  const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
+  const conBaja = gente.filter(c => c.baja && c.baja.fecha);
+  if (!conBaja.length) return null;
+
+  const delPeriodo = conBaja
+    .filter(c => c.baja.fecha >= desde && c.baja.fecha <= hoy)
+    .map(c => ({ fecha: c.baja.fecha, grupo: c.baja.grupo || 'Otros',
+                 nombre: c.nombre, motivo: c.baja.motivo || '' }));
+
+  const porGrupo = {};
+  delPeriodo.forEach(b => { porGrupo[b.grupo] = (porGrupo[b.grupo] || 0) + 1; });
+  const activos = gente.filter(c => c.activo !== false).length;
+  const media = activos + delPeriodo.length / 2;
+
+  return {
+    desde, hasta: hoy, bajas: delPeriodo.length,
+    tasa: media > 0 ? delPeriodo.length / media : null,
+    porGrupo,
+    renuncias: porGrupo['Renuncias'] || 0,
+    despidos: porGrupo['Despidos'] || 0,
+    media,
+    ultimas: delPeriodo.slice().sort((a, b) => b.fecha.localeCompare(a.fecha)).slice(0, 5)
+  };
+}
+
+/**
+ * Ausentismo de los últimos doce meses: días de ausencia sobre días-persona.
+ * Cuenta solo lo que ya pasó, como `diasDeAusencia()`, así que una licencia
+ * abierta suma hasta hoy y no hasta el alta prevista.
+ */
+function ausentismoDelArea(estado, hoyISO) {
+  const hoy = hoyISO || _diaHoy();
+  const desde = _mesesAtras(hoy, 12);
+  const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
+  if (!gente.some(c => (c.ausencias || []).length)) return null;
+
+  let dias = 0;
+  const quienes = new Set();
+  const porMotivo = {};
+  gente.forEach(c => (c.ausencias || []).forEach(a => {
+    if (!a.desde || a.desde < desde) return;
+    const d = diasDeAusencia(a, hoy);
+    if (!d) return;
+    dias += d;
+    quienes.add(c.id);
+    const k = a.motivo || 'sin motivo';
+    porMotivo[k] = (porMotivo[k] || 0) + d;
+  }));
+  if (!dias) return null;
+
+  const activos = gente.filter(c => c.activo !== false).length;
+  const diasPersona = activos * 365;
+  return {
+    desde, hasta: hoy, dias, personas: quienes.size,
+    tasa: diasPersona > 0 ? dias / diasPersona : null,
+    /* Cuánto trabajo no se prestó, en la unidad en la que se piensa la
+       dotación: los días perdidos sobre un año de una persona. */
+    fte: dias / 365,
+    porMotivo
+  };
+}
+
+/** Reclamos: cuántos hay abiertos y cuánto tardan en cerrarse. */
+function reclamosDelArea(estado, hoyISO) {
+  const hoy = hoyISO || _diaHoy();
+  const todos = ((estado || {}).reclamos || []);
+  if (!todos.length) return null;
+  const cerrado = r => ((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
+    && ESTADOS_RECLAMO_POR_ID[r.estado]) || {}).cerrado;
+  const abiertos = todos.filter(r => !cerrado(r));
+  const demoras = todos.filter(r => cerrado(r) && r.fecha && r.fechaCierre)
+    .map(r => _diasEntreISO(r.fecha, r.fechaCierre)).filter(x => x !== null);
+  const viejos = abiertos.map(r => _diasEntreISO(r.fecha, hoy))
+    .filter(x => x !== null).sort((a, b) => b - a);
+  return {
+    total: todos.length, abiertos: abiertos.length,
+    cerrados: todos.length - abiertos.length,
+    demora: demoras.length ? demoras.reduce((a, b) => a + b, 0) / demoras.length : null,
+    masViejo: viejos.length ? viejos[0] : null
+  };
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BANDAS_ANTIGUEDAD, PUESTOS_CLAVE,
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
-    indicadoresDelArea, loQueFaltaParaMedir
+    indicadoresDelArea, loQueFaltaParaMedir,
+    rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS
   };
 }

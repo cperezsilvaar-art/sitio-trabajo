@@ -472,12 +472,30 @@ rampa de un tono en cinco pasos —validada contra los dos fondos— y no colore
 distintos; la estructura por nivel de cargo es **nominal**, así que va toda del
 mismo color y lo que se compara es el largo.
 
-**Lo que necesita historia no se promete en un guión.** `loQueFaltaParaMedir()`
-lista los seis clásicos —rotación, ausentismo, check list, 9-box, reclamos, costo
-sobre venta— con qué hay que cargar para que aparezcan, y **cada uno sale de la
-lista solo** cuando el dato existe. Un indicador que promete un número y devuelve
-un guión durante seis meses es peor que no ofrecerlo. Uno nuevo se agrega ahí, no
-como un KPI vacío en la tira.
+**Un indicador o está implementado y aparece cuando el dato existe, o no se
+promete.** `rotacionDelArea()`, `ausentismoDelArea()` y `reclamosDelArea()`
+devuelven `null` mientras no haya con qué, y entonces la pantalla los lista al pie
+—con qué hay que cargar y un enlace para ir—; en cuanto hay un dato aparecen
+arriba, en *Lo que se mueve*, con su número. **Nunca las dos cosas ni ninguna**:
+`loQueFaltaParaMedir()` pregunta por el propio cálculo y no por si el dato suelto
+existe.
+
+La primera versión hacía solo la mitad: listaba seis indicadores como «ya viene»
+y, al cargar la primera baja, **el renglón desaparecía de la lista sin que
+apareciera nada en su lugar**. Eso es peor que el guión que la lista venía a
+evitar. Un indicador nuevo se agrega con su cálculo, o no se agrega.
+
+**Tres no se repiten acá a propósito** —cumplimiento del check list, distribución
+del 9-box y costo sobre venta—: ya viven donde se cargan, en la visita y en la
+estadística del mes, y traerlos sería el sexto lugar con los mismos números.
+`DONDE_VIVEN_LOS_OTROS` los enlaza en vez de prometerlos.
+
+**La rotación separa renuncias de despidos** porque no son el mismo problema: una
+se previene con condiciones de trabajo y la otra es una decisión propia. La
+dotación media del período es **aproximada** —los activos de hoy más la mitad de
+los que se fueron— porque el panel guarda el plantel de hoy y no la foto de cada
+mes, **y la pantalla lo dice**: un promedio inventado sobre una serie que no
+existe sería peor que un número aproximado y anunciado como tal.
 
 **Trampa conocida — `esNoPresencial()` devuelve un objeto**, no un booleano, así
 que `filter(c => esNoPresencial(c))` se queda con todo el plantel: hay que leer
