@@ -1194,6 +1194,9 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
         <a href="#/diario" title="Quién no está hoy, desde cuándo y hasta cuándo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m9 15.5 2 2 4-4"/></svg>
           <span>Presentismo</span><b class="lat-badge" data-badge="ausencias" hidden></b></a>
+        <a href="#/operacion" title="La venta del día, para leerla contra la gente que estuvo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 15.5 5-5.5 3.5 3.5L20 6"/><path d="M15.5 6H20v4.5"/></svg>
+          <span>Ventas</span></a>
         <a href="#/asistente" title="Preguntale por el área y mirá tu agenda">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 11.6c0 4.4-3.8 7.9-8.5 7.9a9.6 9.6 0 0 1-3.2-.5L3.5 21l1.6-4.2a7.6 7.6 0 0 1-1.6-4.6C3.5 7.7 7.3 4.2 12 4.2s8.5 3.5 8.5 7.4Z"/><path d="M9 11.5h.01M12 11.5h.01M15 11.5h.01"/></svg>
           <span>Asistente</span></a>
@@ -1214,16 +1217,9 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 
       <span class="nav-grupo">
         <span class="grupo">Cierre del mes</span>
-        <a href="#/estadistica">
+        <a href="#/estadistica" title="Lo que pasó el mes que cerró: FTE, costo y ausentismo liquidados">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20.5V13m5 7.5V6.5m5 14v-5m5 5V9.5"/></svg>
           <span>Estadística</span></a>
-      </span>
-
-      <span class="nav-grupo">
-        <span class="grupo">La operación</span>
-        <a href="#/operacion" title="La venta del día, para leerla contra la gente que estuvo">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 15.5 5-5.5 3.5 3.5L20 6"/><path d="M15.5 6H20v4.5"/></svg>
-          <span>Ventas</span></a>
       </span>
 
       <a href="#/config" class="al-final">
@@ -1758,79 +1754,6 @@ function semaforoDotacion(diferencia) {
   return { clave: 'reducir', icono: '🔴', texto: 'Reducir dotación' };
 }
 
-/* ------------------------------------------------------------------ *
- * 7. Recorrida del HRBP                                                *
- *                                                                      *
- * El check de la visita semanal. Está ordenado como transcurre la      *
- * visita, no por tema: primero lo que se ve antes de que nadie sepa     *
- * que llegaste, después la gente, y al final el gerente. Ese orden      *
- * importa: si arrancás por la oficina del gerente, el resto de la       *
- * visita ya es la versión que él te quiere mostrar.                     *
- *                                                                      *
- * `clave: true` marca lo que no debería quedar sin hacer nunca.         *
- * ------------------------------------------------------------------ */
-const RECORRIDA_HRBP = [
-  {
-    id: 'previo',
-    nombre: 'Antes de entrar',
-    ayuda: 'Diez minutos de preparación cambian la calidad de toda la visita.',
-    items: [
-      { id: 'pendientes', clave: true, texto: 'Repasé los compromisos pendientes de la visita anterior',
-        ayuda: 'Si no se revisan, el plan de acción se convierte en una lista de deseos.' },
-      { id: 'numeros', clave: true, texto: 'Miré los números del mes antes de entrar',
-        ayuda: 'Ausentismo, rotación y horas extras. Entrar sabiendo qué preguntar.' },
-      { id: 'novedades', texto: 'Revisé ingresos, egresos y licencias desde la última visita' }
-    ]
-  },
-  {
-    id: 'piso',
-    nombre: 'Recorrida del salón',
-    ayuda: 'Antes de reunirte con nadie. Lo que se ve sin avisar es el dato más honesto de la visita.',
-    items: [
-      { id: 'dotacionTurno', clave: true, texto: 'Conté la gente en el piso y la comparé con la que debía estar',
-        ayuda: 'La diferencia entre la dotación planificada y la real del turno explica media visita.' },
-      { id: 'uniforme', texto: 'Uniforme, credencial y presentación del equipo' },
-      { id: 'clima', clave: true, texto: 'Observé el clima: cómo se tratan entre ellos y cómo atienden',
-        ayuda: 'Se mira, no se pregunta. El trato entre compañeros delante de un cliente dice más que una encuesta.' },
-      { id: 'condiciones', texto: 'Condiciones de trabajo: iluminación, temperatura, sillas, orden del depósito' },
-      { id: 'cartelera', texto: 'Cartelera y comunicación interna al día' },
-      { id: 'seguridad', clave: true, texto: 'Seguridad e higiene: matafuegos vigentes, salidas libres, botiquín, señalética',
-        ayuda: 'Es lo primero que pregunta un inspector y lo último que mira una visita apurada.' }
-    ]
-  },
-  {
-    id: 'gente',
-    nombre: 'Con la gente',
-    ayuda: 'La visita existe para esto. Si te fuiste sin hablar con nadie del piso, no fuiste.',
-    items: [
-      { id: 'colaborador', clave: true, texto: 'Hablé a solas con al menos un colaborador que no eligió el gerente',
-        ayuda: 'Elegirlo vos, en el piso, y sin el gerente cerca. Es la única fuente no filtrada que tenés.' },
-      { id: 'ingresos', clave: true, texto: 'Pregunté a los ingresos recientes cómo fue su inducción',
-        ayuda: 'Si tienen uniforme, usuario, capacitación y quién les explicó la caja. La mayoría de las bajas tempranas se decide en las primeras dos semanas.' },
-      { id: 'liquidacion', texto: 'Escuché reclamos de recibo, horas extras o liquidación',
-        ayuda: 'Un error de liquidación sin resolver es la razón más barata de perder a alguien.' },
-      { id: 'riesgoSalida', texto: 'Identifiqué a quién veo en riesgo de irse y por qué' },
-      { id: 'reconocimiento', texto: 'Reconocí en persona algo bien hecho',
-        ayuda: 'Concreto y a la persona. La visita de RRHH no puede ser solo la que viene a marcar lo que falta.' }
-    ]
-  },
-  {
-    id: 'gerente',
-    nombre: 'Con el Gerente de Tienda',
-    ayuda: 'Después de recorrer, no antes: así la conversación arranca sobre hechos.',
-    items: [
-      { id: 'planAnterior', clave: true, texto: 'Repasamos el plan de acción de la visita anterior, punto por punto' },
-      { id: 'cobertura', clave: true, texto: 'Revisamos la cobertura de turnos y francos del mes que viene',
-        ayuda: 'Es lo que evita las horas extras del mes siguiente. Se planifica antes, no se explica después.' },
-      { id: 'vacaciones', texto: 'Vacaciones planificadas y cómo se cubren' },
-      { id: 'bajoDesempeno', texto: 'Personas por debajo de lo esperado: qué está haciendo el gerente al respecto' },
-      { id: 'sucesion', texto: 'Quién cubre al gerente si falta, y quién viene atrás de cada posición clave' },
-      { id: 'sanciones', texto: 'Sanciones aplicadas: notificadas, firmadas y archivadas' },
-      { id: 'necesidades', texto: 'Qué necesita de RRHH que hoy no está teniendo',
-        ayuda: 'Preguntarlo explícitamente. Es la parte de "business partner" que suele quedar afuera.' }
-    ]
-  }
-];
 
 const ESTADOS_CHECK = [
   { id: '',    nombre: '—' },
@@ -2585,45 +2508,6 @@ function generarHallazgos(v, par) {
 
 /* ------------------------- Recorrida del HRBP ----------------------- */
 
-/**
- * Avance de la recorrida de una visita.
- *
- * Lo que no aplica no cuenta en contra: el porcentaje se calcula sobre lo que
- * correspondía hacer, no sobre la lista entera. Los puntos marcados como clave
- * se siguen aparte, porque son los que no deberían quedar sin hacer.
- */
-function evaluarRecorrida(recorrida) {
-  const checks = (recorrida && recorrida.checks) || {};
-  const bloques = RECORRIDA_HRBP.map(b => {
-    const items = b.items.map(i => ({
-      id: b.id + '_' + i.id,
-      texto: i.texto, ayuda: i.ayuda, clave: !!i.clave,
-      estado: checks[b.id + '_' + i.id] || ''
-    }));
-    const aplica = items.filter(i => i.estado !== 'na');
-    const hechos = items.filter(i => i.estado === 'ok');
-    return {
-      id: b.id, nombre: b.nombre, ayuda: b.ayuda, items,
-      total: items.length, aplican: aplica.length, hechos: hechos.length,
-      pct: aplica.length ? hechos.length / aplica.length : null
-    };
-  });
-
-  const todos = bloques.reduce((a, b) => a.concat(b.items), []);
-  const aplican = todos.filter(i => i.estado !== 'na');
-  const hechos = todos.filter(i => i.estado === 'ok');
-  const sinHacer = todos.filter(i => i.estado === 'no');
-  const sinResponder = todos.filter(i => !i.estado);
-  const clavesPendientes = todos.filter(i => i.clave && i.estado !== 'ok' && i.estado !== 'na');
-
-  return {
-    bloques, total: todos.length,
-    aplican: aplican.length, hechos: hechos.length,
-    sinHacer, sinResponder, clavesPendientes,
-    pct: aplican.length ? hechos.length / aplican.length : null,
-    completa: !sinResponder.length
-  };
-}
 
 /**
  * El FTE explicado en el idioma del Gerente de Operaciones.
@@ -13534,8 +13418,6 @@ const App = (() => {
           ${dato('Estatus', c.estatus)}
         </div>
 
-        ${fichaConvenio(c, anios)}
-
         <h4>Vínculo</h4>
         <div class="grid c4">
           <label class="campo"><span>Ingreso${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}</span>
@@ -13606,15 +13488,24 @@ const App = (() => {
           Lo que cargues acá queda igual y se refleja en el 9-box.
         </p>
 
+        ${fichaConvenio(c, anios)}
+
         ${fichaMovimientos(c, s)}
 
+        ${/* Cómo viene: la lectura de hoy y, si está entrenando, hacia dónde. */''}
         ${talentCard(c, s, { sinCabecera: true })}
-
-        ${fichaLicencias(c)}
-        ${fichaSanciones(c)}
-        ${fichaAusenciasRegistradas(c)}
         ${fichaEntrenamientos(c)}
+
+        ${/* Las tres cosas de ausencias, juntas y en este orden: lo que
+             registramos, lo que el convenio le permite y lo que la liquidación
+             devolvió. Estaban separadas por Sanciones y por Desarrollo, y con
+             tres tablas parecidas repartidas por la ficha era imposible saber
+             cuál contestaba qué. */''}
+        ${fichaAusenciasRegistradas(c)}
+        ${fichaLicencias(c)}
         ${fichaAusencias(c, periodos)}
+
+        ${fichaSanciones(c)}
       </section>`;
   }
 
@@ -14029,9 +13920,10 @@ const App = (() => {
         Es el ${fmtPct(suyo.parteDeLaTienda, 0)} de los días de ausencia de
         ${esc(au.tienda.sucursal)}, que está en ${fmtPct(au.tienda.tasa, 1)} contra
         ${fmtPct(au.area.tasa, 1)} del área.
-        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos} de
-          esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron como un
-          día.</span>` : ''}
+        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos === 1
+          ? `Uno de esos ${suyo.eventos} certificados no decía cuánto duraba y se tomó`
+          : `${suyo.supuestos} de esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron`
+          } como un día.</span>` : ''}
       </p>` : ''}
 
       <div class="tabla-scroll"><table>
@@ -14077,7 +13969,7 @@ const App = (() => {
   /* ------------- Historial de ausencias mes a mes ------------- */
   function fichaAusencias(c, periodos) {
     if (!periodos.length) {
-      return `<h4>Ausencias mes a mes</h4>
+      return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
         <p class="vacio">Todavía no se importaron novedades de liquidación de esta persona.</p>`;
     }
     const col = [
@@ -14089,7 +13981,10 @@ const App = (() => {
     col.forEach(([k]) => { tot[k] = periodos.reduce((s, p) => s + (+c.novedades[p][k] || 0), 0); });
     const totHe = periodos.reduce((s, p) => s + (+c.novedades[p].he50 || 0) + (+c.novedades[p].he100 || 0), 0);
 
-    return `<h4>Ausencias mes a mes</h4>
+    return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
+      <p class="ayuda" style="margin:-4px 0 10px">Sale de las novedades que devuelve la
+        liquidación, ya cerradas. No es lo mismo que el bloque de arriba, que es lo que
+        registrás vos: cotejarlos es justamente para lo que sirve tenerlos al lado.</p>
       <div class="tabla-scroll"><table>
         <thead><tr><th>Período</th>${col.map(([, t]) => `<th class="num">${t}</th>`).join('')}
           <th class="num">Total</th><th class="num">Hs. extras</th><th>Observaciones</th></tr></thead>

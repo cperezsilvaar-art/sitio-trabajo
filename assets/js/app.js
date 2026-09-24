@@ -2781,8 +2781,6 @@ const App = (() => {
           ${dato('Estatus', c.estatus)}
         </div>
 
-        ${fichaConvenio(c, anios)}
-
         <h4>Vínculo</h4>
         <div class="grid c4">
           <label class="campo"><span>Ingreso${anios !== null ? ` · ${fmtNum(anios, 1)} años` : ''}</span>
@@ -2853,15 +2851,24 @@ const App = (() => {
           Lo que cargues acá queda igual y se refleja en el 9-box.
         </p>
 
+        ${fichaConvenio(c, anios)}
+
         ${fichaMovimientos(c, s)}
 
+        ${/* Cómo viene: la lectura de hoy y, si está entrenando, hacia dónde. */''}
         ${talentCard(c, s, { sinCabecera: true })}
-
-        ${fichaLicencias(c)}
-        ${fichaSanciones(c)}
-        ${fichaAusenciasRegistradas(c)}
         ${fichaEntrenamientos(c)}
+
+        ${/* Las tres cosas de ausencias, juntas y en este orden: lo que
+             registramos, lo que el convenio le permite y lo que la liquidación
+             devolvió. Estaban separadas por Sanciones y por Desarrollo, y con
+             tres tablas parecidas repartidas por la ficha era imposible saber
+             cuál contestaba qué. */''}
+        ${fichaAusenciasRegistradas(c)}
+        ${fichaLicencias(c)}
         ${fichaAusencias(c, periodos)}
+
+        ${fichaSanciones(c)}
       </section>`;
   }
 
@@ -3276,9 +3283,10 @@ const App = (() => {
         Es el ${fmtPct(suyo.parteDeLaTienda, 0)} de los días de ausencia de
         ${esc(au.tienda.sucursal)}, que está en ${fmtPct(au.tienda.tasa, 1)} contra
         ${fmtPct(au.area.tasa, 1)} del área.
-        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos} de
-          esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron como un
-          día.</span>` : ''}
+        ${suyo.supuestos ? `<br><span style="color:var(--texto-suave)">${suyo.supuestos === 1
+          ? `Uno de esos ${suyo.eventos} certificados no decía cuánto duraba y se tomó`
+          : `${suyo.supuestos} de esos ${suyo.eventos} certificados no decían cuánto duraban y se tomaron`
+          } como un día.</span>` : ''}
       </p>` : ''}
 
       <div class="tabla-scroll"><table>
@@ -3324,7 +3332,7 @@ const App = (() => {
   /* ------------- Historial de ausencias mes a mes ------------- */
   function fichaAusencias(c, periodos) {
     if (!periodos.length) {
-      return `<h4>Ausencias mes a mes</h4>
+      return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
         <p class="vacio">Todavía no se importaron novedades de liquidación de esta persona.</p>`;
     }
     const col = [
@@ -3336,7 +3344,10 @@ const App = (() => {
     col.forEach(([k]) => { tot[k] = periodos.reduce((s, p) => s + (+c.novedades[p][k] || 0), 0); });
     const totHe = periodos.reduce((s, p) => s + (+c.novedades[p].he50 || 0) + (+c.novedades[p].he100 || 0), 0);
 
-    return `<h4>Ausencias mes a mes</h4>
+    return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
+      <p class="ayuda" style="margin:-4px 0 10px">Sale de las novedades que devuelve la
+        liquidación, ya cerradas. No es lo mismo que el bloque de arriba, que es lo que
+        registrás vos: cotejarlos es justamente para lo que sirve tenerlos al lado.</p>
       <div class="tabla-scroll"><table>
         <thead><tr><th>Período</th>${col.map(([, t]) => `<th class="num">${t}</th>`).join('')}
           <th class="num">Total</th><th class="num">Hs. extras</th><th>Observaciones</th></tr></thead>

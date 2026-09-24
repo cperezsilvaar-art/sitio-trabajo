@@ -100,9 +100,15 @@ zoom**: *Panel* (el área), *Sucursales* (una tienda), *Nómina* (una persona). 
 son tareas, son desde dónde se mira, y de ahí sale el camino de todos los días:
 **Sucursales → elegir la sucursal → lo que haga falta de esa tienda**.
 
-Debajo van los grupos, por ritmo de trabajo y no por módulo: *Cada día*,
-*Seguimiento*, *Cierre del mes*, *La operación*. Una entrada nueva va adentro
-del grupo que le corresponde, salvo que sea otro punto de partida.
+Debajo van los grupos, por ritmo de trabajo y no por módulo: *Cada día*
+—Presentismo, Ventas, Asistente—, *Seguimiento* y *Cierre del mes*. Una entrada
+nueva va adentro del grupo que le corresponde, salvo que sea otro punto de
+partida.
+
+**Un rótulo de grupo arriba de un solo ítem es ruido.** *La operación* tenía
+adentro únicamente a *Ventas*, y la venta del día es del día: se mudó a *Cada
+día*, al lado de Presentismo, que es además donde se la mira —contra la gente
+que estuvo—. Un grupo nuevo se crea cuando hay dos cosas que poner adentro.
 
 *Seguimiento* se llamaba *En la tienda* y tenía adentro a *Sucursales*. Estaba
 mezclado: la puerta de entrada a una tienda no es una tarea al lado de
@@ -324,6 +330,32 @@ meterlas infla el número con algo que no es un problema—, y tampoco la matern
 ni el fallecimiento: `TIPOS_FORMULARIO` lo marca con `ausentismo: false` y
 `participacionDeAusencias()` los saltea. Los apercibimientos no son una ausencia.
 
+**El ausentismo se ve en los tres lugares donde se lo busca**, y los tres salen
+del **mismo** cálculo: `ausentismoDe()` (`indicadores.js`) es un buscador sobre
+`participacionDeAusencias()`, no una cuenta nueva. Dos funciones que cuentan lo
+mismo dan números distintos el día que una cambia, y acá los tres niveles se
+leen uno al lado del otro. Están en *Panel → Indicadores* (el área, con el
+desglose), en `#/sucursal/<id>` (la tienda contra el área, arriba de los atajos)
+y en la ficha de cada persona (sus días, su tasa, qué parte de los de su tienda
+es, y la tasa de su tienda y la del área para poder leerla contra algo).
+
+**El Panel abre con «Quién no está hoy»** (`bloqueQuienNoEsta()`, sobre
+`ausenciasEnCurso()`). Ese lugar lo ocupaba un aviso de *Certificados que
+vencen* que listaba solo lo urgente, pero la pregunta de la mañana no es «qué
+vence» sino «quién me falta y desde cuándo»: lo urgente es una columna de esa
+lista, no una lista aparte. Va sobre toda ausencia empezada y sin cerrar, y no
+sobre `ausentesHoy()`, porque **el que ya debería haber vuelto y nadie marcó
+tampoco está en la tienda**. Con el historial cargado y nadie ausente el bloque
+dice «hoy no falta nadie» en vez de desaparecer —un cero es una respuesta, y
+esconderlo se lee como que la pantalla se rompió—; sin ninguna ausencia cargada
+sí desaparece, como los contadores.
+
+**Lo que se importa entra cerrado si ya terminó.** La planilla arranca en marzo
+de 2025: es un registro de lo que pasó, no una carga en vivo. Sin eso las 125
+licencias entraban abiertas y el Panel anunciaba 125 ausentes, cada una «vencida
+hace 400 días». No se inventa la fecha de reincorporación, así que
+`diasDeAusencia()` se sigue quedando con `hasta` y el ausentismo no cambia.
+
 **`participacionDeAusencias()` (`indicadores.js`) contesta de dónde sale**, en
 tres niveles: el área, cada tienda sobre el total del área y cada persona sobre
 su tienda. Los tres se cuentan **en días** y los tres traen su **tasa** —días de
@@ -470,7 +502,9 @@ El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
 con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó por
 repetirlo—. `v.recorrida` sigue en el modelo para no romper lo ya guardado, pero
-no se muestra ni entra en ningún reporte.
+no se muestra ni entra en ningún reporte, y **su código ya no está**:
+`RECORRIDA_HRBP` y `evaluarRecorrida()` eran 114 líneas que no llamaba nadie
+desde que la solapa se sacó.
 
 **`#/sucursales` (*Sucursales*) es la puerta de entrada a las tiendas** y
 reemplazó a *Visitas* en el menú. Es la misma lista mirada desde donde el

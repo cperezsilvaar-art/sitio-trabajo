@@ -33,18 +33,26 @@ Las ausencias viven en **`c.ausencias`**, o sea que ya cuelgan del colaborador y
 no de la sucursal: si se muda de tienda, el historial se muda con él. Lo que
 faltaba era mostrárselo, y desde septiembre de 2026 está en su perfil —el que se
 abre desde *Nómina* o desde el organigrama—, en **Licencias y ausencias
-registradas**, arriba de *Ausencias mes a mes*.
+registradas**.
 
-Son dos bloques distintos y conviene no confundirlos:
+Arriba del historial va **su ausentismo**: cuántos días faltó en los últimos tres
+meses, su tasa, qué parte de los días de ausencia de su tienda representa, y la
+tasa de su tienda contra la del área. Un 2% suelto no dice nada; contra el 0,5%
+de su tienda dice bastante.
+
+Abajo van los otros dos bloques de ausencias, **los tres juntos y en este
+orden** —estaban separados por *Sanciones* y por *Desarrollo*, y con tres tablas
+parecidas repartidas por la ficha era imposible saber cuál contestaba qué—:
 
 | Bloque | De dónde sale | Qué contesta |
 |---|---|---|
 | **Licencias y ausencias registradas** | `c.ausencias`, lo que cargás en Presentismo | Qué licencias tuvo, cuándo y si trajo el papel |
-| **Ausencias mes a mes** | `c.novedades`, el libro de liquidación | Qué días pagó la liquidación de cada mes |
+| **Licencias especiales del art. 25** | `c.licencias` + la liquidación | Cuántos días de cada licencia del CCT le quedan |
+| **Ausencias que liquidó Nómina, mes a mes** | `c.novedades`, el libro de liquidación | Qué días pagó la liquidación de cada mes |
 
-El primero es lo que sabés **hoy**; el segundo es lo que quedó **liquidado**. Que
+El primero es lo que sabés **hoy**; el último es lo que quedó **liquidado**. Que
 no coincidan es información, no un error: una licencia de este mes se liquida el
-mes que viene.
+mes que viene, y por eso el título dice de dónde sale cada uno.
 
 ### Cómo se reparten los días
 
@@ -193,6 +201,18 @@ Una ausencia que se importó **antes** de tomar el supuesto quedó sin `hasta`.
 Volver a pegar la planilla **la completa** en vez de contarla como repetida, así
 no hay que borrar nada para recuperar los días.
 
+### Lo importado entra cerrado si ya terminó
+
+La planilla arranca en marzo de 2025: es un **registro de lo que ya pasó**, no
+una carga en vivo. Una licencia cuyo certificado terminó antes de hoy está
+terminada —la persona volvió hace meses—, así que entra con `reincorporado`.
+
+Sin eso las 125 entraban abiertas y el Panel anunciaba **125 ausentes**, cada una
+«vencida hace 400 días». No se inventa la fecha de reincorporación:
+`diasDeAusencia()` con `reincorporado` y sin fecha se queda con `hasta`, que es
+exactamente lo que dice el papel, así que el ausentismo no cambia. La que sigue
+abierta hoy entra abierta y aparece en el Panel, que es su lugar.
+
 ### Lo que se pega es la planilla entera
 
 La planilla de respuestas es de **toda la empresa**: 734 filas de 28 tiendas
@@ -283,5 +303,24 @@ Repartir por días pero ordenar por eventos —que es como quedó la primera
 versión— daba dos respuestas distintas a la misma pregunta, una al lado de la
 otra. Ahora las dos escalas usan días.
 
-Se ve en *Panel → Indicadores*, y el historial de cada persona está en su ficha
-(`fichaAusenciasRegistradas`).
+Se ve en **tres lugares**, todos sobre el mismo cálculo: *Panel → Indicadores*
+(el área, con el desglose por tienda y por persona), `#/sucursal/<id>` (la tienda
+contra el área) y la ficha de cada persona (`fichaAusenciasRegistradas`).
+`ausentismoDe(estado, colaboradorId, sucursalId, hasta)` es el buscador que usan
+los dos últimos: **no es una cuenta nueva**, porque dos funciones que cuentan lo
+mismo dan números distintos el día que una cambia.
+
+## Quién no está hoy, en el Panel
+
+`ausenciasEnCurso()` devuelve toda ausencia empezada y sin cerrar, con su estado,
+y el Panel abre con esa lista. Es más ancha que `ausentesHoy()` a propósito: el
+que ya debería haber vuelto y nadie marcó la reincorporación tampoco está en la
+tienda, y es justamente el caso que hay que resolver.
+
+Antes ahí había un aviso de *Certificados que vencen* que listaba solo lo
+urgente. La pregunta de la mañana no es «qué vence» sino «quién me falta y desde
+cuándo»: lo urgente es una columna de esa lista, no una lista aparte.
+
+Con el historial cargado y nadie ausente, el bloque dice **«hoy no falta nadie»**
+en vez de desaparecer —un cero es una respuesta—. Sin ninguna ausencia cargada sí
+desaparece, como los contadores del menú.
