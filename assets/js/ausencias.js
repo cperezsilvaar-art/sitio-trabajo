@@ -358,3 +358,120 @@ if (typeof module !== 'undefined' && module.exports) {
     alertasDeAusencias, ausentesHoy
   };
 }
+
+/* ============ El formulario de recepción de ausencias ==================== *
+ *
+ * Las ausencias entran por un formulario de Google que completan los gerentes
+ * —«Recepción de ausencias por certificados, apercibimientos y vacaciones»— y
+ * salen como una planilla de respuestas. Esto la lee.
+ *
+ * **La planilla no fue pensada para medir.** El certificado se carga en un solo
+ * campo de texto libre que pide patología, fecha de inicio y días de reposo, y
+ * en la práctica la mitad de las respuestas trae solo la patología: «MIGRAÑA»,
+ * «dolor de espalda». De las que traen duración, la mayoría la escribe en horas
+ * —«(24) HORAS»— y no en días.
+ *
+ * Por eso esto **parsea lo que puede y dice lo que no pudo**, en vez de
+ * completar con supuestos. Una ausencia sin duración se guarda igual: que la
+ * persona faltó es un hecho, y cuántos días faltó es otro dato. El que falta se
+ * cuenta aparte y la pantalla lo muestra, porque un porcentaje de ausentismo
+ * calculado sobre la mitad de los certificados no es un porcentaje bajo: es un
+ * porcentaje falso.
+ */
+
+/** Qué es cada columna del formulario, por lo que dice su encabezado. */
+const COLUMNAS_FORMULARIO_AUSENCIAS = [
+  { campo: 'marca',    claves: ['marca temporal'] },
+  { campo: 'periodo',  claves: ['mes y ano en curso'] },
+  { campo: 'nombre',   claves: ['apellido y nombre'] },
+  { campo: 'tienda',   claves: ['tienda'] },
+  { campo: 'cuil',     claves: ['cuil'] },
+  { campo: 'tipo',     claves: ['que novedad'] },
+  { campo: 'detalle',  claves: ['patologia'] },
+  { campo: 'apercibimiento', claves: ['fecha del apercibimiento'] },
+  { campo: 'parto',    claves: ['fecha probable de parto'] },
+  { campo: 'desdeAnses', claves: ['inicio de la licencia abonada'] },
+  { campo: 'hastaAnses', claves: ['fin de la licencia abonada'] },
+  { campo: 'casamiento', claves: ['fecha de casamiento'] }
+];
+
+/* Lo que el formulario ofrece elegir, mapeado a los motivos del panel. Las
+   vacaciones se importan pero **no son ausentismo**: son tiempo planificado y
+   contarlas infla el número con algo que no es un problema. */
+const TIPOS_FORMULARIO = [
+  { clave: 'certificado',  motivo: 'enfermedad',  ausentismo: true },
+  { clave: 'vacacion',     motivo: 'vacaciones',  ausentismo: false },
+  { clave: 'embarazo',     motivo: 'maternidad',  ausentismo: false },
+  { clave: 'fallecimiento', motivo: 'otra',       ausentismo: false },
+  { clave: 'apercibimiento', motivo: null,        ausentismo: false }
+];
+
+const _sinTildesMay = s => String(s || '').normalize('NFD')
+  .replace(/[̀-ͯ]/g, '').toUpperCase();
+
+/** A qué motivo del panel corresponde lo que eligieron en el formulario. */
+function motivoDeFormulario(texto) {
+  const t = _sinTildesMay(texto).toLowerCase();
+  return TIPOS_FORMULARIO.find(x => t.indexOf(x.clave) >= 0) || null;
+}
+
+/**
+ * Saca del texto libre del certificado lo que se pueda: día de inicio,
+ * duración y patología. Devuelve `null` en lo que no está, nunca un supuesto.
+ *
+ * El año es opcional —«08/03», «18-03»— porque el formulario lo omite seguido;
+ * cuando falta se toma el de la respuesta, que es cuando se cargó.
+ */
+function leerCertificado(texto, anioRef) {
+  const t = String(texto || '').trim();
+  if (!t) return { dias: null, desde: null, patologia: '' };
+
+  /* La duración: primero días, después horas. «(24) HORAS» es un día, no
+     veinticuatro: es como lo escribe la mitad de los gerentes. */
+  let dias = null;
+  const mD = t.match(/(\d{1,3})\s*d[ií]as?\b/i);
+  if (mD) {
+    dias = parseInt(mD[1], 10);
+  } else {
+    const mH = t.match(/\(?\s*(\d{1,3})\s*\)?\s*h(?:s|rs|oras?)?\b/i);
+    if (mH) dias = Math.max(1, Math.ceil(parseInt(mH[1], 10) / 24));
+  }
+
+  /* La fecha: dd/mm, dd-mm-aa o dd-mm-aaaa. Se descarta lo que no sea una
+     fecha posible, para no leer «24 HORAS» como un 24 de algo. */
+  let desde = null;
+  const mF = t.match(/\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b/);
+  if (mF) {
+    const d = +mF[1], m = +mF[2];
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12) {
+      let a = mF[3] ? +mF[3] : (anioRef || new Date().getFullYear());
+      if (a < 100) a += 2000;
+      desde = `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  /* La patología es lo que queda sacando números y separadores. Va al campo
+     diagnóstico de la ausencia, que ya existe. */
+  const patologia = t.replace(/\(?\s*\d{1,3}\s*\)?\s*(h(s|rs|oras?)?|d[ií]as?)\b/gi, ' ')
+    .replace(/\b\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?\b/g, ' ')
+    .replace(/\b(fecha de inicio|tiempo de reposo|patologia|reposo|inicio)\b\s*:?/gi, ' ')
+    .replace(/[\s,;/|-]+/g, ' ').trim();
+
+  return { dias, desde, patologia };
+}
+
+/** El CUIL que escribieron, sin lo que le agrega Excel al guardarlo como número. */
+function cuilDelFormulario(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  /* Excel guarda el CUIL como número y al exportarlo le queda un `.0`, que al
+     sacar los no-dígitos se convierte en un cero de más al final. */
+  if (d.length === 12 && d.endsWith('0')) return d.slice(0, 11);
+  return d.length === 11 ? d : '';
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Object.assign(module.exports || {}, {
+    COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO,
+    motivoDeFormulario, leerCertificado, cuilDelFormulario
+  });
+}

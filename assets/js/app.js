@@ -224,6 +224,7 @@ const App = (() => {
       </section>
 
       ${bloqueMovimiento(ind)}
+      ${bloqueParticipacion(e)}
       ${bloqueEstructura(ind)}
       ${bloqueAntiguedad(ind)}
       ${bloqueCobertura(ind)}
@@ -275,6 +276,55 @@ const App = (() => {
           ${r.ultimas.map(b => `<li>${fmtFecha(b.fecha)} — ${esc(b.nombre)}
             (${esc(b.grupo)}${b.motivo ? `: ${esc(b.motivo)}` : ''})</li>`).join('')}
         </ul>` : ''}
+    </section>`;
+  }
+
+  /* De dónde sale el ausentismo: qué tiendas lo aportan y, adentro de cada
+     una, quiénes. Es lo que convierte el número en una conversación con el
+     gerente. Se cuenta en eventos y no en días porque más de la mitad de los
+     certificados no dice cuántos días son; los días van aparte, diciendo sobre
+     cuántos se saben. */
+  let tiendaAbierta = null;
+
+  function bloqueParticipacion(e) {
+    const pa = participacionDeAusencias(e, null, hoyISO());
+    if (!pa.eventos) return '';
+    const tope = pa.tiendas[0].eventos || 1;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>De dónde sale el ausentismo</h2>
+        <span class="chip ambar">${pa.eventos} en 3 meses</span>
+      </div>
+      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)},
+        ${pa.personas} persona${pa.personas === 1 ? '' : 's'} con al menos una ausencia.
+        Se cuenta en <strong>eventos</strong>: de ${pa.eventos},
+        <strong>${pa.conDias}</strong> dicen cuántos días duran y suman
+        ${fmtNum(pa.dias, 0)} días.${pa.sinDias ? ` Los otros ${pa.sinDias} llegaron sin
+        duración, así que los días son un piso y no el total.` : ''}
+        Las vacaciones no cuentan.</p>
+
+      <div class="lista-barras">
+        ${pa.tiendas.map(t => `
+          <button class="fila-tienda-aus" data-accion="ver-tienda-aus" data-id="${t.id}">
+            ${barraDato(t.eventos / tope,
+              `${esc(t.sucursal)} <b>${t.eventos}</b> <em>${fmtPct(t.parteDelArea, 0)} del área · ${
+                t.personas} persona${t.personas === 1 ? '' : 's'}${
+                t.conDias ? ` · ${fmtNum(t.dias, 0)} días conocidos` : ''}</em>`)}
+          </button>
+          ${tiendaAbierta === t.id ? `<ul class="lista-pendientes" style="margin:2px 0 10px 14px">
+            ${t.gente.map(g => `<li class="pendiente">
+              <a href="#/nomina">
+                <strong>${esc(g.nombre)}</strong>
+                <span>${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
+                  g.conDias ? ` · ${fmtNum(g.dias, 0)} días` : ''}${
+                  g.sinDias ? ` · ${g.sinDias} sin duración` : ''}</span>
+              </a>
+              <b>${fmtPct(g.parteDeLaTienda, 0)} de la tienda</b>
+            </li>`).join('')}
+          </ul>` : ''}`).join('')}
+      </div>
+      <p class="ayuda" style="margin-top:12px">Tocá una tienda para ver quiénes la componen.</p>
     </section>`;
   }
 
@@ -1725,7 +1775,45 @@ const App = (() => {
         la falta queda <strong>pendiente de justificar</strong>.
       </p>
 
-      ${panelAusenciasLargas()}`;
+      ${panelAusenciasLargas()}
+      ${bloqueImportarAusencias()}`;
+  }
+
+  /* ---------- Traer las ausencias del formulario de recepción ----------
+     Los gerentes las cargan en un formulario de Google y la planilla de
+     respuestas se pega acá, igual que la nómina. No hay conector: el archivo
+     tiene patologías adentro y eso vive solo en este navegador. */
+  let resultadoAusencias = null;
+
+  function bloqueImportarAusencias() {
+    const r = resultadoAusencias;
+    return `<section class="tarjeta">
+      <h2>Traer las ausencias del formulario</h2>
+      <p class="ayuda">Abrí la planilla de respuestas del formulario de recepción, seleccioná
+        desde la fila de encabezados hasta la última respuesta, copiá y pegá acá. Empareja por
+        CUIL y, si falta, por nombre. No duplica: una ausencia de la misma persona el mismo día
+        y por el mismo motivo entra una sola vez.</p>
+      <textarea id="pegar-ausencias" style="min-height:120px"
+        placeholder="Marca temporal	Mes y año en curso	Apellido y nombre…"></textarea>
+      <div class="acciones">
+        <button class="b" data-accion="importar-ausencias">Importar las ausencias</button>
+      </div>
+      <p class="ayuda"><strong>Las vacaciones entran pero no cuentan como ausentismo</strong>:
+        son tiempo planificado. Los apercibimientos no son una ausencia y se saltean.</p>
+      ${r ? `<div class="aviso-caja ${r.cargadas ? 'info' : ''}" style="margin-top:14px">
+        <strong>Entraron ${r.cargadas} ausencia${r.cargadas === 1 ? '' : 's'}.</strong>
+        ${r.porCuil} por CUIL y ${r.porNombre} por nombre.
+        ${r.repetidas ? `${r.repetidas} ya estaban cargadas y no se duplicaron.` : ''}
+        ${r.apercibimientos ? `${r.apercibimientos} apercibimiento${r.apercibimientos === 1 ? '' : 's'} salteado${r.apercibimientos === 1 ? '' : 's'}.` : ''}
+        ${r.sinDuracion ? `<br><strong>${r.sinDuracion} no dicen cuántos días duran</strong>:
+          el certificado se cargó con la patología nada más. Quedan registradas —que la persona
+          faltó es un hecho— pero no suman días.` : ''}
+        ${r.sinPersona.length ? `<br>${r.sinPersona.length} no se pudieron atribuir a nadie del
+          padrón: ${esc([...new Set(r.sinPersona)].slice(0, 8).join(' · '))}${
+          new Set(r.sinPersona).size > 8 ? '…' : ''}. Suele ser gente que ya no está o un
+          nombre escrito distinto.` : ''}
+      </div>` : ''}
+    </section>`;
   }
 
   /* ====================== VISTA: VENTAS DEL DÍA ======================
@@ -6405,6 +6493,39 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'importar-ausencias') {
+        const crudo = (document.getElementById('pegar-ausencias') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá la planilla de respuestas primero.', 'error'); return; }
+        const filas = filasPegadas(crudo);
+        if (filas.length < 2) { avisar('No se entendió la planilla. ¿Copiaste los encabezados?', 'error'); return; }
+
+        /* El encabezado dice qué es cada columna: el formulario cambia de
+           preguntas y las posiciones se corren. */
+        const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const cab = filas[0].map(norm);
+        const col = {};
+        COLUMNAS_FORMULARIO_AUSENCIAS.forEach(d => {
+          const i = cab.findIndex(h => d.claves.some(k => h.indexOf(k) >= 0));
+          if (i >= 0) col[d.campo] = i;
+        });
+        if (col.nombre === undefined || col.tipo === undefined) {
+          avisar('No encontré las columnas de nombre y de novedad. ¿Es la planilla del formulario?', 'error');
+          return;
+        }
+        resultadoAusencias = Store.importarAusenciasFormulario(filas.slice(1).map(f => {
+          const o = {};
+          Object.keys(col).forEach(k => { o[k] = f[col[k]] || ''; });
+          return o;
+        }));
+        refrescar();
+        avisar(`Entraron ${resultadoAusencias.cargadas} ausencias.`);
+      }
+
+      if (a === 'ver-tienda-aus') {
+        tiendaAbierta = tiendaAbierta === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;

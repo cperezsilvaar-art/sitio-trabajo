@@ -1078,6 +1078,101 @@ const Store = (() => {
       return this.importarNomina(filas);
     },
 
+    /* ---------- Las ausencias del formulario de recepción ----------
+     *
+     * Los gerentes cargan las ausencias en un formulario de Google y la
+     * planilla de respuestas se pega acá. Cada respuesta es un evento: que la
+     * persona faltó. **Cuántos días faltó es otro dato**, y más de la mitad de
+     * las respuestas no lo trae: el certificado se carga en un campo de texto
+     * libre y mucha gente escribe solo la patología.
+     *
+     * Por eso la ausencia se guarda igual sin duración, con `dias: null`, en
+     * vez de suponerle un día. Lo que se sabe se cuenta y lo que no, también:
+     * el resultado dice cuántas quedaron sin duración, para que nadie lea un
+     * porcentaje calculado sobre la mitad como si fuera el del área.
+     *
+     * Empareja por CUIL, que es lo único unívoco. El nombre es el respaldo:
+     * el formulario lo escribe a mano y aparece «luciana ortellano» y
+     * «luiciana ortellano» para la misma persona.
+     */
+    importarAusenciasFormulario(filas) {
+      const e = this.get();
+      const gente = [];
+      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => gente.push({ c, s })));
+
+      const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
+      const porCuil = {};
+      gente.forEach(g => {
+        const k = soloDigitos(g.c.cuil);
+        if (k.length === 11) porCuil[k] = g;
+      });
+      const tokens = x => new Set(String(x || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toUpperCase()
+        .split(/[^A-Z]+/).filter(w => w.length > 2));
+
+      const out = { cargadas: 0, repetidas: 0, sinDuracion: 0, sinPersona: [],
+                    porCuil: 0, porNombre: 0, fueraDelArea: 0, apercibimientos: 0 };
+
+      filas.forEach(f => {
+        const tipo = motivoDeFormulario(f.tipo);
+        if (!tipo) { out.fueraDelArea++; return; }
+        if (!tipo.motivo) { out.apercibimientos++; return; }
+
+        /* 1. por CUIL. 2. por nombre, y solo si no hay ambigüedad. */
+        let g = null;
+        const cuil = cuilDelFormulario(f.cuil);
+        if (cuil && porCuil[cuil]) { g = porCuil[cuil]; out.porCuil++; }
+        if (!g) {
+          const t = tokens(f.nombre);
+          const cand = gente.filter(x => {
+            const k = tokens(x.c.nombre);
+            let n = 0; t.forEach(w => { if (k.has(w)) n++; });
+            return n >= 2;
+          });
+          if (cand.length === 1) { g = cand[0]; out.porNombre++; }
+        }
+        if (!g) { out.sinPersona.push(String(f.nombre || '').trim()); return; }
+
+        const anio = /^\d{4}/.test(String(f.marca)) ? +String(f.marca).slice(0, 4)
+                   : new Date().getFullYear();
+        const leido = tipo.clave === 'certificado'
+          ? leerCertificado(f.detalle, anio)
+          : { dias: null, desde: null, patologia: '' };
+
+        /* Sin fecha en el texto se usa el día en que se cargó la respuesta: es
+           el mismo día o el siguiente, y es mejor que no ubicarla en el
+           tiempo. Queda marcado en `fechaAproximada`. */
+        const desde = leido.desde || (String(f.marca || '').slice(0, 10) || '');
+        if (!desde) return;
+        const hasta = leido.dias ? _diaMas(desde, leido.dias - 1) : '';
+
+        /* La misma persona, el mismo día y el mismo motivo es la misma
+           ausencia: el formulario se completa dos veces seguido. */
+        if (!Array.isArray(g.c.ausencias)) g.c.ausencias = [];
+        if (g.c.ausencias.some(a => a.desde === desde && a.motivo === tipo.motivo)) {
+          out.repetidas++; return;
+        }
+
+        g.c.ausencias.push({
+          id: uid(), motivo: tipo.motivo, desde, hasta,
+          diagnostico: leido.patologia || '',
+          /* Vino con el certificado adjunto: el formulario lo pide. */
+          certificado: tipo.clave === 'certificado' ? 'si' : '',
+          notas: '', reincorporado: false, fechaReincorporacion: '',
+          origen: 'formulario',
+          fechaAproximada: !leido.desde,
+          sinDuracion: !leido.dias,
+          cuentaAusentismo: tipo.ausentismo,
+          registradaEl: new Date().toISOString()
+        });
+        out.cargadas++;
+        if (!leido.dias) out.sinDuracion++;
+      });
+
+      guardar();
+      return out;
+    },
+
     importarNomina(filas) {
       const e = this.get();
       const clave = t => String(t || '').trim().toUpperCase()

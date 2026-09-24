@@ -305,11 +305,81 @@ function reclamosDelArea(estado, hoyISO) {
   };
 }
 
+/* ---------------- Participación del ausentismo, en tres niveles ------------
+ *
+ * La pregunta no es solo «cuánto ausentismo tiene el área» sino **de dónde
+ * sale**: qué tiendas aportan la mayor parte y, adentro de una tienda, quiénes.
+ * Es lo que convierte un número en una conversación con un gerente.
+ *
+ * Se cuenta en **eventos** y no en días, y no es una elección estética: más de
+ * la mitad de los certificados que llegan por el formulario no dicen cuántos
+ * días son. Los eventos están completos, así que la participación es exacta;
+ * los días se informan aparte, diciendo sobre cuántos certificados se saben.
+ *
+ * Las **vacaciones no cuentan**: son tiempo planificado y meterlas adentro
+ * infla el número con algo que no es un problema.
+ */
+function participacionDeAusencias(estado, desdeISO, hastaISO) {
+  const e = estado || {};
+  const hasta = hastaISO || _diaHoy();
+  const desde = desdeISO || _mesesAtras(hasta, 3);
+
+  const cuenta = () => ({ eventos: 0, dias: 0, conDias: 0, sinDias: 0, personas: new Set() });
+  const area = cuenta();
+  const tiendas = [];
+
+  (e.sucursales || []).forEach(s => {
+    const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
+    (s.colaboradores || []).forEach(c => {
+      const suyas = (c.ausencias || []).filter(a => {
+        if (a.cuentaAusentismo === false) return false;
+        if (a.motivo === 'vacaciones') return false;
+        return a.desde && a.desde >= desde && a.desde <= hasta;
+      });
+      if (!suyas.length) return;
+      const d = suyas.reduce((n, a) => n + (a.hasta ? (diasDeAusencia(a, hasta) || 0) : 0), 0);
+      const con = suyas.filter(a => a.hasta).length;
+      t.gente.push({ id: c.id, nombre: c.nombre, eventos: suyas.length,
+                     dias: d, conDias: con, sinDias: suyas.length - con });
+      t.eventos += suyas.length; t.dias += d;
+      t.conDias += con; t.sinDias += suyas.length - con;
+      t.personas.add(c.id);
+    });
+    if (!t.eventos) return;
+    /* Adentro de la tienda, el que más falta primero: es con quien empieza la
+       conversación del gerente. */
+    t.gente.sort((a, b) => b.eventos - a.eventos || b.dias - a.dias);
+    t.gente.forEach(g => { g.parteDeLaTienda = t.eventos ? g.eventos / t.eventos : 0; });
+    tiendas.push(t);
+    area.eventos += t.eventos; area.dias += t.dias;
+    area.conDias += t.conDias; area.sinDias += t.sinDias;
+    t.personas.forEach(x => area.personas.add(x));
+  });
+
+  tiendas.sort((a, b) => b.eventos - a.eventos);
+  tiendas.forEach(t => {
+    t.parteDelArea = area.eventos ? t.eventos / area.eventos : 0;
+    t.personas = t.personas.size;
+  });
+
+  return {
+    desde, hasta,
+    eventos: area.eventos, dias: area.dias,
+    conDias: area.conDias, sinDias: area.sinDias,
+    personas: area.personas.size,
+    /* Qué parte de los certificados dice cuántos días dura. Sin esto, el total
+       de días se lee como si fueran todos. */
+    cobertura: area.eventos ? area.conDias / area.eventos : null,
+    tiendas
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BANDAS_ANTIGUEDAD, PUESTOS_CLAVE,
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
-    rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS
+    rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
+    participacionDeAusencias
   };
 }

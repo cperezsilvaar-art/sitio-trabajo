@@ -136,3 +136,63 @@ resolverlas ahí mismo.
 Al volver se marca **Se reincorporó**. Si en cambio trae otro certificado, se
 extiende la misma ausencia: el vínculo con el art. 208 se cuenta desde el primer
 día, no desde el último parte.
+
+## Traer las ausencias del formulario de recepción
+
+Los gerentes cargan las ausencias en un formulario de Google —*Recepción de
+ausencias por certificados, apercibimientos y vacaciones*— y la planilla de
+respuestas se pega al pie de `#/diario`, igual que la nómina. No hay conector:
+el archivo lleva **patologías** adentro y eso vive solo en el navegador.
+
+### Lo que la planilla no puede dar
+
+**No fue pensada para medir.** El certificado se carga en un solo campo de texto
+libre que pide patología, fecha de inicio y días de reposo, y en la práctica:
+
+| De 148 certificados del Área 3 | |
+|---|---|
+| Traen duración (días u horas) | **66 (45%)** |
+| Traen fecha de inicio | 67 (45%) |
+| Traen las dos cosas | 54 (36%) |
+| Solo la patología | **82 (55%)** |
+
+La mitad escribe la duración en **horas** —«(24) HORAS»— y no en días, así que
+`leerCertificado()` lee las dos formas y convierte: 24 horas es un día.
+
+**Por eso el panel no muestra un porcentaje de ausentismo sobre días.** Un
+porcentaje calculado sobre el 45% de los certificados no es un porcentaje bajo:
+es un porcentaje falso, y va a una reunión con Operaciones como si fuera el del
+área. Lo que se muestra es:
+
+- **eventos**, que están completos y por eso permiten comparar tiendas y
+  personas con exactitud;
+- **días conocidos**, diciendo siempre sobre cuántos certificados se saben.
+
+Una ausencia sin duración **se guarda igual**, con `sinDuracion: true`: que la
+persona faltó es un hecho, y cuántos días faltó es otro dato.
+
+### Cómo empareja
+
+Por **CUIL**, que es lo único unívoco. Excel guarda el CUIL como número y al
+exportarlo le deja un `.0` que se lee como un dígito de más:
+`cuilDelFormulario()` lo saca. El nombre es el respaldo y solo vale si no hay
+ambigüedad —el formulario lo escribe a mano y aparecen «luciana ortellano» y
+«luiciana ortellano» para la misma persona—.
+
+**No duplica**: la misma persona, el mismo día y el mismo motivo entra una sola
+vez, así que se puede volver a pegar la planilla entera cada mes.
+
+### Qué cuenta como ausentismo y qué no
+
+`TIPOS_FORMULARIO` mapea lo que el formulario ofrece a los motivos del panel.
+**Las vacaciones se importan pero no cuentan**: son tiempo planificado y meterlas
+adentro infla el número con algo que no es un problema. La maternidad y el
+fallecimiento tampoco. Los apercibimientos no son una ausencia y se saltean.
+
+### De dónde sale el ausentismo
+
+`participacionDeAusencias()` (`indicadores.js`) lo reparte en tres niveles: el
+área, cada tienda con su participación sobre el total, y adentro de cada tienda
+cada persona con su participación sobre esa tienda. Se cuenta en eventos
+—completos— y no en días —incompletos—. Se ve en *Panel → Indicadores*, y el
+historial de cada persona está en su ficha (`fichaAusenciasRegistradas`).

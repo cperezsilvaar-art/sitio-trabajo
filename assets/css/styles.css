@@ -1133,3 +1133,11 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 
 #tabla-falta td { vertical-align: top; }
 #tabla-falta td:first-child { white-space: nowrap; }
+
+/* La fila de una tienda en el desglose de ausentismo: es un botón porque abre
+   quiénes la componen, pero se ve como la barra que es. */
+.fila-tienda-aus {
+  display: block; width: 100%; text-align: left; background: none;
+  border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.fila-tienda-aus:hover .barra-rot { color: var(--azul); }

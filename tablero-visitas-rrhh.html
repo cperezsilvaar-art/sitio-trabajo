@@ -1136,6 +1136,14 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 #tabla-falta td { vertical-align: top; }
 #tabla-falta td:first-child { white-space: nowrap; }
 
+/* La fila de una tienda en el desglose de ausentismo: es un botón porque abre
+   quiénes la componen, pero se ve como la barra que es. */
+.fila-tienda-aus {
+  display: block; width: 100%; text-align: left; background: none;
+  border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer;
+}
+.fila-tienda-aus:hover .barra-rot { color: var(--azul); }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -4065,6 +4073,123 @@ if (typeof module !== 'undefined' && module.exports) {
   };
 }
 
+/* ============ El formulario de recepción de ausencias ==================== *
+ *
+ * Las ausencias entran por un formulario de Google que completan los gerentes
+ * —«Recepción de ausencias por certificados, apercibimientos y vacaciones»— y
+ * salen como una planilla de respuestas. Esto la lee.
+ *
+ * **La planilla no fue pensada para medir.** El certificado se carga en un solo
+ * campo de texto libre que pide patología, fecha de inicio y días de reposo, y
+ * en la práctica la mitad de las respuestas trae solo la patología: «MIGRAÑA»,
+ * «dolor de espalda». De las que traen duración, la mayoría la escribe en horas
+ * —«(24) HORAS»— y no en días.
+ *
+ * Por eso esto **parsea lo que puede y dice lo que no pudo**, en vez de
+ * completar con supuestos. Una ausencia sin duración se guarda igual: que la
+ * persona faltó es un hecho, y cuántos días faltó es otro dato. El que falta se
+ * cuenta aparte y la pantalla lo muestra, porque un porcentaje de ausentismo
+ * calculado sobre la mitad de los certificados no es un porcentaje bajo: es un
+ * porcentaje falso.
+ */
+
+/** Qué es cada columna del formulario, por lo que dice su encabezado. */
+const COLUMNAS_FORMULARIO_AUSENCIAS = [
+  { campo: 'marca',    claves: ['marca temporal'] },
+  { campo: 'periodo',  claves: ['mes y ano en curso'] },
+  { campo: 'nombre',   claves: ['apellido y nombre'] },
+  { campo: 'tienda',   claves: ['tienda'] },
+  { campo: 'cuil',     claves: ['cuil'] },
+  { campo: 'tipo',     claves: ['que novedad'] },
+  { campo: 'detalle',  claves: ['patologia'] },
+  { campo: 'apercibimiento', claves: ['fecha del apercibimiento'] },
+  { campo: 'parto',    claves: ['fecha probable de parto'] },
+  { campo: 'desdeAnses', claves: ['inicio de la licencia abonada'] },
+  { campo: 'hastaAnses', claves: ['fin de la licencia abonada'] },
+  { campo: 'casamiento', claves: ['fecha de casamiento'] }
+];
+
+/* Lo que el formulario ofrece elegir, mapeado a los motivos del panel. Las
+   vacaciones se importan pero **no son ausentismo**: son tiempo planificado y
+   contarlas infla el número con algo que no es un problema. */
+const TIPOS_FORMULARIO = [
+  { clave: 'certificado',  motivo: 'enfermedad',  ausentismo: true },
+  { clave: 'vacacion',     motivo: 'vacaciones',  ausentismo: false },
+  { clave: 'embarazo',     motivo: 'maternidad',  ausentismo: false },
+  { clave: 'fallecimiento', motivo: 'otra',       ausentismo: false },
+  { clave: 'apercibimiento', motivo: null,        ausentismo: false }
+];
+
+const _sinTildesMay = s => String(s || '').normalize('NFD')
+  .replace(/[̀-ͯ]/g, '').toUpperCase();
+
+/** A qué motivo del panel corresponde lo que eligieron en el formulario. */
+function motivoDeFormulario(texto) {
+  const t = _sinTildesMay(texto).toLowerCase();
+  return TIPOS_FORMULARIO.find(x => t.indexOf(x.clave) >= 0) || null;
+}
+
+/**
+ * Saca del texto libre del certificado lo que se pueda: día de inicio,
+ * duración y patología. Devuelve `null` en lo que no está, nunca un supuesto.
+ *
+ * El año es opcional —«08/03», «18-03»— porque el formulario lo omite seguido;
+ * cuando falta se toma el de la respuesta, que es cuando se cargó.
+ */
+function leerCertificado(texto, anioRef) {
+  const t = String(texto || '').trim();
+  if (!t) return { dias: null, desde: null, patologia: '' };
+
+  /* La duración: primero días, después horas. «(24) HORAS» es un día, no
+     veinticuatro: es como lo escribe la mitad de los gerentes. */
+  let dias = null;
+  const mD = t.match(/(\d{1,3})\s*d[ií]as?\b/i);
+  if (mD) {
+    dias = parseInt(mD[1], 10);
+  } else {
+    const mH = t.match(/\(?\s*(\d{1,3})\s*\)?\s*h(?:s|rs|oras?)?\b/i);
+    if (mH) dias = Math.max(1, Math.ceil(parseInt(mH[1], 10) / 24));
+  }
+
+  /* La fecha: dd/mm, dd-mm-aa o dd-mm-aaaa. Se descarta lo que no sea una
+     fecha posible, para no leer «24 HORAS» como un 24 de algo. */
+  let desde = null;
+  const mF = t.match(/\b(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?\b/);
+  if (mF) {
+    const d = +mF[1], m = +mF[2];
+    if (d >= 1 && d <= 31 && m >= 1 && m <= 12) {
+      let a = mF[3] ? +mF[3] : (anioRef || new Date().getFullYear());
+      if (a < 100) a += 2000;
+      desde = `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+  }
+
+  /* La patología es lo que queda sacando números y separadores. Va al campo
+     diagnóstico de la ausencia, que ya existe. */
+  const patologia = t.replace(/\(?\s*\d{1,3}\s*\)?\s*(h(s|rs|oras?)?|d[ií]as?)\b/gi, ' ')
+    .replace(/\b\d{1,2}[/\-.]\d{1,2}([/\-.]\d{2,4})?\b/g, ' ')
+    .replace(/\b(fecha de inicio|tiempo de reposo|patologia|reposo|inicio)\b\s*:?/gi, ' ')
+    .replace(/[\s,;/|-]+/g, ' ').trim();
+
+  return { dias, desde, patologia };
+}
+
+/** El CUIL que escribieron, sin lo que le agrega Excel al guardarlo como número. */
+function cuilDelFormulario(v) {
+  const d = String(v == null ? '' : v).replace(/\D/g, '');
+  /* Excel guarda el CUIL como número y al exportarlo le queda un `.0`, que al
+     sacar los no-dígitos se convierte en un cero de más al final. */
+  if (d.length === 12 && d.endsWith('0')) return d.slice(0, 11);
+  return d.length === 11 ? d : '';
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Object.assign(module.exports || {}, {
+    COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO,
+    motivoDeFormulario, leerCertificado, cuilDelFormulario
+  });
+}
+
 /*
  * desarrollo.js — La ruta de un APV al rol de Senior.
  *
@@ -4780,12 +4905,82 @@ function reclamosDelArea(estado, hoyISO) {
   };
 }
 
+/* ---------------- Participación del ausentismo, en tres niveles ------------
+ *
+ * La pregunta no es solo «cuánto ausentismo tiene el área» sino **de dónde
+ * sale**: qué tiendas aportan la mayor parte y, adentro de una tienda, quiénes.
+ * Es lo que convierte un número en una conversación con un gerente.
+ *
+ * Se cuenta en **eventos** y no en días, y no es una elección estética: más de
+ * la mitad de los certificados que llegan por el formulario no dicen cuántos
+ * días son. Los eventos están completos, así que la participación es exacta;
+ * los días se informan aparte, diciendo sobre cuántos certificados se saben.
+ *
+ * Las **vacaciones no cuentan**: son tiempo planificado y meterlas adentro
+ * infla el número con algo que no es un problema.
+ */
+function participacionDeAusencias(estado, desdeISO, hastaISO) {
+  const e = estado || {};
+  const hasta = hastaISO || _diaHoy();
+  const desde = desdeISO || _mesesAtras(hasta, 3);
+
+  const cuenta = () => ({ eventos: 0, dias: 0, conDias: 0, sinDias: 0, personas: new Set() });
+  const area = cuenta();
+  const tiendas = [];
+
+  (e.sucursales || []).forEach(s => {
+    const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
+    (s.colaboradores || []).forEach(c => {
+      const suyas = (c.ausencias || []).filter(a => {
+        if (a.cuentaAusentismo === false) return false;
+        if (a.motivo === 'vacaciones') return false;
+        return a.desde && a.desde >= desde && a.desde <= hasta;
+      });
+      if (!suyas.length) return;
+      const d = suyas.reduce((n, a) => n + (a.hasta ? (diasDeAusencia(a, hasta) || 0) : 0), 0);
+      const con = suyas.filter(a => a.hasta).length;
+      t.gente.push({ id: c.id, nombre: c.nombre, eventos: suyas.length,
+                     dias: d, conDias: con, sinDias: suyas.length - con });
+      t.eventos += suyas.length; t.dias += d;
+      t.conDias += con; t.sinDias += suyas.length - con;
+      t.personas.add(c.id);
+    });
+    if (!t.eventos) return;
+    /* Adentro de la tienda, el que más falta primero: es con quien empieza la
+       conversación del gerente. */
+    t.gente.sort((a, b) => b.eventos - a.eventos || b.dias - a.dias);
+    t.gente.forEach(g => { g.parteDeLaTienda = t.eventos ? g.eventos / t.eventos : 0; });
+    tiendas.push(t);
+    area.eventos += t.eventos; area.dias += t.dias;
+    area.conDias += t.conDias; area.sinDias += t.sinDias;
+    t.personas.forEach(x => area.personas.add(x));
+  });
+
+  tiendas.sort((a, b) => b.eventos - a.eventos);
+  tiendas.forEach(t => {
+    t.parteDelArea = area.eventos ? t.eventos / area.eventos : 0;
+    t.personas = t.personas.size;
+  });
+
+  return {
+    desde, hasta,
+    eventos: area.eventos, dias: area.dias,
+    conDias: area.conDias, sinDias: area.sinDias,
+    personas: area.personas.size,
+    /* Qué parte de los certificados dice cuántos días dura. Sin esto, el total
+       de días se lee como si fueran todos. */
+    cobertura: area.eventos ? area.conDias / area.eventos : null,
+    tiendas
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BANDAS_ANTIGUEDAD, PUESTOS_CLAVE,
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
-    rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS
+    rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
+    participacionDeAusencias
   };
 }
 
@@ -7946,6 +8141,101 @@ const Store = (() => {
       return this.importarNomina(filas);
     },
 
+    /* ---------- Las ausencias del formulario de recepción ----------
+     *
+     * Los gerentes cargan las ausencias en un formulario de Google y la
+     * planilla de respuestas se pega acá. Cada respuesta es un evento: que la
+     * persona faltó. **Cuántos días faltó es otro dato**, y más de la mitad de
+     * las respuestas no lo trae: el certificado se carga en un campo de texto
+     * libre y mucha gente escribe solo la patología.
+     *
+     * Por eso la ausencia se guarda igual sin duración, con `dias: null`, en
+     * vez de suponerle un día. Lo que se sabe se cuenta y lo que no, también:
+     * el resultado dice cuántas quedaron sin duración, para que nadie lea un
+     * porcentaje calculado sobre la mitad como si fuera el del área.
+     *
+     * Empareja por CUIL, que es lo único unívoco. El nombre es el respaldo:
+     * el formulario lo escribe a mano y aparece «luciana ortellano» y
+     * «luiciana ortellano» para la misma persona.
+     */
+    importarAusenciasFormulario(filas) {
+      const e = this.get();
+      const gente = [];
+      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => gente.push({ c, s })));
+
+      const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
+      const porCuil = {};
+      gente.forEach(g => {
+        const k = soloDigitos(g.c.cuil);
+        if (k.length === 11) porCuil[k] = g;
+      });
+      const tokens = x => new Set(String(x || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toUpperCase()
+        .split(/[^A-Z]+/).filter(w => w.length > 2));
+
+      const out = { cargadas: 0, repetidas: 0, sinDuracion: 0, sinPersona: [],
+                    porCuil: 0, porNombre: 0, fueraDelArea: 0, apercibimientos: 0 };
+
+      filas.forEach(f => {
+        const tipo = motivoDeFormulario(f.tipo);
+        if (!tipo) { out.fueraDelArea++; return; }
+        if (!tipo.motivo) { out.apercibimientos++; return; }
+
+        /* 1. por CUIL. 2. por nombre, y solo si no hay ambigüedad. */
+        let g = null;
+        const cuil = cuilDelFormulario(f.cuil);
+        if (cuil && porCuil[cuil]) { g = porCuil[cuil]; out.porCuil++; }
+        if (!g) {
+          const t = tokens(f.nombre);
+          const cand = gente.filter(x => {
+            const k = tokens(x.c.nombre);
+            let n = 0; t.forEach(w => { if (k.has(w)) n++; });
+            return n >= 2;
+          });
+          if (cand.length === 1) { g = cand[0]; out.porNombre++; }
+        }
+        if (!g) { out.sinPersona.push(String(f.nombre || '').trim()); return; }
+
+        const anio = /^\d{4}/.test(String(f.marca)) ? +String(f.marca).slice(0, 4)
+                   : new Date().getFullYear();
+        const leido = tipo.clave === 'certificado'
+          ? leerCertificado(f.detalle, anio)
+          : { dias: null, desde: null, patologia: '' };
+
+        /* Sin fecha en el texto se usa el día en que se cargó la respuesta: es
+           el mismo día o el siguiente, y es mejor que no ubicarla en el
+           tiempo. Queda marcado en `fechaAproximada`. */
+        const desde = leido.desde || (String(f.marca || '').slice(0, 10) || '');
+        if (!desde) return;
+        const hasta = leido.dias ? _diaMas(desde, leido.dias - 1) : '';
+
+        /* La misma persona, el mismo día y el mismo motivo es la misma
+           ausencia: el formulario se completa dos veces seguido. */
+        if (!Array.isArray(g.c.ausencias)) g.c.ausencias = [];
+        if (g.c.ausencias.some(a => a.desde === desde && a.motivo === tipo.motivo)) {
+          out.repetidas++; return;
+        }
+
+        g.c.ausencias.push({
+          id: uid(), motivo: tipo.motivo, desde, hasta,
+          diagnostico: leido.patologia || '',
+          /* Vino con el certificado adjunto: el formulario lo pide. */
+          certificado: tipo.clave === 'certificado' ? 'si' : '',
+          notas: '', reincorporado: false, fechaReincorporacion: '',
+          origen: 'formulario',
+          fechaAproximada: !leido.desde,
+          sinDuracion: !leido.dias,
+          cuentaAusentismo: tipo.ausentismo,
+          registradaEl: new Date().toISOString()
+        });
+        out.cargadas++;
+        if (!leido.dias) out.sinDuracion++;
+      });
+
+      guardar();
+      return out;
+    },
+
     importarNomina(filas) {
       const e = this.get();
       const clave = t => String(t || '').trim().toUpperCase()
@@ -10500,6 +10790,7 @@ const App = (() => {
       </section>
 
       ${bloqueMovimiento(ind)}
+      ${bloqueParticipacion(e)}
       ${bloqueEstructura(ind)}
       ${bloqueAntiguedad(ind)}
       ${bloqueCobertura(ind)}
@@ -10551,6 +10842,55 @@ const App = (() => {
           ${r.ultimas.map(b => `<li>${fmtFecha(b.fecha)} — ${esc(b.nombre)}
             (${esc(b.grupo)}${b.motivo ? `: ${esc(b.motivo)}` : ''})</li>`).join('')}
         </ul>` : ''}
+    </section>`;
+  }
+
+  /* De dónde sale el ausentismo: qué tiendas lo aportan y, adentro de cada
+     una, quiénes. Es lo que convierte el número en una conversación con el
+     gerente. Se cuenta en eventos y no en días porque más de la mitad de los
+     certificados no dice cuántos días son; los días van aparte, diciendo sobre
+     cuántos se saben. */
+  let tiendaAbierta = null;
+
+  function bloqueParticipacion(e) {
+    const pa = participacionDeAusencias(e, null, hoyISO());
+    if (!pa.eventos) return '';
+    const tope = pa.tiendas[0].eventos || 1;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>De dónde sale el ausentismo</h2>
+        <span class="chip ambar">${pa.eventos} en 3 meses</span>
+      </div>
+      <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)},
+        ${pa.personas} persona${pa.personas === 1 ? '' : 's'} con al menos una ausencia.
+        Se cuenta en <strong>eventos</strong>: de ${pa.eventos},
+        <strong>${pa.conDias}</strong> dicen cuántos días duran y suman
+        ${fmtNum(pa.dias, 0)} días.${pa.sinDias ? ` Los otros ${pa.sinDias} llegaron sin
+        duración, así que los días son un piso y no el total.` : ''}
+        Las vacaciones no cuentan.</p>
+
+      <div class="lista-barras">
+        ${pa.tiendas.map(t => `
+          <button class="fila-tienda-aus" data-accion="ver-tienda-aus" data-id="${t.id}">
+            ${barraDato(t.eventos / tope,
+              `${esc(t.sucursal)} <b>${t.eventos}</b> <em>${fmtPct(t.parteDelArea, 0)} del área · ${
+                t.personas} persona${t.personas === 1 ? '' : 's'}${
+                t.conDias ? ` · ${fmtNum(t.dias, 0)} días conocidos` : ''}</em>`)}
+          </button>
+          ${tiendaAbierta === t.id ? `<ul class="lista-pendientes" style="margin:2px 0 10px 14px">
+            ${t.gente.map(g => `<li class="pendiente">
+              <a href="#/nomina">
+                <strong>${esc(g.nombre)}</strong>
+                <span>${g.eventos} ausencia${g.eventos === 1 ? '' : 's'}${
+                  g.conDias ? ` · ${fmtNum(g.dias, 0)} días` : ''}${
+                  g.sinDias ? ` · ${g.sinDias} sin duración` : ''}</span>
+              </a>
+              <b>${fmtPct(g.parteDeLaTienda, 0)} de la tienda</b>
+            </li>`).join('')}
+          </ul>` : ''}`).join('')}
+      </div>
+      <p class="ayuda" style="margin-top:12px">Tocá una tienda para ver quiénes la componen.</p>
     </section>`;
   }
 
@@ -12001,7 +12341,45 @@ const App = (() => {
         la falta queda <strong>pendiente de justificar</strong>.
       </p>
 
-      ${panelAusenciasLargas()}`;
+      ${panelAusenciasLargas()}
+      ${bloqueImportarAusencias()}`;
+  }
+
+  /* ---------- Traer las ausencias del formulario de recepción ----------
+     Los gerentes las cargan en un formulario de Google y la planilla de
+     respuestas se pega acá, igual que la nómina. No hay conector: el archivo
+     tiene patologías adentro y eso vive solo en este navegador. */
+  let resultadoAusencias = null;
+
+  function bloqueImportarAusencias() {
+    const r = resultadoAusencias;
+    return `<section class="tarjeta">
+      <h2>Traer las ausencias del formulario</h2>
+      <p class="ayuda">Abrí la planilla de respuestas del formulario de recepción, seleccioná
+        desde la fila de encabezados hasta la última respuesta, copiá y pegá acá. Empareja por
+        CUIL y, si falta, por nombre. No duplica: una ausencia de la misma persona el mismo día
+        y por el mismo motivo entra una sola vez.</p>
+      <textarea id="pegar-ausencias" style="min-height:120px"
+        placeholder="Marca temporal	Mes y año en curso	Apellido y nombre…"></textarea>
+      <div class="acciones">
+        <button class="b" data-accion="importar-ausencias">Importar las ausencias</button>
+      </div>
+      <p class="ayuda"><strong>Las vacaciones entran pero no cuentan como ausentismo</strong>:
+        son tiempo planificado. Los apercibimientos no son una ausencia y se saltean.</p>
+      ${r ? `<div class="aviso-caja ${r.cargadas ? 'info' : ''}" style="margin-top:14px">
+        <strong>Entraron ${r.cargadas} ausencia${r.cargadas === 1 ? '' : 's'}.</strong>
+        ${r.porCuil} por CUIL y ${r.porNombre} por nombre.
+        ${r.repetidas ? `${r.repetidas} ya estaban cargadas y no se duplicaron.` : ''}
+        ${r.apercibimientos ? `${r.apercibimientos} apercibimiento${r.apercibimientos === 1 ? '' : 's'} salteado${r.apercibimientos === 1 ? '' : 's'}.` : ''}
+        ${r.sinDuracion ? `<br><strong>${r.sinDuracion} no dicen cuántos días duran</strong>:
+          el certificado se cargó con la patología nada más. Quedan registradas —que la persona
+          faltó es un hecho— pero no suman días.` : ''}
+        ${r.sinPersona.length ? `<br>${r.sinPersona.length} no se pudieron atribuir a nadie del
+          padrón: ${esc([...new Set(r.sinPersona)].slice(0, 8).join(' · '))}${
+          new Set(r.sinPersona).size > 8 ? '…' : ''}. Suele ser gente que ya no está o un
+          nombre escrito distinto.` : ''}
+      </div>` : ''}
+    </section>`;
   }
 
   /* ====================== VISTA: VENTAS DEL DÍA ======================
@@ -16681,6 +17059,39 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'importar-ausencias') {
+        const crudo = (document.getElementById('pegar-ausencias') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá la planilla de respuestas primero.', 'error'); return; }
+        const filas = filasPegadas(crudo);
+        if (filas.length < 2) { avisar('No se entendió la planilla. ¿Copiaste los encabezados?', 'error'); return; }
+
+        /* El encabezado dice qué es cada columna: el formulario cambia de
+           preguntas y las posiciones se corren. */
+        const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const cab = filas[0].map(norm);
+        const col = {};
+        COLUMNAS_FORMULARIO_AUSENCIAS.forEach(d => {
+          const i = cab.findIndex(h => d.claves.some(k => h.indexOf(k) >= 0));
+          if (i >= 0) col[d.campo] = i;
+        });
+        if (col.nombre === undefined || col.tipo === undefined) {
+          avisar('No encontré las columnas de nombre y de novedad. ¿Es la planilla del formulario?', 'error');
+          return;
+        }
+        resultadoAusencias = Store.importarAusenciasFormulario(filas.slice(1).map(f => {
+          const o = {};
+          Object.keys(col).forEach(k => { o[k] = f[col[k]] || ''; });
+          return o;
+        }));
+        refrescar();
+        avisar(`Entraron ${resultadoAusencias.cargadas} ausencias.`);
+      }
+
+      if (a === 'ver-tienda-aus') {
+        tiendaAbierta = tiendaAbierta === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;
