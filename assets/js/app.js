@@ -139,8 +139,184 @@ const App = (() => {
     </div>`;
   }
 
+  /* ======================= VISTA: RED / INDICADORES ======================= *
+     La foto del área como organización: cómo está armado el plantel, cuánta
+     gente nueva hay y si cada tienda tiene cubierto lo que no puede faltar.
+     Es lo que se mira antes de sentarse con Operaciones.
+
+     Sirve para las dos cosas que se le piden: cada número trae escrita al lado
+     la oración que lo explica, así se puede proyectar sin que nadie tenga que
+     traducirlo; y el detalle por tienda va abajo, con enlaces, para trabajarlo.
+
+     Todo sale del padrón. Lo que necesita historia no se promete acá: se lista
+     al pie, con qué hay que cargar para que aparezca. */
+
+  function solapasDelPanel(cual) {
+    const item = (id, ruta, nombre) =>
+      `<a href="${ruta}" class="${cual === id ? 'activo' : ''}">${nombre}</a>`;
+    return `<nav class="tabs">
+      ${item('situacion', '#/red', 'Situación')}
+      ${item('indicadores', '#/red/indicadores', 'Indicadores')}
+    </nav>`;
+  }
+
+  /** Una barra horizontal con el valor escrito en la punta. */
+  function barraDato(parte, texto, clase) {
+    return `<div class="fila-barra">
+      <span class="barra-rot">${texto}</span>
+      <span class="barra-pista"><i class="${clase || ''}" style="width:${Math.max(parte * 100, 1)}%"></i></span>
+    </div>`;
+  }
+
+  function vistaIndicadores() {
+    const e = Store.get();
+    contexto = e.config;
+    const ind = indicadoresDelArea(e, hoyISO());
+    const c = ind.composicion;
+    const nuevos = ind.antiguedad.filas[0];
+    const dot = Store.dotacionDelArea();
+
+    /* La lectura escrita al lado de cada número es la mitad del indicador: sin
+       ella, «6,2 años» no le dice nada a quien no lo mira todos los días. */
+    const tarjeta = (rotulo, valor, unidad, lectura, clase) => `
+      <article class="ind-tarjeta ${clase || ''}">
+        <span class="ind-rotulo">${esc(rotulo)}</span>
+        <strong class="ind-valor">${valor}${unidad ? `<em>${esc(unidad)}</em>` : ''}</strong>
+        <p class="ind-lectura">${lectura}</p>
+      </article>`;
+
+    const pctNuevos = ind.antiguedad.base ? nuevos.personas / ind.antiguedad.base : null;
+
+    return `
+      <h1 class="titulo">Indicadores de RRHH</h1>
+      <p class="subtitulo">Cómo está armada el área, con la lectura de cada número al lado.
+        Todo sale del padrón: no espera ninguna otra carga.</p>
+
+      ${solapasDelPanel('indicadores')}
+
+      <section class="tarjeta">
+        <h2>La foto del área</h2>
+        <div class="ind-grilla">
+          ${tarjeta('Dotación', fmtNum(dot.fte, 1), 'FTE',
+            `<strong>${c.personas}</strong> personas, de las que ${ind.parciales} son de media
+             jornada y ${ind.noPresenciales} no cubren turno por bloqueo de título.`)}
+
+          ${tarjeta('Mujeres en el plantel',
+            c.pctMujeres === null ? '—' : fmtPct(c.pctMujeres, 0), '',
+            c.pctMujeres === null ? 'Falta el sexo en las fichas.'
+            : `<strong>${c.mujeres}</strong> mujeres y <strong>${c.varones}</strong> varones.`)}
+
+          ${tarjeta('Antigüedad en la farmacia',
+            ind.antiguedad.promedio === null ? '—' : fmtNum(ind.antiguedad.promedio, 1), 'años',
+            ind.antiguedadFTD.promedio === null ? 'Promedio del plantel activo.'
+            : `Pero <strong>${fmtNum(ind.antiguedadFTD.promedio, 1)} años</strong> en Farmatodo:
+               las farmacias se compraron, así que hay antigüedad reconocida con poco
+               tiempo bajo la cultura de la empresa.`)}
+
+          ${tarjeta('Gente con menos de un año',
+            pctNuevos === null ? '—' : fmtPct(pctNuevos, 0), '',
+            pctNuevos === null ? 'Faltan fechas de ingreso.'
+            : `<strong>${nuevos.personas}</strong> de ${ind.antiguedad.base} personas.
+               ${pctNuevos >= 0.25 ? 'Es un plantel que todavía se está formando: pesa en el acompañamiento y en el error operativo.'
+                                   : 'El plantel está mayormente asentado.'}`,
+            pctNuevos !== null && pctNuevos >= 0.25 ? 'aviso' : '')}
+        </div>
+      </section>
+
+      ${bloqueEstructura(ind)}
+      ${bloqueAntiguedad(ind)}
+      ${bloqueCobertura(ind)}
+      ${bloqueFalta(e)}`;
+  }
+
+  function bloqueEstructura(ind) {
+    const filas = ind.estructura;
+    if (!filas.length) return '';
+    const tope = filas[0].personas || 1;
+    return `<section class="tarjeta">
+      <h2>Cómo está armado el plantel</h2>
+      <p class="ayuda">Una fila por nivel de cargo, de mayor a menor. Es la pirámide del área:
+        cuánta base de piso, cuántos Senior listos para cubrir y cuántos conduciendo.</p>
+      <div class="lista-barras">
+        ${filas.map(f => barraDato(f.personas / tope,
+          `${esc(f.nivel)} <b>${f.personas}</b> <em>${fmtPct(f.parte, 0)}</em>`)).join('')}
+      </div>
+    </section>`;
+  }
+
+  function bloqueAntiguedad(ind) {
+    const a = ind.antiguedad;
+    if (!a.base) return '';
+    return `<section class="tarjeta">
+      <h2>Cuánto hace que están</h2>
+      <p class="ayuda">Por antigüedad en la farmacia. Las bandas van de menos a más y por eso
+        llevan el mismo color en cinco tonos: el orden se lee en la intensidad.${
+        a.sinFecha ? ` ${a.sinFecha} persona${a.sinFecha === 1 ? '' : 's'} sin fecha de ingreso cargada.` : ''}</p>
+      <div class="lista-barras">
+        ${a.filas.map((f, i) => barraDato(f.parte,
+          `${esc(f.nombre)} <b>${f.personas}</b> <em>${fmtPct(f.parte, 0)} · ${esc(f.lectura)}</em>`,
+          `ban${i + 1}`)).join('')}
+      </div>
+    </section>`;
+  }
+
+  function bloqueCobertura(ind) {
+    const co = ind.cobertura;
+    if (!co.filas.length) return '';
+    const descubiertas = co.filas.filter(f => !f.sinPadron && f.faltan.length);
+    return `<section class="tarjeta">
+      <h2>Puestos que no pueden faltar</h2>
+      <p class="ayuda">Los flotantes quedan afuera: no son una tienda y no tienen que tener
+        ni director técnico ni gerente.</p>
+
+      <div class="kpis">
+        ${co.resumen.map(p => kpi(p.nombre,
+          p.parte === null ? '—' : `${p.cubiertas} / ${p.tiendas}`,
+          p.porque, p.parte === 1 ? 'ok' : p.id === 'dt' ? 'alerta' : 'aviso')).join('')}
+      </div>
+
+      ${descubiertas.length ? `<div class="aviso-caja">
+        <strong>${descubiertas.length} tienda${descubiertas.length === 1 ? '' : 's'} con un puesto clave sin cubrir:</strong>
+        <ul>${descubiertas.map(f => `<li>
+          <a href="#/sucursal/${f.id}">${esc(f.sucursal)}</a> — falta ${esc(f.faltan.join(' y '))}.
+        </li>`).join('')}</ul>
+      </div>` : '<p class="ayuda">Todas las tiendas con padrón tienen los tres puestos cubiertos.</p>'}
+
+      ${co.sinPadron.length ? `<div class="aviso-caja">
+        <strong>${co.sinPadron.length} tienda${co.sinPadron.length === 1 ? '' : 's'} sin nadie en el padrón:</strong>
+        ${esc(co.sinPadron.map(f => f.sucursal).join(' · '))}.
+        No es que estén descubiertas: es que no tienen plantel cargado, que es otro problema.
+      </div>` : ''}
+    </section>`;
+  }
+
+  function bloqueFalta(e) {
+    const lista = loQueFaltaParaMedir(e).filter(x => !x.listo);
+    if (!lista.length) return '';
+    return `<section class="tarjeta">
+      <h2>Lo que todavía no se puede medir</h2>
+      <p class="ayuda">Estos seis indicadores son los de siempre en RRHH y el panel los va a
+        calcular solo. Hoy no están porque necesitan historia que todavía no cargaste: cada
+        uno dice con qué se enciende. No son una promesa vacía — aparecen cuando el dato existe.</p>
+      <div class="tabla-scroll"><table id="tabla-falta">
+        <thead><tr><th>Indicador</th><th>Qué va a decir</th><th>Qué le falta</th></tr></thead>
+        <tbody>${lista.map(x => `<tr>
+          <td><strong>${esc(x.nombre)}</strong></td>
+          <td>${esc(x.que)}</td>
+          <td>${esc(x.necesita)} <a href="${x.donde}">Ir a cargarlo</a></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+    </section>`;
+  }
+
   /* ============================ VISTA: RED ========================== */
-  function vistaRed() {
+  /* El Panel tiene dos solapas y no dos pantallas: las dos miran el área de
+     conjunto, que es el mismo nivel de zoom. *Situación* contesta «qué está
+     pasando hoy» y *Indicadores* contesta «cómo está armada el área». Separarlas
+     en dos entradas del menú habría dejado seis lugares con KPIs; así siguen
+     siendo los de siempre más uno, en la pantalla que ya es la del área. */
+  function vistaRed(tab) {
+    if (tab === 'indicadores') return vistaIndicadores();
     const e = Store.get();
     contexto = e.config;
 
@@ -168,6 +344,8 @@ const App = (() => {
     const html = `
       <h1 class="titulo">${esc(e.config.area || 'Panel de la red')}</h1>
       <p class="subtitulo">Consolidado de la última visita registrada en cada sucursal${e.config.coordinador ? ` · ${esc(e.config.coordinador)}` : ''}.</p>
+
+      ${solapasDelPanel('situacion')}
 
       ${(() => {
         /* Los certificados que vencen van en la portada porque la decisión es
@@ -5153,7 +5331,11 @@ const App = (() => {
       const id = ruta[1], tab = ruta[2] || 'minutas';
       vistaActual = () => vistaVisita(id, tab);
       html = vistaVisita(id, tab);
-    } else { vistaActual = vistaRed; html = vistaRed(); }
+    } else {
+      const tab = ruta[0] === 'red' ? (ruta[1] || 'situacion') : 'situacion';
+      vistaActual = () => vistaRed(tab);
+      html = vistaRed(tab);
+    }
 
     $('#contenido').innerHTML = html;
 

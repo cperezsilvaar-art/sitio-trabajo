@@ -57,8 +57,8 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `ausencias`, `desarrollo`, `checklist`, `reclamos`, `agenda`, `asistente`,
-  `diario`, `acceso`, `store`, `reporte`, `app`.
+  `ausencias`, `desarrollo`, `indicadores`, `checklist`, `reclamos`, `agenda`,
+  `asistente`, `diario`, `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
@@ -446,6 +446,44 @@ sexo **sí** está en la semilla (`sx`), porque si no el tablero abre vacío en 
 navegador limpio, que es justo lo que la semilla existe para evitar. Cuando un
 promedio sale de una parte del plantel, la celda dice **sobre cuántos** está
 hecho: «40,0 años · sobre 13 de 136».
+
+**El Panel tiene dos solapas y no dos pantallas**: *Situación* (`#/red`) y
+*Indicadores* (`#/red/indicadores`). Las dos miran el área de conjunto, que es el
+mismo nivel de zoom; separarlas en dos entradas del menú habría dejado **seis
+lugares con KPIs**. Una contesta «qué está pasando hoy» y la otra «cómo está
+armada el área».
+
+**Los indicadores de RRHH viven en `assets/js/indicadores.js`** y salen del
+**padrón y de nada más**: composición, las dos antigüedades, la estructura por
+nivel de cargo y la cobertura de los puestos que no pueden faltar. No dependen de
+que haya una visita, una estadística ni un RDV cargados, a propósito: un tablero
+que necesita tres cargas previas es un tablero que nadie mira.
+
+**Las dos antigüedades cuentan historias distintas y van las dos.** Las farmacias
+del área se compraron, así que el promedio da 6,2 años en la farmacia y 1,3 en
+Farmatodo: mucha gente con antigüedad reconocida y poco tiempo bajo la cultura de
+la empresa. Mostrar una sola cuenta media historia, y el número sin esa
+explicación al lado confunde.
+
+**Cada número trae escrita la oración que lo explica** (`.ind-lectura`). Es la
+mitad del indicador: sirve para trabajarlo y para proyectarlo sin que nadie tenga
+que traducirlo. Las bandas de antigüedad son **ordenadas**, así que llevan una
+rampa de un tono en cinco pasos —validada contra los dos fondos— y no colores
+distintos; la estructura por nivel de cargo es **nominal**, así que va toda del
+mismo color y lo que se compara es el largo.
+
+**Lo que necesita historia no se promete en un guión.** `loQueFaltaParaMedir()`
+lista los seis clásicos —rotación, ausentismo, check list, 9-box, reclamos, costo
+sobre venta— con qué hay que cargar para que aparezcan, y **cada uno sale de la
+lista solo** cuando el dato existe. Un indicador que promete un número y devuelve
+un guión durante seis meses es peor que no ofrecerlo. Uno nuevo se agrega ahí, no
+como un KPI vacío en la tira.
+
+**Trampa conocida — `esNoPresencial()` devuelve un objeto**, no un booleano, así
+que `filter(c => esNoPresencial(c))` se queda con todo el plantel: hay que leer
+`.noPresencial`. Le pasó a este tablero, que anunciaba que las 136 personas del
+área tienen bloqueo de título. Es la misma forma del `!!` sobre
+`tieneCertificado()`.
 
 **Siguen siendo dos listas de tiendas y no tres.** `#/red` mira el área de
 conjunto —KPIs y una tarjeta por tienda— y `#/sucursales` mira tienda por

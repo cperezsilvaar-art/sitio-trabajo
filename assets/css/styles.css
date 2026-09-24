@@ -1063,3 +1063,73 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 }
 #tabla-composicion td.num em.sobre { display: block; margin-top: 1px; }
 #tabla-composicion .cabecera-suc { align-items: flex-end; }
+
+/* ---- Indicadores de RRHH ----
+   Cada número con su lectura al lado: sin la oración que lo explica, «6,2 años»
+   no le dice nada a quien no lo mira todos los días. */
+.ind-grilla {
+  display: grid; gap: 14px; margin-top: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+.ind-tarjeta {
+  border: 1px solid var(--borde); border-left: 4px solid var(--azul-claro);
+  border-radius: var(--radio); padding: 16px 18px; background: var(--panel-alt);
+}
+.ind-tarjeta.aviso { border-left-color: var(--ambar); }
+.ind-tarjeta.alerta { border-left-color: var(--rojo-alerta); }
+.ind-rotulo {
+  display: block; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--texto-suave); font-weight: 600;
+}
+.ind-valor {
+  display: block; margin: 6px 0 8px; font-size: 34px; font-weight: 700;
+  line-height: 1; font-variant-numeric: tabular-nums;
+}
+.ind-valor em {
+  font-style: normal; font-size: 14px; font-weight: 500;
+  color: var(--texto-suave); margin-left: 6px;
+}
+.ind-lectura { margin: 0; font-size: 13px; line-height: 1.5; color: var(--texto-suave); }
+.ind-lectura strong { color: var(--texto); }
+
+/* ---- Barras horizontales ----
+   Horizontales porque los rótulos son largos («Asistente de piso de venta
+   senior»): en vertical habría que girarlos o cortarlos. El valor va escrito
+   en el rótulo y no dentro de la barra, que en las cortas no entraría. */
+.lista-barras { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.fila-barra { display: grid; gap: 3px; }
+.barra-rot { font-size: 13px; color: var(--texto-suave); }
+.barra-rot b { color: var(--texto); font-variant-numeric: tabular-nums; margin-left: 6px; }
+.barra-rot em { font-style: normal; font-size: 12px; margin-left: 6px; }
+.barra-pista { display: block; height: 14px; }
+/* Punta redondeada y base cuadrada: la barra crece desde una línea y se ve de
+   dónde arranca. */
+.barra-pista i {
+  display: block; height: 100%; background: var(--azul-claro);
+  border-radius: 0 4px 4px 0; min-width: 3px;
+}
+
+/* La rampa ordinal de las bandas de antigüedad: un solo tono en cinco pasos,
+   claro a oscuro, porque las bandas tienen orden. Validada contra los dos
+   fondos: monótona en luminosidad, con saltos visibles y el extremo claro
+   despegado del fondo. */
+.barra-pista i.ban1 { background: #8fb9e4; }
+.barra-pista i.ban2 { background: #6ba0d6; }
+.barra-pista i.ban3 { background: #4585c4; }
+.barra-pista i.ban4 { background: #2569ae; }
+.barra-pista i.ban5 { background: #0b3b72; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .barra-pista i.ban1 { background: #35597f; }
+  :root:not([data-theme="light"]) .barra-pista i.ban2 { background: #436d9a; }
+  :root:not([data-theme="light"]) .barra-pista i.ban3 { background: #5285b8; }
+  :root:not([data-theme="light"]) .barra-pista i.ban4 { background: #63a0d8; }
+  :root:not([data-theme="light"]) .barra-pista i.ban5 { background: #9cc7f2; }
+}
+:root[data-theme="dark"] .barra-pista i.ban1 { background: #35597f; }
+:root[data-theme="dark"] .barra-pista i.ban2 { background: #436d9a; }
+:root[data-theme="dark"] .barra-pista i.ban3 { background: #5285b8; }
+:root[data-theme="dark"] .barra-pista i.ban4 { background: #63a0d8; }
+:root[data-theme="dark"] .barra-pista i.ban5 { background: #9cc7f2; }
+
+#tabla-falta td { vertical-align: top; }
+#tabla-falta td:first-child { white-space: nowrap; }
