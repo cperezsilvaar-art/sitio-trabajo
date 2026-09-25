@@ -1683,6 +1683,23 @@ const PARAMETROS_DEFECTO = {
      después ya no entra en este recibo y va al mes siguiente; el panel lo usa
      para no juntar en el parte del cierre algo que Nómina no va a tomar. */
   diaCierreNovedades: 25,
+  /* Desde cuándo miden los indicadores del área: ausentismo y rotación.
+   *
+   * El coordinador venía midiendo a mano y arranca el panel con el corte del
+   * **año fiscal, septiembre de 2026**. Antes de esa fecha no hay historia
+   * completa —las ausencias entraron por una planilla que arranca en marzo de
+   * 2025 y las bajas se cargaron de a poco—, y una tasa calculada sobre una
+   * serie incompleta no es una tasa baja: es una tasa falsa, que además se
+   * compara contra el año siguiente como si las dos midieran lo mismo.
+   *
+   * **Solo recorta los indicadores.** El historial de cada persona muestra
+   * todo lo que tenga cargado, sea de cuando sea: que alguien tuvo una licencia
+   * en mayo es un dato útil para su ficha aunque no entre en la tasa del área.
+   *
+   * Es una fecha y no un cálculo automático: moverla al próximo septiembre es
+   * una decisión suya, y un corte que se corre solo le cambiaría los números
+   * sin avisar. */
+  mideDesde: '2026-09-01',
   moneda: '$'
 };
 
@@ -4800,9 +4817,32 @@ function _diasEntreISO(a, b) {
  * La pantalla lo dice: un promedio inventado sobre una serie que no existe
  * sería peor que un número aproximado y anunciado como tal.
  */
+/**
+ * Desde cuándo miden los indicadores del área.
+ *
+ * Es el corte del año fiscal que fija el coordinador (`parametros.mideDesde`).
+ * La ventana natural de cada indicador —doce meses para la rotación, tres para
+ * la participación de ausencias— **no puede arrancar antes**: atrás no hay
+ * historia completa y una tasa sobre una serie incompleta es una tasa falsa.
+ *
+ * Devuelve también `recortada`, para que la pantalla pueda decir que está
+ * midiendo un período más corto que el habitual en vez de mostrar un número
+ * que se lee como si fuera anual.
+ */
+function ventanaDeMedicion(estado, desdeNatural, hasta) {
+  const corte = (((estado || {}).config || {}).parametros || {}).mideDesde || '';
+  const desde = corte && corte > desdeNatural ? corte : desdeNatural;
+  return {
+    desde, corte,
+    recortada: !!corte && corte > desdeNatural,
+    dias: Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1)
+  };
+}
+
 function rotacionDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
-  const desde = _mesesAtras(hoy, 12);
+  const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
+  const desde = v.desde;
   const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
   const conBaja = gente.filter(c => c.baja && c.baja.fecha);
   if (!conBaja.length) return null;
@@ -4819,6 +4859,10 @@ function rotacionDelArea(estado, hoyISO) {
 
   return {
     desde, hasta: hoy, bajas: delPeriodo.length,
+    /* Cuántos días cubre de verdad: con el corte del año fiscal recién puesto
+       la ventana puede ser de un mes, y una tasa de un mes leída como anual
+       exagera. La pantalla lo dice con esto. */
+    dias: v.dias, recortada: v.recortada, corte: v.corte,
     tasa: media > 0 ? delPeriodo.length / media : null,
     porGrupo,
     renuncias: porGrupo['Renuncias'] || 0,
@@ -4835,7 +4879,8 @@ function rotacionDelArea(estado, hoyISO) {
  */
 function ausentismoDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
-  const desde = _mesesAtras(hoy, 12);
+  const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
+  const desde = v.desde;
   const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
   if (!gente.some(c => (c.ausencias || []).length)) return null;
 
@@ -4854,13 +4899,17 @@ function ausentismoDelArea(estado, hoyISO) {
   if (!dias) return null;
 
   const activos = gente.filter(c => c.activo !== false).length;
-  const diasPersona = activos * 365;
+  /* Los días-persona son los de la ventana real, no un año entero: con el
+     corte puesto este mes, dividir por 365 daría una tasa diez veces menor de
+     la que el período muestra. */
+  const diasPersona = activos * v.dias;
   return {
     desde, hasta: hoy, dias, personas: quienes.size,
+    diasVentana: v.dias, recortada: v.recortada, corte: v.corte,
     tasa: diasPersona > 0 ? dias / diasPersona : null,
     /* Cuánto trabajo no se prestó, en la unidad en la que se piensa la
-       dotación: los días perdidos sobre un año de una persona. */
-    fte: dias / 365,
+       dotación: los días perdidos sobre el período de una persona. */
+    fte: dias / v.dias,
     porMotivo
   };
 }
@@ -4904,11 +4953,12 @@ function reclamosDelArea(estado, hoyISO) {
 function participacionDeAusencias(estado, desdeISO, hastaISO) {
   const e = estado || {};
   const hasta = hastaISO || _diaHoy();
-  const desde = desdeISO || _mesesAtras(hasta, 3);
+  const v = ventanaDeMedicion(e, desdeISO || _mesesAtras(hasta, 3), hasta);
+  const desde = v.desde;
 
   /* El largo de la ventana es el denominador de la tasa: los días de ausencia
      de una persona sobre los días que tuvo el período. */
-  const ventana = Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1);
+  const ventana = v.dias;
 
   const cuenta = () => ({ eventos: 0, dias: 0, diasSupuestos: 0,
                           medidos: 0, supuestos: 0, personas: new Set() });
@@ -4968,6 +5018,9 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
 
   return {
     desde, hasta, ventana, plantel,
+    /* El corte del año fiscal recortó la ventana: la pantalla lo dice para que
+       nadie lea tres meses donde hay veinticinco días. */
+    recortada: v.recortada, corte: v.corte,
     eventos: area.eventos, dias: area.dias,
     diasSupuestos: area.diasSupuestos,
     medidos: area.medidos, supuestos: area.supuestos,
@@ -4988,7 +5041,7 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
     rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
-    participacionDeAusencias, ausentismoDe
+    participacionDeAusencias, ausentismoDe, ventanaDeMedicion
   };
 }
 
@@ -10965,23 +11018,31 @@ const App = (() => {
     const r = ind.rotacion, a = ind.ausentismo, re = ind.reclamos;
     if (!r && !a && !re) return '';
 
+    /* El corte del año fiscal puede dejar la ventana en un mes. Decir «los
+       últimos 12 meses» arriba de un número que cubre veinticinco días es la
+       forma más fácil de que alguien lo lea como anual en una reunión. */
+    const periodo = v => v && v.recortada
+      ? `desde el ${fmtFecha(v.corte)}` : 'de los últimos 12 meses';
+
     const tarjetas = [];
     if (r) tarjetas.push(`<article class="ind-tarjeta ${r.tasa >= 0.3 ? 'alerta' : r.tasa >= 0.15 ? 'aviso' : ''}">
-      <span class="ind-rotulo">Rotación de los últimos 12 meses</span>
+      <span class="ind-rotulo">Rotación ${periodo(r)}</span>
       <strong class="ind-valor">${r.tasa === null ? '—' : fmtPct(r.tasa, 1)}</strong>
       <p class="ind-lectura"><strong>${r.bajas}</strong> baja${r.bajas === 1 ? '' : 's'}
         —${r.renuncias} renuncia${r.renuncias === 1 ? '' : 's'} y ${r.despidos}
         despido${r.despidos === 1 ? '' : 's'}— sobre una dotación media de
         ${fmtNum(r.media, 1)}. La media es aproximada: el panel guarda el plantel de hoy,
-        no la foto de cada mes.</p>
+        no la foto de cada mes.${r.recortada ? ` Son <strong>${r.dias} días</strong>, no un año:
+        no es comparable con una rotación anual todavía.` : ''}</p>
     </article>`);
 
     if (a) tarjetas.push(`<article class="ind-tarjeta ${a.tasa >= 0.05 ? 'aviso' : ''}">
-      <span class="ind-rotulo">Ausentismo de los últimos 12 meses</span>
+      <span class="ind-rotulo">Ausentismo ${periodo(a)}</span>
       <strong class="ind-valor">${a.tasa === null ? '—' : fmtPct(a.tasa, 1)}</strong>
       <p class="ind-lectura"><strong>${fmtNum(a.dias, 0)}</strong> días de ausencia
         de ${a.personas} persona${a.personas === 1 ? '' : 's'}, que son
-        <strong>${fmtNum(a.fte, 1)} FTE</strong> de trabajo que no se prestó.</p>
+        <strong>${fmtNum(a.fte, 1)} FTE</strong> de trabajo que no se prestó${
+        a.recortada ? ` en los ${a.diasVentana} días del período` : ''}.</p>
     </article>`);
 
     if (re) tarjetas.push(`<article class="ind-tarjeta ${re.abiertos ? 'aviso' : ''}">
@@ -10995,8 +11056,11 @@ const App = (() => {
 
     return `<section class="tarjeta">
       <h2>Lo que se mueve</h2>
-      <p class="ayuda">Los tres que necesitan historia. Se calculan sobre los últimos doce
-        meses y se van afinando a medida que cargues.</p>
+      <p class="ayuda">Los tres que necesitan historia. ${(r && r.recortada) || (a && a.recortada)
+        ? `Se cuentan <strong>desde el ${fmtFecha((r && r.corte) || (a && a.corte))}</strong>, que
+           es el corte que fijaste: atrás la serie está incompleta y una tasa sobre eso no se
+           puede comparar contra el año que viene. Se mueve en Configuración.`
+        : 'Se calculan sobre los últimos doce meses y se van afinando a medida que cargues.'}</p>
       <div class="ind-grilla">${tarjetas.join('')}</div>
       ${r && r.ultimas.length ? `<h3 style="margin-top:18px;font-size:14px">Últimas bajas</h3>
         <ul class="ayuda" style="margin:6px 0 0;padding-left:18px">
@@ -11019,6 +11083,11 @@ const App = (() => {
     const tope = pa.tiendas[0].dias || 1;
 
     const meses = Math.round(pa.ventana / 30);
+    /* Con el corte del año fiscal recién puesto la ventana es de días, no de
+       meses: decir «3 meses» sería falso. */
+    const cuanto = pa.recortada
+      ? `desde el ${fmtFecha(pa.corte)} (${pa.ventana} día${pa.ventana === 1 ? '' : 's'})`
+      : `en ${meses} mes${meses === 1 ? '' : 'es'}`;
     return `<section class="tarjeta">
       <div class="cabecera-suc">
         <h2>Ausentismo: cuánto y de dónde sale</h2>
@@ -11028,7 +11097,8 @@ const App = (() => {
       <p class="ayuda">Del ${fmtFecha(pa.desde)} al ${fmtFecha(pa.hasta)}:
         <strong>${fmtNum(pa.dias, 0)} días</strong> de ausencia de
         ${pa.personas} persona${pa.personas === 1 ? '' : 's'}, sobre un plantel de
-        ${pa.plantel} en ${meses} mes${meses === 1 ? '' : 'es'}.
+        ${pa.plantel} ${cuanto}.${pa.recortada ? ` Es el corte que fijaste en Configuración:
+        antes de esa fecha la serie está incompleta y el número no sería comparable.` : ''}
         ${pa.supuestos ? `<strong>${fmtPct(pa.parteSupuesta, 0)} de esos días son supuestos</strong>:
           ${pa.supuestos} de los ${pa.eventos} certificados no decían cuánto duraban y se
           tomaron como un día. El resto sale del papel.` : 'Todos los días salen del papel.'}
@@ -13198,10 +13268,12 @@ const App = (() => {
            que es la conversación con el gerente y no la del turno de mañana. */
         const au = ausentismoDe(e, null, s.id, hoyISO());
         const meses = Math.round(au.area.ventana / 30);
+        const cuando = au.area.recortada
+          ? `desde el ${fmtFecha(au.area.corte)}` : `en los últimos ${meses} meses`;
         return `<section class="tarjeta">
           <h2>De esta tienda</h2>
           ${au.tienda && au.tienda.tasa !== null ? `<p class="ind-lectura" style="margin:0 0 14px">
-            <strong>Ausentismo ${fmtPct(au.tienda.tasa, 1)}</strong> en los últimos ${meses} meses
+            <strong>Ausentismo ${fmtPct(au.tienda.tasa, 1)}</strong> ${cuando}
             —${au.tienda.dias} día${au.tienda.dias === 1 ? '' : 's'} de ${au.tienda.personas}
             persona${au.tienda.personas === 1 ? '' : 's'}, sobre un plantel de ${au.tienda.plantel}—,
             contra ${fmtPct(au.area.tasa, 1)} del área.
@@ -13934,6 +14006,9 @@ const App = (() => {
     const au = suc ? ausentismoDe(Store.get(), c.id, suc.id, hoy) : null;
     const suyo = au && au.persona ? au.persona : null;
     const meses = au ? Math.round(au.area.ventana / 30) : 3;
+    const cuando = au && au.area.recortada
+      ? `desde el ${fmtFecha(au.area.corte)}`
+      : `en los últimos ${meses} meses`;
     /* Solo las columnas que esta persona usó: una tabla con seis licencias en
        cero no dice nada que el «—» no diga mejor. */
     const motivos = MOTIVOS_AUSENCIA_LARGA.filter(m => r.porMotivo[m.id]);
@@ -13943,7 +14018,7 @@ const App = (() => {
         ${r.sinJustificar ? `<span class="chip rojo">${r.sinJustificar} sin justificar</span>` : ''}</h4>
 
       ${suyo ? `<p class="ind-lectura" style="margin:0 0 12px">
-        <strong>Faltó ${suyo.dias} día${suyo.dias === 1 ? '' : 's'} en los últimos ${meses} meses</strong>
+        <strong>Faltó ${suyo.dias} día${suyo.dias === 1 ? '' : 's'} ${cuando}</strong>
         —${fmtPct(suyo.tasa, 1)} de su turno—, en ${suyo.eventos}
         ${suyo.eventos === 1 ? 'licencia' : 'licencias'}.
         Es el ${fmtPct(suyo.parteDeLaTienda, 0)} de los días de ausencia de
@@ -13988,6 +14063,8 @@ const App = (() => {
       </table></div>
 
       <p class="ayuda">
+        <strong>Acá está todo lo que tenga cargado</strong>, sea de cuando sea: el corte del
+        año fiscal recorta los indicadores del área, no el historial de la persona.
         Sale de lo que cargás en <a href="#/diario/${c.id}">Presentismo</a>. Los días se
         reparten por mes: una licencia del 25 de agosto al 5 de septiembre son días de los
         dos meses, no del primero. Lo que todavía no pasó no se cuenta: un certificado
@@ -14417,7 +14494,20 @@ const App = (() => {
           ${campo('Umbral de horas extras', 'parametros.umbralHorasExtras', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Cierre de novedades (día del mes)', 'parametros.diaCierreNovedades',
                   { tipo: 'number', step: '1', calc: true })}
+          ${campo('Los indicadores miden desde', 'parametros.mideDesde',
+                  { tipo: 'date', calc: true })}
           ${campo('Símbolo de moneda', 'parametros.moneda', { calc: true })}
+        </div>
+        <p class="ayuda"><strong>«Los indicadores miden desde»</strong> es el corte del año
+          fiscal. El ausentismo y la rotación del área no cuentan nada anterior a esa fecha:
+          atrás la serie está incompleta —las ausencias entraron por una planilla que arranca
+          antes de que el panel existiera, y las bajas se fueron cargando de a poco— y una tasa
+          sobre una serie incompleta no se puede comparar contra el año siguiente.
+          <strong>El historial de cada persona no se toca</strong>: su ficha muestra todas las
+          licencias que tenga cargadas, sean de cuando sean. Moverlo al próximo septiembre es
+          una decisión tuya; no se corre solo, porque un corte que se mueve sin avisar te cambia
+          los números en el medio de una reunión.</p>
+        <div class="grid c3" hidden>
         </div>
         <p class="ayuda">
           El <strong>cierre de novedades</strong> es el día en que Nómina deja de tomar

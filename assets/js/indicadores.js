@@ -233,9 +233,32 @@ function _diasEntreISO(a, b) {
  * La pantalla lo dice: un promedio inventado sobre una serie que no existe
  * sería peor que un número aproximado y anunciado como tal.
  */
+/**
+ * Desde cuándo miden los indicadores del área.
+ *
+ * Es el corte del año fiscal que fija el coordinador (`parametros.mideDesde`).
+ * La ventana natural de cada indicador —doce meses para la rotación, tres para
+ * la participación de ausencias— **no puede arrancar antes**: atrás no hay
+ * historia completa y una tasa sobre una serie incompleta es una tasa falsa.
+ *
+ * Devuelve también `recortada`, para que la pantalla pueda decir que está
+ * midiendo un período más corto que el habitual en vez de mostrar un número
+ * que se lee como si fuera anual.
+ */
+function ventanaDeMedicion(estado, desdeNatural, hasta) {
+  const corte = (((estado || {}).config || {}).parametros || {}).mideDesde || '';
+  const desde = corte && corte > desdeNatural ? corte : desdeNatural;
+  return {
+    desde, corte,
+    recortada: !!corte && corte > desdeNatural,
+    dias: Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1)
+  };
+}
+
 function rotacionDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
-  const desde = _mesesAtras(hoy, 12);
+  const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
+  const desde = v.desde;
   const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
   const conBaja = gente.filter(c => c.baja && c.baja.fecha);
   if (!conBaja.length) return null;
@@ -252,6 +275,10 @@ function rotacionDelArea(estado, hoyISO) {
 
   return {
     desde, hasta: hoy, bajas: delPeriodo.length,
+    /* Cuántos días cubre de verdad: con el corte del año fiscal recién puesto
+       la ventana puede ser de un mes, y una tasa de un mes leída como anual
+       exagera. La pantalla lo dice con esto. */
+    dias: v.dias, recortada: v.recortada, corte: v.corte,
     tasa: media > 0 ? delPeriodo.length / media : null,
     porGrupo,
     renuncias: porGrupo['Renuncias'] || 0,
@@ -268,7 +295,8 @@ function rotacionDelArea(estado, hoyISO) {
  */
 function ausentismoDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
-  const desde = _mesesAtras(hoy, 12);
+  const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
+  const desde = v.desde;
   const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
   if (!gente.some(c => (c.ausencias || []).length)) return null;
 
@@ -287,13 +315,17 @@ function ausentismoDelArea(estado, hoyISO) {
   if (!dias) return null;
 
   const activos = gente.filter(c => c.activo !== false).length;
-  const diasPersona = activos * 365;
+  /* Los días-persona son los de la ventana real, no un año entero: con el
+     corte puesto este mes, dividir por 365 daría una tasa diez veces menor de
+     la que el período muestra. */
+  const diasPersona = activos * v.dias;
   return {
     desde, hasta: hoy, dias, personas: quienes.size,
+    diasVentana: v.dias, recortada: v.recortada, corte: v.corte,
     tasa: diasPersona > 0 ? dias / diasPersona : null,
     /* Cuánto trabajo no se prestó, en la unidad en la que se piensa la
-       dotación: los días perdidos sobre un año de una persona. */
-    fte: dias / 365,
+       dotación: los días perdidos sobre el período de una persona. */
+    fte: dias / v.dias,
     porMotivo
   };
 }
@@ -337,11 +369,12 @@ function reclamosDelArea(estado, hoyISO) {
 function participacionDeAusencias(estado, desdeISO, hastaISO) {
   const e = estado || {};
   const hasta = hastaISO || _diaHoy();
-  const desde = desdeISO || _mesesAtras(hasta, 3);
+  const v = ventanaDeMedicion(e, desdeISO || _mesesAtras(hasta, 3), hasta);
+  const desde = v.desde;
 
   /* El largo de la ventana es el denominador de la tasa: los días de ausencia
      de una persona sobre los días que tuvo el período. */
-  const ventana = Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1);
+  const ventana = v.dias;
 
   const cuenta = () => ({ eventos: 0, dias: 0, diasSupuestos: 0,
                           medidos: 0, supuestos: 0, personas: new Set() });
@@ -401,6 +434,9 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
 
   return {
     desde, hasta, ventana, plantel,
+    /* El corte del año fiscal recortó la ventana: la pantalla lo dice para que
+       nadie lea tres meses donde hay veinticinco días. */
+    recortada: v.recortada, corte: v.corte,
     eventos: area.eventos, dias: area.dias,
     diasSupuestos: area.diasSupuestos,
     medidos: area.medidos, supuestos: area.supuestos,
@@ -421,6 +457,6 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
     rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
-    participacionDeAusencias, ausentismoDe
+    participacionDeAusencias, ausentismoDe, ventanaDeMedicion
   };
 }

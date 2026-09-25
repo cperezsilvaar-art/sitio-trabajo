@@ -366,6 +366,31 @@ días, o al revés, daba dos respuestas distintas a la misma pregunta una al lad
 de la otra. Se ve en *Panel → Indicadores*; el historial de cada persona ya
 estaba en su ficha (`fichaAusenciasRegistradas`).
 
+**Los indicadores del área miden desde el corte del año fiscal**
+(`parametros.mideDesde`, septiembre de 2026, editable en `#/config`).
+`ventanaDeMedicion()` (`indicadores.js`) es el único lugar que lo decide: la
+ventana natural de cada indicador —doce meses para la rotación y el ausentismo,
+tres para la participación— **no puede arrancar antes del corte**. El
+coordinador venía midiendo a mano y atrás no hay serie completa: las ausencias
+entraron por una planilla que arranca en marzo de 2025 y las bajas se cargaron
+de a poco. Una tasa sobre una serie incompleta no es una tasa baja, es una que
+no se puede comparar contra el año siguiente.
+
+**Recorta los indicadores, no el historial.** La ficha de cada persona muestra
+todas sus licencias, sean de cuando sean, y lo dice: que alguien tuvo una
+licencia en mayo es un dato útil de su legajo aunque no entre en la tasa del
+área.
+
+**El rótulo nombra el período de verdad.** Con el corte recién puesto la ventana
+puede ser de veinticinco días, así que la tarjeta dice «Rotación desde el
+01/09/2026» y no «de los últimos 12 meses», y el ausentismo divide por los días
+que la ventana tiene y no por 365 — si no, un número de un mes leído como anual
+se lleva a una reunión como si fuera comparable. Lo mismo la participación, que
+dice «desde el … (25 días)» en vez de «en 3 meses».
+
+**No se corre solo.** Moverlo al próximo septiembre es una decisión del
+coordinador; un corte automático le cambiaría los números sin avisar.
+
 **El historial va en la ficha de la persona**, no en la de la sucursal: vive en
 `c.ausencias`, así que la acompaña cuando se muda de tienda. `ausenciasPorMes()`
 lo reparte por mes calendario —del 25/08 al 05/09 son siete días de agosto y

@@ -422,6 +422,23 @@ const PARAMETROS_DEFECTO = {
      después ya no entra en este recibo y va al mes siguiente; el panel lo usa
      para no juntar en el parte del cierre algo que Nómina no va a tomar. */
   diaCierreNovedades: 25,
+  /* Desde cuándo miden los indicadores del área: ausentismo y rotación.
+   *
+   * El coordinador venía midiendo a mano y arranca el panel con el corte del
+   * **año fiscal, septiembre de 2026**. Antes de esa fecha no hay historia
+   * completa —las ausencias entraron por una planilla que arranca en marzo de
+   * 2025 y las bajas se cargaron de a poco—, y una tasa calculada sobre una
+   * serie incompleta no es una tasa baja: es una tasa falsa, que además se
+   * compara contra el año siguiente como si las dos midieran lo mismo.
+   *
+   * **Solo recorta los indicadores.** El historial de cada persona muestra
+   * todo lo que tenga cargado, sea de cuando sea: que alguien tuvo una licencia
+   * en mayo es un dato útil para su ficha aunque no entre en la tasa del área.
+   *
+   * Es una fecha y no un cálculo automático: moverla al próximo septiembre es
+   * una decisión suya, y un corte que se corre solo le cambiaría los números
+   * sin avisar. */
+  mideDesde: '2026-09-01',
   moneda: '$'
 };
 
