@@ -222,6 +222,9 @@ const Store = (() => {
            persona: los topes son por año y por persona, no por período. */
         if (!Array.isArray(c.licencias)) c.licencias = [];
         if (!Array.isArray(c.sanciones)) c.sanciones = [];
+        /* Los casos cuelgan de la persona, como la baja, los movimientos y las
+           ausencias: si la trasladan de tienda el seguimiento la acompaña. */
+        if (!Array.isArray(c.casos)) c.casos = [];
         /* Traspasos de sucursal y modificaciones de puesto. Viven en la ficha
            de la persona y no en la sucursal, así el historial la acompaña
            cuando se muda de tienda. */
@@ -773,6 +776,70 @@ const Store = (() => {
       if (!c) return;
       c.licencias = c.licencias.filter(l => l.id !== licenciaId);
       guardar();
+    },
+
+    /* --------------------------- casos ---------------------------- */
+
+    abrirCaso(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      if (!Array.isArray(c.casos)) c.casos = [];
+      const k = casoNuevo(datos);
+      c.casos.push(k);
+      guardar();
+      return k;
+    },
+
+    /**
+     * Cambia lo que se edita de un caso. **Cerrar deja la fecha**: un caso sin
+     * fecha de cierre no se puede contar ni auditar, y «cuándo se resolvió» es
+     * la mitad de la información de un caso resuelto.
+     */
+    editarCaso(colaboradorId, casoId, cambios) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      Object.assign(k, cambios || {});
+      if (k.estado === 'cerrado' && !k.cerradoEl) k.cerradoEl = _diaHoy();
+      if (k.estado !== 'cerrado') k.cerradoEl = '';
+      guardar();
+      return k;
+    },
+
+    /* Cada movimiento del caso queda con su fecha. Es lo que después permite
+       reconstruir qué se hizo y cuándo, que es justo lo que no se acuerda nadie
+       tres meses más tarde. */
+    agregarHitoCaso(colaboradorId, casoId, hito) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      if (!Array.isArray(k.hitos)) k.hitos = [];
+      k.hitos.push({
+        id: uid(),
+        fecha: (hito && hito.fecha) || _diaHoy(),
+        que: (hito && hito.que) || '',
+        quien: (hito && hito.quien) || ''
+      });
+      k.hitos.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+      guardar();
+      return k;
+    },
+
+    quitarHitoCaso(colaboradorId, casoId, hitoId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      k.hitos = (k.hitos || []).filter(x => x.id !== hitoId);
+      guardar();
+      return k;
+    },
+
+    borrarCaso(colaboradorId, casoId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return false;
+      c.casos = (c.casos || []).filter(x => x.id !== casoId);
+      guardar();
+      return true;
     },
 
     agregarSancionColaborador(colaboradorId, datos) {

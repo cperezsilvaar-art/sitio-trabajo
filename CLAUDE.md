@@ -57,8 +57,8 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `ausencias`, `desarrollo`, `indicadores`, `checklist`, `reclamos`, `agenda`,
-  `asistente`, `diario`, `acceso`, `store`, `reporte`, `app`.
+  `ausencias`, `desarrollo`, `indicadores`, `casos`, `checklist`, `reclamos`,
+  `agenda`, `asistente`, `diario`, `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
@@ -486,8 +486,10 @@ módulos: en la página comparten ámbito global, y en la build de un solo archi
 van todos dentro del mismo `<script>`. Un segundo `const _diaHoy` o
 `function _sumarDias` no rompe ese archivo: **rompe la página entera**, y con
 `<script>` separados el módulo que llega segundo no se ejecuta. `_diaHoy` está en
-`ausencias.js` y `_sumarDias` en `agenda.js`; los demás los usan sin redeclarar, o
-eligen otro nombre (`_diaMas`). El chequeo que lo agarra está en la verificación
+`ausencias.js`, `_sumarDias` en `agenda.js` y `_diasEntre` en `desarrollo.js`;
+los demás los usan sin redeclarar, o eligen otro nombre (`_diaMas`). Le volvió a
+pasar a `casos.js`, que se escribió con su propio `_diasEntre` y lo habría
+dejado todo en blanco: el chequeo lo agarró antes de commitear. El chequeo que lo agarra está en la verificación
 de más abajo y hay que correrlo siempre.
 
 Las **ausencias con certificado** (`assets/js/ausencias.js`, `c.ausencias`) son
@@ -691,6 +693,46 @@ en una fila desplegable, mientras los mismos campos se leían en
 - **la importación de la nómina** está al pie de `#/nomina`;
 - **el alta, la baja y «Cargar padrón del Área 3»** están en `#/config`
   (`panelSucursalesConfig()`), que es donde vive el resto de la puesta a punto.
+
+**Los casos en seguimiento viven en `#/casos`** (`assets/js/casos.js`,
+`c.casos[]`): las situaciones que no se resuelven solas —un desempeño que no
+levanta, un ausentismo que ya no es un resfrío, un intercambio con el estudio
+jurídico—.
+
+**Se sigue la situación, no se etiqueta a la persona**, y el nombre no es
+casual: el coordinador pidió «panel de empleados complejos» y eso sería una
+lista de adjetivos sobre gente con nombre y apellido guardada en una
+herramienta de la empresa. No dice qué hacer, envejece mal y en un juicio se lee
+como prueba de un prejuicio. Un caso tiene fecha de apertura, un próximo paso y
+una fecha de cierre, y cuando se resuelve **se cierra**. Por eso lo que se
+escribe son hechos y acciones —qué pasó, cuándo, qué sigue y quién lo lleva— y
+no calificaciones.
+
+**Las señales no se tipean: se leen.** `senalesDe()` trae el cuadrante del
+9-box —«Riesgo» es exactamente el bajo desempeño con bajo potencial, y ya está
+calculado—, los días y la tasa de ausencia de la persona, si hoy tiene licencia
+abierta, sus reclamos abiertos, sus sanciones y si está en desarrollo. Pedir que
+se vuelva a cargar algo que el panel ya sabe es la forma más rápida de que los
+dos números difieran.
+
+**La documentación no va acá.** Certificados, informes médicos, cartas documento
+e intercambios con el estudio viven en el legajo y en el estudio; la pantalla lo
+dice. El panel guarda que el caso existe, en qué estado está y qué sigue: con
+eso alcanza para no perderle el rastro y evita que una historia clínica termine
+en el almacenamiento de un navegador.
+
+**Tres estados y ninguno más**: *abierto* —la próxima acción es tuya—,
+*esperando* —depende de un tercero: el estudio, una junta médica, una
+respuesta— y *cerrado*. «En seguimiento» y «abierto» serían el mismo estado con
+dos nombres; lo que cambia la lectura es de qué lado está la pelota.
+`estadoDeCaso()` marca lo que pide algo: el próximo paso vencido, el caso sin
+próximo paso definido y el que lleva `DIAS_CASO_SIN_MOVIMIENTO` (21) quieto —a
+las tres semanas ya no se está siguiendo, se está olvidando—.
+
+**Los casos cuelgan de la persona**, como `c.baja`, `c.movimientos`,
+`c.ausencias` y `c.entrenamientos`, así el seguimiento la acompaña si la
+trasladan. Lo que pide algo entra en `pendientesDelArea()` y en el contador del
+menú, no en `e.agenda`: es la misma regla de *lee, no copia*.
 
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos

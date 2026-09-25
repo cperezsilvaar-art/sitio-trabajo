@@ -1862,6 +1862,9 @@ const App = (() => {
      tiene patologías adentro y eso vive solo en este navegador. */
   let resultadoAusencias = null;
   let resultadoParte = null;
+  let casoPersona = '';       // a quién se le abre un caso desde el alta
+  let casoAbierto = null;     // qué caso está desplegado
+  let verCasosCerrados = false;
 
   /* El parte de ausentes de las tiendas. Va ARRIBA de la importación del
      formulario porque contesta la pregunta de hoy —quién no está— mientras que
@@ -2273,6 +2276,195 @@ const App = (() => {
             c.movimientos.filter(m => m.estado === 'aplicada')
               .map(m => `${m.vigencia ? fmtFecha(m.vigencia) : ''} ${detalleMovimiento(m)}`).join(' · ')}</p>` : ''}
     </div>`;
+  }
+
+  /* ====================== VISTA: CASOS EN SEGUIMIENTO ==================
+     Se sigue la situación, no se etiqueta a la persona: el caso tiene fecha de
+     apertura, un próximo paso y una fecha de cierre, y cuando se resuelve se
+     cierra. Un listado de «empleados complejos» sería una lista de adjetivos
+     sobre gente con nombre y apellido que no dice qué hacer y envejece mal.
+     Las señales que el panel ya calcula —9-box, ausentismo, reclamos,
+     sanciones— se leen desde acá y no se vuelven a tipear. */
+  function vistaCasos() {
+    const e = Store.get();
+    contexto = e;
+    const hoy = hoyISO();
+    const todos = casosDelArea(e, hoy);
+    const r = resumenDeCasos(todos);
+    const lista = verCasosCerrados ? todos : todos.filter(x => x.caso.estado !== 'cerrado');
+    const gente = e.sucursales.flatMap(s => (s.colaboradores || [])
+      .filter(c => !c.baja).map(c => ({ c, s })))
+      .sort((a, b) => String(a.c.nombre).localeCompare(String(b.c.nombre)));
+    const nom = id => (TIPOS_CASO.find(t => t.id === id) || {}).nombre || id;
+
+    return `
+      <h1 class="titulo">Casos en seguimiento</h1>
+      <p class="subtitulo">Las situaciones que no se resuelven solas y hay que empujar:
+        desempeño, ausentismo reiterado, conducta, salud o un intercambio legal.</p>
+
+      <section class="tarjeta">
+        <div class="kpis">
+          ${kpi('Abiertos', r.abiertos, r.total ? `de ${r.total} en total` : '',
+                r.abiertos ? 'alerta' : 'ok')}
+          ${kpi('Piden algo hoy', r.piden, 'vencidos, sin próximo paso o quietos',
+                r.piden ? 'alerta' : 'ok')}
+          ${kpi('Críticos', r.criticos, 'marcados como riesgo crítico',
+                r.criticos ? 'alerta' : 'ok')}
+        </div>
+        ${r.porTipo.length ? `<p class="ayuda">${r.porTipo
+          .map(t => `<strong>${t.cuantos}</strong> de ${esc(t.nombre.toLowerCase())}`)
+          .join(' · ')}.</p>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Abrir un caso</h2>
+        </div>
+        <div class="grid c3">
+          <label class="campo"><span>Quién</span>
+            <select id="caso-persona">
+              <option value="">— elegí a la persona —</option>
+              ${gente.map(x => `<option value="${x.c.id}"${x.c.id === casoPersona ? ' selected' : ''}
+                >${esc(x.c.nombre)} · ${esc(x.s.nombre || x.s.codigo)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>De qué se trata</span>
+            <select id="caso-tipo">
+              ${TIPOS_CASO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Riesgo</span>
+            <select id="caso-riesgo">
+              ${RIESGOS_CASO.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('')}
+            </select></label>
+        </div>
+        <label class="campo"><span>Qué está pasando, en una línea</span>
+          <input id="caso-resumen" placeholder="Licencia psiquiátrica que se extiende; dos controles médicos dieron alta"></label>
+        <div class="grid c3">
+          <label class="campo"><span>Próximo paso</span>
+            <input id="caso-paso" placeholder="Confirmar recepción de la CD"></label>
+          <label class="campo"><span>Para cuándo</span>
+            <input type="date" id="caso-paso-el"></label>
+          <label class="campo"><span>Quién lo lleva</span>
+            <input id="caso-responsable" placeholder="Yo, Nómina, el estudio…"></label>
+        </div>
+        <div class="acciones">
+          <button class="b" data-accion="abrir-caso">Abrir el caso</button>
+        </div>
+        <p class="ayuda"><strong>Acá no va la documentación.</strong> Certificados, informes
+          médicos, cartas documento y los intercambios con el estudio viven en el legajo y en
+          el estudio. El panel guarda que el caso existe, en qué estado está y qué sigue: con
+          eso alcanza para no perderle el rastro.</p>
+      </section>
+
+      ${lista.length ? lista.map(x => fichaCaso(x, e, hoy)).join('') : `
+        <section class="tarjeta"><p class="vacio">
+          ${todos.length ? 'No hay casos abiertos. ' : 'Todavía no abriste ningún caso. '}
+          ${todos.length && !verCasosCerrados ? 'Los cerrados se ven con el botón de abajo.' : ''}
+        </p></section>`}
+
+      ${todos.some(x => x.caso.estado === 'cerrado') ? `<div class="acciones">
+        <button class="b sec" data-accion="ver-casos-cerrados">${verCasosCerrados
+          ? 'Ver solo los abiertos'
+          : `Ver también los ${todos.filter(x => x.caso.estado === 'cerrado').length} cerrados`}</button>
+      </div>` : ''}`;
+  }
+
+  /* Un caso, con las señales que el panel ya sabe de esa persona al lado. */
+  function fichaCaso(x, e, hoy) {
+    const k = x.caso, est = x.estado;
+    const abierto = casoAbierto === k.id;
+    const sen = senalesDe(e, x.colaboradorId, x.sucursalId, hoy) || {};
+    const nom = id => (TIPOS_CASO.find(t => t.id === id) || {}).nombre || id;
+    const dias = _diasEntre(k.abiertoEl, hoy);
+
+    /* Las señales no se tipean: salen del 9-box, del ausentismo y de los
+       reclamos, que ya están cargados en otro lado. */
+    const chips = [];
+    if (sen.enRiesgo9Box) chips.push(`<span class="chip rojo">9-box: Riesgo</span>`);
+    else if (sen.cuadrante) chips.push(`<span class="chip ${sen.cuadrante.tono === 'rojo' ? 'rojo'
+      : sen.cuadrante.tono === 'amarillo' ? 'ambar' : 'azul'}">9-box: ${esc(sen.cuadrante.nombre)}</span>`);
+    if (sen.ausentismo) chips.push(`<span class="chip ${sen.ausentismo.tasa >= 0.05 ? 'rojo' : 'ambar'}"
+      >${sen.ausentismo.dias} días de ausencia · ${fmtPct(sen.ausentismo.tasa, 1)}</span>`);
+    if (sen.licenciaAbierta) chips.push('<span class="chip ambar">hoy con licencia</span>');
+    if (sen.reclamosAbiertos) chips.push(`<span class="chip ambar">${sen.reclamosAbiertos} reclamo${
+      sen.reclamosAbiertos === 1 ? '' : 's'} abierto${sen.reclamosAbiertos === 1 ? '' : 's'}</span>`);
+    if (sen.sanciones) chips.push(`<span class="chip">${sen.sanciones} sanción${
+      sen.sanciones === 1 ? '' : 'es'}</span>`);
+    if (sen.entrenando) chips.push('<span class="chip verde">en desarrollo</span>');
+
+    return `<section class="tarjeta caso ${est.tono}">
+      <div class="cabecera-suc">
+        <h2>${esc(x.nombre)}
+          <span style="font-weight:400;color:var(--texto-suave)"> · ${esc(x.sucursal)}</span></h2>
+        <span class="chip ${est.tono}">${esc(est.texto)}</span>
+      </div>
+      <p class="ayuda" style="margin-top:-4px">
+        <strong>${esc(nom(k.tipo))}</strong> · riesgo ${esc((RIESGOS_CASO.find(z => z.id === k.riesgo) || {}).nombre || k.riesgo)}
+        · abierto hace ${dias === null ? '—' : dias} día${dias === 1 ? '' : 's'}${
+        k.responsable ? ` · lo lleva ${esc(k.responsable)}` : ''}</p>
+      ${k.resumen ? `<p>${esc(k.resumen)}</p>` : ''}
+      ${k.proximoPaso ? `<p class="ind-lectura"><strong>Próximo paso:</strong> ${esc(k.proximoPaso)}${
+        k.proximoPasoEl ? ` — ${fmtFecha(k.proximoPasoEl)}` : ''}</p>`
+        : '<p class="ind-lectura"><strong>No tiene próximo paso definido.</strong> Es lo único que hace que un caso avance.</p>'}
+      ${chips.length ? `<p style="margin:10px 0 0">${chips.join(' ')}</p>` : ''}
+
+      <div class="acciones" style="margin-top:12px">
+        <button class="b sec" data-accion="abrir-ficha-caso" data-id="${k.id}"
+          data-colab="${x.colaboradorId}">${abierto ? 'Cerrar' : 'Ver y actualizar'}</button>
+        <button class="b sec" data-accion="ir-al-perfil" data-id="${x.colaboradorId}">Ver su ficha</button>
+      </div>
+
+      ${abierto ? `
+        <div class="grid c3" style="margin-top:14px">
+          <label class="campo"><span>Estado</span>
+            <select data-caso-campo="${x.colaboradorId}|${k.id}|estado">
+              ${ESTADOS_CASO.map(z => `<option value="${z.id}"${k.estado === z.id ? ' selected' : ''}
+                >${esc(z.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Riesgo</span>
+            <select data-caso-campo="${x.colaboradorId}|${k.id}|riesgo">
+              ${RIESGOS_CASO.map(z => `<option value="${z.id}"${k.riesgo === z.id ? ' selected' : ''}
+                >${esc(z.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Quién lo lleva</span>
+            <input data-caso-campo="${x.colaboradorId}|${k.id}|responsable" value="${esc(k.responsable || '')}"></label>
+        </div>
+        <label class="campo"><span>Qué está pasando</span>
+          <input data-caso-campo="${x.colaboradorId}|${k.id}|resumen" value="${esc(k.resumen || '')}"></label>
+        <div class="grid c2">
+          <label class="campo"><span>Próximo paso</span>
+            <input data-caso-campo="${x.colaboradorId}|${k.id}|proximoPaso" value="${esc(k.proximoPaso || '')}"></label>
+          <label class="campo"><span>Para cuándo</span>
+            <input type="date" data-caso-campo="${x.colaboradorId}|${k.id}|proximoPasoEl" value="${esc(k.proximoPasoEl || '')}"></label>
+        </div>
+
+        <h4>Qué fue pasando</h4>
+        ${(k.hitos || []).length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Qué pasó</th><th>Quién</th><th></th></tr></thead>
+          <tbody>${k.hitos.slice().reverse().map(h => `<tr>
+            <td class="tipo">${fmtFecha(h.fecha)}</td>
+            <td>${esc(h.que)}</td>
+            <td>${esc(h.quien || '—')}</td>
+            <td><button class="mini" data-accion="quitar-hito-caso" data-id="${k.id}"
+              data-colab="${x.colaboradorId}" data-hito="${h.id}">✕</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Todavía no anotaste ningún movimiento.</p>'}
+
+        <div class="grid c3" style="margin-top:10px">
+          <label class="campo"><span>Fecha</span>
+            <input type="date" id="hito-fecha-${k.id}" value="${hoy}"></label>
+          <label class="campo"><span>Qué pasó</span>
+            <input id="hito-que-${k.id}" placeholder="Se despachó la CD; el estudio pide los dos controles"></label>
+          <label class="campo"><span>Con quién</span>
+            <input id="hito-quien-${k.id}" placeholder="Estudio Esquivel, Nómina, el gerente…"></label>
+        </div>
+        <div class="acciones">
+          <button class="b" data-accion="agregar-hito-caso" data-id="${k.id}"
+            data-colab="${x.colaboradorId}">Anotar el movimiento</button>
+          <button class="b sec" data-accion="borrar-caso" data-id="${k.id}"
+            data-colab="${x.colaboradorId}">Borrar el caso</button>
+        </div>
+      ` : ''}
+    </section>`;
   }
 
   function vistaReclamos() {
@@ -5553,7 +5745,8 @@ const App = (() => {
         .reduce((m, c) => m + (c.movimientos || [])
           .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
           + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
-      desarrollo: alertasDeDesarrollo(e, hoyISO()).length
+      desarrollo: alertasDeDesarrollo(e, hoyISO()).length,
+      casos: casosDelArea(e, hoyISO()).filter(x => x.estado.pide).length
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
       const n = cuentas[b.dataset.badge] || 0;
@@ -5649,6 +5842,12 @@ const App = (() => {
          el aviso del menú y desde la ficha de la persona. */
       if (ruta[1] !== undefined) entrenamientoAbierto = ruta[1] || null;
       vistaActual = vistaDesarrollo; html = vistaDesarrollo();
+    }
+    else if (ruta[0] === 'casos') {
+      /* `#/casos/<colaboradorId>` abre el alta con esa persona ya elegida, como
+         `#/diario/<id>` con las ausencias. */
+      if (ruta[1] !== undefined) casoPersona = ruta[1] || '';
+      vistaActual = vistaCasos;  html = vistaCasos();
     }
     else if (ruta[0] === 'reclamos') {
       /* `#/reclamos/<sucursal>` es como se llega desde la visita y desde la
@@ -5838,12 +6037,30 @@ const App = (() => {
     });
 
     cont.addEventListener('input', ev => {
+      /* Los campos de un caso llevan su propio binding —`colaborador|caso|campo`—
+         porque hay que pasar por `editarCaso()`, que es quien pone y saca la
+         fecha de cierre según el estado. */
+      const kc = ev.target.closest('[data-caso-campo]');
+      if (kc) {
+        const [colab, caso, campo] = kc.dataset.casoCampo.split('|');
+        Store.editarCaso(colab, caso, { [campo]: kc.value });
+        if (campo === 'estado') refrescar();
+        return;
+      }
       const el = ev.target.closest('[data-colab-campo]');
       if (!el) return;
       const c = colaboradorDe(el.dataset.colabCampo);
       if (!c) return;
       c[el.dataset.colabCampo.split('|')[1]] = el.value;
       guardarDiferido();
+    });
+
+    cont.addEventListener('change', ev => {
+      const kc = ev.target.closest('[data-caso-campo]');
+      if (!kc) return;
+      const [colab, caso, campo] = kc.dataset.casoCampo.split('|');
+      Store.editarCaso(colab, caso, { [campo]: kc.value });
+      if (campo === 'estado' || campo === 'riesgo') refrescar();
     });
 
     cont.addEventListener('change', ev => {
@@ -6768,6 +6985,60 @@ const App = (() => {
       }
 
       if (a === 'ver-ausentes') { verAusentes = !verAusentes; refrescar(); }
+      if (a === 'ver-casos-cerrados') { verCasosCerrados = !verCasosCerrados; refrescar(); }
+      if (a === 'abrir-ficha-caso') {
+        casoAbierto = casoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'abrir-caso') {
+        const quien = valorDe('#caso-persona');
+        if (!quien) { avisar('Elegí a la persona.', 'error'); return; }
+        const resumen = valorDe('#caso-resumen');
+        if (!resumen.trim()) { avisar('Escribí en una línea qué está pasando.', 'error'); return; }
+        const k = Store.abrirCaso(quien, {
+          tipo: valorDe('#caso-tipo'), riesgo: valorDe('#caso-riesgo'),
+          resumen, proximoPaso: valorDe('#caso-paso'),
+          proximoPasoEl: valorDe('#caso-paso-el'), responsable: valorDe('#caso-responsable')
+        });
+        casoPersona = '';
+        casoAbierto = k ? k.id : null;
+        refrescar();
+        avisar('Caso abierto.');
+        return;
+      }
+
+      if (a === 'agregar-hito-caso') {
+        const id = btn.dataset.id;
+        const que = valorDe('#hito-que-' + id);
+        if (!que.trim()) { avisar('Escribí qué pasó.', 'error'); return; }
+        Store.agregarHitoCaso(btn.dataset.colab, id, {
+          fecha: valorDe('#hito-fecha-' + id), que, quien: valorDe('#hito-quien-' + id)
+        });
+        refrescar();
+        return;
+      }
+
+      if (a === 'quitar-hito-caso') {
+        Store.quitarHitoCaso(btn.dataset.colab, btn.dataset.id, btn.dataset.hito);
+        refrescar();
+        return;
+      }
+
+      if (a === 'borrar-caso') {
+        /* Borrar un caso borra su historial entero. Para el que se cerró está
+           el estado «cerrado», que lo conserva. */
+        confirmar('¿Borrar el caso?',
+          'Se borra con todo lo que anotaste adentro y no se puede deshacer. Si el caso se ' +
+          'resolvió, cerralo en vez de borrarlo: así queda en el historial de la persona.')
+          .then(ok => {
+            if (!ok) return;
+            Store.borrarCaso(btn.dataset.colab, btn.dataset.id);
+            casoAbierto = null;
+            refrescar();
+          });
+        return;
+      }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;

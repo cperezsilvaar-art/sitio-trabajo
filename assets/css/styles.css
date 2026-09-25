@@ -1160,3 +1160,13 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--radio);
   background: rgba(255, 255, 255, .10); line-height: 1.45;
 }
+
+/* La tarjeta de un caso lleva una barra a la izquierda con el tono de su
+   estado: en una lista larga es lo que deja ver de un vistazo cuáles piden algo
+   sin tener que leer cada chip. El color no es lo único que lo dice —el chip de
+   la derecha lo escribe— porque el color solo nunca alcanza. */
+.tarjeta.caso { border-left: 4px solid var(--borde-fuerte); }
+.tarjeta.caso.rojo  { border-left-color: var(--rojo-alerta); }
+.tarjeta.caso.ambar { border-left-color: var(--ambar); }
+.tarjeta.caso.azul  { border-left-color: var(--azul-claro); }
+.tarjeta.caso.verde { border-left-color: var(--verde); }

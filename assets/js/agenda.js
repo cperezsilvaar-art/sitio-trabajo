@@ -490,6 +490,29 @@ function pendientesDelArea(estado, hoyISO) {
   const grupos = [];
   const tono = d => d === null ? '' : d >= DIAS_PARA_INSISTIR ? 'rojo' : 'ambar';
 
+  /* 0. Los casos en seguimiento que piden algo. Van primero porque son los
+        que tienen a alguien esperando del otro lado —un estudio, una junta
+        médica— y los que peor envejecen si se los suelta. */
+  if (typeof casosDelArea === 'function') {
+    const casos = casosDelArea(e, hoy)
+      .filter(x => x.estado.pide)
+      .map(x => {
+        const dias = _diasDesde(x.caso.abiertoEl, hoy);
+        return {
+          que: `${x.nombre} — ${x.estado.texto.toLowerCase()}`,
+          quien: x.sucursal,
+          detalle: x.caso.proximoPaso
+            ? `próximo paso: ${x.caso.proximoPaso}`
+            : (x.caso.resumen || 'sin próximo paso definido'),
+          desde: x.caso.abiertoEl, dias, tono: x.caso.riesgo === 'critico' ? 'rojo' : tono(dias),
+          ruta: '#/casos'
+        };
+      });
+    if (casos.length) grupos.push({
+      id: 'casos', titulo: 'Casos que piden algo', ruta: '#/casos', items: casos
+    });
+  }
+
   /* 1. Los trámites de una baja. El que se olvida aparece solo semanas
         después: alguien que conserva accesos, un recibo liquidado de más. */
   const bajas = [];

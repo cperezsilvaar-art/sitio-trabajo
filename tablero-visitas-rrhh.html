@@ -1163,6 +1163,16 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   background: rgba(255, 255, 255, .10); line-height: 1.45;
 }
 
+/* La tarjeta de un caso lleva una barra a la izquierda con el tono de su
+   estado: en una lista larga es lo que deja ver de un vistazo cuáles piden algo
+   sin tener que leer cada chip. El color no es lo único que lo dice —el chip de
+   la derecha lo escribe— porque el color solo nunca alcanza. */
+.tarjeta.caso { border-left: 4px solid var(--borde-fuerte); }
+.tarjeta.caso.rojo  { border-left-color: var(--rojo-alerta); }
+.tarjeta.caso.ambar { border-left-color: var(--ambar); }
+.tarjeta.caso.azul  { border-left-color: var(--azul-claro); }
+.tarjeta.caso.verde { border-left-color: var(--verde); }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -1215,6 +1225,9 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
         <a href="#/desarrollo" title="Quién está entrenando para Senior y cómo viene">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 21 8l-9 4.5L3 8Z"/><path d="M6.5 10.2v4.4c0 1.7 2.5 3 5.5 3s5.5-1.3 5.5-3v-4.4"/><path d="M21 8v6"/></svg>
           <span>Desarrollo</span><b class="lat-badge" data-badge="desarrollo" hidden></b></a>
+        <a href="#/casos" title="Las situaciones que hay que seguir de cerca: desempeño, ausentismo, conducta o legal">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 20.5 8v5c0 4.2-3.3 6.9-8.5 8.5C6.8 19.9 3.5 17.2 3.5 13V8Z"/><path d="M12 8.5v4"/><path d="M12 15.8v.2"/></svg>
+          <span>Casos</span><b class="lat-badge" data-badge="casos" hidden></b></a>
         <a href="#/reclamos">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 12.5c0 4-3.8 7.2-8.5 7.2a9.9 9.9 0 0 1-2.8-.4L4 21.5l1.4-3.8a7 7 0 0 1-1.9-5.2c0-4 3.8-7.2 8.5-7.2s8.5 3.2 8.5 7.2Z"/><path d="M12 8.8v3.4M12 15.2h.01"/></svg>
           <span>Reclamos</span><b class="lat-badge" data-badge="reclamos" hidden></b></a>
@@ -5122,6 +5135,218 @@ if (typeof module !== 'undefined' && module.exports) {
   };
 }
 
+/* ===================== CASOS EN SEGUIMIENTO ==============================
+ *
+ * Las situaciones que el coordinador sigue de cerca porque no se resuelven
+ * solas: un desempeño que no levanta, un ausentismo que ya no es un resfrío,
+ * un intercambio con el estudio jurídico.
+ *
+ * **Se sigue la situación, no se etiqueta a la persona.** El nombre no es
+ * casual. Un listado de «empleados complejos» es una lista de adjetivos sobre
+ * gente con nombre y apellido guardada en una herramienta de la empresa: no
+ * dice qué hacer, envejece mal y en un juicio se lee como prueba de un
+ * prejuicio. Un caso, en cambio, tiene fecha de apertura, un próximo paso y
+ * una fecha de cierre — y cuando se resuelve, se cierra.
+ *
+ * Por eso lo que se escribe acá son **hechos y acciones** —qué pasó, cuándo,
+ * qué sigue y quién lo lleva— y no calificaciones. El desempeño ya se evalúa
+ * en el 9-box y el ausentismo ya se mide: esas señales se **leen** desde acá y
+ * no se vuelven a tipear.
+ *
+ * **La documentación no va acá.** Certificados, informes médicos, cartas
+ * documento e intercambios con el estudio viven en el legajo y en el estudio.
+ * El panel guarda que el caso existe, en qué estado está y qué sigue: con eso
+ * alcanza para no perderle el rastro, y evita que una historia clínica termine
+ * en el almacenamiento de un navegador.
+ */
+
+const TIPOS_CASO = [
+  { id: 'desempeno',  nombre: 'Desempeño',
+    ayuda: 'No alcanza lo esperado y hay un plan de mejora en curso.' },
+  { id: 'ausentismo', nombre: 'Ausentismo reiterado',
+    ayuda: 'Faltas repetidas o una licencia que se extiende más de lo previsto.' },
+  { id: 'conducta',   nombre: 'Conducta o disciplina',
+    ayuda: 'Incumplimientos, sanciones aplicadas, conflicto con el equipo.' },
+  { id: 'salud',      nombre: 'Salud y reincorporación',
+    ayuda: 'Licencia larga, control médico, reubicación o tareas livianas.' },
+  { id: 'legal',      nombre: 'Intercambio legal',
+    ayuda: 'Carta documento, intimación o expediente con el estudio jurídico.' },
+  { id: 'otro',       nombre: 'Otro',
+    ayuda: 'Cualquier situación que necesite seguimiento y no entre en las de arriba.' }
+];
+
+/* Tres estados y ninguno más. «En seguimiento» y «abierto» serían el mismo
+   estado con dos nombres; lo que de verdad cambia la lectura es si la pelota
+   está de este lado o del de un tercero —el estudio, una junta médica, el
+   colaborador que tiene que contestar—. */
+const ESTADOS_CASO = [
+  { id: 'abierto',   nombre: 'Abierto',   tono: 'ambar',
+    ayuda: 'La próxima acción es tuya.' },
+  { id: 'esperando', nombre: 'Esperando', tono: 'azul',
+    ayuda: 'Depende de un tercero: el estudio, un control médico, una respuesta.' },
+  { id: 'cerrado',   nombre: 'Cerrado',   tono: 'verde',
+    ayuda: 'Se resolvió. Queda en el historial de la persona.' }
+];
+
+const RIESGOS_CASO = [
+  { id: 'medio', nombre: 'Medio', tono: 'azul' },
+  { id: 'alto',  nombre: 'Alto',  tono: 'ambar' },
+  { id: 'critico', nombre: 'Crítico', tono: 'rojo' }
+];
+
+/* Un caso abierto que hace tres semanas que no se toca ya no se está
+   siguiendo: se está olvidando. Es el mismo criterio que el de los pendientes
+   de la agenda, con el plazo un poco más largo porque estos se mueven por
+   terceros. */
+const DIAS_CASO_SIN_MOVIMIENTO = 21;
+
+function casoNuevo(datos) {
+  const d = datos || {};
+  return {
+    id: (typeof uid === 'function' ? uid() : 'c' + Date.now() + Math.random().toString(36).slice(2, 7)),
+    tipo: d.tipo || 'otro',
+    estado: d.estado || 'abierto',
+    riesgo: d.riesgo || 'medio',
+    abiertoEl: d.abiertoEl || (typeof _diaHoy === 'function' ? _diaHoy() : ''),
+    cerradoEl: '',
+    /* Una línea, en tus palabras, de qué está pasando. No el expediente. */
+    resumen: d.resumen || '',
+    responsable: d.responsable || '',
+    proximoPaso: d.proximoPaso || '',
+    proximoPasoEl: d.proximoPasoEl || '',
+    hitos: []
+  };
+}
+
+/** La última fecha en que el caso se movió: su hito más nuevo, o su apertura. */
+function ultimoMovimiento(caso) {
+  const h = (caso.hitos || []).map(x => x.fecha).filter(Boolean).sort();
+  return h.length ? h[h.length - 1] : (caso.abiertoEl || '');
+}
+
+/**
+ * Qué le pasa a un caso hoy: si pide algo y por qué.
+ *
+ * Devuelve `{ clase, texto, tono }`. El orden importa — es el mismo que usa la
+ * pantalla para ordenar— y arranca por lo único que dice qué hacer hoy.
+ */
+function estadoDeCaso(caso, hoy) {
+  const h = hoy || (typeof _diaHoy === 'function' ? _diaHoy() : '');
+  const c = caso || {};
+  if (c.estado === 'cerrado') {
+    return { clase: 'cerrado', texto: 'Cerrado' + (c.cerradoEl ? ' el ' + c.cerradoEl : ''),
+             tono: 'verde', pide: false };
+  }
+  if (c.proximoPaso && c.proximoPasoEl && c.proximoPasoEl < h) {
+    return { clase: 'vencido', texto: 'El próximo paso venció', tono: 'rojo', pide: true };
+  }
+  if (!c.proximoPaso) {
+    return { clase: 'sinPaso', texto: 'Sin próximo paso definido', tono: 'rojo', pide: true };
+  }
+  const quieto = _diasEntre(ultimoMovimiento(c), h);
+  if (quieto !== null && quieto >= DIAS_CASO_SIN_MOVIMIENTO) {
+    return { clase: 'quieto', texto: `Sin movimiento hace ${quieto} días`, tono: 'ambar', pide: true };
+  }
+  if (c.proximoPasoEl === h) {
+    return { clase: 'hoy', texto: 'El próximo paso es hoy', tono: 'ambar', pide: true };
+  }
+  if (c.estado === 'esperando') {
+    return { clase: 'esperando', texto: 'Esperando a un tercero', tono: 'azul', pide: false };
+  }
+  return { clase: 'enCurso', texto: c.proximoPasoEl ? 'Próximo paso el ' + c.proximoPasoEl : 'En curso',
+           tono: 'azul', pide: false };
+}
+
+/**
+ * Todos los casos del área, con la persona y la tienda al lado, ordenados por
+ * lo que pide atención primero.
+ */
+function casosDelArea(estado, hoy) {
+  const h = hoy || (typeof _diaHoy === 'function' ? _diaHoy() : '');
+  const out = [];
+  ((estado || {}).sucursales || []).forEach(s => {
+    (s.colaboradores || []).forEach(c => {
+      (c.casos || []).forEach(k => {
+        const est = estadoDeCaso(k, h);
+        out.push({
+          caso: k, colaboradorId: c.id, nombre: c.nombre,
+          sucursalId: s.id, sucursal: s.nombre || s.codigo,
+          estado: est,
+          orden: est.clase === 'vencido' ? 0 : est.clase === 'sinPaso' ? 1
+               : est.clase === 'hoy' ? 2 : est.clase === 'quieto' ? 3
+               : est.clase === 'esperando' ? 4 : est.clase === 'cerrado' ? 6 : 5
+        });
+      });
+    });
+  });
+  return out.sort((a, b) => a.orden - b.orden ||
+    String(a.caso.proximoPasoEl || '9').localeCompare(String(b.caso.proximoPasoEl || '9')));
+}
+
+/**
+ * Las señales que el panel **ya calcula** sobre esta persona, para no pedir que
+ * se tipeen: su cuadrante del 9-box, sus días de ausencia del período, sus
+ * reclamos abiertos, sus sanciones y si hoy tiene una licencia sin cerrar.
+ *
+ * Es lo que convierte la pantalla en algo más que una lista de nombres: al
+ * abrir un caso de desempeño ya se ve si además falta, y al revés.
+ */
+function senalesDe(estado, colaboradorId, sucursalId, hoy) {
+  const e = estado || {};
+  const c = (e.sucursales || []).flatMap(s => s.colaboradores || [])
+    .find(x => x.id === colaboradorId);
+  if (!c) return null;
+
+  const cuadrante = (typeof cuadranteDe === 'function' && c.potencial && c.desempeno)
+    ? cuadranteDe(c.potencial, c.desempeno) : null;
+
+  let aus = null;
+  if (typeof ausentismoDe === 'function') {
+    const a = ausentismoDe(e, colaboradorId, sucursalId, hoy);
+    if (a && a.persona) aus = a.persona;
+  }
+  const licenciaAbierta = (c.ausencias || []).some(a =>
+    !a.reincorporado && a.desde && a.desde <= (hoy || '9999') &&
+    (!a.hasta || a.hasta >= (hoy || '')));
+
+  const reclamos = (e.reclamos || []).filter(r =>
+    r.colaboradorId === colaboradorId && r.estado !== 'Cerrado').length;
+
+  return {
+    cuadrante,
+    /* El 9-box marca «Riesgo» al que no alcanza lo esperado y no se proyecta:
+       es exactamente el bajo desempeño con bajo potencial, y ya está calculado. */
+    enRiesgo9Box: !!cuadrante && cuadrante.nombre === 'Riesgo',
+    ausentismo: aus,
+    licenciaAbierta,
+    reclamosAbiertos: reclamos,
+    sanciones: (c.sanciones || []).length,
+    entrenando: (c.entrenamientos || []).some(x => x.estado !== 'cerrado')
+  };
+}
+
+/** Un resumen del conjunto, para el encabezado de la pantalla. */
+function resumenDeCasos(lista) {
+  const abiertos = lista.filter(x => x.caso.estado !== 'cerrado');
+  return {
+    total: lista.length,
+    abiertos: abiertos.length,
+    piden: abiertos.filter(x => x.estado.pide).length,
+    criticos: abiertos.filter(x => x.caso.riesgo === 'critico').length,
+    porTipo: TIPOS_CASO.map(t => ({
+      ...t, cuantos: abiertos.filter(x => x.caso.tipo === t.id).length
+    })).filter(t => t.cuantos)
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    TIPOS_CASO, ESTADOS_CASO, RIESGOS_CASO, DIAS_CASO_SIN_MOVIMIENTO,
+    casoNuevo, estadoDeCaso, casosDelArea, senalesDe, resumenDeCasos,
+    ultimoMovimiento
+  };
+}
+
 /* ============ CHECK LIST DE RRHH OPERACIONES — FARMATODO ============
  *
  * El instrumento corporativo con el que se audita una tienda: 30 puntos en
@@ -5976,6 +6201,29 @@ function pendientesDelArea(estado, hoyISO) {
   const e = estado || {};
   const grupos = [];
   const tono = d => d === null ? '' : d >= DIAS_PARA_INSISTIR ? 'rojo' : 'ambar';
+
+  /* 0. Los casos en seguimiento que piden algo. Van primero porque son los
+        que tienen a alguien esperando del otro lado —un estudio, una junta
+        médica— y los que peor envejecen si se los suelta. */
+  if (typeof casosDelArea === 'function') {
+    const casos = casosDelArea(e, hoy)
+      .filter(x => x.estado.pide)
+      .map(x => {
+        const dias = _diasDesde(x.caso.abiertoEl, hoy);
+        return {
+          que: `${x.nombre} — ${x.estado.texto.toLowerCase()}`,
+          quien: x.sucursal,
+          detalle: x.caso.proximoPaso
+            ? `próximo paso: ${x.caso.proximoPaso}`
+            : (x.caso.resumen || 'sin próximo paso definido'),
+          desde: x.caso.abiertoEl, dias, tono: x.caso.riesgo === 'critico' ? 'rojo' : tono(dias),
+          ruta: '#/casos'
+        };
+      });
+    if (casos.length) grupos.push({
+      id: 'casos', titulo: 'Casos que piden algo', ruta: '#/casos', items: casos
+    });
+  }
 
   /* 1. Los trámites de una baja. El que se olvida aparece solo semanas
         después: alguien que conserva accesos, un recibo liquidado de más. */
@@ -7444,6 +7692,9 @@ const Store = (() => {
            persona: los topes son por año y por persona, no por período. */
         if (!Array.isArray(c.licencias)) c.licencias = [];
         if (!Array.isArray(c.sanciones)) c.sanciones = [];
+        /* Los casos cuelgan de la persona, como la baja, los movimientos y las
+           ausencias: si la trasladan de tienda el seguimiento la acompaña. */
+        if (!Array.isArray(c.casos)) c.casos = [];
         /* Traspasos de sucursal y modificaciones de puesto. Viven en la ficha
            de la persona y no en la sucursal, así el historial la acompaña
            cuando se muda de tienda. */
@@ -7995,6 +8246,70 @@ const Store = (() => {
       if (!c) return;
       c.licencias = c.licencias.filter(l => l.id !== licenciaId);
       guardar();
+    },
+
+    /* --------------------------- casos ---------------------------- */
+
+    abrirCaso(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      if (!Array.isArray(c.casos)) c.casos = [];
+      const k = casoNuevo(datos);
+      c.casos.push(k);
+      guardar();
+      return k;
+    },
+
+    /**
+     * Cambia lo que se edita de un caso. **Cerrar deja la fecha**: un caso sin
+     * fecha de cierre no se puede contar ni auditar, y «cuándo se resolvió» es
+     * la mitad de la información de un caso resuelto.
+     */
+    editarCaso(colaboradorId, casoId, cambios) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      Object.assign(k, cambios || {});
+      if (k.estado === 'cerrado' && !k.cerradoEl) k.cerradoEl = _diaHoy();
+      if (k.estado !== 'cerrado') k.cerradoEl = '';
+      guardar();
+      return k;
+    },
+
+    /* Cada movimiento del caso queda con su fecha. Es lo que después permite
+       reconstruir qué se hizo y cuándo, que es justo lo que no se acuerda nadie
+       tres meses más tarde. */
+    agregarHitoCaso(colaboradorId, casoId, hito) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      if (!Array.isArray(k.hitos)) k.hitos = [];
+      k.hitos.push({
+        id: uid(),
+        fecha: (hito && hito.fecha) || _diaHoy(),
+        que: (hito && hito.que) || '',
+        quien: (hito && hito.quien) || ''
+      });
+      k.hitos.sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+      guardar();
+      return k;
+    },
+
+    quitarHitoCaso(colaboradorId, casoId, hitoId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      const k = c && (c.casos || []).find(x => x.id === casoId);
+      if (!k) return null;
+      k.hitos = (k.hitos || []).filter(x => x.id !== hitoId);
+      guardar();
+      return k;
+    },
+
+    borrarCaso(colaboradorId, casoId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return false;
+      c.casos = (c.casos || []).filter(x => x.id !== casoId);
+      guardar();
+      return true;
     },
 
     agregarSancionColaborador(colaboradorId, datos) {
@@ -12750,6 +13065,9 @@ const App = (() => {
      tiene patologías adentro y eso vive solo en este navegador. */
   let resultadoAusencias = null;
   let resultadoParte = null;
+  let casoPersona = '';       // a quién se le abre un caso desde el alta
+  let casoAbierto = null;     // qué caso está desplegado
+  let verCasosCerrados = false;
 
   /* El parte de ausentes de las tiendas. Va ARRIBA de la importación del
      formulario porque contesta la pregunta de hoy —quién no está— mientras que
@@ -13161,6 +13479,195 @@ const App = (() => {
             c.movimientos.filter(m => m.estado === 'aplicada')
               .map(m => `${m.vigencia ? fmtFecha(m.vigencia) : ''} ${detalleMovimiento(m)}`).join(' · ')}</p>` : ''}
     </div>`;
+  }
+
+  /* ====================== VISTA: CASOS EN SEGUIMIENTO ==================
+     Se sigue la situación, no se etiqueta a la persona: el caso tiene fecha de
+     apertura, un próximo paso y una fecha de cierre, y cuando se resuelve se
+     cierra. Un listado de «empleados complejos» sería una lista de adjetivos
+     sobre gente con nombre y apellido que no dice qué hacer y envejece mal.
+     Las señales que el panel ya calcula —9-box, ausentismo, reclamos,
+     sanciones— se leen desde acá y no se vuelven a tipear. */
+  function vistaCasos() {
+    const e = Store.get();
+    contexto = e;
+    const hoy = hoyISO();
+    const todos = casosDelArea(e, hoy);
+    const r = resumenDeCasos(todos);
+    const lista = verCasosCerrados ? todos : todos.filter(x => x.caso.estado !== 'cerrado');
+    const gente = e.sucursales.flatMap(s => (s.colaboradores || [])
+      .filter(c => !c.baja).map(c => ({ c, s })))
+      .sort((a, b) => String(a.c.nombre).localeCompare(String(b.c.nombre)));
+    const nom = id => (TIPOS_CASO.find(t => t.id === id) || {}).nombre || id;
+
+    return `
+      <h1 class="titulo">Casos en seguimiento</h1>
+      <p class="subtitulo">Las situaciones que no se resuelven solas y hay que empujar:
+        desempeño, ausentismo reiterado, conducta, salud o un intercambio legal.</p>
+
+      <section class="tarjeta">
+        <div class="kpis">
+          ${kpi('Abiertos', r.abiertos, r.total ? `de ${r.total} en total` : '',
+                r.abiertos ? 'alerta' : 'ok')}
+          ${kpi('Piden algo hoy', r.piden, 'vencidos, sin próximo paso o quietos',
+                r.piden ? 'alerta' : 'ok')}
+          ${kpi('Críticos', r.criticos, 'marcados como riesgo crítico',
+                r.criticos ? 'alerta' : 'ok')}
+        </div>
+        ${r.porTipo.length ? `<p class="ayuda">${r.porTipo
+          .map(t => `<strong>${t.cuantos}</strong> de ${esc(t.nombre.toLowerCase())}`)
+          .join(' · ')}.</p>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Abrir un caso</h2>
+        </div>
+        <div class="grid c3">
+          <label class="campo"><span>Quién</span>
+            <select id="caso-persona">
+              <option value="">— elegí a la persona —</option>
+              ${gente.map(x => `<option value="${x.c.id}"${x.c.id === casoPersona ? ' selected' : ''}
+                >${esc(x.c.nombre)} · ${esc(x.s.nombre || x.s.codigo)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>De qué se trata</span>
+            <select id="caso-tipo">
+              ${TIPOS_CASO.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Riesgo</span>
+            <select id="caso-riesgo">
+              ${RIESGOS_CASO.map(x => `<option value="${x.id}">${esc(x.nombre)}</option>`).join('')}
+            </select></label>
+        </div>
+        <label class="campo"><span>Qué está pasando, en una línea</span>
+          <input id="caso-resumen" placeholder="Licencia psiquiátrica que se extiende; dos controles médicos dieron alta"></label>
+        <div class="grid c3">
+          <label class="campo"><span>Próximo paso</span>
+            <input id="caso-paso" placeholder="Confirmar recepción de la CD"></label>
+          <label class="campo"><span>Para cuándo</span>
+            <input type="date" id="caso-paso-el"></label>
+          <label class="campo"><span>Quién lo lleva</span>
+            <input id="caso-responsable" placeholder="Yo, Nómina, el estudio…"></label>
+        </div>
+        <div class="acciones">
+          <button class="b" data-accion="abrir-caso">Abrir el caso</button>
+        </div>
+        <p class="ayuda"><strong>Acá no va la documentación.</strong> Certificados, informes
+          médicos, cartas documento y los intercambios con el estudio viven en el legajo y en
+          el estudio. El panel guarda que el caso existe, en qué estado está y qué sigue: con
+          eso alcanza para no perderle el rastro.</p>
+      </section>
+
+      ${lista.length ? lista.map(x => fichaCaso(x, e, hoy)).join('') : `
+        <section class="tarjeta"><p class="vacio">
+          ${todos.length ? 'No hay casos abiertos. ' : 'Todavía no abriste ningún caso. '}
+          ${todos.length && !verCasosCerrados ? 'Los cerrados se ven con el botón de abajo.' : ''}
+        </p></section>`}
+
+      ${todos.some(x => x.caso.estado === 'cerrado') ? `<div class="acciones">
+        <button class="b sec" data-accion="ver-casos-cerrados">${verCasosCerrados
+          ? 'Ver solo los abiertos'
+          : `Ver también los ${todos.filter(x => x.caso.estado === 'cerrado').length} cerrados`}</button>
+      </div>` : ''}`;
+  }
+
+  /* Un caso, con las señales que el panel ya sabe de esa persona al lado. */
+  function fichaCaso(x, e, hoy) {
+    const k = x.caso, est = x.estado;
+    const abierto = casoAbierto === k.id;
+    const sen = senalesDe(e, x.colaboradorId, x.sucursalId, hoy) || {};
+    const nom = id => (TIPOS_CASO.find(t => t.id === id) || {}).nombre || id;
+    const dias = _diasEntre(k.abiertoEl, hoy);
+
+    /* Las señales no se tipean: salen del 9-box, del ausentismo y de los
+       reclamos, que ya están cargados en otro lado. */
+    const chips = [];
+    if (sen.enRiesgo9Box) chips.push(`<span class="chip rojo">9-box: Riesgo</span>`);
+    else if (sen.cuadrante) chips.push(`<span class="chip ${sen.cuadrante.tono === 'rojo' ? 'rojo'
+      : sen.cuadrante.tono === 'amarillo' ? 'ambar' : 'azul'}">9-box: ${esc(sen.cuadrante.nombre)}</span>`);
+    if (sen.ausentismo) chips.push(`<span class="chip ${sen.ausentismo.tasa >= 0.05 ? 'rojo' : 'ambar'}"
+      >${sen.ausentismo.dias} días de ausencia · ${fmtPct(sen.ausentismo.tasa, 1)}</span>`);
+    if (sen.licenciaAbierta) chips.push('<span class="chip ambar">hoy con licencia</span>');
+    if (sen.reclamosAbiertos) chips.push(`<span class="chip ambar">${sen.reclamosAbiertos} reclamo${
+      sen.reclamosAbiertos === 1 ? '' : 's'} abierto${sen.reclamosAbiertos === 1 ? '' : 's'}</span>`);
+    if (sen.sanciones) chips.push(`<span class="chip">${sen.sanciones} sanción${
+      sen.sanciones === 1 ? '' : 'es'}</span>`);
+    if (sen.entrenando) chips.push('<span class="chip verde">en desarrollo</span>');
+
+    return `<section class="tarjeta caso ${est.tono}">
+      <div class="cabecera-suc">
+        <h2>${esc(x.nombre)}
+          <span style="font-weight:400;color:var(--texto-suave)"> · ${esc(x.sucursal)}</span></h2>
+        <span class="chip ${est.tono}">${esc(est.texto)}</span>
+      </div>
+      <p class="ayuda" style="margin-top:-4px">
+        <strong>${esc(nom(k.tipo))}</strong> · riesgo ${esc((RIESGOS_CASO.find(z => z.id === k.riesgo) || {}).nombre || k.riesgo)}
+        · abierto hace ${dias === null ? '—' : dias} día${dias === 1 ? '' : 's'}${
+        k.responsable ? ` · lo lleva ${esc(k.responsable)}` : ''}</p>
+      ${k.resumen ? `<p>${esc(k.resumen)}</p>` : ''}
+      ${k.proximoPaso ? `<p class="ind-lectura"><strong>Próximo paso:</strong> ${esc(k.proximoPaso)}${
+        k.proximoPasoEl ? ` — ${fmtFecha(k.proximoPasoEl)}` : ''}</p>`
+        : '<p class="ind-lectura"><strong>No tiene próximo paso definido.</strong> Es lo único que hace que un caso avance.</p>'}
+      ${chips.length ? `<p style="margin:10px 0 0">${chips.join(' ')}</p>` : ''}
+
+      <div class="acciones" style="margin-top:12px">
+        <button class="b sec" data-accion="abrir-ficha-caso" data-id="${k.id}"
+          data-colab="${x.colaboradorId}">${abierto ? 'Cerrar' : 'Ver y actualizar'}</button>
+        <button class="b sec" data-accion="ir-al-perfil" data-id="${x.colaboradorId}">Ver su ficha</button>
+      </div>
+
+      ${abierto ? `
+        <div class="grid c3" style="margin-top:14px">
+          <label class="campo"><span>Estado</span>
+            <select data-caso-campo="${x.colaboradorId}|${k.id}|estado">
+              ${ESTADOS_CASO.map(z => `<option value="${z.id}"${k.estado === z.id ? ' selected' : ''}
+                >${esc(z.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Riesgo</span>
+            <select data-caso-campo="${x.colaboradorId}|${k.id}|riesgo">
+              ${RIESGOS_CASO.map(z => `<option value="${z.id}"${k.riesgo === z.id ? ' selected' : ''}
+                >${esc(z.nombre)}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Quién lo lleva</span>
+            <input data-caso-campo="${x.colaboradorId}|${k.id}|responsable" value="${esc(k.responsable || '')}"></label>
+        </div>
+        <label class="campo"><span>Qué está pasando</span>
+          <input data-caso-campo="${x.colaboradorId}|${k.id}|resumen" value="${esc(k.resumen || '')}"></label>
+        <div class="grid c2">
+          <label class="campo"><span>Próximo paso</span>
+            <input data-caso-campo="${x.colaboradorId}|${k.id}|proximoPaso" value="${esc(k.proximoPaso || '')}"></label>
+          <label class="campo"><span>Para cuándo</span>
+            <input type="date" data-caso-campo="${x.colaboradorId}|${k.id}|proximoPasoEl" value="${esc(k.proximoPasoEl || '')}"></label>
+        </div>
+
+        <h4>Qué fue pasando</h4>
+        ${(k.hitos || []).length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Fecha</th><th>Qué pasó</th><th>Quién</th><th></th></tr></thead>
+          <tbody>${k.hitos.slice().reverse().map(h => `<tr>
+            <td class="tipo">${fmtFecha(h.fecha)}</td>
+            <td>${esc(h.que)}</td>
+            <td>${esc(h.quien || '—')}</td>
+            <td><button class="mini" data-accion="quitar-hito-caso" data-id="${k.id}"
+              data-colab="${x.colaboradorId}" data-hito="${h.id}">✕</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : '<p class="vacio">Todavía no anotaste ningún movimiento.</p>'}
+
+        <div class="grid c3" style="margin-top:10px">
+          <label class="campo"><span>Fecha</span>
+            <input type="date" id="hito-fecha-${k.id}" value="${hoy}"></label>
+          <label class="campo"><span>Qué pasó</span>
+            <input id="hito-que-${k.id}" placeholder="Se despachó la CD; el estudio pide los dos controles"></label>
+          <label class="campo"><span>Con quién</span>
+            <input id="hito-quien-${k.id}" placeholder="Estudio Esquivel, Nómina, el gerente…"></label>
+        </div>
+        <div class="acciones">
+          <button class="b" data-accion="agregar-hito-caso" data-id="${k.id}"
+            data-colab="${x.colaboradorId}">Anotar el movimiento</button>
+          <button class="b sec" data-accion="borrar-caso" data-id="${k.id}"
+            data-colab="${x.colaboradorId}">Borrar el caso</button>
+        </div>
+      ` : ''}
+    </section>`;
   }
 
   function vistaReclamos() {
@@ -16441,7 +16948,8 @@ const App = (() => {
         .reduce((m, c) => m + (c.movimientos || [])
           .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
           + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
-      desarrollo: alertasDeDesarrollo(e, hoyISO()).length
+      desarrollo: alertasDeDesarrollo(e, hoyISO()).length,
+      casos: casosDelArea(e, hoyISO()).filter(x => x.estado.pide).length
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
       const n = cuentas[b.dataset.badge] || 0;
@@ -16537,6 +17045,12 @@ const App = (() => {
          el aviso del menú y desde la ficha de la persona. */
       if (ruta[1] !== undefined) entrenamientoAbierto = ruta[1] || null;
       vistaActual = vistaDesarrollo; html = vistaDesarrollo();
+    }
+    else if (ruta[0] === 'casos') {
+      /* `#/casos/<colaboradorId>` abre el alta con esa persona ya elegida, como
+         `#/diario/<id>` con las ausencias. */
+      if (ruta[1] !== undefined) casoPersona = ruta[1] || '';
+      vistaActual = vistaCasos;  html = vistaCasos();
     }
     else if (ruta[0] === 'reclamos') {
       /* `#/reclamos/<sucursal>` es como se llega desde la visita y desde la
@@ -16726,12 +17240,30 @@ const App = (() => {
     });
 
     cont.addEventListener('input', ev => {
+      /* Los campos de un caso llevan su propio binding —`colaborador|caso|campo`—
+         porque hay que pasar por `editarCaso()`, que es quien pone y saca la
+         fecha de cierre según el estado. */
+      const kc = ev.target.closest('[data-caso-campo]');
+      if (kc) {
+        const [colab, caso, campo] = kc.dataset.casoCampo.split('|');
+        Store.editarCaso(colab, caso, { [campo]: kc.value });
+        if (campo === 'estado') refrescar();
+        return;
+      }
       const el = ev.target.closest('[data-colab-campo]');
       if (!el) return;
       const c = colaboradorDe(el.dataset.colabCampo);
       if (!c) return;
       c[el.dataset.colabCampo.split('|')[1]] = el.value;
       guardarDiferido();
+    });
+
+    cont.addEventListener('change', ev => {
+      const kc = ev.target.closest('[data-caso-campo]');
+      if (!kc) return;
+      const [colab, caso, campo] = kc.dataset.casoCampo.split('|');
+      Store.editarCaso(colab, caso, { [campo]: kc.value });
+      if (campo === 'estado' || campo === 'riesgo') refrescar();
     });
 
     cont.addEventListener('change', ev => {
@@ -17656,6 +18188,60 @@ const App = (() => {
       }
 
       if (a === 'ver-ausentes') { verAusentes = !verAusentes; refrescar(); }
+      if (a === 'ver-casos-cerrados') { verCasosCerrados = !verCasosCerrados; refrescar(); }
+      if (a === 'abrir-ficha-caso') {
+        casoAbierto = casoAbierto === btn.dataset.id ? null : btn.dataset.id;
+        refrescar();
+      }
+
+      if (a === 'abrir-caso') {
+        const quien = valorDe('#caso-persona');
+        if (!quien) { avisar('Elegí a la persona.', 'error'); return; }
+        const resumen = valorDe('#caso-resumen');
+        if (!resumen.trim()) { avisar('Escribí en una línea qué está pasando.', 'error'); return; }
+        const k = Store.abrirCaso(quien, {
+          tipo: valorDe('#caso-tipo'), riesgo: valorDe('#caso-riesgo'),
+          resumen, proximoPaso: valorDe('#caso-paso'),
+          proximoPasoEl: valorDe('#caso-paso-el'), responsable: valorDe('#caso-responsable')
+        });
+        casoPersona = '';
+        casoAbierto = k ? k.id : null;
+        refrescar();
+        avisar('Caso abierto.');
+        return;
+      }
+
+      if (a === 'agregar-hito-caso') {
+        const id = btn.dataset.id;
+        const que = valorDe('#hito-que-' + id);
+        if (!que.trim()) { avisar('Escribí qué pasó.', 'error'); return; }
+        Store.agregarHitoCaso(btn.dataset.colab, id, {
+          fecha: valorDe('#hito-fecha-' + id), que, quien: valorDe('#hito-quien-' + id)
+        });
+        refrescar();
+        return;
+      }
+
+      if (a === 'quitar-hito-caso') {
+        Store.quitarHitoCaso(btn.dataset.colab, btn.dataset.id, btn.dataset.hito);
+        refrescar();
+        return;
+      }
+
+      if (a === 'borrar-caso') {
+        /* Borrar un caso borra su historial entero. Para el que se cerró está
+           el estado «cerrado», que lo conserva. */
+        confirmar('¿Borrar el caso?',
+          'Se borra con todo lo que anotaste adentro y no se puede deshacer. Si el caso se ' +
+          'resolvió, cerralo en vez de borrarlo: así queda en el historial de la persona.')
+          .then(ok => {
+            if (!ok) return;
+            Store.borrarCaso(btn.dataset.colab, btn.dataset.id);
+            casoAbierto = null;
+            refrescar();
+          });
+        return;
+      }
 
       if (a === 'ver-pendientes') {
         const g = btn.dataset.grupo;
