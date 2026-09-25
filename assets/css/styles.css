@@ -1152,3 +1152,11 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   text-underline-offset: 2px;
 }
 .como-enlace:hover { text-decoration-thickness: 2px; }
+
+/* El aviso de demostración en la portada: tiene que leerse sin gritar, porque
+   comparte lugar con el pie legal de la marca. */
+.pm-demo {
+  margin-top: 10px; padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, .35); border-radius: var(--radio);
+  background: rgba(255, 255, 255, .10); line-height: 1.45;
+}

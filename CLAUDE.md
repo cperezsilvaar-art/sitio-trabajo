@@ -724,7 +724,20 @@ más arriba, en un comentario.
 
 El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
 datos adentro; la pantalla de Configuración lo advierte cuando hay alguno
-cargado. El cifrado no tiene recuperación por diseño.
+cargado. El cifrado no tiene recuperación por diseño, y **las copias
+automáticas guardan el crudo del almacén**, así que con clave puesta están
+cifradas con la misma: sin la clave tampoco se leen. El `.json` exportado es la
+única salida, y por eso es el que hay que tener.
+
+**Cada panel tiene su propia clave, y la portada ahora lo dice.** El panel que se
+abre desde el archivo y la página publicada son dos almacenamientos distintos:
+la clave de uno no abre el otro. Las dos portadas eran idénticas, así que
+quedarse afuera de la demostración se confundía con quedarse afuera del panel de
+trabajo. El cartel de «esto es la demostración» vivía **adentro** del panel —o
+sea detrás del candado, justo donde no se lo puede leer cuando no se logra
+entrar— y ahora también está en la portada, y el error de clave equivocada
+nombra las dos cosas: que cada panel tiene la suya y que la única salida es
+empezar de cero e importar un `.json`.
 
 El panel se guarda **copias automáticas** en el mismo navegador, en una clave
 aparte del almacén: una por día al abrir y una antes de cada acción que

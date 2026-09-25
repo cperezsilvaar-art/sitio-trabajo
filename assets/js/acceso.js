@@ -210,6 +210,17 @@ const Acceso = (() => {
           ? `<img class="pm-local" src="${FOTO_LOCAL}" alt="">`
           : local}
         <p class="pm-pie">Herramienta interna de trabajo. Los datos se guardan solo en esta computadora.</p>
+        ${/* El cartel de «esto es la demostración» vivía adentro del panel, o sea
+             detrás del candado: justo el lugar donde no se lo puede leer cuando
+             uno no logra entrar. Y las dos portadas eran idénticas, así que
+             quedarse afuera de la página publicada se confundía con quedarse
+             afuera del panel de trabajo. */''}
+        ${typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+          ? `<p class="pm-pie pm-demo"><strong>Ésta es la página de demostración.</strong>
+             Las personas que trae están inventadas. Tu panel de trabajo es el que abrís
+             desde el archivo, y tiene su propia clave: la de acá no lo abre, y la de allá
+             no abre ésta.</p>`
+          : ''}
       </section>
 
       <section class="portada-acceso">
@@ -340,7 +351,17 @@ const Acceso = (() => {
           } else {
             if (!c1) { mostrarError('Escribí tu clave.'); return; }
             const cif = await abrirCon(c1);
-            if (!cif) { mostrarError('Clave incorrecta.'); return; }
+            if (!cif) {
+              /* «Clave incorrecta» a secas deja al coordinador probando de nuevo
+                 sin saber que cada panel tiene la suya, ni que no hay
+                 recuperación. Las dos cosas se dicen acá, que es donde está
+                 parado. */
+              mostrarError('Clave incorrecta. Ojo: cada panel tiene la suya — la del que abrís ' +
+                'desde el archivo no abre el del link, y al revés. Si no te acordás de ésta no hay ' +
+                'forma de recuperarla: la única salida es empezar de cero acá e importar un ' +
+                'respaldo .json, si tenés uno exportado.');
+              return;
+            }
             terminar(cif);
           }
         } finally {
