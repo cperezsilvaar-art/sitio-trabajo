@@ -308,6 +308,39 @@ son la lista que importa —casi siempre gente que ya se fue, porque la planilla
 arranca en marzo de 2025 y el padrón es el de hoy—. Antes las dos iban juntas en
 un solo número de 615 y el útil quedaba tapado por el que no pedía nada.
 
+**El parte de ausentes de las tiendas es la otra entrada, y contesta otra
+pregunta.** El formulario de recepción es el registro de lo que fue pasando y
+**no dice hasta cuándo**; el parte que mandan los gerentes dice *quién no está
+hoy en mi tienda y hasta cuándo*. Como trae la fecha de fin escrita, **lo que
+entra por ahí no lleva ningún supuesto**: `diasSupuestos` queda en falso y esos
+días están medidos. Son dos entradas a propósito y no dos formas de lo mismo
+—una es el pasado y la otra el presente—, y las dos viven al pie de `#/diario`
+diciendo cuál sirve para qué.
+
+`importarParteDeAusentes()` (`store.js`) lee las columnas de
+`COLUMNAS_PARTE_AUSENTES`: tienda, nombre, CUIL o DNI, tipo de licencia, desde,
+hasta, certificado y observaciones. **En `MOTIVOS_DEL_PARTE` el ART va antes que
+enfermedad** y no es casual: el accidente de trabajo lo cubre la aseguradora y
+**no corre por los plazos del art. 208**, así que meterlo en enfermedad
+inculpable le mostraría al coordinador un vencimiento de licencia paga que no
+existe. Lo que no se reconoce entra como *Otra* en vez de perderse: que la
+persona no está es el dato.
+
+**Sin fecha de fin la licencia entra igual, abierta** —una ART recién abierta no
+tiene alta—: queda como `sinAlta` y el Panel la pone arriba de todo pidiendo el
+dato, que es lo que hay que reclamarle al gerente. Sin fecha de **inicio** no
+entra: no se la puede ubicar en el tiempo.
+
+**Vuelve a mandarse todos los meses y por eso corrige en vez de duplicar**: si la
+persona ya tiene una licencia abierta del mismo motivo que se solapa con la que
+viene, se le corrige el `hasta`. Cargarla dos veces contaría los días dos veces.
+
+**El emparejamiento con el padrón es uno solo.** `buscadorDePadron()` (`store.js`)
+lo usan los dos importadores: número primero —CUIL o DNI—, después nombre y solo
+sin ambigüedad, nada de nombre para una tienda de otra área, y la fila no entra
+cuando el número y el nombre apuntan cada uno sin dudas a personas distintas.
+Tenerlo dos veces garantizaba que un día difieran.
+
 **La planilla no fue pensada para medir**, y de ahí sale el único supuesto del
 panel. El certificado se carga en un campo de texto libre: de los 148
 certificados del Área 3, **82 traen solo la patología** y ninguna duración; de

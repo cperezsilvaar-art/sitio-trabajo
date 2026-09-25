@@ -424,6 +424,82 @@ if (typeof module !== 'undefined' && module.exports) {
  * supuesto se apaga solo para las nuevas y las viejas siguen marcadas. */
 const DIAS_SIN_DURACION = 1;
 
+/* ====== El parte de ausentes que mandan los gerentes de tienda ===========
+ *
+ * El formulario de recepción es un registro de lo que fue pasando y **no dice
+ * hasta cuándo**: por eso el certificado sin duración se toma como un día. Este
+ * es otro papel y contesta otra pregunta: *quién no está hoy en mi tienda y
+ * hasta cuándo*. Trae la fecha de fin escrita, así que lo que entra por acá
+ * **no lleva ningún supuesto** —`diasSupuestos` queda en falso— y el ausentismo
+ * que sale de estas filas está medido, no estimado.
+ *
+ * Son dos entradas distintas a propósito, no dos formas de lo mismo: una es el
+ * pasado y la otra el presente. Por eso el panel las muestra separadas y dice
+ * cuál sirve para qué.
+ */
+const COLUMNAS_PARTE_AUSENTES = [
+  { campo: 'tienda',  claves: ['tienda', 'sucursal'] },
+  { campo: 'nombre',  claves: ['apellido y nombre', 'colaborador', 'nombre'] },
+  { campo: 'cuil',    claves: ['cuil', 'dni', 'documento'] },
+  { campo: 'motivo',  claves: ['tipo de licencia', 'motivo', 'licencia'] },
+  { campo: 'desde',   claves: ['desde', 'inicio'] },
+  { campo: 'hasta',   claves: ['hasta', 'fin', 'alta'] },
+  { campo: 'certificado', claves: ['certificado', 'papel', 'comprobante'] },
+  { campo: 'notas',   claves: ['observacion', 'comentario', 'nota'] }
+];
+
+/* Lo que el gerente escribe en «tipo de licencia», mapeado a los motivos del
+   panel. Se busca por pedazo de palabra porque nadie escribe el nombre exacto:
+   «ART», «accidente laboral» y «accidente de trabajo» son lo mismo. */
+const MOTIVOS_DEL_PARTE = [
+  { motivo: 'accidenteTrabajo', claves: ['art', 'accidente'] },
+  { motivo: 'maternidad',       claves: ['maternidad', 'embarazo', 'parto'] },
+  { motivo: 'paternidad',       claves: ['paternidad'] },
+  { motivo: 'familiarEnfermo',  claves: ['familiar', 'hijo', 'madre', 'padre'] },
+  { motivo: 'vacaciones',       claves: ['vacacion'] },
+  { motivo: 'enfermedad',       claves: ['enfermedad', 'medica', 'medico', 'salud', 'reposo', 'certificado'] }
+];
+
+/**
+ * Qué motivo del panel es lo que escribió el gerente.
+ *
+ * **«ART» va antes que «enfermedad»** y no es casual: el accidente de trabajo
+ * lo cubre la aseguradora y **no corre por los plazos del art. 208** de la LCT.
+ * Meterlo en enfermedad inculpable le mostraría al coordinador un vencimiento
+ * de licencia paga que no existe.
+ */
+function motivoDelParte(texto) {
+  const t = String(texto || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!t) return '';
+  const m = MOTIVOS_DEL_PARTE.find(x => x.claves.some(k => t.includes(k)));
+  /* Lo que no se reconoce entra como «Otra» en vez de perderse: que la persona
+     no está es el dato, y el motivo se corrige después en su ficha. */
+  return m ? m.motivo : 'otra';
+}
+
+/**
+ * Una fecha como la escribe un gerente: 05/10/2026, 5-10-26, 2026-10-05, o el
+ * número que deja Excel al copiar una celda con formato de fecha.
+ */
+function fechaDelParte(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+  /* El serial de Excel: días desde el 30/12/1899. */
+  if (/^\d{5}(\.\d+)?$/.test(t)) {
+    const d = new Date(Date.UTC(1899, 11, 30) + Math.floor(+t) * 86400000);
+    return d.toISOString().slice(0, 10);
+  }
+  const m = t.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
+  if (!m) return '';
+  const d = +m[1], mes = +m[2];
+  if (d < 1 || d > 31 || mes < 1 || mes > 12) return '';
+  let a = +m[3];
+  if (a < 100) a += 2000;
+  return `${a}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 /** Qué es cada columna del formulario, por lo que dice su encabezado. */
 const COLUMNAS_FORMULARIO_AUSENCIAS = [
   { campo: 'marca',    claves: ['marca temporal'] },
@@ -536,6 +612,7 @@ function documentoDelFormulario(v) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = Object.assign(module.exports || {}, {
     COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO, DIAS_SIN_DURACION,
-    motivoDeFormulario, leerCertificado, cuilDelFormulario, documentoDelFormulario
+    motivoDeFormulario, leerCertificado, cuilDelFormulario, documentoDelFormulario,
+    COLUMNAS_PARTE_AUSENTES, MOTIVOS_DEL_PARTE, motivoDelParte, fechaDelParte
   });
 }

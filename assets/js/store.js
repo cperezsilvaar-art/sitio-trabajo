@@ -486,6 +486,71 @@ const Store = (() => {
    * @param {string} motivo texto que después se muestra en Configuración.
    * @returns {boolean} true si quedó un resguardo nuevo.
    */
+  /**
+   * Buscar a quién pertenece una fila pegada, con las reglas que costó afinar.
+   * Lo usan los dos importadores de ausencias —el del formulario de recepción y
+   * el parte de ausentes que mandan los gerentes—, porque el emparejamiento es
+   * lo mismo y tenerlo dos veces garantiza que un día difieran.
+   *
+   * La fila necesita `cuil` (el número, sea CUIL o DNI), `nombre` y `tienda`.
+   * Devuelve `{ g, via, propia, conflicto }`.
+   */
+  function buscadorDePadron(estado) {
+    const gente = [];
+    (estado.sucursales || []).forEach(s =>
+      (s.colaboradores || []).forEach(c => gente.push({ c, s })));
+
+    const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
+    const porCuil = {}, porDni = {};
+    gente.forEach(g => {
+      const cu = soloDigitos(g.c.cuil);
+      if (cu.length === 11) porCuil[cu] = g;
+      const dn = soloDigitos(g.c.dni);
+      if (dn.length >= 7 && dn.length <= 8) porDni[dn] = g;
+    });
+    const tokens = x => new Set(String(x || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').toUpperCase()
+      .split(/[^A-Z]+/).filter(w => w.length > 2));
+    const clave = x => String(x || '').trim().toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const misTiendas = new Set();
+    (estado.sucursales || []).forEach(su => {
+      if (clave(su.codigo)) misTiendas.add(clave(su.codigo));
+      if (clave(su.nombre)) misTiendas.add(clave(su.nombre));
+    });
+
+    return function (f) {
+      /* 1. por número —CUIL, y si no, DNI—. 2. por nombre, y solo si no hay
+         ambigüedad y la fila es de una tienda del área. */
+      const doc = documentoDelFormulario(f.cuil);
+      let g = null, via = '';
+      if (doc.cuil && porCuil[doc.cuil]) { g = porCuil[doc.cuil]; via = 'cuil'; }
+      if (!g && doc.dni && porDni[doc.dni]) { g = porDni[doc.dni]; via = 'dni'; }
+
+      const t = tokens(f.nombre);
+      const cand = gente.filter(x => {
+        const k = tokens(x.c.nombre);
+        let n = 0; t.forEach(w => { if (k.has(w)) n++; });
+        return n >= 2;
+      });
+      const propia = misTiendas.has(clave(f.tienda));
+
+      /* El número manda sobre el nombre: el nombre viene escrito a mano y
+         «diaz cyntia» no tiene por qué encontrar a «DIAZ, CYNTHIA». Lo único
+         que no se resuelve solo es cuando los dos apuntan, cada uno sin ninguna
+         duda, a personas distintas —«Luis Toro» con el número de Juan Gabriel
+         Luna—: ahí es un error de carga, y adivinar cuál de los dos vale le
+         cuelga la licencia a alguien que no faltó. Un nombre ambiguo, en
+         cambio, no contradice nada: pierde contra el número y la fila entra. */
+      if (g && cand.length === 1 && cand[0].c.id !== g.c.id) {
+        return { g: null, via: '', propia,
+                 conflicto: String(f.nombre || '').trim() + ' → ' + g.c.nombre };
+      }
+      if (!g && cand.length === 1 && propia) { g = cand[0]; via = 'nombre'; }
+      return { g, via, propia, conflicto: '' };
+    };
+  }
+
   function resguardar(motivo) {
     let crudo = null;
     try { crudo = localStorage.getItem(CLAVE_ALMACEN); } catch (err) { crudo = null; }
@@ -1104,30 +1169,7 @@ const Store = (() => {
      */
     importarAusenciasFormulario(filas) {
       const e = this.get();
-      const gente = [];
-      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => gente.push({ c, s })));
-
-      const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
-      const porCuil = {}, porDni = {};
-      gente.forEach(g => {
-        const cu = soloDigitos(g.c.cuil);
-        if (cu.length === 11) porCuil[cu] = g;
-        const dn = soloDigitos(g.c.dni);
-        if (dn.length >= 7 && dn.length <= 8) porDni[dn] = g;
-      });
-      const tokens = x => new Set(String(x || '').normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '').toUpperCase()
-        .split(/[^A-Z]+/).filter(w => w.length > 2));
-
-      /* Las tiendas del área, por código y por nombre: es como el gerente las
-         escribe en el formulario. */
-      const clave = x => String(x || '').trim().toUpperCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      const misTiendas = new Set();
-      e.sucursales.forEach(su => {
-        if (clave(su.codigo)) misTiendas.add(clave(su.codigo));
-        if (clave(su.nombre)) misTiendas.add(clave(su.nombre));
-      });
+      const buscar = buscadorDePadron(e);
 
       const out = { cargadas: 0, repetidas: 0, completadas: 0, sinDuracion: 0,
                     sinPersona: [], porCuil: 0, porDni: 0, porNombre: 0,
@@ -1139,43 +1181,17 @@ const Store = (() => {
         if (!tipo) { out.tipoDesconocido++; return; }
         if (!tipo.motivo) { out.apercibimientos++; return; }
 
-        /* 1. por número —CUIL, y si no, DNI—. 2. por nombre, y solo si no hay
-           ambigüedad y la fila es de una tienda del área. */
-        const doc = documentoDelFormulario(f.cuil);
-        let g = null, porNumero = false;
-        if (doc.cuil && porCuil[doc.cuil]) { g = porCuil[doc.cuil]; porNumero = true; out.porCuil++; }
-        if (!g && doc.dni && porDni[doc.dni]) { g = porDni[doc.dni]; porNumero = true; out.porDni++; }
-
-        const t = tokens(f.nombre);
-        const cand = gente.filter(x => {
-          const k = tokens(x.c.nombre);
-          let n = 0; t.forEach(w => { if (k.has(w)) n++; });
-          return n >= 2;
-        });
-        const propia = misTiendas.has(clave(f.tienda));
-
-        /* El número manda sobre el nombre: el nombre viene escrito a mano y
-           «diaz cyntia» no tiene por qué encontrar a «DIAZ, CYNTHIA». Lo único
-           que no se resuelve solo es cuando los dos apuntan, cada uno sin
-           ninguna duda, a personas distintas —«Luis Toro» con el número de Juan
-           Gabriel Luna—: ahí es un error de carga del formulario, y adivinar
-           cuál de los dos vale le cuelga el certificado a alguien que no faltó.
-           Se deja afuera y se nombra. Un nombre ambiguo, en cambio, no
-           contradice nada: pierde contra el número y la fila entra. */
-        if (porNumero && cand.length === 1 && cand[0].c.id !== g.c.id) {
-          out.enConflicto.push(String(f.nombre || '').trim() + ' → ' + g.c.nombre);
-          return;
-        }
-        if (!g && cand.length === 1 && propia) { g = cand[0]; out.porNombre++; }
-        if (!g) {
-          /* Sin número que coincida y sin nombre unívoco: si la tienda no es del
-             área, es de otra área y no hay nada que hacer. Si es del área, es
-             alguien que el padrón de hoy no tiene —casi siempre una baja— y eso
-             sí vale nombrarlo. */
-          if (propia) out.sinPersona.push(String(f.nombre || '').trim());
+        const m = buscar(f);
+        if (m.via === 'cuil') out.porCuil++;
+        if (m.via === 'dni') out.porDni++;
+        if (m.via === 'nombre') out.porNombre++;
+        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
+        if (!m.g) {
+          if (m.propia) out.sinPersona.push(String(f.nombre || '').trim());
           else out.otrasAreas++;
           return;
         }
+        const g = m.g;
 
         const anio = /^\d{4}/.test(String(f.marca)) ? +String(f.marca).slice(0, 4)
                    : new Date().getFullYear();
@@ -1238,6 +1254,82 @@ const Store = (() => {
         });
         out.cargadas++;
         if (!leido.dias) out.sinDuracion++;
+      });
+
+      guardar();
+      return out;
+    },
+
+    /**
+     * El parte de ausentes de cada tienda: quién no está hoy y **hasta cuándo**.
+     *
+     * A diferencia del formulario de recepción, que es el registro de lo que fue
+     * pasando, acá el gerente escribe la fecha de fin. Por eso **nada de lo que
+     * entra por acá lleva supuesto**: `diasSupuestos` queda en falso y el
+     * ausentismo que sale de estas filas está medido.
+     *
+     * Actualiza en vez de duplicar: si la persona ya tiene una ausencia abierta
+     * del mismo motivo que se solapa con la que viene, se le corrige el `hasta`.
+     * Es lo que pasa todos los meses —el gerente manda el parte otra vez con el
+     * certificado renovado— y cargarla dos veces contaría los días dos veces.
+     */
+    importarParteDeAusentes(filas) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const hoy = _diaHoy();
+      const out = { cargadas: 0, extendidas: 0, repetidas: 0, sinFecha: 0,
+                    sinPersona: [], otrasAreas: 0, enConflicto: [],
+                    porCuil: 0, porDni: 0, porNombre: 0, abiertas: 0 };
+
+      filas.forEach(f => {
+        const desde = fechaDelParte(f.desde);
+        if (!desde) { out.sinFecha++; return; }
+        const hasta = fechaDelParte(f.hasta);
+        /* Sin fecha de fin la ausencia entra igual, abierta: el gerente puede no
+           saber cuándo vuelve —una ART recién abierta no tiene alta—. Queda como
+           `sinAlta` y el panel la pone arriba de todo pidiendo el dato. */
+        if (!hasta) out.abiertas++;
+
+        const m = buscar(f);
+        if (m.via === 'cuil') out.porCuil++;
+        if (m.via === 'dni') out.porDni++;
+        if (m.via === 'nombre') out.porNombre++;
+        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
+        if (!m.g) {
+          if (m.propia) out.sinPersona.push(String(f.nombre || '').trim());
+          else out.otrasAreas++;
+          return;
+        }
+
+        const motivo = motivoDelParte(f.motivo);
+        const c = m.g.c;
+        if (!Array.isArray(c.ausencias)) c.ausencias = [];
+
+        /* La misma licencia que ya estaba: mismo motivo y fechas que se tocan.
+           Se le corrige el hasta en vez de sumar una segunda. */
+        const ya = c.ausencias.find(a => a.motivo === motivo && !a.reincorporado &&
+          a.desde && a.desde <= (hasta || desde) && (!a.hasta || a.hasta >= desde));
+        if (ya) {
+          if (hasta && ya.hasta !== hasta) { ya.hasta = hasta; ya.diasSupuestos = false; out.extendidas++; }
+          else out.repetidas++;
+          return;
+        }
+
+        c.ausencias.push({
+          id: uid(), motivo, desde, hasta: hasta || '',
+          diagnostico: '',
+          certificado: /^(s|si|sí|x|ok|1|true)$/i.test(String(f.certificado || '').trim()) ? 'si' : '',
+          notas: String(f.notas || '').trim(),
+          reincorporado: !!hasta && hasta < hoy,
+          fechaReincorporacion: '',
+          origen: 'parte',
+          /* El gerente escribió la fecha de fin: no hay nada supuesto. */
+          diasSupuestos: false,
+          fechaAproximada: false,
+          cuentaAusentismo: motivo !== 'vacaciones',
+          registradaEl: new Date().toISOString()
+        });
+        out.cargadas++;
       });
 
       guardar();

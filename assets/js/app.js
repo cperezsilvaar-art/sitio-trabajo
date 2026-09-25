@@ -1852,6 +1852,7 @@ const App = (() => {
       </p>
 
       ${panelAusenciasLargas()}
+      ${bloqueParteDeAusentes()}
       ${bloqueImportarAusencias()}`;
   }
 
@@ -1860,6 +1861,52 @@ const App = (() => {
      respuestas se pega acá, igual que la nómina. No hay conector: el archivo
      tiene patologías adentro y eso vive solo en este navegador. */
   let resultadoAusencias = null;
+  let resultadoParte = null;
+
+  /* El parte de ausentes de las tiendas. Va ARRIBA de la importación del
+     formulario porque contesta la pregunta de hoy —quién no está— mientras que
+     la otra es el registro de lo que fue pasando. Son dos entradas distintas a
+     propósito: ésta trae la fecha de fin escrita y por eso no lleva supuestos. */
+  function bloqueParteDeAusentes() {
+    const r = resultadoParte;
+    return `<section class="tarjeta">
+      <h2>Traer el parte de ausentes de las tiendas</h2>
+      <p class="ayuda">Lo que mandan los gerentes: <strong>quién no está hoy en su tienda y
+        hasta cuándo</strong>. Como trae la fecha de fin escrita, lo que entra por acá
+        <strong>no lleva ningún supuesto</strong> y el ausentismo que sale de estas filas está
+        medido. Copiá desde la fila de encabezados y pegá.</p>
+      <p class="ayuda">Las columnas que busca: <strong>Tienda · Apellido y nombre · CUIL o DNI ·
+        Tipo de licencia · Desde · Hasta · Certificado · Observaciones</strong>. Si alguna falta
+        no pasa nada, salvo el nombre y el desde. En <em>Tipo de licencia</em> alcanza con
+        escribir ART, enfermedad, maternidad, paternidad, familiar o vacaciones.</p>
+      <textarea id="pegar-parte" style="min-height:110px"
+        placeholder="Tienda	Apellido y nombre	CUIL o DNI	Tipo de licencia	Desde	Hasta…"></textarea>
+      <div class="acciones">
+        <button class="b" data-accion="importar-parte">Importar el parte</button>
+      </div>
+      ${r ? `<div class="aviso-caja ${r.cargadas ? 'info' : ''}" style="margin-top:14px">
+        <strong>Entraron ${r.cargadas} licencia${r.cargadas === 1 ? '' : 's'}.</strong>
+        ${r.porCuil} por CUIL, ${r.porDni} por DNI y ${r.porNombre} por nombre.
+        ${r.extendidas ? `${r.extendidas} ya estaban abiertas y se les corrigió la fecha de fin.` : ''}
+        ${r.repetidas ? `${r.repetidas} ya estaban igual y no se duplicaron.` : ''}
+        ${r.abiertas ? `<br>${r.abiertas === 1 ? 'Una vino' : r.abiertas + ' vinieron'}
+          <strong>sin fecha de fin</strong>: ${r.abiertas === 1 ? 'entró' : 'entraron'}
+          igual y ${r.abiertas === 1 ? 'queda' : 'quedan'} arriba de todo en el Panel pidiendo
+          el dato, que es lo que hay que reclamarle al gerente.` : ''}
+        ${r.sinFecha ? `<br>${r.sinFecha === 1 ? 'Una no traía' : r.sinFecha + ' no traían'}
+          fecha de inicio y se ${r.sinFecha === 1 ? 'salteó' : 'saltearon'}: sin eso no se puede
+          ubicar la licencia en el tiempo.` : ''}
+        ${r.otrasAreas ? `<br>${r.otrasAreas} son de tiendas de otras áreas y se saltearon.` : ''}
+        ${r.sinPersona.length ? `<br><strong>${r.sinPersona.length} no caen en nadie del
+          padrón</strong>: ${esc([...new Set(r.sinPersona)].slice(0, 10).join(' · '))}${
+          new Set(r.sinPersona).size > 10 ? '…' : ''}. Si son altas nuevas, pegá primero la
+          nómina del mes.` : ''}
+        ${r.enConflicto.length ? `<br><strong>${r.enConflicto.length} traen el número de una
+          persona y el nombre de otra</strong>: ${esc(r.enConflicto.slice(0, 6).join(' · '))}.
+          No se cargaron: hay que verlo con el gerente.` : ''}
+      </div>` : ''}
+    </section>`;
+  }
 
   function bloqueImportarAusencias() {
     const r = resultadoAusencias;
@@ -6648,6 +6695,31 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'importar-parte') {
+        const crudo = (document.getElementById('pegar-parte') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá el parte primero.', 'error'); return; }
+        const filas = filasPegadas(crudo);
+        if (filas.length < 2) { avisar('No se entendió el parte. ¿Copiaste los encabezados?', 'error'); return; }
+        const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const cab = filas[0].map(norm);
+        const col = {};
+        COLUMNAS_PARTE_AUSENTES.forEach(d => {
+          const i = cab.findIndex(h => d.claves.some(k => h.indexOf(k) >= 0));
+          if (i >= 0) col[d.campo] = i;
+        });
+        if (col.nombre === undefined || col.desde === undefined) {
+          avisar('No encontré las columnas de nombre y de fecha de inicio. ¿Es el parte de ausentes?', 'error');
+          return;
+        }
+        resultadoParte = Store.importarParteDeAusentes(filas.slice(1).map(f => {
+          const o = {};
+          Object.keys(col).forEach(k => { o[k] = f[col[k]] || ''; });
+          return o;
+        }));
+        refrescar();
+        return;
+      }
 
       if (a === 'importar-ausencias') {
         const crudo = (document.getElementById('pegar-ausencias') || {}).value || '';
