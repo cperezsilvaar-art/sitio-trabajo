@@ -424,6 +424,23 @@ dice «desde el … (25 días)» en vez de «en 3 meses».
 **No se corre solo.** Moverlo al próximo septiembre es una decisión del
 coordinador; un corte automático le cambiaría los números sin avisar.
 
+**El año se arma a la vista, mes a mes** (`serieMensualDeAusentismo()`, bloque
+*Cómo se va llenando el año*). Con una sola tasa acumulada no se ve que el
+indicador **se va llenando**: se carga una licencia, el número se mueve dos
+centésimas y parece que no pasó nada. Una fila por mes desde el corte —incluidos
+los que están en cero, porque un mes sin licencias es una respuesta— y el mes en
+curso marcado, para que nadie lo compare contra uno cerrado.
+
+Es **tabla con una barra y no un gráfico**, como el resto del panel: la barra
+sola perdería los días y cuántos de ellos son supuestos, que es justamente lo que
+hace que el número se pueda defender. Los días se reparten por mes calendario,
+igual que `ausenciasPorMes()` en la ficha.
+
+**El plantel es el de hoy en todos los meses**, y la pantalla lo dice: el panel
+guarda la foto actual y no la de cada cierre, así que la tasa de un mes viejo se
+calcula contra la dotación de hoy. Es la misma aproximación anunciada que la
+dotación media de la rotación.
+
 **El historial va en la ficha de la persona**, no en la de la sucursal: vive en
 `c.ausencias`, así que la acompaña cuando se muda de tienda. `ausenciasPorMes()`
 lo reparte por mes calendario —del 25/08 al 05/09 son siete días de agosto y

@@ -224,6 +224,7 @@ const App = (() => {
       </section>
 
       ${bloqueMovimiento(ind)}
+      ${bloqueSerieAusentismo(e)}
       ${bloqueParticipacion(e)}
       ${bloqueEstructura(ind)}
       ${bloqueAntiguedad(ind)}
@@ -348,6 +349,73 @@ const App = (() => {
           ${r.ultimas.map(b => `<li>${fmtFecha(b.fecha)} — ${esc(b.nombre)}
             (${esc(b.grupo)}${b.motivo ? `: ${esc(b.motivo)}` : ''})</li>`).join('')}
         </ul>` : ''}
+    </section>`;
+  }
+
+  /* El ausentismo mes a mes, desde el corte del año fiscal.
+     Con una sola tasa acumulada no se ve que el indicador se va llenando: se
+     carga una licencia, el número se mueve dos centésimas y parece que no pasó
+     nada. Mes a mes cada mes nuevo es una fila y el año se construye a la
+     vista. Es tabla con una barra y no un gráfico, como el resto del panel: la
+     barra sola perdería los días y cuántos de ellos son supuestos, que es lo
+     que hace que el número se pueda defender. */
+  function bloqueSerieAusentismo(e) {
+    const serie = serieMensualDeAusentismo(e, hoyISO());
+    if (!serie || !serie.filas.length) return '';
+    const tope = Math.max(...serie.filas.map(f => f.tasa || 0), 0.001);
+    const MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const rotulo = k => `${MES[+k.slice(5, 7)]} ${k.slice(0, 4)}`;
+    const conDato = serie.filas.filter(f => f.dias).length;
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Cómo se va llenando el año</h2>
+        <span class="chip ${serie.tasa >= 0.05 ? 'rojo' : serie.tasa >= 0.03 ? 'ambar' : 'verde'}"
+          >${serie.tasa === null ? '—' : fmtPct(serie.tasa, 1)} acumulado</span>
+      </div>
+      <p class="ayuda">Un mes por fila desde el ${fmtFecha(serie.desde)}, que es el corte que
+        fijaste. Cada licencia que cargás suma acá: el mes en curso se completa solo a medida
+        que pasan los días y el que cierra queda fijo.
+        ${conDato ? `Por ahora hay datos en ${conDato} de ${serie.filas.length} mes${
+          serie.filas.length === 1 ? '' : 'es'}.` : 'Todavía no hay ninguna licencia en la ventana.'}</p>
+
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Mes</th><th></th><th class="num">Ausentismo</th>
+          <th class="num">Días</th><th class="num">Personas</th><th>De dónde sale</th></tr></thead>
+        <tbody>${serie.filas.map(f => {
+          const curso = f.mes === serie.mesEnCurso;
+          return `<tr${f.dias ? '' : ' class="inactivo"'}>
+            <td><strong>${esc(rotulo(f.mes))}</strong>${curso
+              ? ' <span class="chip azul">en curso</span>' : ''}</td>
+            <td style="width:34%">${barraDato((f.tasa || 0) / tope, '', 'ban3')}</td>
+            <td class="num">${f.tasa === null ? '—' : fmtPct(f.tasa, 1)}</td>
+            <td class="num">${f.dias || '—'}</td>
+            <td class="num">${f.personas || '—'}</td>
+            <td>${f.dias
+              ? (f.diasSupuestos
+                 ? `${f.dias - f.diasSupuestos} medidos · ${f.diasSupuestos} supuestos`
+                 : 'todos del papel')
+              : '<span style="color:var(--texto-suave)">sin licencias</span>'}</td>
+          </tr>`;
+        }).join('')}</tbody>
+        <tfoot><tr class="total">
+          <td><strong>Acumulado</strong></td><td></td>
+          <td class="num"><strong>${serie.tasa === null ? '—' : fmtPct(serie.tasa, 1)}</strong></td>
+          <td class="num"><strong>${serie.dias}</strong></td>
+          <td class="num"></td>
+          <td>${serie.diasSupuestos
+            ? `${serie.dias - serie.diasSupuestos} medidos · ${serie.diasSupuestos} supuestos`
+            : 'todos del papel'}</td>
+        </tr></tfoot>
+      </table></div>
+
+      <p class="ayuda"><strong>El plantel es el de hoy —${serie.plantel} personas— en todos los
+        meses.</strong> El panel guarda la foto actual y no la de cada cierre, así que la tasa de
+        un mes viejo se calcula contra la dotación de hoy: es una aproximación, igual que la
+        dotación media de la rotación. Las vacaciones, la maternidad y el fallecimiento no
+        cuentan. Los días se reparten por mes calendario: una licencia del 25/09 al 05/10 son
+        seis días de septiembre y cinco de octubre.</p>
     </section>`;
   }
 

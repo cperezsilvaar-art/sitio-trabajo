@@ -165,6 +165,107 @@ function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
   return { area: pa, tienda: t, persona: g };
 }
 
+/**
+ * El ausentismo mes a mes desde el corte del año fiscal.
+ *
+ * Es la misma cuenta que `participacionDeAusencias()` pero partida por mes
+ * calendario, y existe por una razón concreta: con una sola tasa acumulada no
+ * se ve que el indicador **se va llenando**. El coordinador carga una licencia,
+ * el número se mueve dos centésimas y parece que no pasó nada. Mes a mes, en
+ * cambio, cada mes nuevo es una fila nueva y el año fiscal se construye a la
+ * vista.
+ *
+ * Los días se reparten por mes calendario, igual que `ausenciasPorMes()` en la
+ * ficha de la persona: una licencia del 25/09 al 05/10 son seis días de
+ * septiembre y cinco de octubre, no once de septiembre.
+ *
+ * **El plantel es el de hoy en todos los meses.** El panel guarda la foto
+ * actual y no la de cada cierre, así que la tasa de un mes viejo usa la
+ * dotación de hoy. Es una aproximación y la pantalla lo dice, igual que con la
+ * dotación media de la rotación: un número aproximado y anunciado como tal es
+ * mejor que una serie inventada.
+ */
+function serieMensualDeAusentismo(estado, hastaISO) {
+  const e = estado || {};
+  const hasta = hastaISO || _diaHoy();
+  const v = ventanaDeMedicion(e, _mesesAtras(hasta, 12), hasta);
+  const desde = v.desde;
+  if (desde > hasta) return null;
+
+  const gente = (e.sucursales || []).flatMap(s => s.colaboradores || []);
+  const plantel = gente.filter(c => c.activo !== false).length;
+  if (!plantel) return null;
+
+  /* Un casillero por mes entre el corte y hoy, aunque el mes no tenga ninguna:
+     un mes en cero es una respuesta y saltearlo rompe la lectura de la serie. */
+  const meses = {};
+  const orden = [];
+  let y = +desde.slice(0, 4), m = +desde.slice(5, 7);
+  while (y * 12 + m <= (+hasta.slice(0, 4)) * 12 + (+hasta.slice(5, 7))) {
+    const k = y + '-' + String(m).padStart(2, '0');
+    meses[k] = { mes: k, dias: 0, diasSupuestos: 0, eventos: 0, personas: new Set() };
+    orden.push(k);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+
+  gente.forEach(c => (c.ausencias || []).forEach(a => {
+    if (a.cuentaAusentismo === false || a.motivo === 'vacaciones') return;
+    if (!a.desde) return;
+    /* El último día que cuenta: el alta del certificado, o hoy si sigue abierta.
+       Lo que todavía no pasó no se cuenta. */
+    const fin = (a.hasta && a.hasta < hasta) ? a.hasta : hasta;
+    if (fin < desde) return;
+    let d = a.desde > desde ? a.desde : desde;
+    let primero = true;
+    while (d <= fin) {
+      const k = d.slice(0, 7);
+      if (meses[k]) {
+        meses[k].dias++;
+        if (a.diasSupuestos) meses[k].diasSupuestos++;
+        meses[k].personas.add(c.id);
+        if (primero) { meses[k].eventos++; primero = false; }
+      }
+      d = _diaMas(d, 1);
+    }
+  }));
+
+  const filas = orden.map(k => {
+    const x = meses[k];
+    const dias = _diasDelMes(k, desde, hasta);
+    return {
+      mes: k, dias: x.dias, diasSupuestos: x.diasSupuestos,
+      eventos: x.eventos, personas: x.personas.size,
+      diasDelMes: dias,
+      tasa: dias > 0 ? x.dias / (plantel * dias) : null
+    };
+  });
+
+  const total = filas.reduce((n, f) => n + f.dias, 0);
+  const diasTotales = filas.reduce((n, f) => n + f.diasDelMes, 0);
+  return {
+    desde, hasta, plantel, filas,
+    dias: total,
+    diasSupuestos: filas.reduce((n, f) => n + f.diasSupuestos, 0),
+    tasa: diasTotales > 0 ? total / (plantel * diasTotales) : null,
+    /* El mes en curso está a medias por definición: la pantalla lo marca para
+       que nadie lo compare contra un mes cerrado. */
+    mesEnCurso: hasta.slice(0, 7)
+  };
+}
+
+/* Cuántos días de ese mes caen adentro de la ventana. El primero y el último
+   están cortados —el corte es el día 1 o no, y hoy es el día que es—, y usar
+   30 para todos daría una tasa más baja en los dos extremos. */
+function _diasDelMes(mes, desde, hasta) {
+  const ini = mes + '-01';
+  const y = +mes.slice(0, 4), m = +mes.slice(5, 7);
+  const fin = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  const a = ini > desde ? ini : desde;
+  const b = fin < hasta ? fin : hasta;
+  if (a > b) return 0;
+  return (_diasEntreISO(a, b) || 0) + 1;
+}
+
 function loQueFaltaParaMedir(estado, hoyISO) {
   const e = estado || {};
   /* Cada renglón pregunta por **su propio cálculo**, no por si existe el dato
@@ -457,6 +558,7 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadPorBanda, estructuraDelPlantel, cobertura,
     indicadoresDelArea, loQueFaltaParaMedir,
     rotacionDelArea, ausentismoDelArea, reclamosDelArea, DONDE_VIVEN_LOS_OTROS,
-    participacionDeAusencias, ausentismoDe, ventanaDeMedicion
+    participacionDeAusencias, ausentismoDe, ventanaDeMedicion,
+    serieMensualDeAusentismo
   };
 }
