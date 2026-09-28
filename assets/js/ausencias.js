@@ -230,6 +230,31 @@ function diasDeAusencia(a, hoy) {
   return (_dias(x.desde, fin) || 0) + 1;
 }
 
+/**
+ * Los días de una ausencia que caen adentro de una ventana, y nada más.
+ *
+ * `diasDeAusencia()` contesta «cuánto duró la licencia»; esto contesta «cuánto
+ * de eso pasó en este período», que es la única cuenta que sirve para una tasa.
+ * Una licencia que empezó en agosto y sigue hoy aporta días a septiembre: la
+ * tasa de septiembre no puede llevarse también los de agosto —eso infla— ni
+ * descartar la licencia por haber empezado antes del corte —eso vacía—. Las dos
+ * cosas estaban pasando en el panel al mismo tiempo, en pantallas distintas.
+ *
+ * Lo que no es ausentismo —vacaciones, maternidad, fallecimiento— vale cero
+ * acá, y no en cada uno de los que llaman: cuando la misma regla vive en tres
+ * lugares, un día uno de los tres se olvida.
+ */
+function diasDeAusenciaEntre(a, desde, hasta) {
+  const x = a || {};
+  if (!x.desde || !desde || !hasta) return 0;
+  if (x.cuentaAusentismo === false || x.motivo === 'vacaciones') return 0;
+  const fin = _finComputable(x, hasta);
+  if (!fin || fin < desde || x.desde > hasta) return 0;
+  const ini = x.desde > desde ? x.desde : desde;
+  if (fin < ini) return 0;
+  return (_dias(ini, fin) || 0) + 1;
+}
+
 const _finComputable = (x, h) => {
   if (x.reincorporado) {
     /* Se reincorporó el 20 quiere decir que el 20 ya trabajó: el último día de

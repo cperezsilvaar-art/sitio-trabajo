@@ -363,14 +363,40 @@ meterlas infla el número con algo que no es un problema—, y tampoco la matern
 ni el fallecimiento: `TIPOS_FORMULARIO` lo marca con `ausentismo: false` y
 `participacionDeAusencias()` los saltea. Los apercibimientos no son una ausencia.
 
+**Los días de ausencia de un período los cuenta `diasDeAusenciaEntre()`
+(`ausencias.js`) y nadie más.** Toma la licencia y la ventana y devuelve
+**los días que caen adentro**: la que empezó en agosto y sigue hoy aporta sus
+días de septiembre, y ni se pierde por haber empezado antes del corte ni se
+cuenta entera. Las exclusiones —vacaciones, maternidad, fallecimiento,
+`cuentaAusentismo: false`— también viven ahí, porque una regla repetida en tres
+lugares es una regla que un día se olvida en uno.
+
+Eso fue exactamente lo que pasó: `serieMensualDeAusentismo()`,
+`participacionDeAusencias()` y `ausentismoDelArea()` contaban cada una a su
+manera y daban **23, 1 y 3 días** del mismo mes, con la misma ventana y el mismo
+padrón. La serie repartía por día —bien—; las otras dos exigían que la licencia
+*empezara* adentro de la ventana y después la contaban completa, y la del Panel
+además sumaba las vacaciones y la maternidad. Tres tarjetas del mismo tablero
+diciendo 0,58%, 0,03% y 0,08%. **Una cuenta nueva de días de ausencia no se
+escribe: se llama a `diasDeAusenciaEntre()`.**
+
 **El ausentismo se ve en los tres lugares donde se lo busca**, y los tres salen
 del **mismo** cálculo: `ausentismoDe()` (`indicadores.js`) es un buscador sobre
 `participacionDeAusencias()`, no una cuenta nueva. Dos funciones que cuentan lo
 mismo dan números distintos el día que una cambia, y acá los tres niveles se
 leen uno al lado del otro. Están en *Panel → Indicadores* (el área, con el
-desglose), en `#/sucursal/<id>` (la tienda contra el área, arriba de los atajos)
-y en la ficha de cada persona (sus días, su tasa, qué parte de los de su tienda
+desglose), en `#/sucursal/<id>` (la tienda contra el área, abajo de su tira de
+KPIs) y en la ficha de cada persona (sus días, su tasa, qué parte de los de su tienda
 es, y la tasa de su tienda y la del área para poder leerla contra algo).
+
+**En la tienda el ausentismo son dos números con dos nombres, y el que manda es
+el que se mueve.** `#/sucursal/<id>` abre con *Ausentismo del mes*, que sale de
+las licencias que el coordinador va cargando y por eso cambia en el momento en
+que carga una; el de la estadística del cierre quedó al lado y se llama
+*Ausentismo liquidado*. Antes había uno solo, el de la liquidación, que decía «—»
+hasta que el mes cerraba: cargar una licencia no movía nada y la pantalla parecía
+no estar mirando. Dos fuentes con el mismo rótulo es la forma más rápida de que
+alguien lleve el número de una a una reunión creyendo que es el de la otra.
 
 **El Panel abre con «Quién no está hoy»** (`bloqueQuienNoEsta()`, sobre
 `ausenciasEnCurso()`). Ese lugar lo ocupaba un aviso de *Certificados que
@@ -435,6 +461,16 @@ Es **tabla con una barra y no un gráfico**, como el resto del panel: la barra
 sola perdería los días y cuántos de ellos son supuestos, que es justamente lo que
 hace que el número se pueda defender. Los días se reparten por mes calendario,
 igual que `ausenciasPorMes()` en la ficha.
+
+**El mismo bloque, acotado a una tienda, va en la página de la tienda.**
+`serieMensualDeAusentismo()` toma un tercer argumento opcional con el id de la
+sucursal y `bloqueSerieAusentismo(e, sucursalId)` lo dibuja en los dos lugares:
+el del área en *Panel → Indicadores* y el de la tienda abajo de su tira de KPIs.
+Es un filtro sobre la misma cuenta y no una función nueva —la tasa de la tienda
+se divide por **su** plantel, no por el del área— porque dos cuentas del mismo
+número terminan difiriendo el día que se toca una. El bloque de la tienda es
+además donde se lee de dónde salió el *Ausentismo del mes* de arriba: el mes en
+curso está marcado, con sus días y cuántos de ellos son supuestos.
 
 **El plantel es el de hoy en todos los meses**, y la pantalla lo dice: el panel
 guarda la foto actual y no la de cada cierre, así que la tasa de un mes viejo se

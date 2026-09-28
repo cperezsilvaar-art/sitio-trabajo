@@ -185,14 +185,20 @@ function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
  * dotación media de la rotación: un número aproximado y anunciado como tal es
  * mejor que una serie inventada.
  */
-function serieMensualDeAusentismo(estado, hastaISO) {
+function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
   const e = estado || {};
   const hasta = hastaISO || _diaHoy();
   const v = ventanaDeMedicion(e, _mesesAtras(hasta, 12), hasta);
   const desde = v.desde;
   if (desde > hasta) return null;
 
-  const gente = (e.sucursales || []).flatMap(s => s.colaboradores || []);
+  /* Con `sucursalId` la misma cuenta se acota a una tienda. Es un filtro y no
+     una función aparte: dos cuentas del mismo número terminan difiriendo. */
+  const suc = sucursalId
+    ? (e.sucursales || []).filter(x => x.id === sucursalId)
+    : (e.sucursales || []);
+  if (sucursalId && !suc.length) return null;
+  const gente = suc.flatMap(s => s.colaboradores || []);
   const plantel = gente.filter(c => c.activo !== false).length;
   if (!plantel) return null;
 
@@ -208,13 +214,18 @@ function serieMensualDeAusentismo(estado, hastaISO) {
     m++; if (m > 12) { m = 1; y++; }
   }
 
+  /* Quién aporta los días, contados en el mismo recorrido y con la misma regla
+     que la serie. La tasa y el ranking tienen que salir de una sola cuenta: la
+     pantalla los muestra juntos y dos cuentas parecidas ahí se leen como una
+     contradicción. */
+  const porPersona = {};
+
   gente.forEach(c => (c.ausencias || []).forEach(a => {
-    if (a.cuentaAusentismo === false || a.motivo === 'vacaciones') return;
-    if (!a.desde) return;
-    /* El último día que cuenta: el alta del certificado, o hoy si sigue abierta.
-       Lo que todavía no pasó no se cuenta. */
-    const fin = (a.hasta && a.hasta < hasta) ? a.hasta : hasta;
-    if (fin < desde) return;
+    /* Qué cuenta y hasta dónde lo decide `diasDeAusenciaEntre()`, el mismo
+       contador que usan la participación y el KPI del área: acá se recorren los
+       días uno por uno solo porque hay que repartirlos por mes. */
+    if (!diasDeAusenciaEntre(a, desde, hasta)) return;
+    const fin = _finComputable(a, hasta);
     let d = a.desde > desde ? a.desde : desde;
     let primero = true;
     while (d <= fin) {
@@ -224,6 +235,11 @@ function serieMensualDeAusentismo(estado, hastaISO) {
         if (a.diasSupuestos) meses[k].diasSupuestos++;
         meses[k].personas.add(c.id);
         if (primero) { meses[k].eventos++; primero = false; }
+        const q = porPersona[c.id] ||
+          (porPersona[c.id] = { id: c.id, nombre: c.nombre, dias: 0, diasSupuestos: 0, eventos: 0 });
+        q.dias++;
+        if (a.diasSupuestos) q.diasSupuestos++;
+        if (q.ultimoEvento !== a.id) { q.eventos++; q.ultimoEvento = a.id; }
       }
       d = _diaMas(d, 1);
     }
@@ -242,8 +258,17 @@ function serieMensualDeAusentismo(estado, hastaISO) {
 
   const total = filas.reduce((n, f) => n + f.dias, 0);
   const diasTotales = filas.reduce((n, f) => n + f.diasDelMes, 0);
+  /* El mes en curso por separado: es el que el coordinador mira todos los días
+     y el único que todavía puede cambiar. */
+  const actual = filas.find(f => f.mes === hasta.slice(0, 7)) || null;
+
+  const quienes = Object.keys(porPersona).map(k => porPersona[k])
+    .sort((x, z) => z.dias - x.dias || z.eventos - x.eventos);
+  quienes.forEach(q => { q.parte = total ? q.dias / total : 0; });
+
   return {
-    desde, hasta, plantel, filas,
+    desde, hasta, plantel, filas, actual, quienes,
+    sucursalId: sucursalId || '',
     dias: total,
     diasSupuestos: filas.reduce((n, f) => n + f.diasSupuestos, 0),
     tasa: diasTotales > 0 ? total / (plantel * diasTotales) : null,
@@ -405,8 +430,11 @@ function ausentismoDelArea(estado, hoyISO) {
   const quienes = new Set();
   const porMotivo = {};
   gente.forEach(c => (c.ausencias || []).forEach(a => {
-    if (!a.desde || a.desde < desde) return;
-    const d = diasDeAusencia(a, hoy);
+    /* El mismo contador que la serie y la participación. Esta cuenta iba por su
+       cuenta: pedía que la licencia empezara adentro de la ventana, la contaba
+       entera y —lo peor— no salteaba las vacaciones ni la maternidad, así que la
+       tarjeta del Panel decía un número que las otras dos pantallas negaban. */
+    const d = diasDeAusenciaEntre(a, desde, hoy);
     if (!d) return;
     dias += d;
     quienes.add(c.id);
@@ -489,18 +517,21 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
     t.plantel = activos;
     plantel += activos;
     (s.colaboradores || []).forEach(c => {
-      const suyas = (c.ausencias || []).filter(a => {
-        if (a.cuentaAusentismo === false) return false;
-        if (a.motivo === 'vacaciones') return false;
-        return a.desde && a.desde >= desde && a.desde <= hasta;
-      });
+      /* Toda licencia que pise la ventana, y de cada una solo los días que
+         caen adentro: la que empezó antes del corte y sigue hoy aporta sus días
+         de este período. Antes se pedía que la licencia *empezara* adentro de la
+         ventana y después se contaba entera, así que una licencia de agosto que
+         seguía en septiembre no aparecía y una que empezaba el 28 se contaba
+         completa. */
+      const suyas = (c.ausencias || [])
+        .map(a => ({ a, dias: diasDeAusenciaEntre(a, desde, hasta) }))
+        .filter(x => x.dias > 0);
       if (!suyas.length) return;
-      const d = suyas.reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
+      const d = suyas.reduce((n, x) => n + x.dias, 0);
       /* Cuántos de esos días salen del papel y cuántos del supuesto de un día:
          el total se lee distinto según de dónde venga. */
-      const sup = suyas.filter(a => a.diasSupuestos)
-        .reduce((n, a) => n + (diasDeAusencia(a, hasta) || 0), 0);
-      const nSup = suyas.filter(a => a.diasSupuestos).length;
+      const sup = suyas.filter(x => x.a.diasSupuestos).reduce((n, x) => n + x.dias, 0);
+      const nSup = suyas.filter(x => x.a.diasSupuestos).length;
       t.gente.push({ id: c.id, nombre: c.nombre, eventos: suyas.length,
                      dias: d, diasSupuestos: sup,
                      medidos: suyas.length - nSup, supuestos: nSup,

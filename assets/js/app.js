@@ -359,18 +359,30 @@ const App = (() => {
      vista. Es tabla con una barra y no un gráfico, como el resto del panel: la
      barra sola perdería los días y cuántos de ellos son supuestos, que es lo
      que hace que el número se pueda defender. */
-  function bloqueSerieAusentismo(e) {
-    const serie = serieMensualDeAusentismo(e, hoyISO());
+  function bloqueSerieAusentismo(e, sucursalId) {
+    const serie = serieMensualDeAusentismo(e, hoyISO(), sucursalId);
     if (!serie || !serie.filas.length) return '';
+    const deTienda = !!sucursalId;
     const tope = Math.max(...serie.filas.map(f => f.tasa || 0), 0.001);
     const MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
                  'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
     const rotulo = k => `${MES[+k.slice(5, 7)]} ${k.slice(0, 4)}`;
     const conDato = serie.filas.filter(f => f.dias).length;
 
+    /* La tienda contra el área. Un 2% solo no dice nada; en la página de la
+       tienda es justamente la comparación que el coordinador lleva a la charla
+       con el gerente. El número del área sale de esta misma función sin acotar:
+       la comparación y la tabla que está abajo tienen que venir de una sola
+       cuenta, porque se leen de un solo golpe de vista. Cada tasa se divide por
+       su propio plantel, si no una tienda de seis y una de veinte se leerían
+       con la misma vara. */
+    const tT = serie.tasa;
+    const tA = deTienda ? (serieMensualDeAusentismo(e, hoyISO()) || {}).tasa : null;
+    const primero = serie.quienes[0] || null;
+
     return `<section class="tarjeta">
       <div class="cabecera-suc">
-        <h2>Cómo se va llenando el año</h2>
+        <h2>${deTienda ? 'Ausentismo de la tienda, mes a mes' : 'Cómo se va llenando el año'}</h2>
         <span class="chip ${serie.tasa >= 0.05 ? 'rojo' : serie.tasa >= 0.03 ? 'ambar' : 'verde'}"
           >${serie.tasa === null ? '—' : fmtPct(serie.tasa, 1)} acumulado</span>
       </div>
@@ -379,6 +391,20 @@ const App = (() => {
         que pasan los días y el que cierra queda fijo.
         ${conDato ? `Por ahora hay datos en ${conDato} de ${serie.filas.length} mes${
           serie.filas.length === 1 ? '' : 'es'}.` : 'Todavía no hay ninguna licencia en la ventana.'}</p>
+      ${deTienda && tA !== null && tA !== undefined ? `<p class="ind-lectura">Desde el corte esta
+        tienda acumula <strong>${tT === null ? '—' : fmtPct(tT, 1)}</strong> de ausentismo y el
+        área entera, <strong>${fmtPct(tA, 1)}</strong>${tT === null ? '.' : tT > tA
+          ? `: está ${fmtPct(tT - tA, 1)} arriba del promedio del área.`
+          : tT < tA ? `: está ${fmtPct(tA - tT, 1)} abajo del promedio del área.`
+          : ': está en el promedio del área.'} Cada tasa se divide por su propio
+        plantel, así que una tienda chica y una grande se pueden comparar.${
+        /* Quién empuja el número. La tasa sola abre la conversación con el
+           gerente pero no dice sobre quién es; los días son los mismos de la
+           tabla de abajo, no otra cuenta. */
+        primero ? ` El que más faltó es <strong>${esc(primero.nombre)}</strong>, con ${
+              primero.dias} día${primero.dias === 1 ? '' : 's'} (${
+              fmtPct(primero.parte, 0)} de los de la tienda).` : ''}
+        <a href="#/red/indicadores">Ver el desglose del área</a></p>` : ''}
 
       <div class="tabla-scroll"><table>
         <thead><tr><th>Mes</th><th></th><th class="num">Ausentismo</th>
@@ -394,7 +420,8 @@ const App = (() => {
             <td class="num">${f.personas || '—'}</td>
             <td>${f.dias
               ? (f.diasSupuestos
-                 ? `${f.dias - f.diasSupuestos} medidos · ${f.diasSupuestos} supuestos`
+                 ? `${f.dias - f.diasSupuestos} medidos · ${f.diasSupuestos} supuesto${
+                     f.diasSupuestos === 1 ? '' : 's'}`
                  : 'todos del papel')
               : '<span style="color:var(--texto-suave)">sin licencias</span>'}</td>
           </tr>`;
@@ -405,13 +432,14 @@ const App = (() => {
           <td class="num"><strong>${serie.dias}</strong></td>
           <td class="num"></td>
           <td>${serie.diasSupuestos
-            ? `${serie.dias - serie.diasSupuestos} medidos · ${serie.diasSupuestos} supuestos`
+            ? `${serie.dias - serie.diasSupuestos} medidos · ${serie.diasSupuestos} supuesto${
+                serie.diasSupuestos === 1 ? '' : 's'}`
             : 'todos del papel'}</td>
         </tr></tfoot>
       </table></div>
 
-      <p class="ayuda"><strong>El plantel es el de hoy —${serie.plantel} personas— en todos los
-        meses.</strong> El panel guarda la foto actual y no la de cada cierre, así que la tasa de
+      <p class="ayuda"><strong>El plantel es el de hoy —${serie.plantel} persona${
+        serie.plantel === 1 ? '' : 's'}— en todos los meses.</strong> El panel guarda la foto actual y no la de cada cierre, así que la tasa de
         un mes viejo se calcula contra la dotación de hoy: es una aproximación, igual que la
         dotación media de la rotación. Las vacaciones, la maternidad y el fallecimiento no
         cuentan. Los días se reparten por mes calendario: una licencia del 25/09 al 05/10 son
@@ -2803,8 +2831,23 @@ const App = (() => {
               dp.bajas.length ? 'ya no cuentan en la dotación' : 'ninguna')}
         ${kpi('FTE del mes cerrado', calc && calc.matriz.total.fteReal ? fmtNum(calc.matriz.total.fteReal) : '—',
               ultima ? `visita del ${fmtFecha(ultima.fecha)}` : 'se calcula con la estadística del mes')}
-        ${kpi('Ausentismo', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
-              calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : '',
+        ${(() => {
+          /* El ausentismo que el coordinador alimenta con las licencias, no el
+             de la estadística del mes: es el que se mueve cuando carga algo, y
+             por eso es el que va en la tira. El de la liquidación es otra cosa
+             y quedó abajo, con su nombre. */
+          const sa = serieMensualDeAusentismo(e, hoyISO(), s.id);
+          const m = sa && sa.actual;
+          const u = e.config.parametros.umbralAusentismo;
+          return kpi('Ausentismo del mes', m && m.tasa !== null ? fmtPct(m.tasa, 1) : '—',
+            m ? (m.dias
+                  ? `${m.dias} día${m.dias === 1 ? '' : 's'} de ${m.personas} persona${m.personas === 1 ? '' : 's'}`
+                  : 'sin licencias este mes')
+              : 'se calcula desde el corte',
+            m && m.tasa > u ? 'alerta' : 'ok');
+        })()}
+        ${kpi('Ausentismo liquidado', calc && calc.ausentismo.pctTotal !== null ? fmtPct(calc.ausentismo.pctTotal) : '—',
+              calc ? `${calc.ausentismo.totalDias} días · ${calc.ausentismo.diasGestionables} evitables` : 'del mes cerrado',
               calc && calc.ausentismo.pctTotal > e.config.parametros.umbralAusentismo ? 'alerta' : 'ok')}
         ${kpi('Horas extras', nov && nov.personas
                 ? fmtNum(Object.keys(nov.porPosicion).reduce((a, k) => a + nov.porPosicion[k].horasExtras, 0), 1) + ' h'
@@ -2827,6 +2870,8 @@ const App = (() => {
               t9.sinEvaluar.length ? `${t9.sinEvaluar.length} sin evaluar` : 'plantel completo',
               t9.sinEvaluar.length ? 'aviso' : 'ok')}
       </div>
+
+      ${bloqueSerieAusentismo(e, s.id)}
 
       <div class="acciones" style="margin-bottom:18px">
         <button class="b grande" data-accion="nueva-visita" data-id="${s.id}">+ Registrar visita</button>
@@ -2851,26 +2896,11 @@ const App = (() => {
             <span class="atajo-icono">${icono}</span>
             <span><strong>${esc(titulo)}</strong><em>${nota}</em></span>
           </a>`;
-        /* El ausentismo de la tienda, contra el del área. El atajo de al lado
-           contesta «quién falta hoy»; esto contesta «cómo viene esta tienda»,
-           que es la conversación con el gerente y no la del turno de mañana. */
-        const au = ausentismoDe(e, null, s.id, hoyISO());
-        const meses = Math.round(au.area.ventana / 30);
-        const cuando = au.area.recortada
-          ? `desde el ${fmtFecha(au.area.corte)}` : `en los últimos ${meses} meses`;
+        /* El ausentismo de la tienda vive ahora en su propio bloque, arriba:
+           tenerlo también acá eran los mismos números dos veces en la misma
+           pantalla. Acá quedan los atajos, que es lo que este bloque aporta. */
         return `<section class="tarjeta">
           <h2>De esta tienda</h2>
-          ${au.tienda && au.tienda.tasa !== null ? `<p class="ind-lectura" style="margin:0 0 14px">
-            <strong>Ausentismo ${fmtPct(au.tienda.tasa, 1)}</strong> ${cuando}
-            —${au.tienda.dias} día${au.tienda.dias === 1 ? '' : 's'} de ${au.tienda.personas}
-            persona${au.tienda.personas === 1 ? '' : 's'}, sobre un plantel de ${au.tienda.plantel}—,
-            contra ${fmtPct(au.area.tasa, 1)} del área.
-            ${au.tienda.gente.length ? `El que más faltó es
-              <strong>${esc(au.tienda.gente[0].nombre)}</strong>, con ${au.tienda.gente[0].dias}
-              día${au.tienda.gente[0].dias === 1 ? '' : 's'}
-              (${fmtPct(au.tienda.gente[0].parteDeLaTienda, 0)} de los de la tienda).` : ''}
-            <a href="#/red/indicadores"> Ver el desglose del área</a>
-          </p>` : ''}
           <div class="atajos-tienda">
             ${item(`#/diario`, '🩺', 'Presentismo',
                    aus.length

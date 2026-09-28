@@ -293,6 +293,25 @@ cada persona con su participación sobre esa tienda. Los tres van **en días**, 
 los tres traen además su **tasa**: días de ausencia sobre plantel por días de la
 ventana.
 
+### Una sola cuenta de días
+
+`diasDeAusenciaEntre(ausencia, desde, hasta)` (`ausencias.js`) devuelve **los días
+de esa licencia que caen adentro de la ventana**, y es la única cuenta de días de
+ausencia del panel. `diasDeAusencia()` contesta otra pregunta —cuánto duró la
+licencia— y se sigue usando para el historial de la persona.
+
+Antes había tres cuentas. Con el mismo mes, la misma ventana y el mismo padrón,
+`serieMensualDeAusentismo()` daba **23 días**, `participacionDeAusencias()`
+**1** y `ausentismoDelArea()` **3**, o sea 0,58%, 0,03% y 0,08% en tres tarjetas
+del mismo tablero. Las dos últimas exigían que la licencia *empezara* adentro de
+la ventana —así que la que venía de agosto y seguía abierta no existía— y después
+la contaban **entera**, incluidos los días de antes del corte; la del Panel,
+además, sumaba las vacaciones y la maternidad, que no son ausentismo.
+
+Las exclusiones viven también ahí: vacaciones, `cuentaAusentismo: false`
+—maternidad, fallecimiento— y lo que no pasó todavía. Una cuenta nueva de días de
+ausencia no se escribe: se llama a `diasDeAusenciaEntre()`.
+
 La tasa de cada tienda se calcula **sobre su propio plantel**, no sobre el del
 área. Una tienda de seis personas con cuatro días de ausencia y una de veinte
 con los mismos cuatro días aportan lo mismo al total del área y no tienen el
@@ -309,6 +328,24 @@ contra el área) y la ficha de cada persona (`fichaAusenciasRegistradas`).
 `ausentismoDe(estado, colaboradorId, sucursalId, hasta)` es el buscador que usan
 los dos últimos: **no es una cuenta nueva**, porque dos funciones que cuentan lo
 mismo dan números distintos el día que una cambia.
+
+### En la página de la tienda
+
+La tira de KPIs de `#/sucursal/<id>` abre con **Ausentismo del mes**: el que sale
+de las licencias que se van cargando, así que se mueve en el momento en que se
+carga una. El de la estadística del cierre quedó al lado con su propio nombre,
+**Ausentismo liquidado**. Antes había uno solo —el de la liquidación—, que decía
+«—» hasta que el mes cerraba: cargar una licencia no movía nada y la pantalla
+parecía no estar mirando. Dos fuentes con el mismo rótulo es la forma más rápida
+de que alguien lleve el número de una a una reunión creyendo que es el de la otra.
+
+Abajo de la tira va el mismo bloque mes a mes del área, acotado a la tienda:
+`serieMensualDeAusentismo(estado, hasta, sucursalId)` toma el id como tercer
+argumento opcional y `bloqueSerieAusentismo(e, sucursalId)` lo dibuja en los dos
+lugares. Es un **filtro sobre la misma cuenta**, no una función aparte, y la tasa
+de la tienda se divide por su propio plantel. Ahí también se lee la tienda contra
+el área —«esta tienda acumula 1,1% y el área, 0,8%»— y de dónde sale el número de
+arriba: el mes en curso está marcado, con sus días y cuántos son supuestos.
 
 ## Quién no está hoy, en el Panel
 
