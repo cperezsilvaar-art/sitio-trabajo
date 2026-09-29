@@ -1507,7 +1507,10 @@ const App = (() => {
               r.alBordeDelAnio.length ? `arriba del ${fmtPct(T.avisoDesde, 0)} de las ${T.anual} h` : 'ninguno',
               r.alBordeDelAnio.length ? 'aviso' : 'ok')}
         ${kpi('Días de ausencia liquidados', fmtNum(r.total.diasAusencia, 0),
-              'sin contar vacaciones')}
+              `${fmtNum(r.total.fteAusencia, 2)} FTE · sin contar vacaciones`)}
+        ${kpi('Turno neto del mes', `${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)} FTE`,
+              `${fmtNum(r.total.fteExtras, 2)} de extras − ${fmtNum(r.total.fteAusencia, 2)} de ausencias`,
+              r.total.fteNeto < 0 ? 'aviso' : 'ok')}
       </div>
 
       <section class="tarjeta">
@@ -1521,6 +1524,14 @@ const App = (() => {
           total del mes por persona y no el reparto por día, así que un control diario sería un número
           inventado. Es una orientación sobre la norma general, no un dictamen.
         </p>
+        <p class="ind-lectura" style="margin:12px 0 0">
+          <strong>Un FTE es una persona de jornada completa</strong>, 45 horas semanales. Los días de
+          ausencia se leen sobre <strong>${r.diasMes}</strong> y las horas extras sobre
+          <strong>${r.horasMes}</strong>, que son los mismos divisores de la matriz de FTE de la
+          estadística y se cambian en <a href="#/config">Configuración</a>. Así los dos se pueden
+          sumar: el turno que se perdió por licencias y el que se repuso pagando extras están en la
+          misma unidad, y la resta dice cuánta gente faltó de verdad en el mes.
+        </p>
       </section>
 
       <section class="tarjeta">
@@ -1530,8 +1541,8 @@ const App = (() => {
           <thead><tr>
             <th>Tienda</th><th class="num">Personas</th>
             <th class="num">Hs. extras</th><th class="num">al 50%</th><th class="num">al 100%</th>
-            <th class="num">Promedio</th><th class="num">Se pasaron</th>
-            <th class="num">Días de ausencia</th>
+            <th class="num">FTE +</th><th class="num">Se pasaron</th>
+            <th class="num">Días de ausencia</th><th class="num">FTE −</th><th class="num">Neto</th>
           </tr></thead>
           <tbody>${r.tiendas.map(x => `<tr>
             <td><a href="#/sucursal/${x.id}" style="color:inherit">${esc(x.sucursal)}</a></td>
@@ -1539,9 +1550,12 @@ const App = (() => {
             <td class="num"><strong>${fmtNum(x.horasExtras, 1)}</strong></td>
             <td class="num">${fmtNum(x.he50, 1)}</td>
             <td class="num">${fmtNum(x.he100, 1)}</td>
-            <td class="num">${x.conNovedades ? fmtNum(x.horasExtras / x.conNovedades, 1) : '—'}</td>
+            <td class="num">${x.fteExtras ? '+' + fmtNum(x.fteExtras, 2) : '—'}</td>
             <td class="num">${x.excedenMes ? `<span class="chip rojo">${x.excedenMes}</span>` : '—'}</td>
             <td class="num">${fmtNum(x.diasAusencia, 0)}</td>
+            <td class="num">${x.fteAusencia ? '−' + fmtNum(x.fteAusencia, 2) : '—'}</td>
+            <td class="num"><strong style="color:${x.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
+              >${x.fteNeto >= 0 ? '+' : ''}${fmtNum(x.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
           <tfoot><tr class="total">
             <td><strong>Área 3</strong></td>
@@ -1549,9 +1563,11 @@ const App = (() => {
             <td class="num"><strong>${fmtNum(r.total.horasExtras, 1)}</strong></td>
             <td class="num">${fmtNum(r.total.he50, 1)}</td>
             <td class="num">${fmtNum(r.total.he100, 1)}</td>
-            <td class="num">${r.total.personas ? fmtNum(r.total.horasExtras / r.total.personas, 1) : '—'}</td>
+            <td class="num"><strong>+${fmtNum(r.total.fteExtras, 2)}</strong></td>
             <td class="num">${r.excedenMes.length || '—'}</td>
             <td class="num"><strong>${fmtNum(r.total.diasAusencia, 0)}</strong></td>
+            <td class="num"><strong>−${fmtNum(r.total.fteAusencia, 2)}</strong></td>
+            <td class="num"><strong>${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)}</strong></td>
           </tr></tfoot>
         </table></div>
       </section>
@@ -1575,6 +1591,7 @@ const App = (() => {
             <th class="num">Hs. del mes</th><th>Contra las ${T.mensual}</th>
             <th class="num">Año</th><th>Contra las ${T.anual}</th>
             <th class="num">Le quedan</th><th class="num">Días de ausencia</th>
+            <th class="num">FTE neto</th>
           </tr></thead>
           <tbody>${r.gente.map(g => `<tr${g.tope.excedeMes || g.tope.excedeAnio ? ' class="fila-alerta"' : ''}>
             <td><button class="check-titulo" data-accion="ir-a-ficha" data-id="${g.id}"
@@ -1592,6 +1609,8 @@ const App = (() => {
                 ? `<br><span style="font-size:11px;color:var(--texto-suave)">${
                     Object.keys(g.porConcepto).map(k => `${esc(k)} ${g.porConcepto[k]}`).join(' · ')}</span>`
                 : ''}</td>
+            <td class="num"><strong style="color:${g.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
+              >${g.fteNeto >= 0 ? '+' : ''}${fmtNum(g.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
         </table></div>
       </section>`;

@@ -595,6 +595,15 @@ function cierreDelMes(estado, periodo) {
   const tiendas = [];
   const gente = [];
 
+  /* Los mismos divisores que la matriz de FTE de la estadística, y por eso
+     salen de `parametros` y no de una constante nueva: si el coordinador los
+     cambia en Configuración, las dos pantallas tienen que moverse juntas. Un
+     FTE es una persona de jornada completa —45 horas semanales—, así que los
+     días de ausencia se leen sobre 30 y las horas extras sobre 200. */
+  const par = (e.config || {}).parametros || {};
+  const diasMes = +par.diasMes || 30;
+  const horasMes = +par.horasMes || 200;
+
   (e.sucursales || []).forEach(s => {
     const fila = {
       id: s.id, sucursal: s.nombre || s.codigo,
@@ -631,6 +640,11 @@ function cierreDelMes(estado, periodo) {
       gente.push({
         id: c.id, nombre: c.nombre, sucursal: s.nombre || s.codigo, sucursalId: s.id,
         cargo: c.cargo || c.posicion || '', tope, dias,
+        /* Lo mismo en la unidad en la que se piensa la dotación: cuánto turno
+           se perdió y cuánto se repuso pagando extras. */
+        fteAusencia: dias / diasMes,
+        fteExtras: tope.mes.total / horasMes,
+        fteNeto: tope.mes.total / horasMes - dias / diasMes,
         porConcepto: MAPA_AUSENCIAS.reduce((a, m) => {
           const d = +n[m.campo] || 0; if (d) a[m.nombre] = d; return a;
         }, {})
@@ -639,7 +653,16 @@ function cierreDelMes(estado, periodo) {
     if (fila.conNovedades) tiendas.push(fila);
   });
 
-  tiendas.sort((a, b) => b.horasExtras - a.horasExtras || b.diasAusencia - a.diasAusencia);
+  tiendas.forEach(x => {
+    x.fteAusencia = x.diasAusencia / diasMes;
+    x.fteExtras = x.horasExtras / horasMes;
+    x.fteNeto = x.fteExtras - x.fteAusencia;
+  });
+
+  /* Por el neto y no por las horas: la pregunta de la tienda no es cuántas
+     extras pagó sino cuánto turno le faltó, y una que perdió un FTE entero en
+     licencias está peor que una que hizo cuarenta horas extras. */
+  tiendas.sort((a, b) => a.fteNeto - b.fteNeto || b.diasAusencia - a.diasAusencia);
   gente.sort((a, b) => b.tope.mes.total - a.tope.mes.total || b.dias - a.dias);
 
   const tot = tiendas.reduce((a, x) => ({
@@ -648,9 +671,12 @@ function cierreDelMes(estado, periodo) {
     horasExtras: a.horasExtras + x.horasExtras,
     diasAusencia: a.diasAusencia + x.diasAusencia
   }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0 });
+  tot.fteAusencia = tot.diasAusencia / diasMes;
+  tot.fteExtras = tot.horasExtras / horasMes;
+  tot.fteNeto = tot.fteExtras - tot.fteAusencia;
 
   return {
-    periodo, tiendas, gente, total: tot,
+    periodo, tiendas, gente, total: tot, diasMes, horasMes,
     hayDatos: !!gente.length,
     excedenMes: gente.filter(g => g.tope.excedeMes),
     excedenAnio: gente.filter(g => g.tope.excedeAnio),

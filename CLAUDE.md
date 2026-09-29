@@ -631,6 +631,18 @@ por eso cada uno se lee donde vive y no se los promedia. Las vacaciones aparecen
 en el desglose por concepto pero no suman al total de días, igual que en
 `participacionDeAusencias()`.
 
+**Los días y las horas se llevan a FTE con los divisores de la estadística**,
+`parametros.diasMes` (30) y `parametros.horasMes` (200), que salen de
+`#/config` y no de una constante nueva: si el coordinador los cambia, la matriz
+de FTE y esta pantalla se tienen que mover juntas. Un FTE es una persona de
+jornada completa —45 horas semanales—, así que los días de ausencia se leen
+sobre 30 y las horas extras sobre 200. Puestos en la misma unidad se pueden
+restar, y esa resta —el **turno neto**— es el número que contesta cuánta gente
+faltó de verdad en el mes: en septiembre de 2026 el área perdió 5,53 FTE en
+licencias y repuso 1,65 pagando extras, o sea **−3,88 FTE**. Las tiendas se
+ordenan por el neto y no por las horas: la que perdió un FTE entero en licencias
+está peor que la que hizo cuarenta horas extras.
+
 Va en `#/nomina` y no en la estadística porque la pregunta es «¿alguien se pasó
 del tope?», que es sobre personas y cruza los meses; la estadística mira **una
 tienda en un mes** y desde ahí el tope anual no se puede contestar. Son **dos
