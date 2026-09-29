@@ -624,6 +624,26 @@ ausentismo aunque sea una ausencia. `cuentaComoAusentismo()` es quien decide, en
 un solo lugar. **No partir el nombre completo por el primer espacio**: rompe los
 apellidos compuestos, y en el área hay varios.
 
+**El panel fabricaba duplicados y era `importarNovedades()`.** El importador de
+**una hoja** buscaba a la persona solo dentro de esa tienda y, si no la
+encontraba, la creaba: cualquiera con un traspaso sin aplicar —el libro la trae
+en la tienda nueva, el padrón la tiene en la vieja— terminaba con dos fichas.
+Después aparecía dos veces en Presentismo, contaba dos veces en la dotación y
+cada ficha se quedaba con la mitad del historial. Ahora **busca en toda el área
+antes de crear a nadie** y **no la muda**: dónde está cargada lo decide el
+traspaso, no la planilla del mes. El importador del libro entero nunca creó a
+nadie.
+
+**Las que ya quedaron se limpian en `#/config`.** `Store.duplicados()` las
+encuentra por CUIL, por DNI o por nombre, y dice **con qué se quedó cada
+ficha** —licencias, meses de novedades, movimientos, si está evaluada—, que es
+lo que decide cuál conservar. `unirColaboradores(queda, seVa)` junta todo en la
+elegida: las listas se concatenan sin repetir —las ausencias por motivo y
+fechas—, los meses de novedades que falten se traen y **en el choque gana la
+ficha que se conserva**, los campos sueltos se completan solo donde están
+vacíos. Resguarda antes, porque borra una ficha. El bloque no aparece cuando no
+hay ninguno, como los contadores.
+
 **El libro no solo guarda la novedad: registra la licencia.** Sin eso llenaba
 `c.novedades` y el ausentismo por sucursal —que se calcula sobre
 `c.ausencias`— se quedaba en cero aunque el mes tuviera 166 días de licencia:
@@ -637,10 +657,17 @@ principio del mes y queda marcada con **`fechasSupuestas`** para siempre, y la
 ficha lo dice en la fila y al pie. Es el mismo trato que `diasSupuestos` le da
 al certificado sin duración: lo que se supone se marca y no se muestra solo.
 
-**No pisa lo que ya estaba y no duplica.** Si la persona ya tiene una licencia
-de ese motivo que toca el mes —del formulario de recepción o del parte de los
-gerentes—, esa manda: tiene fechas de verdad. Volver a pegar el mismo libro no
-suma un día. Y **`cuentaAusentismo` sale de `cuentaComoAusentismo()`**, si no la
+**Las fechas son las que ya estaban; los días, los que se pagaron.** Si la
+persona ya tiene una licencia de ese motivo que toca el mes, su `desde` es el
+bueno —el del libro sería inventado— pero **la cantidad de días la manda la
+liquidación**, que es lo que efectivamente se pagó: se estira el `hasta` hasta
+cubrirlos, dentro del mes. Se corrige **la que tenía la duración supuesta**,
+que es el eslabón débil —un certificado sin duración tomado como un día—, y esa
+deja de ser un supuesto. Queda anotado en cuál cierre se ajustó y cuál era el
+`hasta` anterior. **Hacia abajo no se toca**: que la liquidación pagara menos
+días que el certificado es un problema de la liquidación, y recortar la
+licencia borraría la prueba — se informa y listo. Volver a pegar el mismo libro
+no suma un día ni la estira de nuevo. Y **`cuentaAusentismo` sale de `cuentaComoAusentismo()`**, si no la
 maternidad, el matrimonio, el nacimiento y el fallecimiento entrarían al
 ausentismo por la puerta de atrás.
 

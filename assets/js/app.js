@@ -4401,6 +4401,45 @@ const App = (() => {
      dentro de una fila desplegable mientras la misma ficha se leía en la
      página de la tienda. Ahora cada tienda se edita en su página, y acá queda
      solo lo que es alta y baja del área. */
+  /* Personas cargadas dos veces. El panel las fabricaba —pegar la hoja de
+     novedades de una tienda creaba una ficha nueva para quien estuviera
+     cargado en otra— y eso ya se arregló, pero las que quedaron hay que poder
+     limpiarlas: aparecen dos veces en Presentismo, cuentan dos veces en la
+     dotación y cada una se queda con la mitad del historial. */
+  function panelDuplicados() {
+    const dup = Store.duplicados();
+    if (!dup.length) return '';
+    const cuanto = f => [
+      f.ausencias ? `${f.ausencias} licencia${f.ausencias === 1 ? '' : 's'}` : '',
+      f.novedades ? `${f.novedades} mes${f.novedades === 1 ? '' : 'es'} de novedades` : '',
+      f.movimientos ? `${f.movimientos} movimiento${f.movimientos === 1 ? '' : 's'}` : '',
+      f.evaluada ? 'evaluada en el 9-box' : ''
+    ].filter(Boolean).join(' · ') || 'sin nada cargado';
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Personas cargadas dos veces</h2>
+        <span class="chip rojo">${dup.length}</span>
+      </div>
+      <p class="ayuda">
+        La misma persona en dos fichas. Aparece dos veces en Presentismo, cuenta dos veces en la
+        dotación y cada ficha se queda con la mitad del historial. <strong>Unir junta todo en la
+        que elijas</strong> —licencias, novedades, movimientos, evaluación— y borra la otra;
+        los datos sueltos se completan donde falten y no se pisa nada.
+      </p>
+      ${dup.map(d => `<div class="aviso-caja" style="margin-bottom:10px">
+        <strong>${esc(d.nombre)}</strong>
+        <ul style="margin:6px 0 0">${d.fichas.map(f => `<li>
+          <strong>${esc(f.sucursal)}</strong>${f.activo ? '' : ' <span class="chip rojo">de baja</span>'}
+          ${f.cuil ? ` · CUIL ${esc(f.cuil)}` : ' · sin CUIL'} — ${esc(cuanto(f))}
+          <button class="mini" data-accion="unir-fichas" data-queda="${f.id}"
+            data-nombre="${esc(d.nombre)}" data-donde="${esc(f.sucursal)}"
+            style="margin-left:8px">Dejar esta y unir el resto</button>
+        </li>`).join('')}</ul>
+      </div>`).join('')}
+    </section>`;
+  }
+
   function panelSucursalesConfig() {
     const e = Store.get();
     const dot = Store.dotacionDelArea();
@@ -4459,6 +4498,7 @@ const App = (() => {
       <h1 class="titulo">Configuración</h1>
       <p class="subtitulo">Sucursales del área, destinatarios de los reportes y parámetros de cálculo.</p>
 
+      ${panelDuplicados()}
       ${panelSucursalesConfig()}
 
       <section class="tarjeta">
@@ -7293,6 +7333,24 @@ const App = (() => {
           }, 60);
         }
       }
+      if (a === 'unir-fichas') {
+        const queda = btn.dataset.queda;
+        const grupo = Store.duplicados().find(d => d.fichas.some(f => f.id === queda));
+        if (!grupo) return refrescar();
+        const otras = grupo.fichas.filter(f => f.id !== queda);
+        const ok = await confirmar(
+          `Unir las fichas de ${btn.dataset.nombre}`,
+          `Se junta todo el historial —licencias, novedades, movimientos, evaluación— en la ficha ` +
+          `de ${btn.dataset.donde} y se borra${otras.length === 1 ? '' : 'n'} ` +
+          `${otras.length === 1 ? 'la otra' : 'las otras ' + otras.length}. Queda una copia automática.`,
+          'Unir');
+        if (!ok) return;
+        otras.forEach(f => Store.unirColaboradores(queda, f.id));
+        avisar(`${btn.dataset.nombre} quedó en una sola ficha, en ${btn.dataset.donde}.`);
+        refrescar();
+        return;
+      }
+
       if (a === 'filtro-adef') { adefFiltro = btn.dataset.filtro; refrescar(); }
 
       /* Desde el relevamiento a la ficha de esa persona: es la otra solapa de
@@ -7832,12 +7890,18 @@ const App = (() => {
               tiendas no cayeron en nadie del padrón:</strong>
               ${r.sinPersona.map(x => esc(x.nombre) + ' (' + esc(x.tienda) + ')').join(', ')}.
               Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
-            ${r.diferencias.length ? `<p style="margin:8px 0 0"><strong>${r.diferencias.length}
-              ${r.diferencias.length === 1 ? 'licencia ya registrada no coincide' : 'licencias ya registradas no coinciden'}
-              con lo que pagó la liquidación</strong> —mandan las que tienen fechas de verdad—:
-              ${r.diferencias.map(x => `${esc(x.nombre)}: la liquidación pagó ${x.pagados} y
-                están registrados ${x.registrados}`).join(' · ')}.
-              Suele ser un certificado que se extendió y no se actualizó.</p>` : ''}
+            ${(() => {
+              const ok2 = r.diferencias.filter(x => x.ajustada);
+              const no = r.diferencias.filter(x => !x.ajustada);
+              return `${ok2.length ? `<p style="margin:8px 0 0"><strong>${ok2.length}
+                ${ok2.length === 1 ? 'licencia corregida' : 'licencias corregidas'} con los días que
+                pagó la liquidación</strong> —la fecha de inicio es la que ya estaba, que es la real—:
+                ${ok2.map(x => `${esc(x.nombre)}: de ${x.registrados} a ${x.pagados} días`).join(' · ')}.</p>` : ''}
+              ${no.length ? `<p style="margin:8px 0 0"><strong>${no.length}
+                ${no.length === 1 ? 'licencia donde la liquidación pagó menos' : 'licencias donde la liquidación pagó menos'}
+                de lo registrado</strong>, y eso no se toca: recortar el certificado borraría la prueba.
+                ${no.map(x => `${esc(x.nombre)}: pagó ${x.pagados} y hay ${x.registrados} registrados`).join(' · ')}.</p>` : ''}`;
+            })()}
             ${r.enConflicto.length ? `<p style="margin:8px 0 0"><strong>${r.enConflicto.length} con el
               número y el nombre en contradicción</strong>, que quedaron afuera:
               ${r.enConflicto.map(esc).join(' · ')}.</p>` : ''}

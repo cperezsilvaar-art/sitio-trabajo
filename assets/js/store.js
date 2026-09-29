@@ -529,10 +529,9 @@ const Store = (() => {
       if (dias <= 0) return;
       const motivo = MOTIVO_DE_NOVEDAD[campo];
 
-      /* Ya hay una con fechas reales que pisa este mes: manda esa. Pero si
-         los días no coinciden con los que pagó la liquidación, la diferencia
-         se nombra: casi siempre es un certificado que se extendió y que nadie
-         actualizó, y callarla deja al ausentismo corto sin decir por qué. */
+      /* Ya hay una licencia de ese motivo que pisa el mes. Las fechas de esa
+         son las buenas —las del libro serían inventadas— pero **los días los
+         manda la liquidación**: es lo que efectivamente se pagó. */
       const suyas = c.ausencias.filter(a => a.motivo === motivo && a.desde
         && a.desde <= finMes && (a.hasta || finMes) >= ini);
       if (suyas.length) {
@@ -540,16 +539,47 @@ const Store = (() => {
            `diasDeAusenciaEntre()`, que devuelve cero para lo que no es
            ausentismo: comparar así daba «la maternidad pagó 17 y hay 0
            registrados» sobre una licencia que estaba perfectamente cargada. */
-        const registrados = suyas.reduce((n, a) => {
+        const enElMes = a => {
           const d1 = a.desde > ini ? a.desde : ini;
           const d2 = (a.hasta && a.hasta < finMes) ? a.hasta : finMes;
-          if (d2 < d1) return n;
-          return n + Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1;
-        }, 0);
+          return d2 < d1 ? 0 : Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1;
+        };
+        const registrados = suyas.reduce((n, a) => n + enElMes(a), 0);
         const pagados = Math.round(dias);
-        if (registrados !== pagados && diferencias) {
-          diferencias.push({ nombre: c.nombre, concepto: campo, pagados, registrados });
+        if (registrados === pagados) return;
+
+        /* **Se corrige hacia arriba y no hacia abajo.** Que la liquidación
+           pagara menos días que los del certificado es un problema de la
+           liquidación, no del registro, y recortar la licencia borraría
+           justamente la prueba. Se nombra y se deja como está. */
+        if (pagados < registrados) {
+          if (diferencias) diferencias.push({ nombre: c.nombre, concepto: campo,
+                                              pagados, registrados, ajustada: false });
+          return;
         }
+
+        /* Cuál se extiende: la última, y con preferencia la que tenía la
+           duración **supuesta**. El supuesto es el eslabón débil —un
+           certificado sin duración que se tomó como un día— y la liquidación
+           es el dato que lo reemplaza. */
+        const orden = suyas.slice().sort((x, y) => String(x.desde).localeCompare(String(y.desde)));
+        const elegida = orden.filter(a => a.diasSupuestos).pop() || orden[orden.length - 1];
+
+        const fin = new Date((elegida.hasta || elegida.desde) + 'T00:00:00');
+        fin.setDate(fin.getDate() + (pagados - registrados));
+        const nuevoHasta = fin.toISOString().slice(0, 10);
+        const antes = elegida.hasta || elegida.desde;
+        elegida.hasta = nuevoHasta > finMes ? finMes : nuevoHasta;
+        /* Ya no es un supuesto: la liquidación dice cuántos días pagó. */
+        elegida.diasSupuestos = false;
+        elegida.origenDias = 'liquidacion';
+        elegida.ajustadaPorLiquidacion = periodo;
+        elegida.hastaAnterior = antes;
+        elegida.reincorporado = true;
+
+        if (diferencias) diferencias.push({ nombre: c.nombre, concepto: campo,
+                                            pagados, registrados, ajustada: true,
+                                            desde: elegida.desde, hasta: elegida.hasta });
         return;
       }
 
@@ -1718,6 +1748,7 @@ const Store = (() => {
     },
 
     importarNovedades(sucursalId, periodo, filas) {
+      const e = this.get();
       const s = this.sucursal(sucursalId);
       if (!s) return null;
       const clave = t => String(t || '').toLowerCase()
@@ -1726,10 +1757,33 @@ const Store = (() => {
       let nuevos = 0, actualizados = 0;
       const sinPosicion = [];
 
+      const enOtraTienda = [];
+
       (filas || []).forEach(f => {
         const nombre = nombreDePlanilla(f);
         let c = f.cuil ? s.colaboradores.find(x => x.cuil === f.cuil) : null;
         if (!c) c = s.colaboradores.find(x => clave(x.nombre) === clave(nombre));
+
+        /* Antes de crear a nadie, buscarla en **toda el área**. Buscar solo
+           dentro de la tienda era la fábrica de duplicados del panel: la hoja
+           del libro dice dónde trabajó ese mes y el padrón dice dónde está
+           cargada, y cuando difieren —un traspaso que todavía no se aplicó—
+           se creaba una segunda persona con el mismo nombre. Se usa la que ya
+           existe y **no se la muda**: dónde está cargada lo decide el
+           traspaso, no la planilla del mes. */
+        if (!c) {
+          let otra = null, suTienda = null;
+          e.sucursales.forEach(x => {
+            if (otra || x.id === s.id) return;
+            const h = (x.colaboradores || []).find(y =>
+              (f.cuil && y.cuil === f.cuil) || (y.nombre && clave(y.nombre) === clave(nombre)));
+            if (h) { otra = h; suTienda = x; }
+          });
+          if (otra) {
+            c = otra;
+            enOtraTienda.push({ nombre: otra.nombre, tienda: suTienda.nombre || suTienda.codigo });
+          }
+        }
 
         if (!c) {
           c = this.agregarColaborador(sucursalId, { nombre, cuil: f.cuil });
@@ -1759,7 +1813,7 @@ const Store = (() => {
         .map(c => c.nombre);
 
       guardar();
-      return { nuevos, actualizados, sinPosicion, ausentesDelPadron,
+      return { nuevos, actualizados, sinPosicion, ausentesDelPadron, enOtraTienda,
                total: (filas || []).length };
     },
 
@@ -1920,6 +1974,115 @@ const Store = (() => {
 
       guardar();
       return d;
+    },
+
+    /**
+     * Personas cargadas dos veces: el mismo CUIL, el mismo DNI o el mismo
+     * nombre en dos fichas distintas.
+     *
+     * Existe porque el panel las fabricaba: hasta que se arregló, pegar la
+     * hoja de novedades de una tienda creaba una ficha nueva para quien
+     * estuviera cargado en otra —el caso de cualquiera con un traspaso sin
+     * aplicar—. Detectarlas no alcanza: hay que poder unirlas sin perder lo
+     * que cada ficha juntó.
+     */
+    duplicados() {
+      const e = this.get();
+      const gente = [];
+      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => gente.push({ c, s })));
+      const norm = x => String(x || '').toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z]/g, '');
+      const dig = x => String(x == null ? '' : x).replace(/\D/g, '');
+
+      const grupos = {};
+      gente.forEach(g => {
+        /* La clave más fuerte que tenga: el número identifica mejor que el
+           nombre, que se escribe a mano y se repite entre hermanos. */
+        const cu = dig(g.c.cuil), dn = dig(g.c.dni);
+        const k = cu.length === 11 ? 'cuil:' + cu
+                : dn.length >= 7 ? 'dni:' + dn
+                : 'nombre:' + norm(g.c.nombre);
+        if (!k || k === 'nombre:') return;
+        (grupos[k] = grupos[k] || []).push(g);
+      });
+
+      /* Y una segunda pasada por nombre, para los que quedaron con números
+         distintos: dos fichas con el mismo nombre en el área son una sola
+         persona salvo homonimia, y esa el coordinador la ve en la lista. */
+      const porNombre = {};
+      gente.forEach(g => {
+        const k = norm(g.c.nombre);
+        if (k) (porNombre[k] = porNombre[k] || []).push(g);
+      });
+
+      const vistos = {};
+      const salida = [];
+      const agregar = lista => {
+        if (lista.length < 2) return;
+        const ids = lista.map(x => x.c.id).sort().join('|');
+        if (vistos[ids]) return;
+        vistos[ids] = true;
+        salida.push({
+          nombre: lista[0].c.nombre,
+          fichas: lista.map(x => ({
+            id: x.c.id, sucursal: x.s.nombre || x.s.codigo, sucursalId: x.s.id,
+            cuil: x.c.cuil || '', activo: x.c.activo !== false,
+            /* Con qué se quedó cada ficha: es lo que decide cuál conviene
+               conservar y qué habría que mover. */
+            ausencias: (x.c.ausencias || []).length,
+            novedades: Object.keys(x.c.novedades || {}).length,
+            movimientos: (x.c.movimientos || []).length,
+            evaluada: !!(x.c.desempeno && x.c.potencial)
+          }))
+        });
+      };
+      Object.keys(grupos).forEach(k => agregar(grupos[k]));
+      Object.keys(porNombre).forEach(k => agregar(porNombre[k]));
+      return salida;
+    },
+
+    /**
+     * Une dos fichas de la misma persona en una.
+     *
+     * Lo que se junta se junta —ausencias, novedades, movimientos, licencias,
+     * casos, entrenamientos, sanciones— y lo que es un dato único se completa
+     * solo donde falta: la ficha que se conserva no pierde nada y la otra no
+     * deja nada atrás. Las ausencias se deduplican por motivo y fecha, que es
+     * lo que se repite cuando la misma licencia entró por las dos fichas.
+     */
+    unirColaboradores(idQueda, idSeVa) {
+      if (idQueda === idSeVa) return null;
+      const a = this.colaboradorPorId(idQueda), b = this.colaboradorPorId(idSeVa);
+      if (!a || !b) return null;
+      resguardar('Antes de unir dos fichas');
+
+      ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones'].forEach(k => {
+        if (!Array.isArray(b[k]) || !b[k].length) return;
+        if (!Array.isArray(a[k])) a[k] = [];
+        b[k].forEach(x => {
+          const igual = k === 'ausencias'
+            ? a[k].some(y => y.motivo === x.motivo && y.desde === x.desde && y.hasta === x.hasta)
+            : a[k].some(y => y.id && y.id === x.id);
+          if (!igual) a[k].push(x);
+        });
+      });
+
+      a.novedades = Object.assign({}, b.novedades || {}, a.novedades || {});
+      if (!a.baja && b.baja) a.baja = b.baja;
+      /* Los campos sueltos: se completan donde la ficha que queda está vacía,
+         nunca se pisan. */
+      Object.keys(b).forEach(k => {
+        if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
+             'sanciones', 'novedades', 'baja'].indexOf(k) >= 0) return;
+        const v = b[k];
+        if (v === '' || v === null || v === undefined) return;
+        if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;
+      });
+
+      const s = this.sucursalDe(idSeVa);
+      if (s) s.colaboradores = s.colaboradores.filter(x => x.id !== idSeVa);
+      guardar();
+      return a;
     },
 
     /* ------------------- curso de ADEF (art. 8) -------------------- */
