@@ -624,6 +624,40 @@ ausentismo aunque sea una ausencia. `cuentaComoAusentismo()` es quien decide, en
 un solo lugar. **No partir el nombre completo por el primer espacio**: rompe los
 apellidos compuestos, y en el área hay varios.
 
+**El libro no solo guarda la novedad: registra la licencia.** Sin eso llenaba
+`c.novedades` y el ausentismo por sucursal —que se calcula sobre
+`c.ausencias`— se quedaba en cero aunque el mes tuviera 166 días de licencia:
+el coordinador cargaba el cierre y no se movía nada, porque era la misma
+pantalla mirando otra caja. `registrarLicenciasDelLibro()` (`store.js`) crea la
+ausencia de cada concepto con `MOTIVO_DE_NOVEDAD`.
+
+**El libro dice cuántos días, no cuáles.** La duración está medida —la
+liquidación la pagó— pero las fechas no, así que la licencia se ubica al
+principio del mes y queda marcada con **`fechasSupuestas`** para siempre, y la
+ficha lo dice en la fila y al pie. Es el mismo trato que `diasSupuestos` le da
+al certificado sin duración: lo que se supone se marca y no se muestra solo.
+
+**No pisa lo que ya estaba y no duplica.** Si la persona ya tiene una licencia
+de ese motivo que toca el mes —del formulario de recepción o del parte de los
+gerentes—, esa manda: tiene fechas de verdad. Volver a pegar el mismo libro no
+suma un día. Y **`cuentaAusentismo` sale de `cuentaComoAusentismo()`**, si no la
+maternidad, el matrimonio, el nacimiento y el fallecimiento entrarían al
+ausentismo por la puerta de atrás.
+
+**La ficha de la persona tiene dos bloques de ausencias y no tres.** El tercero
+—*Ausencias que liquidó Nómina, mes a mes*— **se eliminó, con su función**.
+Existía cuando la liquidación era una fuente aparte que había que cotejar
+contra lo registrado; desde que el libro registra las licencias decía
+exactamente lo mismo que el bloque de arriba dos renglones más abajo, y con
+otro formato. Lo único suyo que no estaba en ningún lado —las horas extras del
+mes— vive ahora en *El cierre del mes*.
+
+**Un bloque vacío tampoco ocupa un bloque.** Es la regla del indicador sin
+número, una pantalla más adentro: con ninguna licencia del art. 25 usada, la
+tabla de cinco filas de guiones se reemplaza por una línea y el botón de
+registrar. La ficha abría con dos tablas llenas de «—» que había que leer para
+descubrir que no decían nada.
+
 **Los topes de horas extras no los pone el CCT sino el Decreto 484/2000**: 30
 horas mensuales y 200 anuales sin autorización administrativa previa.
 `TOPES_HORAS_EXTRAS` y `topeHorasExtras()` viven en `convenio.js` y se leen en
@@ -667,6 +701,20 @@ faltó de verdad en el mes: en septiembre de 2026 el área perdió 5,53 FTE en
 licencias y repuso 1,65 pagando extras, o sea **−3,88 FTE**. Las tiendas se
 ordenan por el neto y no por las horas: la que perdió un FTE entero en licencias
 está peor que la que hizo cuarenta horas extras.
+
+**Las altas y las bajas cuentan, y esa era la pata que faltaba.** Quien entró el
+16 aportó quince días y no un mes, y los que le faltaron para los 30 se
+descuentan igual que una ausencia: contarlo como mes entero infla la dotación
+con gente que no estuvo, que es justo lo que el cierre viene a mostrar. El
+**FTE real** es la fórmula de la matriz de TD01 —días de vínculo ÷ 30, menos
+ausencias ÷ 30, más horas extras ÷ 200— y el **neto** es lo mismo leído contra
+tener a todos el mes completo.
+
+La cuenta de los días de vínculo es `movimientoDelMes()`, que ya la usaba la
+matriz de FTE y era privada de `store.js`: se abrió como
+**`Store.diasDeVinculo()`** en vez de escribir una parecida en `convenio.js`.
+Dos formas de contar los días de un alta terminan difiriendo el día que se toca
+una.
 
 Va en `#/nomina` y no en la estadística porque la pregunta es «¿alguien se pasó
 del tope?», que es sobre personas y cruza los meses; la estadística mira **una

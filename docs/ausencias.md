@@ -293,6 +293,27 @@ cada persona con su participación sobre esa tienda. Los tres van **en días**, 
 los tres traen además su **tasa**: días de ausencia sobre plantel por días de la
 ventana.
 
+### La tercera entrada: el libro de novedades
+
+El libro que devuelve la liquidación **registra licencias**, no solo novedades.
+`registrarLicenciasDelLibro()` (`store.js`) crea la ausencia de cada concepto
+según `MOTIVO_DE_NOVEDAD`. Sin eso el ausentismo por sucursal se quedaba en cero
+con el mes entero cargado, porque se calcula sobre `c.ausencias` y el libro solo
+llenaba `c.novedades`.
+
+**Los días están medidos, las fechas no.** El libro dice cuántos días pagó, no
+cuáles: la licencia se ubica al principio del mes y queda con
+`fechasSupuestas: true` para siempre. Es el mismo trato que `diasSupuestos` le
+da al certificado sin duración.
+
+**Una licencia con fechas reales le gana.** Si ya hay una del mismo motivo que
+toca el mes, la del libro no entra: los días no se cuentan dos veces y se puede
+volver a pegar el libro todos los meses.
+
+**Las vacaciones no se registran** —no están en `MOTIVO_DE_NOVEDAD`— y la
+maternidad, el matrimonio, el nacimiento y el fallecimiento sí, pero con
+`cuentaAusentismo: false`, que sale de `cuentaComoAusentismo()`.
+
 ### Una sola cuenta de días
 
 `diasDeAusenciaEntre(ausencia, desde, hasta)` (`ausencias.js`) devuelve **los días

@@ -610,6 +610,7 @@ function cierreDelMes(estado, periodo) {
       personas: 0, conNovedades: 0,
       he50: 0, he100: 0, horasExtras: 0,
       diasAusencia: 0, porConcepto: {},
+      diasVinculo: 0, diasFaltantes: 0, altas: [], bajas: [],
       excedenMes: 0
     };
     (s.colaboradores || []).forEach(c => {
@@ -617,6 +618,19 @@ function cierreDelMes(estado, periodo) {
       const n = (c.novedades || {})[periodo];
       if (!n) return;
       fila.conNovedades++;
+
+      /* Cuántos días del mes estuvo vinculada. Quien entró el 16 aportó
+         quince y quien se fue el 12, doce: contarlos como un mes entero
+         infla la dotación con gente que no estuvo, que es justamente lo que
+         el cierre tiene que mostrar. La cuenta es la de la matriz de FTE
+         (`movimientoDelMes()` en `store.js`) y no una nueva. */
+      const mov = (typeof Store !== 'undefined' && Store.diasDeVinculo)
+        ? Store.diasDeVinculo(c, periodo, diasMes)
+        : { tipo: 'estable', dias: diasMes };
+      fila.diasVinculo += mov.dias;
+      fila.diasFaltantes += diasMes - mov.dias;
+      if (mov.tipo === 'alta') fila.altas.push({ nombre: c.nombre, dias: mov.dias });
+      if (mov.tipo === 'baja') fila.bajas.push({ nombre: c.nombre, dias: mov.dias });
 
       const tope = topeHorasExtras(c, periodo);
       fila.he50 += tope.mes.al50;
@@ -641,11 +655,15 @@ function cierreDelMes(estado, periodo) {
       gente.push({
         id: c.id, nombre: c.nombre, sucursal: s.nombre || s.codigo, sucursalId: s.id,
         cargo: c.cargo || c.posicion || '', tope, dias,
-        /* Lo mismo en la unidad en la que se piensa la dotación: cuánto turno
-           se perdió y cuánto se repuso pagando extras. */
+        movimiento: mov.tipo, diasVinculo: mov.dias, diasFaltantes: diasMes - mov.dias,
+        /* Lo mismo en la unidad en la que se piensa la dotación. El FTE real es
+           la fórmula de TD01: los días que estuvo, menos los que faltó, más lo
+           que se repuso con extras. */
+        fteVinculo: mov.dias / diasMes,
         fteAusencia: dias / diasMes,
         fteExtras: tope.mes.total / horasMes,
-        fteNeto: tope.mes.total / horasMes - dias / diasMes,
+        fteReal: mov.dias / diasMes - dias / diasMes + tope.mes.total / horasMes,
+        fteNeto: tope.mes.total / horasMes - dias / diasMes - (diasMes - mov.dias) / diasMes,
         porConcepto: MAPA_AUSENCIAS.reduce((a, m) => {
           const d = +n[m.campo] || 0; if (d) a[m.nombre] = d; return a;
         }, {})
@@ -657,7 +675,13 @@ function cierreDelMes(estado, periodo) {
   tiendas.forEach(x => {
     x.fteAusencia = x.diasAusencia / diasMes;
     x.fteExtras = x.horasExtras / horasMes;
-    x.fteNeto = x.fteExtras - x.fteAusencia;
+    x.fteVinculo = x.diasVinculo / diasMes;
+    /* Lo que se perdió porque alguien entró o salió en el medio del mes. */
+    x.fteMovimientos = x.diasFaltantes / diasMes;
+    x.fteReal = x.fteVinculo - x.fteAusencia + x.fteExtras;
+    /* El neto contra tener a todos el mes entero: es el número que dice
+       cuánta gente faltó de verdad. */
+    x.fteNeto = x.fteExtras - x.fteAusencia - x.fteMovimientos;
   });
 
   /* Por el neto y no por las horas: la pregunta de la tienda no es cuántas
@@ -670,11 +694,18 @@ function cierreDelMes(estado, periodo) {
     personas: a.personas + x.conNovedades,
     he50: a.he50 + x.he50, he100: a.he100 + x.he100,
     horasExtras: a.horasExtras + x.horasExtras,
-    diasAusencia: a.diasAusencia + x.diasAusencia
-  }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0 });
+    diasAusencia: a.diasAusencia + x.diasAusencia,
+    diasVinculo: a.diasVinculo + x.diasVinculo,
+    diasFaltantes: a.diasFaltantes + x.diasFaltantes,
+    altas: a.altas + x.altas.length, bajas: a.bajas + x.bajas.length
+  }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0,
+        diasVinculo: 0, diasFaltantes: 0, altas: 0, bajas: 0 });
   tot.fteAusencia = tot.diasAusencia / diasMes;
   tot.fteExtras = tot.horasExtras / horasMes;
-  tot.fteNeto = tot.fteExtras - tot.fteAusencia;
+  tot.fteVinculo = tot.diasVinculo / diasMes;
+  tot.fteMovimientos = tot.diasFaltantes / diasMes;
+  tot.fteReal = tot.fteVinculo - tot.fteAusencia + tot.fteExtras;
+  tot.fteNeto = tot.fteExtras - tot.fteAusencia - tot.fteMovimientos;
 
   return {
     periodo, tiendas, gente, total: tot, diasMes, horasMes,

@@ -498,6 +498,91 @@ const Store = (() => {
    * La fila necesita `cuil` (el número, sea CUIL o DNI), `nombre` y `tienda`.
    * Devuelve `{ g, via, propia, conflicto }`.
    */
+  /**
+   * Registra en `c.ausencias` las licencias que la liquidación pagó ese mes.
+   *
+   * Sin esto el libro solo llenaba `c.novedades`, y el ausentismo por sucursal
+   * —que se calcula sobre `c.ausencias`— se quedaba en cero aunque el mes
+   * tuviera 166 días de licencia. El coordinador cargaba el cierre y no se
+   * movía nada: es la misma pantalla mirando otra caja.
+   *
+   * **El libro dice cuántos días, no cuáles.** La duración está medida —la
+   * liquidación la pagó— pero las fechas no, así que la licencia se ubica al
+   * principio del mes y queda marcada con `fechasSupuestas` para siempre. Es
+   * el mismo trato que `diasSupuestos` le da al certificado sin duración: lo
+   * que se supone se marca y no se muestra solo.
+   *
+   * **No pisa lo que ya estaba.** Si la persona ya tiene una licencia de ese
+   * motivo que toca el mes —cargada del formulario de recepción o del parte de
+   * los gerentes—, esa es la buena: tiene fechas de verdad. La del libro no
+   * entra y los días no se cuentan dos veces.
+   */
+  function registrarLicenciasDelLibro(c, periodo, nov, diferencias) {
+    if (!Array.isArray(c.ausencias)) c.ausencias = [];
+    const ini = periodo + '-01';
+    const finMes = new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0)
+      .toISOString().slice(0, 10);
+    let puestas = 0;
+
+    Object.keys(MOTIVO_DE_NOVEDAD).forEach(campo => {
+      const dias = numeroNovedad(nov[campo]);
+      if (dias <= 0) return;
+      const motivo = MOTIVO_DE_NOVEDAD[campo];
+
+      /* Ya hay una con fechas reales que pisa este mes: manda esa. Pero si
+         los días no coinciden con los que pagó la liquidación, la diferencia
+         se nombra: casi siempre es un certificado que se extendió y que nadie
+         actualizó, y callarla deja al ausentismo corto sin decir por qué. */
+      const suyas = c.ausencias.filter(a => a.motivo === motivo && a.desde
+        && a.desde <= finMes && (a.hasta || finMes) >= ini);
+      if (suyas.length) {
+        /* Los días que la licencia pisa del mes, a secas. No con
+           `diasDeAusenciaEntre()`, que devuelve cero para lo que no es
+           ausentismo: comparar así daba «la maternidad pagó 17 y hay 0
+           registrados» sobre una licencia que estaba perfectamente cargada. */
+        const registrados = suyas.reduce((n, a) => {
+          const d1 = a.desde > ini ? a.desde : ini;
+          const d2 = (a.hasta && a.hasta < finMes) ? a.hasta : finMes;
+          if (d2 < d1) return n;
+          return n + Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1;
+        }, 0);
+        const pagados = Math.round(dias);
+        if (registrados !== pagados && diferencias) {
+          diferencias.push({ nombre: c.nombre, concepto: campo, pagados, registrados });
+        }
+        return;
+      }
+
+      const fin = new Date(ini + 'T00:00:00');
+      fin.setDate(fin.getDate() + Math.round(dias) - 1);
+      const hasta = fin.toISOString().slice(0, 10);
+
+      c.ausencias.push({
+        id: uid(),
+        desde: ini,
+        hasta: hasta > finMes ? finMes : hasta,
+        motivo,
+        concepto: campo,
+        diagnostico: '', certificado: '', notas: '',
+        /* La liquidación ya la pagó: es una ausencia cerrada, no una abierta
+           que el Panel tenga que anunciar como «falta hoy». */
+        reincorporado: true,
+        fechaReincorporacion: '',
+        origen: 'liquidacion',
+        periodoLiquidacion: periodo,
+        /* Quién cuenta para el ausentismo lo decide `cuentaComoAusentismo()` y
+           nadie más: sin esto la maternidad, el matrimonio, el nacimiento y el
+           fallecimiento entrarían como ausentismo por la puerta de atrás. */
+        cuentaAusentismo: cuentaComoAusentismo(campo),
+        fechasSupuestas: true,
+        diasSupuestos: false,
+        registradaEl: new Date().toISOString()
+      });
+      puestas++;
+    });
+    return puestas;
+  }
+
   function buscadorDePadron(estado) {
     const gente = [];
     (estado.sucursales || []).forEach(s =>
@@ -1563,8 +1648,21 @@ const Store = (() => {
      * necesita: casi siempre es alguien que se fue o que todavía no pegó la
      * nómina del mes.
      */
+    /**
+     * Los días que una persona estuvo vinculada dentro del período.
+     *
+     * Es `movimientoDelMes()`, que es privada del módulo, abierta para que
+     * `cierreDelMes()` —que vive en `convenio.js`— use **la misma cuenta** que
+     * la matriz de FTE en vez de escribir una parecida. Dos formas de contar
+     * los días de un alta terminan difiriendo el día que se toca una.
+     */
+    diasDeVinculo(colaborador, periodo, diasMes) {
+      return movimientoDelMes(colaborador, periodo, diasMes);
+    },
+
     importarLibroDeNovedades(periodo, filas) {
       const e = this.get();
+      resguardar('Antes de importar el libro de novedades');
       const buscar = buscadorDePadron(e);
       const norm = t => String(t || '').toUpperCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
@@ -1576,8 +1674,8 @@ const Store = (() => {
         [s.nombre, s.codigo, s.rvd].forEach(x => { if (x) porClave[norm(x)] = s; });
       });
 
-      let actualizados = 0;
-      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [];
+      let actualizados = 0, registradas = 0;
+      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [], diferencias = [];
       const porTienda = {};
 
       (filas || []).forEach(f => {
@@ -1609,12 +1707,13 @@ const Store = (() => {
         c.novedades[periodo] = nov;
 
         actualizados++;
+        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias);
         const k = s.nombre || s.codigo;
         porTienda[k] = (porTienda[k] || 0) + 1;
       });
 
       guardar();
-      return { periodo, actualizados, porTienda, sinPersona, sinTienda, enConflicto,
+      return { periodo, actualizados, registradas, porTienda, sinPersona, sinTienda, enConflicto, diferencias,
                otrasAreas: otrasAreas.length, leidas: (filas || []).length };
     },
 

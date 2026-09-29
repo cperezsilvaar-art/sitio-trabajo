@@ -1508,8 +1508,13 @@ const App = (() => {
               r.alBordeDelAnio.length ? 'aviso' : 'ok')}
         ${kpi('Días de ausencia liquidados', fmtNum(r.total.diasAusencia, 0),
               `${fmtNum(r.total.fteAusencia, 2)} FTE · sin contar vacaciones`)}
-        ${kpi('Turno neto del mes', `${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)} FTE`,
-              `${fmtNum(r.total.fteExtras, 2)} de extras − ${fmtNum(r.total.fteAusencia, 2)} de ausencias`,
+        ${kpi('Altas y bajas', `${r.total.altas + r.total.bajas}`,
+              r.total.altas + r.total.bajas
+                ? `${r.total.altas} altas · ${r.total.bajas} bajas · −${fmtNum(r.total.fteMovimientos, 2)} FTE`
+                : 'nadie entró ni salió en el mes',
+              r.total.fteMovimientos > 0.5 ? 'aviso' : 'ok')}
+        ${kpi('FTE real del mes', fmtNum(r.total.fteReal, 2),
+              `sobre ${r.total.personas} cabezas · ${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)} contra el mes completo`,
               r.total.fteNeto < 0 ? 'aviso' : 'ok')}
       </div>
 
@@ -1531,6 +1536,11 @@ const App = (() => {
           estadística y se cambian en <a href="#/config">Configuración</a>. Así los dos se pueden
           sumar: el turno que se perdió por licencias y el que se repuso pagando extras están en la
           misma unidad, y la resta dice cuánta gente faltó de verdad en el mes.
+          <strong>Las altas y las bajas cuentan igual</strong>: quien entró el 16 aportó quince
+          días y no un mes, y los que le faltaron para los ${r.diasMes} se descuentan. El
+          <strong>FTE real</strong> es la fórmula de la matriz de TD01 —días de vínculo ÷
+          ${r.diasMes}, menos ausencias ÷ ${r.diasMes}, más horas extras ÷ ${r.horasMes}—, y el
+          <strong>neto</strong> es lo mismo leído contra tener a todos el mes entero.
         </p>
       </section>
 
@@ -1542,7 +1552,8 @@ const App = (() => {
             <th>Tienda</th><th class="num">Personas</th>
             <th class="num">Hs. extras</th><th class="num">al 50%</th><th class="num">al 100%</th>
             <th class="num">FTE +</th><th class="num">Se pasaron</th>
-            <th class="num">Días de ausencia</th><th class="num">FTE −</th><th class="num">Neto</th>
+            <th class="num">Días de ausencia</th><th class="num">FTE −</th>
+            <th class="num">Altas y bajas</th><th class="num">FTE real</th><th class="num">Neto</th>
           </tr></thead>
           <tbody>${r.tiendas.map(x => `<tr>
             <td><a href="#/sucursal/${x.id}" style="color:inherit">${esc(x.sucursal)}</a></td>
@@ -1554,6 +1565,11 @@ const App = (() => {
             <td class="num">${x.excedenMes ? `<span class="chip rojo">${x.excedenMes}</span>` : '—'}</td>
             <td class="num">${fmtNum(x.diasAusencia, 0)}</td>
             <td class="num">${x.fteAusencia ? '−' + fmtNum(x.fteAusencia, 2) : '—'}</td>
+            <td class="num">${x.altas.length + x.bajas.length
+              ? `<span title="${esc(x.altas.map(z => z.nombre + ' entró').concat(
+                    x.bajas.map(z => z.nombre + ' salió')).join(' · '))}">−${fmtNum(x.fteMovimientos, 2)}</span>`
+              : '—'}</td>
+            <td class="num">${fmtNum(x.fteReal, 2)}</td>
             <td class="num"><strong style="color:${x.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
               >${x.fteNeto >= 0 ? '+' : ''}${fmtNum(x.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
@@ -1567,6 +1583,8 @@ const App = (() => {
             <td class="num">${r.excedenMes.length || '—'}</td>
             <td class="num"><strong>${fmtNum(r.total.diasAusencia, 0)}</strong></td>
             <td class="num"><strong>−${fmtNum(r.total.fteAusencia, 2)}</strong></td>
+            <td class="num"><strong>${r.total.fteMovimientos ? '−' + fmtNum(r.total.fteMovimientos, 2) : '—'}</strong></td>
+            <td class="num"><strong>${fmtNum(r.total.fteReal, 2)}</strong></td>
             <td class="num"><strong>${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)}</strong></td>
           </tr></tfoot>
         </table></div>
@@ -1591,7 +1609,7 @@ const App = (() => {
             <th class="num">Hs. del mes</th><th>Contra las ${T.mensual}</th>
             <th class="num">Año</th><th>Contra las ${T.anual}</th>
             <th class="num">Le quedan</th><th class="num">Días de ausencia</th>
-            <th class="num">FTE neto</th>
+            <th class="num">Vínculo</th><th class="num">FTE neto</th>
           </tr></thead>
           <tbody>${r.gente.map(g => `<tr${g.tope.excedeMes || g.tope.excedeAnio ? ' class="fila-alerta"' : ''}>
             <td><button class="check-titulo" data-accion="ir-a-ficha" data-id="${g.id}"
@@ -1609,6 +1627,9 @@ const App = (() => {
                 ? `<br><span style="font-size:11px;color:var(--texto-suave)">${
                     Object.keys(g.porConcepto).map(k => `${esc(k)} ${g.porConcepto[k]}`).join(' · ')}</span>`
                 : ''}</td>
+            <td class="num">${g.movimiento === 'estable' ? 'mes entero'
+              : `<span class="chip ambar">${g.movimiento === 'alta' ? 'entró' : 'salió'}</span>
+                 <br><span style="font-size:11px;color:var(--texto-suave)">${g.diasVinculo} días</span>`}</td>
             <td class="num"><strong style="color:${g.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
               >${g.fteNeto >= 0 ? '+' : ''}${fmtNum(g.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
@@ -3473,8 +3494,6 @@ const App = (() => {
     const edad = antiguedadAnios(c.fechaNacimiento);
     const q = c.desempeno && c.potencial ? NINE_BOX[`${c.potencial}${c.desempeno}`] : null;
 
-    /* Los períodos con novedades cargadas, del más reciente al más viejo. */
-    const periodos = Object.keys(c.novedades || {}).sort().reverse();
 
     return `
       <section class="tarjeta" id="perfil-colaborador">
@@ -3592,14 +3611,18 @@ const App = (() => {
         ${talentCard(c, s, { sinCabecera: true })}
         ${fichaEntrenamientos(c)}
 
-        ${/* Las tres cosas de ausencias, juntas y en este orden: lo que
-             registramos, lo que el convenio le permite y lo que la liquidación
-             devolvió. Estaban separadas por Sanciones y por Desarrollo, y con
-             tres tablas parecidas repartidas por la ficha era imposible saber
-             cuál contestaba qué. */''}
+        ${/* Dos bloques de ausencias y no tres: lo que le pasó a la persona y
+             lo que el convenio le permite.
+
+             El tercero —«Ausencias que liquidó Nómina, mes a mes»— se eliminó.
+             Existía cuando la liquidación era una fuente aparte que había que
+             cotejar contra lo registrado; desde que el libro **registra** las
+             licencias, decía exactamente lo mismo que el bloque de arriba dos
+             renglones más abajo, y encima con otro formato. Lo único suyo que
+             no estaba en ningún lado —las horas extras del mes— tiene ahora su
+             propia pantalla en «El cierre del mes». */''}
         ${fichaAusenciasRegistradas(c)}
         ${fichaLicencias(c)}
-        ${fichaAusencias(c, periodos)}
 
         ${fichaSanciones(c)}
       </section>`;
@@ -3831,6 +3854,20 @@ const App = (() => {
         .concat([String(new Date().getFullYear())])
     )).filter(Boolean).sort().reverse();
 
+    /* Sin ninguna usada, la tabla son cinco filas de guiones que ocupan media
+       pantalla para decir «no pasó nada». Es la misma regla que saca de la tira
+       al indicador sin número: se resume en una línea y el botón queda. */
+    const usados = saldo.reduce((n, x) => n + (x.usados || 0), 0);
+    if (!usados) {
+      return `<h4>Licencias especiales del art. 25</h4>
+        <p class="ayuda" style="margin:-4px 0 10px">No usó ninguna de las licencias del
+          convenio en ${esc(anio)} —matrimonio, enfermedad de un familiar, examen y
+          capacitación sindical—. Lo que trae la liquidación se cuenta solo.</p>
+        <div class="acciones" style="margin-top:0">
+          <button class="b sec" data-accion="nueva-licencia" data-id="${c.id}">+ Registrar una licencia</button>
+        </div>`;
+    }
+
     return `<h4>Licencias especiales del art. 25 · año
         <select id="licencia-anio" style="width:auto;display:inline-block;margin-left:6px">
           ${anios.map(a => `<option value="${a}"${a === anio ? ' selected' : ''}>${a}</option>`).join('')}
@@ -4046,16 +4083,25 @@ const App = (() => {
           return `<tr${a.reincorporado ? ' class="inactivo"' : ''}>
             <td><strong>${esc(nombreMotivo(a.motivo))}</strong>
               ${a.diagnostico ? `<div style="font-size:11.5px;color:var(--texto-suave)">${esc(a.diagnostico)}</div>` : ''}</td>
-            <td class="tipo">${a.desde ? fmtFecha(a.desde) : '—'}</td>
+            <td class="tipo">${a.desde ? fmtFecha(a.desde) : '—'}${a.fechasSupuestas
+              ? '<div style="font-size:11px;color:var(--texto-suave)">fecha supuesta</div>' : ''}</td>
             <td class="tipo">${a.hasta ? fmtFecha(a.hasta) : '—'}</td>
             <td class="num">${diasDeAusencia(a, hoy) || '—'}</td>
-            <td class="tipo">${tieneCertificado(a)
-              ? '<span class="chip verde">presentado</span>'
-              : '<span class="chip rojo">no lo trajo</span>'}</td>
+            <td class="tipo">${a.origen === 'liquidacion'
+              ? `<span class="chip azul" title="Días que pagó la liquidación de ${esc(a.periodoLiquidacion || '')}">de la liquidación</span>`
+              : tieneCertificado(a)
+                ? '<span class="chip verde">presentado</span>'
+                : '<span class="chip rojo">no lo trajo</span>'}</td>
             <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
+
+      ${todas.some(a => a.origen === 'liquidacion') ? `<p class="ayuda">
+        <strong>Las que dicen «de la liquidación» salen del libro de novedades del mes.</strong>
+        Los días están medidos —la liquidación los pagó— pero el libro no dice <em>cuáles</em>,
+        así que se ubican al principio del mes y quedan marcadas. Si cargás la licencia con sus
+        fechas reales, esa manda y la del libro no vuelve a entrar.</p>` : ''}
 
       <p class="ayuda">
         <strong>Acá está todo lo que tenga cargado</strong>, sea de cuando sea: el corte del
@@ -4067,50 +4113,6 @@ const App = (() => {
       </p>`;
   }
 
-  /* ------------- Historial de ausencias mes a mes ------------- */
-  function fichaAusencias(c, periodos) {
-    if (!periodos.length) {
-      return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
-        <p class="vacio">Todavía no se importaron novedades de liquidación de esta persona.</p>`;
-    }
-    const col = [
-      ['enfermedad', 'Enfermedad'], ['vacaciones', 'Vacaciones'],
-      ['noJustificada', 'Sin aviso'], ['examen', 'Examen'],
-      ['fallecimiento', 'Fallec.'], ['mudanza', 'Mudanza'], ['gremio', 'Gremial']
-    ];
-    const tot = {};
-    col.forEach(([k]) => { tot[k] = periodos.reduce((s, p) => s + (+c.novedades[p][k] || 0), 0); });
-    const totHe = periodos.reduce((s, p) => s + (+c.novedades[p].he50 || 0) + (+c.novedades[p].he100 || 0), 0);
-
-    return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
-      <p class="ayuda" style="margin:-4px 0 10px">Sale de las novedades que devuelve la
-        liquidación, ya cerradas. No es lo mismo que el bloque de arriba, que es lo que
-        registrás vos: cotejarlos es justamente para lo que sirve tenerlos al lado.</p>
-      <div class="tabla-scroll"><table>
-        <thead><tr><th>Período</th>${col.map(([, t]) => `<th class="num">${t}</th>`).join('')}
-          <th class="num">Total</th><th class="num">Hs. extras</th><th>Observaciones</th></tr></thead>
-        <tbody>${periodos.map(pp => {
-          const n = c.novedades[pp];
-          const total = col.reduce((s, [k]) => s + (+n[k] || 0), 0);
-          return `<tr>
-            <td><strong>${esc(pp)}</strong></td>
-            ${col.map(([k]) => `<td class="num">${(+n[k] || 0) || '—'}</td>`).join('')}
-            <td class="num"><strong>${total || '—'}</strong></td>
-            <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
-            <td>${esc(n.obs || '')}</td>
-          </tr>`;
-        }).join('')}</tbody>
-        <tfoot><tr class="total"><td><strong>Total</strong></td>
-          ${col.map(([k]) => `<td class="num">${tot[k] || '—'}</td>`).join('')}
-          <td class="num"><strong>${col.reduce((s, [k]) => s + tot[k], 0) || '—'}</strong></td>
-          <td class="num">${fmtNum(totHe, 1)}</td><td></td></tr></tfoot>
-      </table></div>
-      <p class="ayuda">
-        Sale del libro de novedades de liquidación que se importa en la estadística
-        mensual. Examen, fallecimiento, mudanza y gremial alimentan además el contador
-        de topes del convenio de acá arriba.
-      </p>`;
-  }
 
   const dato = (etiqueta, valor) => `<div class="campo-lectura">
     <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
@@ -7830,6 +7832,12 @@ const App = (() => {
               tiendas no cayeron en nadie del padrón:</strong>
               ${r.sinPersona.map(x => esc(x.nombre) + ' (' + esc(x.tienda) + ')').join(', ')}.
               Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
+            ${r.diferencias.length ? `<p style="margin:8px 0 0"><strong>${r.diferencias.length}
+              ${r.diferencias.length === 1 ? 'licencia ya registrada no coincide' : 'licencias ya registradas no coinciden'}
+              con lo que pagó la liquidación</strong> —mandan las que tienen fechas de verdad—:
+              ${r.diferencias.map(x => `${esc(x.nombre)}: la liquidación pagó ${x.pagados} y
+                están registrados ${x.registrados}`).join(' · ')}.
+              Suele ser un certificado que se extendió y no se actualizó.</p>` : ''}
             ${r.enConflicto.length ? `<p style="margin:8px 0 0"><strong>${r.enConflicto.length} con el
               número y el nombre en contradicción</strong>, que quedaron afuera:
               ${r.enConflicto.map(esc).join(' · ')}.</p>` : ''}

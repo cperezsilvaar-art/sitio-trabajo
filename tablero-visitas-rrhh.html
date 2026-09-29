@@ -2838,6 +2838,22 @@ const MAPA_AUSENCIAS = [
   { campo: 'examen',        cod: '056', nombre: 'Examen universitario' }
 ];
 
+/* A qué motivo de `c.ausencias` corresponde cada concepto del libro. Lo que no
+   está acá no se registra como licencia: las vacaciones y la capacitación
+   gremial son tiempo planificado, y el faltante de caja no es una ausencia. */
+const MOTIVO_DE_NOVEDAD = {
+  enfermedad: 'enfermedad',
+  art: 'accidenteTrabajo',
+  maternidad: 'maternidad',
+  nacimiento: 'paternidad',
+  noJustificada: 'otra',
+  examen: 'otra',
+  mudanza: 'otra',
+  matrimonio: 'otra',
+  fallecimiento: 'otra',
+  reserva: 'otra'
+};
+
 /** Si ese concepto suma al ausentismo. Por defecto sí. */
 const cuentaComoAusentismo = campo => {
   const m = MAPA_AUSENCIAS.find(x => x.campo === campo);
@@ -3958,6 +3974,7 @@ function cierreDelMes(estado, periodo) {
       personas: 0, conNovedades: 0,
       he50: 0, he100: 0, horasExtras: 0,
       diasAusencia: 0, porConcepto: {},
+      diasVinculo: 0, diasFaltantes: 0, altas: [], bajas: [],
       excedenMes: 0
     };
     (s.colaboradores || []).forEach(c => {
@@ -3965,6 +3982,19 @@ function cierreDelMes(estado, periodo) {
       const n = (c.novedades || {})[periodo];
       if (!n) return;
       fila.conNovedades++;
+
+      /* Cuántos días del mes estuvo vinculada. Quien entró el 16 aportó
+         quince y quien se fue el 12, doce: contarlos como un mes entero
+         infla la dotación con gente que no estuvo, que es justamente lo que
+         el cierre tiene que mostrar. La cuenta es la de la matriz de FTE
+         (`movimientoDelMes()` en `store.js`) y no una nueva. */
+      const mov = (typeof Store !== 'undefined' && Store.diasDeVinculo)
+        ? Store.diasDeVinculo(c, periodo, diasMes)
+        : { tipo: 'estable', dias: diasMes };
+      fila.diasVinculo += mov.dias;
+      fila.diasFaltantes += diasMes - mov.dias;
+      if (mov.tipo === 'alta') fila.altas.push({ nombre: c.nombre, dias: mov.dias });
+      if (mov.tipo === 'baja') fila.bajas.push({ nombre: c.nombre, dias: mov.dias });
 
       const tope = topeHorasExtras(c, periodo);
       fila.he50 += tope.mes.al50;
@@ -3989,11 +4019,15 @@ function cierreDelMes(estado, periodo) {
       gente.push({
         id: c.id, nombre: c.nombre, sucursal: s.nombre || s.codigo, sucursalId: s.id,
         cargo: c.cargo || c.posicion || '', tope, dias,
-        /* Lo mismo en la unidad en la que se piensa la dotación: cuánto turno
-           se perdió y cuánto se repuso pagando extras. */
+        movimiento: mov.tipo, diasVinculo: mov.dias, diasFaltantes: diasMes - mov.dias,
+        /* Lo mismo en la unidad en la que se piensa la dotación. El FTE real es
+           la fórmula de TD01: los días que estuvo, menos los que faltó, más lo
+           que se repuso con extras. */
+        fteVinculo: mov.dias / diasMes,
         fteAusencia: dias / diasMes,
         fteExtras: tope.mes.total / horasMes,
-        fteNeto: tope.mes.total / horasMes - dias / diasMes,
+        fteReal: mov.dias / diasMes - dias / diasMes + tope.mes.total / horasMes,
+        fteNeto: tope.mes.total / horasMes - dias / diasMes - (diasMes - mov.dias) / diasMes,
         porConcepto: MAPA_AUSENCIAS.reduce((a, m) => {
           const d = +n[m.campo] || 0; if (d) a[m.nombre] = d; return a;
         }, {})
@@ -4005,7 +4039,13 @@ function cierreDelMes(estado, periodo) {
   tiendas.forEach(x => {
     x.fteAusencia = x.diasAusencia / diasMes;
     x.fteExtras = x.horasExtras / horasMes;
-    x.fteNeto = x.fteExtras - x.fteAusencia;
+    x.fteVinculo = x.diasVinculo / diasMes;
+    /* Lo que se perdió porque alguien entró o salió en el medio del mes. */
+    x.fteMovimientos = x.diasFaltantes / diasMes;
+    x.fteReal = x.fteVinculo - x.fteAusencia + x.fteExtras;
+    /* El neto contra tener a todos el mes entero: es el número que dice
+       cuánta gente faltó de verdad. */
+    x.fteNeto = x.fteExtras - x.fteAusencia - x.fteMovimientos;
   });
 
   /* Por el neto y no por las horas: la pregunta de la tienda no es cuántas
@@ -4018,11 +4058,18 @@ function cierreDelMes(estado, periodo) {
     personas: a.personas + x.conNovedades,
     he50: a.he50 + x.he50, he100: a.he100 + x.he100,
     horasExtras: a.horasExtras + x.horasExtras,
-    diasAusencia: a.diasAusencia + x.diasAusencia
-  }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0 });
+    diasAusencia: a.diasAusencia + x.diasAusencia,
+    diasVinculo: a.diasVinculo + x.diasVinculo,
+    diasFaltantes: a.diasFaltantes + x.diasFaltantes,
+    altas: a.altas + x.altas.length, bajas: a.bajas + x.bajas.length
+  }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0,
+        diasVinculo: 0, diasFaltantes: 0, altas: 0, bajas: 0 });
   tot.fteAusencia = tot.diasAusencia / diasMes;
   tot.fteExtras = tot.horasExtras / horasMes;
-  tot.fteNeto = tot.fteExtras - tot.fteAusencia;
+  tot.fteVinculo = tot.diasVinculo / diasMes;
+  tot.fteMovimientos = tot.diasFaltantes / diasMes;
+  tot.fteReal = tot.fteVinculo - tot.fteAusencia + tot.fteExtras;
+  tot.fteNeto = tot.fteExtras - tot.fteAusencia - tot.fteMovimientos;
 
   return {
     periodo, tiendas, gente, total: tot, diasMes, horasMes,
@@ -8540,6 +8587,91 @@ const Store = (() => {
    * La fila necesita `cuil` (el número, sea CUIL o DNI), `nombre` y `tienda`.
    * Devuelve `{ g, via, propia, conflicto }`.
    */
+  /**
+   * Registra en `c.ausencias` las licencias que la liquidación pagó ese mes.
+   *
+   * Sin esto el libro solo llenaba `c.novedades`, y el ausentismo por sucursal
+   * —que se calcula sobre `c.ausencias`— se quedaba en cero aunque el mes
+   * tuviera 166 días de licencia. El coordinador cargaba el cierre y no se
+   * movía nada: es la misma pantalla mirando otra caja.
+   *
+   * **El libro dice cuántos días, no cuáles.** La duración está medida —la
+   * liquidación la pagó— pero las fechas no, así que la licencia se ubica al
+   * principio del mes y queda marcada con `fechasSupuestas` para siempre. Es
+   * el mismo trato que `diasSupuestos` le da al certificado sin duración: lo
+   * que se supone se marca y no se muestra solo.
+   *
+   * **No pisa lo que ya estaba.** Si la persona ya tiene una licencia de ese
+   * motivo que toca el mes —cargada del formulario de recepción o del parte de
+   * los gerentes—, esa es la buena: tiene fechas de verdad. La del libro no
+   * entra y los días no se cuentan dos veces.
+   */
+  function registrarLicenciasDelLibro(c, periodo, nov, diferencias) {
+    if (!Array.isArray(c.ausencias)) c.ausencias = [];
+    const ini = periodo + '-01';
+    const finMes = new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0)
+      .toISOString().slice(0, 10);
+    let puestas = 0;
+
+    Object.keys(MOTIVO_DE_NOVEDAD).forEach(campo => {
+      const dias = numeroNovedad(nov[campo]);
+      if (dias <= 0) return;
+      const motivo = MOTIVO_DE_NOVEDAD[campo];
+
+      /* Ya hay una con fechas reales que pisa este mes: manda esa. Pero si
+         los días no coinciden con los que pagó la liquidación, la diferencia
+         se nombra: casi siempre es un certificado que se extendió y que nadie
+         actualizó, y callarla deja al ausentismo corto sin decir por qué. */
+      const suyas = c.ausencias.filter(a => a.motivo === motivo && a.desde
+        && a.desde <= finMes && (a.hasta || finMes) >= ini);
+      if (suyas.length) {
+        /* Los días que la licencia pisa del mes, a secas. No con
+           `diasDeAusenciaEntre()`, que devuelve cero para lo que no es
+           ausentismo: comparar así daba «la maternidad pagó 17 y hay 0
+           registrados» sobre una licencia que estaba perfectamente cargada. */
+        const registrados = suyas.reduce((n, a) => {
+          const d1 = a.desde > ini ? a.desde : ini;
+          const d2 = (a.hasta && a.hasta < finMes) ? a.hasta : finMes;
+          if (d2 < d1) return n;
+          return n + Math.round((new Date(d2) - new Date(d1)) / 86400000) + 1;
+        }, 0);
+        const pagados = Math.round(dias);
+        if (registrados !== pagados && diferencias) {
+          diferencias.push({ nombre: c.nombre, concepto: campo, pagados, registrados });
+        }
+        return;
+      }
+
+      const fin = new Date(ini + 'T00:00:00');
+      fin.setDate(fin.getDate() + Math.round(dias) - 1);
+      const hasta = fin.toISOString().slice(0, 10);
+
+      c.ausencias.push({
+        id: uid(),
+        desde: ini,
+        hasta: hasta > finMes ? finMes : hasta,
+        motivo,
+        concepto: campo,
+        diagnostico: '', certificado: '', notas: '',
+        /* La liquidación ya la pagó: es una ausencia cerrada, no una abierta
+           que el Panel tenga que anunciar como «falta hoy». */
+        reincorporado: true,
+        fechaReincorporacion: '',
+        origen: 'liquidacion',
+        periodoLiquidacion: periodo,
+        /* Quién cuenta para el ausentismo lo decide `cuentaComoAusentismo()` y
+           nadie más: sin esto la maternidad, el matrimonio, el nacimiento y el
+           fallecimiento entrarían como ausentismo por la puerta de atrás. */
+        cuentaAusentismo: cuentaComoAusentismo(campo),
+        fechasSupuestas: true,
+        diasSupuestos: false,
+        registradaEl: new Date().toISOString()
+      });
+      puestas++;
+    });
+    return puestas;
+  }
+
   function buscadorDePadron(estado) {
     const gente = [];
     (estado.sucursales || []).forEach(s =>
@@ -9605,8 +9737,21 @@ const Store = (() => {
      * necesita: casi siempre es alguien que se fue o que todavía no pegó la
      * nómina del mes.
      */
+    /**
+     * Los días que una persona estuvo vinculada dentro del período.
+     *
+     * Es `movimientoDelMes()`, que es privada del módulo, abierta para que
+     * `cierreDelMes()` —que vive en `convenio.js`— use **la misma cuenta** que
+     * la matriz de FTE en vez de escribir una parecida. Dos formas de contar
+     * los días de un alta terminan difiriendo el día que se toca una.
+     */
+    diasDeVinculo(colaborador, periodo, diasMes) {
+      return movimientoDelMes(colaborador, periodo, diasMes);
+    },
+
     importarLibroDeNovedades(periodo, filas) {
       const e = this.get();
+      resguardar('Antes de importar el libro de novedades');
       const buscar = buscadorDePadron(e);
       const norm = t => String(t || '').toUpperCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
@@ -9618,8 +9763,8 @@ const Store = (() => {
         [s.nombre, s.codigo, s.rvd].forEach(x => { if (x) porClave[norm(x)] = s; });
       });
 
-      let actualizados = 0;
-      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [];
+      let actualizados = 0, registradas = 0;
+      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [], diferencias = [];
       const porTienda = {};
 
       (filas || []).forEach(f => {
@@ -9651,12 +9796,13 @@ const Store = (() => {
         c.novedades[periodo] = nov;
 
         actualizados++;
+        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias);
         const k = s.nombre || s.codigo;
         porTienda[k] = (porTienda[k] || 0) + 1;
       });
 
       guardar();
-      return { periodo, actualizados, porTienda, sinPersona, sinTienda, enConflicto,
+      return { periodo, actualizados, registradas, porTienda, sinPersona, sinTienda, enConflicto, diferencias,
                otrasAreas: otrasAreas.length, leidas: (filas || []).length };
     },
 
@@ -13378,8 +13524,13 @@ const App = (() => {
               r.alBordeDelAnio.length ? 'aviso' : 'ok')}
         ${kpi('Días de ausencia liquidados', fmtNum(r.total.diasAusencia, 0),
               `${fmtNum(r.total.fteAusencia, 2)} FTE · sin contar vacaciones`)}
-        ${kpi('Turno neto del mes', `${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)} FTE`,
-              `${fmtNum(r.total.fteExtras, 2)} de extras − ${fmtNum(r.total.fteAusencia, 2)} de ausencias`,
+        ${kpi('Altas y bajas', `${r.total.altas + r.total.bajas}`,
+              r.total.altas + r.total.bajas
+                ? `${r.total.altas} altas · ${r.total.bajas} bajas · −${fmtNum(r.total.fteMovimientos, 2)} FTE`
+                : 'nadie entró ni salió en el mes',
+              r.total.fteMovimientos > 0.5 ? 'aviso' : 'ok')}
+        ${kpi('FTE real del mes', fmtNum(r.total.fteReal, 2),
+              `sobre ${r.total.personas} cabezas · ${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)} contra el mes completo`,
               r.total.fteNeto < 0 ? 'aviso' : 'ok')}
       </div>
 
@@ -13401,6 +13552,11 @@ const App = (() => {
           estadística y se cambian en <a href="#/config">Configuración</a>. Así los dos se pueden
           sumar: el turno que se perdió por licencias y el que se repuso pagando extras están en la
           misma unidad, y la resta dice cuánta gente faltó de verdad en el mes.
+          <strong>Las altas y las bajas cuentan igual</strong>: quien entró el 16 aportó quince
+          días y no un mes, y los que le faltaron para los ${r.diasMes} se descuentan. El
+          <strong>FTE real</strong> es la fórmula de la matriz de TD01 —días de vínculo ÷
+          ${r.diasMes}, menos ausencias ÷ ${r.diasMes}, más horas extras ÷ ${r.horasMes}—, y el
+          <strong>neto</strong> es lo mismo leído contra tener a todos el mes entero.
         </p>
       </section>
 
@@ -13412,7 +13568,8 @@ const App = (() => {
             <th>Tienda</th><th class="num">Personas</th>
             <th class="num">Hs. extras</th><th class="num">al 50%</th><th class="num">al 100%</th>
             <th class="num">FTE +</th><th class="num">Se pasaron</th>
-            <th class="num">Días de ausencia</th><th class="num">FTE −</th><th class="num">Neto</th>
+            <th class="num">Días de ausencia</th><th class="num">FTE −</th>
+            <th class="num">Altas y bajas</th><th class="num">FTE real</th><th class="num">Neto</th>
           </tr></thead>
           <tbody>${r.tiendas.map(x => `<tr>
             <td><a href="#/sucursal/${x.id}" style="color:inherit">${esc(x.sucursal)}</a></td>
@@ -13424,6 +13581,11 @@ const App = (() => {
             <td class="num">${x.excedenMes ? `<span class="chip rojo">${x.excedenMes}</span>` : '—'}</td>
             <td class="num">${fmtNum(x.diasAusencia, 0)}</td>
             <td class="num">${x.fteAusencia ? '−' + fmtNum(x.fteAusencia, 2) : '—'}</td>
+            <td class="num">${x.altas.length + x.bajas.length
+              ? `<span title="${esc(x.altas.map(z => z.nombre + ' entró').concat(
+                    x.bajas.map(z => z.nombre + ' salió')).join(' · '))}">−${fmtNum(x.fteMovimientos, 2)}</span>`
+              : '—'}</td>
+            <td class="num">${fmtNum(x.fteReal, 2)}</td>
             <td class="num"><strong style="color:${x.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
               >${x.fteNeto >= 0 ? '+' : ''}${fmtNum(x.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
@@ -13437,6 +13599,8 @@ const App = (() => {
             <td class="num">${r.excedenMes.length || '—'}</td>
             <td class="num"><strong>${fmtNum(r.total.diasAusencia, 0)}</strong></td>
             <td class="num"><strong>−${fmtNum(r.total.fteAusencia, 2)}</strong></td>
+            <td class="num"><strong>${r.total.fteMovimientos ? '−' + fmtNum(r.total.fteMovimientos, 2) : '—'}</strong></td>
+            <td class="num"><strong>${fmtNum(r.total.fteReal, 2)}</strong></td>
             <td class="num"><strong>${r.total.fteNeto >= 0 ? '+' : ''}${fmtNum(r.total.fteNeto, 2)}</strong></td>
           </tr></tfoot>
         </table></div>
@@ -13461,7 +13625,7 @@ const App = (() => {
             <th class="num">Hs. del mes</th><th>Contra las ${T.mensual}</th>
             <th class="num">Año</th><th>Contra las ${T.anual}</th>
             <th class="num">Le quedan</th><th class="num">Días de ausencia</th>
-            <th class="num">FTE neto</th>
+            <th class="num">Vínculo</th><th class="num">FTE neto</th>
           </tr></thead>
           <tbody>${r.gente.map(g => `<tr${g.tope.excedeMes || g.tope.excedeAnio ? ' class="fila-alerta"' : ''}>
             <td><button class="check-titulo" data-accion="ir-a-ficha" data-id="${g.id}"
@@ -13479,6 +13643,9 @@ const App = (() => {
                 ? `<br><span style="font-size:11px;color:var(--texto-suave)">${
                     Object.keys(g.porConcepto).map(k => `${esc(k)} ${g.porConcepto[k]}`).join(' · ')}</span>`
                 : ''}</td>
+            <td class="num">${g.movimiento === 'estable' ? 'mes entero'
+              : `<span class="chip ambar">${g.movimiento === 'alta' ? 'entró' : 'salió'}</span>
+                 <br><span style="font-size:11px;color:var(--texto-suave)">${g.diasVinculo} días</span>`}</td>
             <td class="num"><strong style="color:${g.fteNeto < 0 ? 'var(--rojo-alerta)' : 'inherit'}"
               >${g.fteNeto >= 0 ? '+' : ''}${fmtNum(g.fteNeto, 2)}</strong></td>
           </tr>`).join('')}</tbody>
@@ -15343,8 +15510,6 @@ const App = (() => {
     const edad = antiguedadAnios(c.fechaNacimiento);
     const q = c.desempeno && c.potencial ? NINE_BOX[`${c.potencial}${c.desempeno}`] : null;
 
-    /* Los períodos con novedades cargadas, del más reciente al más viejo. */
-    const periodos = Object.keys(c.novedades || {}).sort().reverse();
 
     return `
       <section class="tarjeta" id="perfil-colaborador">
@@ -15462,14 +15627,18 @@ const App = (() => {
         ${talentCard(c, s, { sinCabecera: true })}
         ${fichaEntrenamientos(c)}
 
-        ${/* Las tres cosas de ausencias, juntas y en este orden: lo que
-             registramos, lo que el convenio le permite y lo que la liquidación
-             devolvió. Estaban separadas por Sanciones y por Desarrollo, y con
-             tres tablas parecidas repartidas por la ficha era imposible saber
-             cuál contestaba qué. */''}
+        ${/* Dos bloques de ausencias y no tres: lo que le pasó a la persona y
+             lo que el convenio le permite.
+
+             El tercero —«Ausencias que liquidó Nómina, mes a mes»— se eliminó.
+             Existía cuando la liquidación era una fuente aparte que había que
+             cotejar contra lo registrado; desde que el libro **registra** las
+             licencias, decía exactamente lo mismo que el bloque de arriba dos
+             renglones más abajo, y encima con otro formato. Lo único suyo que
+             no estaba en ningún lado —las horas extras del mes— tiene ahora su
+             propia pantalla en «El cierre del mes». */''}
         ${fichaAusenciasRegistradas(c)}
         ${fichaLicencias(c)}
-        ${fichaAusencias(c, periodos)}
 
         ${fichaSanciones(c)}
       </section>`;
@@ -15701,6 +15870,20 @@ const App = (() => {
         .concat([String(new Date().getFullYear())])
     )).filter(Boolean).sort().reverse();
 
+    /* Sin ninguna usada, la tabla son cinco filas de guiones que ocupan media
+       pantalla para decir «no pasó nada». Es la misma regla que saca de la tira
+       al indicador sin número: se resume en una línea y el botón queda. */
+    const usados = saldo.reduce((n, x) => n + (x.usados || 0), 0);
+    if (!usados) {
+      return `<h4>Licencias especiales del art. 25</h4>
+        <p class="ayuda" style="margin:-4px 0 10px">No usó ninguna de las licencias del
+          convenio en ${esc(anio)} —matrimonio, enfermedad de un familiar, examen y
+          capacitación sindical—. Lo que trae la liquidación se cuenta solo.</p>
+        <div class="acciones" style="margin-top:0">
+          <button class="b sec" data-accion="nueva-licencia" data-id="${c.id}">+ Registrar una licencia</button>
+        </div>`;
+    }
+
     return `<h4>Licencias especiales del art. 25 · año
         <select id="licencia-anio" style="width:auto;display:inline-block;margin-left:6px">
           ${anios.map(a => `<option value="${a}"${a === anio ? ' selected' : ''}>${a}</option>`).join('')}
@@ -15916,16 +16099,25 @@ const App = (() => {
           return `<tr${a.reincorporado ? ' class="inactivo"' : ''}>
             <td><strong>${esc(nombreMotivo(a.motivo))}</strong>
               ${a.diagnostico ? `<div style="font-size:11.5px;color:var(--texto-suave)">${esc(a.diagnostico)}</div>` : ''}</td>
-            <td class="tipo">${a.desde ? fmtFecha(a.desde) : '—'}</td>
+            <td class="tipo">${a.desde ? fmtFecha(a.desde) : '—'}${a.fechasSupuestas
+              ? '<div style="font-size:11px;color:var(--texto-suave)">fecha supuesta</div>' : ''}</td>
             <td class="tipo">${a.hasta ? fmtFecha(a.hasta) : '—'}</td>
             <td class="num">${diasDeAusencia(a, hoy) || '—'}</td>
-            <td class="tipo">${tieneCertificado(a)
-              ? '<span class="chip verde">presentado</span>'
-              : '<span class="chip rojo">no lo trajo</span>'}</td>
+            <td class="tipo">${a.origen === 'liquidacion'
+              ? `<span class="chip azul" title="Días que pagó la liquidación de ${esc(a.periodoLiquidacion || '')}">de la liquidación</span>`
+              : tieneCertificado(a)
+                ? '<span class="chip verde">presentado</span>'
+                : '<span class="chip rojo">no lo trajo</span>'}</td>
             <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
+
+      ${todas.some(a => a.origen === 'liquidacion') ? `<p class="ayuda">
+        <strong>Las que dicen «de la liquidación» salen del libro de novedades del mes.</strong>
+        Los días están medidos —la liquidación los pagó— pero el libro no dice <em>cuáles</em>,
+        así que se ubican al principio del mes y quedan marcadas. Si cargás la licencia con sus
+        fechas reales, esa manda y la del libro no vuelve a entrar.</p>` : ''}
 
       <p class="ayuda">
         <strong>Acá está todo lo que tenga cargado</strong>, sea de cuando sea: el corte del
@@ -15937,50 +16129,6 @@ const App = (() => {
       </p>`;
   }
 
-  /* ------------- Historial de ausencias mes a mes ------------- */
-  function fichaAusencias(c, periodos) {
-    if (!periodos.length) {
-      return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
-        <p class="vacio">Todavía no se importaron novedades de liquidación de esta persona.</p>`;
-    }
-    const col = [
-      ['enfermedad', 'Enfermedad'], ['vacaciones', 'Vacaciones'],
-      ['noJustificada', 'Sin aviso'], ['examen', 'Examen'],
-      ['fallecimiento', 'Fallec.'], ['mudanza', 'Mudanza'], ['gremio', 'Gremial']
-    ];
-    const tot = {};
-    col.forEach(([k]) => { tot[k] = periodos.reduce((s, p) => s + (+c.novedades[p][k] || 0), 0); });
-    const totHe = periodos.reduce((s, p) => s + (+c.novedades[p].he50 || 0) + (+c.novedades[p].he100 || 0), 0);
-
-    return `<h4>Ausencias que liquidó Nómina, mes a mes</h4>
-      <p class="ayuda" style="margin:-4px 0 10px">Sale de las novedades que devuelve la
-        liquidación, ya cerradas. No es lo mismo que el bloque de arriba, que es lo que
-        registrás vos: cotejarlos es justamente para lo que sirve tenerlos al lado.</p>
-      <div class="tabla-scroll"><table>
-        <thead><tr><th>Período</th>${col.map(([, t]) => `<th class="num">${t}</th>`).join('')}
-          <th class="num">Total</th><th class="num">Hs. extras</th><th>Observaciones</th></tr></thead>
-        <tbody>${periodos.map(pp => {
-          const n = c.novedades[pp];
-          const total = col.reduce((s, [k]) => s + (+n[k] || 0), 0);
-          return `<tr>
-            <td><strong>${esc(pp)}</strong></td>
-            ${col.map(([k]) => `<td class="num">${(+n[k] || 0) || '—'}</td>`).join('')}
-            <td class="num"><strong>${total || '—'}</strong></td>
-            <td class="num">${fmtNum((+n.he50 || 0) + (+n.he100 || 0), 1)}</td>
-            <td>${esc(n.obs || '')}</td>
-          </tr>`;
-        }).join('')}</tbody>
-        <tfoot><tr class="total"><td><strong>Total</strong></td>
-          ${col.map(([k]) => `<td class="num">${tot[k] || '—'}</td>`).join('')}
-          <td class="num"><strong>${col.reduce((s, [k]) => s + tot[k], 0) || '—'}</strong></td>
-          <td class="num">${fmtNum(totHe, 1)}</td><td></td></tr></tfoot>
-      </table></div>
-      <p class="ayuda">
-        Sale del libro de novedades de liquidación que se importa en la estadística
-        mensual. Examen, fallecimiento, mudanza y gremial alimentan además el contador
-        de topes del convenio de acá arriba.
-      </p>`;
-  }
 
   const dato = (etiqueta, valor) => `<div class="campo-lectura">
     <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
@@ -19700,6 +19848,12 @@ const App = (() => {
               tiendas no cayeron en nadie del padrón:</strong>
               ${r.sinPersona.map(x => esc(x.nombre) + ' (' + esc(x.tienda) + ')').join(', ')}.
               Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
+            ${r.diferencias.length ? `<p style="margin:8px 0 0"><strong>${r.diferencias.length}
+              ${r.diferencias.length === 1 ? 'licencia ya registrada no coincide' : 'licencias ya registradas no coinciden'}
+              con lo que pagó la liquidación</strong> —mandan las que tienen fechas de verdad—:
+              ${r.diferencias.map(x => `${esc(x.nombre)}: la liquidación pagó ${x.pagados} y
+                están registrados ${x.registrados}`).join(' · ')}.
+              Suele ser un certificado que se extendió y no se actualizó.</p>` : ''}
             ${r.enConflicto.length ? `<p style="margin:8px 0 0"><strong>${r.enConflicto.length} con el
               número y el nombre en contradicción</strong>, que quedaron afuera:
               ${r.enConflicto.map(esc).join(' · ')}.</p>` : ''}

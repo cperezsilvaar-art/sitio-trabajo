@@ -86,6 +86,22 @@ const MAPA_AUSENCIAS = [
   { campo: 'examen',        cod: '056', nombre: 'Examen universitario' }
 ];
 
+/* A qué motivo de `c.ausencias` corresponde cada concepto del libro. Lo que no
+   está acá no se registra como licencia: las vacaciones y la capacitación
+   gremial son tiempo planificado, y el faltante de caja no es una ausencia. */
+const MOTIVO_DE_NOVEDAD = {
+  enfermedad: 'enfermedad',
+  art: 'accidenteTrabajo',
+  maternidad: 'maternidad',
+  nacimiento: 'paternidad',
+  noJustificada: 'otra',
+  examen: 'otra',
+  mudanza: 'otra',
+  matrimonio: 'otra',
+  fallecimiento: 'otra',
+  reserva: 'otra'
+};
+
 /** Si ese concepto suma al ausentismo. Por defecto sí. */
 const cuentaComoAusentismo = campo => {
   const m = MAPA_AUSENCIAS.find(x => x.campo === campo);
