@@ -1753,6 +1753,31 @@ const Store = (() => {
       return d;
     },
 
+    /* ------------------- curso de ADEF (art. 8) -------------------- */
+
+    /**
+     * Anota en qué anda con el curso de ADEF.
+     *
+     * Vive en `c.adef` y no en cuatro campos sueltos porque es una sola
+     * respuesta con su fecha y su nota, y porque así acompaña a la persona
+     * cuando la trasladan, igual que `c.baja`, `c.ausencias` o
+     * `c.entrenamientos`.
+     *
+     * Un estado vacío **borra el relevamiento** en vez de guardar una respuesta
+     * en blanco: volver a «sin relevar» es una respuesta válida cuando algo se
+     * marcó por error, y dejar un objeto vacío lo contaría como relevado.
+     */
+    marcarAdef(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const d = Object.assign({}, c.adef || {}, datos || {});
+      if (!d.estado) { delete c.adef; guardar(); return null; }
+      d.relevadoEl = d.relevadoEl || new Date().toISOString().slice(0, 10);
+      c.adef = d;
+      guardar();
+      return d;
+    },
+
     /* ------------------------ ausencias --------------------------- */
 
     /**

@@ -160,6 +160,19 @@ const App = (() => {
     </nav>`;
   }
 
+  /* `#/nomina` tiene dos solapas y no dos entradas de menú: son la misma lista
+     de personas mirada de dos formas. El padrón contesta «¿quién es esta
+     persona?»; el relevamiento contesta «¿cómo viene el plantel con el curso?».
+     Una lista más de las 141 personas en otra pantalla sería la tercera. */
+  function solapasDeNomina(cual) {
+    const item = (id, ruta, nombre) =>
+      `<a href="${ruta}" class="${cual === id ? 'activo' : ''}">${nombre}</a>`;
+    return `<nav class="tabs">
+      ${item('padron', '#/nomina', 'El padrón')}
+      ${item('adef', '#/nomina/adef', 'Curso de ADEF')}
+    </nav>`;
+  }
+
   /** Una barra horizontal con el valor escrito en la punta. */
   function barraDato(parte, texto, clase) {
     return `<div class="fila-barra">
@@ -1165,6 +1178,7 @@ const App = (() => {
         Todo el personal, flotantes incluidos. Escribí en el buscador para filtrar por nombre,
         sucursal, puesto o documento; tocá una fila para abrir la ficha completa.
       </p>
+      ${solapasDeNomina('padron')}
 
       <section class="tarjeta">
         <div class="acciones" style="align-items:flex-end;margin-top:0">
@@ -1295,6 +1309,124 @@ const App = (() => {
       </button>
       ${abierta ? perfilColaborador(s, c) : ''}
     </article>`;
+  }
+
+  /* ===================== VISTA: CURSO DE ADEF =======================
+     El relevamiento. Es una tabla y no fichas desplegables porque lo que se
+     hace acá es una pasada de 141 respuestas de un tirón: cada apertura que
+     haya que hacer es una razón para dejarlo por la mitad.
+
+     El orden por defecto es por lo que apura —primero quien ya cumplió el
+     art. 8 sin estar recategorizado, después quien está por cumplirlo— y no
+     alfabético: el alfabético sirve para buscar a alguien, y buscar a alguien
+     es lo que hace la otra solapa. */
+
+  let adefFiltro = 'todos';
+
+  const FILTROS_ADEF = [
+    ['todos',      'Todos'],
+    ['sinRelevar', 'Sin relevar'],
+    ['cursando',   'Cursando'],
+    ['terminado',  'Terminado'],
+    ['art8',       'Art. 8 cumplido o por cumplir']
+  ];
+
+  function vistaAdef() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const r = relevamientoAdef(e, hoyISO());
+    const filas = r.filas.filter(f =>
+      adefFiltro === 'todos' ? true
+      : adefFiltro === 'sinRelevar' ? !f.estado
+      : adefFiltro === 'art8' ? (f.art8.aplica && (f.art8.cumple || f.art8.faltanMeses <= MESES_AVISO_ART8))
+      : f.estado === adefFiltro);
+
+    /* Lo urgente arriba: el que ya cumplió, después el que está por cumplir
+       ordenado por lo que le falta, y al final el resto por antigüedad. */
+    const peso = f => f.art8.aplica && f.art8.cumple ? 0
+                    : f.art8.aplica && f.art8.faltanMeses <= MESES_AVISO_ART8 ? 1
+                    : f.art8.aplica ? 2 : 3;
+    filas.sort((a, b) => peso(a) - peso(b)
+      || (a.art8.faltanMeses - b.art8.faltanMeses)
+      || b.art8.anios - a.art8.anios
+      || _norm(a.c.nombre).localeCompare(_norm(b.c.nombre)));
+
+    return `
+      <h1 class="titulo">Curso de ADEF</h1>
+      <p class="subtitulo">
+        Quién está haciendo el curso y a quién se le viene encima el art. 8 del convenio.
+      </p>
+      ${solapasDeNomina('adef')}
+
+      <div class="kpis" style="margin-top:18px">
+        ${kpi('Relevados', `${r.relevados} / ${r.total}`,
+              r.sinRelevar ? `faltan ${r.sinRelevar}` : 'el plantel entero',
+              r.sinRelevar ? 'aviso' : 'ok')}
+        ${kpi('Cursando', r.porEstado.cursando || 0, 'con el curso empezado')}
+        ${kpi('Con el título', r.porEstado.terminado || 0, 'ya lo tienen')}
+        ${kpi('Ya les corresponde', r.cumplenSinSerlo.length,
+              r.cumplenSinSerlo.length ? 'hay que recategorizarlos' : 'ninguno pendiente',
+              r.cumplenSinSerlo.length ? 'alerta' : 'ok')}
+        ${kpi('Dentro de un año', r.porVencer.length,
+              r.porVencer.length ? 'van a cumplir el art. 8' : 'ninguno en el año',
+              r.porVencer.length ? 'aviso' : 'ok')}
+      </div>
+
+      <section class="tarjeta">
+        <h2>Qué dice el art. 8</h2>
+        <p class="ayuda" style="margin-bottom:0">
+          ${esc(CATEGORIAS_CCT_POR_ID.especializado.detalle)}
+          Son <strong>tres vías a la misma categoría</strong> y alcanza con una. Las dos de
+          antigüedad llegan solas con el calendario; el título de Auxiliar de Farmacia —el curso
+          de ADEF— es la única que se puede adelantar. Por eso el aviso sale con un año de
+          anticipación: es lo que tarda el curso.
+          El artículo aplica a los <strong>${r.alcanzados}</strong> que hoy están como Empleado
+          de farmacia; el relevamiento se hace igual sobre las ${r.total} personas activas, porque
+          saber quién se está formando es otra pregunta.
+        </p>
+      </section>
+
+      <section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>El plantel, uno por uno</h2>
+          <span class="chip">${filas.length} de ${r.total}</span>
+        </div>
+        <div class="acciones" style="margin-top:0">
+          ${FILTROS_ADEF.map(([v, n]) =>
+            `<button class="check-op${adefFiltro === v ? ' activo azul' : ''}"
+              data-accion="filtro-adef" data-filtro="${v}">${n}</button>`).join('')}
+        </div>
+
+        ${filas.length ? `<div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Apellido y nombre</th><th>Sucursal</th><th>Categoría</th>
+            <th class="num">Antigüedad</th><th>Art. 8</th><th style="min-width:190px">Curso de ADEF</th>
+          </tr></thead>
+          <tbody>${filas.map(f => {
+            const a = f.art8;
+            const chip = !a.aplica ? '<span style="color:var(--texto-suave)">no aplica</span>'
+              : a.cumple ? `<span class="chip rojo">ya le corresponde</span>`
+              : a.faltanMeses <= MESES_AVISO_ART8
+                ? `<span class="chip ambar">en ${a.faltanMeses} mes${a.faltanMeses === 1 ? '' : 'es'}</span>`
+                : `<span class="chip">en ${Math.round(a.faltanMeses / 12)} año${Math.round(a.faltanMeses / 12) === 1 ? '' : 's'}</span>`;
+            return `<tr${f.estado ? '' : ' class="inactivo"'}>
+              <td><button class="check-titulo" data-accion="ir-a-ficha" data-id="${f.c.id}"
+                >${esc(f.c.nombre || 'Sin nombre')}</button></td>
+              <td>${esc(f.sucursal)}</td>
+              <td>${esc((a.categoria && a.categoria.nombre) || f.c.categoriaConvenio || '—')}</td>
+              <td class="num">${fmtNum(a.anios, 1)} años${a.tramos.length > 1
+                ? `<br><span style="font-size:11px;color:var(--texto-suave)">${fmtNum(a.enElEstablecimiento, 1)} acá</span>` : ''}</td>
+              <td>${chip}</td>
+              <td><select data-adef="${f.c.id}|estado">
+                <option value="">— sin relevar —</option>
+                ${ESTADOS_ADEF.map(x => `<option value="${x.id}"${f.estado === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+              </select></td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : `<p class="vacio">Nadie cae en este filtro.</p>`}
+      </section>`;
   }
 
   /* ========================= VISTA: ASISTENTE =======================
@@ -3090,6 +3222,62 @@ const App = (() => {
    * lo que solo puede saber RRHH —los talles de la ropa de trabajo, las notas—
    * es editable.
    */
+  /* El curso de ADEF y el reloj del art. 8, juntos en la ficha.
+     Van juntos porque son las dos vías a la misma categoría: la que llega sola
+     con el calendario y la que se puede adelantar. Verlas separadas haría
+     pensar que el curso es opcional para quien ya tiene cuatro años y medio,
+     cuando en realidad ahí lo único que cambia es quién decide la fecha. */
+  function bloqueAdef(c) {
+    const a = situacionArt8(c, hoyISO());
+    const est = (c.adef || {}).estado || '';
+    const eo = ESTADOS_ADEF_POR_ID[est] || null;
+
+    const lectura = !a.aplica
+      ? `El art. 8 no le aplica: ${a.categoria
+          ? `está en <strong>${esc(a.categoria.nombre)}</strong> (art. ${a.categoria.articulo || '—'})`
+          : 'no tiene categoría de convenio cargada'}. El relevamiento del curso se hace igual.`
+      : a.cumple
+        ? `<strong>Ya le corresponde Empleado especializado</strong> ${
+            a.via === 'curso' ? 'por el título de Auxiliar de Farmacia'
+            : a.via === 'establecimiento' ? `por los ${fmtNum(a.enElEstablecimiento, 1)} años en el establecimiento`
+            : `por los ${fmtNum(a.anios, 1)} años en varios, con ${fmtNum(a.maxEnUno, 1)} en uno`
+          }, y sigue cargado como Empleado de farmacia. Es una recategorización pendiente.`
+        : a.faltanMeses <= MESES_AVISO_ART8
+          ? `Le faltan <strong>${a.faltanMeses} mes${a.faltanMeses === 1 ? '' : 'es'}</strong> para el art. 8.
+             Pasa a Empleado especializado con o sin curso: lo que el curso cambia es la fecha.`
+          : `Le faltan ${Math.round(a.faltanMeses / 12)} año${Math.round(a.faltanMeses / 12) === 1 ? '' : 's'}
+             para el art. 8. Con el curso llega antes.`;
+
+    const tono = !a.aplica ? '' : a.cumple ? 'rojo' : a.faltanMeses <= MESES_AVISO_ART8 ? 'ambar' : '';
+
+    return `<h4>Curso de ADEF ${eo
+      ? `<span class="chip ${eo.chip}">${esc(eo.nombre)}</span>`
+      : '<span class="chip">Sin relevar</span>'}${
+      a.aplica && tono ? ` <span class="chip ${tono}">art. 8</span>` : ''}</h4>
+      <div class="grid c4">
+        <label class="campo"><span>¿Está haciendo el curso?</span>
+          <select data-adef="${c.id}|estado">
+            <option value="">— sin relevar —</option>
+            ${ESTADOS_ADEF.map(x => `<option value="${x.id}"${est === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${est === 'cursando' || est === 'terminado' ? `
+          <label class="campo"><span>Empezó</span>
+            <input type="date" data-adef="${c.id}|desde" value="${esc((c.adef || {}).desde || '')}"></label>` : ''}
+        ${est === 'terminado' ? `
+          <label class="campo"><span>Fecha del certificado</span>
+            <input type="date" data-adef="${c.id}|certificado" value="${esc((c.adef || {}).certificado || '')}"></label>` : ''}
+        ${est ? `
+          <label class="campo"><span>Nota</span>
+            <input data-adef="${c.id}|notas" value="${esc((c.adef || {}).notas || '')}"
+              placeholder="Cohorte, comisión, lo que haga falta"></label>` : ''}
+      </div>
+      <p class="ind-lectura" style="margin:10px 0 0">${lectura}
+        ${a.tramos.length > 1
+          ? ` Estuvo en ${a.tramos.length} establecimientos: ${a.tramos.map(x => fmtNum(x, 1)).join(' + ')} años.`
+          : ''}
+        <a href="#/nomina/adef">Ver el relevamiento completo</a></p>`;
+  }
+
   function perfilColaborador(s, c) {
     if (!c) return '';
     const i = s.colaboradores.indexOf(c);
@@ -3146,6 +3334,8 @@ const App = (() => {
           ${dato('Unidad de negocio', c.unidadNegocio)}
           ${dato('Dirección', c.direccionArea)}
         </div>
+
+        ${bloqueAdef(c)}
 
         <h4>Contacto</h4>
         <div class="grid c3">
@@ -5916,7 +6106,10 @@ const App = (() => {
     const e = Store.get();
     let html = '';
 
-    if (ruta[0] === 'nomina')        { vistaActual = vistaNomina;    html = vistaNomina(); }
+    if (ruta[0] === 'nomina') {
+      if (ruta[1] === 'adef') { vistaActual = vistaAdef;   html = vistaAdef(); }
+      else                    { vistaActual = vistaNomina; html = vistaNomina(); }
+    }
     else if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
       vistaActual = vistaAsistente; html = vistaAsistente();
     }
@@ -6151,6 +6344,17 @@ const App = (() => {
       if (!c) return;
       c[el.dataset.colabCampo.split('|')[1]] = el.value;
       guardarDiferido();
+    });
+
+    /* El curso de ADEF. Binding propio y no `data-colab-campo`, que escribe
+       campos planos: `c.adef` es un objeto y partir la ruta por el punto crearía
+       un anidado de más. Es la misma razón por la que existe `data-diario`. */
+    cont.addEventListener('change', ev => {
+      const ad = ev.target.closest('[data-adef]');
+      if (!ad) return;
+      const [id, campo] = ad.dataset.adef.split('|');
+      Store.marcarAdef(id, { [campo]: ad.value });
+      refrescar();
     });
 
     cont.addEventListener('change', ev => {
@@ -6873,6 +7077,16 @@ const App = (() => {
           }, 60);
         }
       }
+      if (a === 'filtro-adef') { adefFiltro = btn.dataset.filtro; refrescar(); }
+
+      /* Desde el relevamiento a la ficha de esa persona: es la otra solapa de
+         la misma lista, así que se abre su ficha y no una pantalla nueva. */
+      if (a === 'ir-a-ficha') {
+        perfilAbierto = btn.dataset.id;
+        location.hash = '#/nomina';
+        return;
+      }
+
       if (a === 'cerrar-perfil') { perfilAbierto = null; refrescar(); }
 
       /* --- check list de RRHH --- */

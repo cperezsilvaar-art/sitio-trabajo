@@ -335,6 +335,167 @@ function jornadaDeVinculo(colaborador) {
     : { fte: 1,   parcial: false, texto: 'Jornada completa' };
 }
 
+/* ---------------- El curso de ADEF y el art. 8 ----------------
+ *
+ * El art. 8 da **tres vías** a la categoría de Empleado especializado y las
+ * tres valen por separado: 5 años en el mismo establecimiento, 6 en varios con
+ * 3 en uno, o el título de Auxiliar de Farmacia. Las dos primeras llegan solas
+ * con el calendario y no se negocian; la tercera es la única que se puede
+ * empujar, y el curso que la da lo dicta ADEF.
+ *
+ * Por eso el relevamiento del curso y el reloj del artículo se miran juntos:
+ * son el mismo problema desde los dos lados. Quien está por cumplir los años
+ * va a cambiar de categoría se haga lo que se haga —y eso hay que preverlo—; a
+ * quien le faltan cuatro años, el curso le adelanta la categoría y a la tienda
+ * le adelanta a alguien que puede despachar.
+ */
+
+/**
+ * Los estados del relevamiento del curso.
+ *
+ * «Sin relevar» **no está en la lista** y es a propósito: es la ausencia del
+ * campo. En un relevamiento la primera pregunta no es quién cursa sino a quién
+ * todavía no le preguntaste, y un estado «no sé» mezclado con los demás se
+ * tilda de apuro y borra esa diferencia.
+ */
+const ESTADOS_ADEF = [
+  { id: 'no',            nombre: 'No lo está haciendo', chip: '' },
+  { id: 'cursando',      nombre: 'Cursando',            chip: 'azul' },
+  { id: 'terminado',     nombre: 'Terminado',           chip: 'verde' },
+  { id: 'noCorresponde', nombre: 'No corresponde',      chip: '' }
+];
+
+const ESTADOS_ADEF_POR_ID = ESTADOS_ADEF.reduce((a, x) => (a[x.id] = x, a), {});
+
+const _aniosEntre = (desde, hasta) => {
+  const a = new Date(String(desde) + 'T00:00:00');
+  const b = new Date(String(hasta) + 'T00:00:00');
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return 0;
+  return (b.getTime() - a.getTime()) / (365.25 * 24 * 3600 * 1000);
+};
+
+/**
+ * La antigüedad partida en tramos, uno por establecimiento.
+ *
+ * El artículo no pregunta cuánta antigüedad tiene sino **cómo se repartió**,
+ * así que un solo número no alcanza. Los cortes son los traspasos ya
+ * aplicados, que es todo lo que el panel sabe del recorrido de la persona: si
+ * nunca la movieron —el caso de casi todo el plantel— hay un solo tramo y es
+ * la antigüedad entera.
+ */
+function tramosDeAntiguedad(colaborador, hoyISO) {
+  const c = colaborador || {};
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const ini = c.fechaIngreso;
+  if (!ini || ini > hoy) return null;
+
+  const cortes = (c.movimientos || [])
+    .filter(m => typeof esTraspaso === 'function' && esTraspaso(m.tipo)
+                 && m.aplicadoEl && m.vigencia && m.vigencia > ini && m.vigencia <= hoy)
+    .map(m => m.vigencia)
+    .sort();
+
+  const hitos = [ini].concat(cortes, [hoy]);
+  const tramos = [];
+  for (let i = 0; i < hitos.length - 1; i++) {
+    const a = _aniosEntre(hitos[i], hitos[i + 1]);
+    if (a > 0) tramos.push(a);
+  }
+  return tramos.length ? tramos : [0];
+}
+
+/**
+ * Si le corresponde la categoría de Empleado especializado, y por cuál vía.
+ *
+ * Solo aplica al **Empleado de farmacia** (art. 7): es la categoría desde la
+ * que se asciende. Perfumería y caja están en otro artículo y el farmacéutico
+ * ya está arriba, así que para ellos el artículo no dice nada — el
+ * relevamiento del curso sí los incluye, porque saber quién se está formando
+ * es otra pregunta.
+ */
+function situacionArt8(colaborador, hoyISO) {
+  const c = colaborador || {};
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const cat = categoriaCct(c.categoriaConvenio || c.categoria || '');
+  const adef = c.adef || {};
+
+  const tramos = tramosDeAntiguedad(c, hoy) || [];
+  const anios = tramos.reduce((a, b) => a + b, 0);
+  const enElEstablecimiento = tramos.length ? tramos[tramos.length - 1] : 0;
+  const maxEnUno = tramos.length ? Math.max.apply(null, tramos) : 0;
+
+  const porEstablecimiento = enElEstablecimiento >= 5;
+  const porVarios = anios >= 6 && maxEnUno >= 3;
+  const porCurso = adef.estado === 'terminado';
+
+  /* Cuánto falta para que lo cumpla el calendario, por la vía que llegue
+     primero. La segunda vía necesita las dos condiciones a la vez, y los tres
+     años «en uno» solo pueden crecer en el tramo actual: un tramo cerrado ya no
+     suma. */
+  const faltaEstablecimiento = Math.max(0, 5 - enElEstablecimiento);
+  const faltaVarios = Math.max(
+    Math.max(0, 6 - anios),
+    maxEnUno >= 3 ? 0 : Math.max(0, 3 - enElEstablecimiento)
+  );
+  const faltanAnios = Math.min(faltaEstablecimiento, faltaVarios);
+
+  return {
+    aplica: !!cat && cat.id === 'empleado',
+    categoria: cat,
+    yaEsEspecializado: !!cat && cat.id === 'especializado',
+    tramos, anios, enElEstablecimiento, maxEnUno,
+    porEstablecimiento, porVarios, porCurso,
+    cumple: porEstablecimiento || porVarios || porCurso,
+    via: porCurso ? 'curso' : porEstablecimiento ? 'establecimiento' : porVarios ? 'varios' : '',
+    /* Meses y no años: «le faltan 7 meses» se agenda, «0,6 años» no. */
+    faltanMeses: (porEstablecimiento || porVarios) ? 0 : Math.round(faltanAnios * 12)
+  };
+}
+
+/* Cuántos meses antes conviene enterarse. Un año es el tiempo que tarda el
+   curso y es también lo que dura un presupuesto: antes de eso el aviso no
+   sirve para decidir nada. */
+const MESES_AVISO_ART8 = 12;
+
+/**
+ * El relevamiento del curso, de conjunto: a cuántos les preguntaste, qué
+ * contestaron y a quiénes se les viene el art. 8 encima.
+ *
+ * Los de baja quedan afuera de la cuenta: el relevamiento es sobre el plantel
+ * que hoy trabaja, y una baja del año pasado no se releva.
+ */
+function relevamientoAdef(estado, hoyISO) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const gente = ((estado || {}).sucursales || [])
+    .flatMap(s => (s.colaboradores || [])
+      .filter(c => c.activo !== false)
+      .map(c => ({ c, sucursal: s.nombre || s.codigo, sucursalId: s.id })));
+
+  const porEstado = {};
+  ESTADOS_ADEF.forEach(x => { porEstado[x.id] = 0; });
+  let relevados = 0;
+
+  const filas = gente.map(g => {
+    const est = ((g.c.adef || {}).estado) || '';
+    if (porEstado[est] !== undefined) { porEstado[est]++; relevados++; }
+    return Object.assign({ estado: est, art8: situacionArt8(g.c, hoy) }, g);
+  });
+
+  /* Los dos que piden algo, y son distintos: uno ya pasó y hay que
+     recategorizarlo, al otro todavía se lo puede adelantar con el curso. */
+  const cumplenSinSerlo = filas.filter(f => f.art8.aplica && f.art8.cumple);
+  const porVencer = filas.filter(f => f.art8.aplica && !f.art8.cumple
+    && f.art8.faltanMeses <= MESES_AVISO_ART8);
+
+  return {
+    hoy, total: gente.length, relevados,
+    sinRelevar: gente.length - relevados,
+    porEstado, filas,
+    alcanzados: filas.filter(f => f.art8.aplica).length,
+    cumplenSinSerlo, porVencer
+  };
+}
+
 const JORNADA_CCT = {
   diaria: 8, semanal: 45,                    // art. 14
   nocturnaDiaria: 7, nocturnaSemanal: 42,    // art. 16
@@ -349,6 +510,8 @@ if (typeof module !== 'undefined' && module.exports) {
     NOVEDAD_A_LICENCIA,
     esNoPresencial, ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
     LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT,
-    jornadaDeVinculo
+    jornadaDeVinculo,
+    ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,
+    MESES_AVISO_ART8, relevamientoAdef
   };
 }

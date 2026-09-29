@@ -553,6 +553,52 @@ antigüedad, duplicados con cargas de familia— y **art. 211** —un año más 
 reserva del puesto—. Es una orientación sobre la ley general, no un dictamen, y
 así lo dice la pantalla. Documentado en `docs/ausencias.md`.
 
+**El curso de ADEF y el art. 8 son el mismo problema desde dos lados**, y por
+eso se miran en una sola pantalla: `#/nomina/adef` (*Curso de ADEF*), la segunda
+solapa de `#/nomina`. El art. 8 del CCT da **tres vías** a la categoría de
+Empleado especializado y alcanza con una: 5 años en el mismo establecimiento, 6
+en varios con 3 en uno, o el título de Auxiliar de Farmacia. Las dos primeras
+llegan solas con el calendario y no se negocian; la tercera es la única que se
+puede empujar, y el curso que la da lo dicta ADEF. Mostrar el relevamiento sin
+el reloj haría pensar que el curso es opcional para quien ya tiene cuatro años y
+medio, cuando lo único que ahí cambia es quién decide la fecha.
+
+`situacionArt8()` y `relevamientoAdef()` viven en `convenio.js`, que es donde
+vive el CCT. **No alcanza con la antigüedad total**: el artículo pregunta cómo se
+repartió, así que `tramosDeAntiguedad()` la parte por establecimiento usando los
+traspasos ya aplicados —lo único que el panel sabe del recorrido de la persona—.
+Quien nunca se movió tiene un solo tramo, que es el caso de casi todo el
+plantel. El aviso sale con **doce meses** de anticipación (`MESES_AVISO_ART8`):
+es lo que tarda el curso, y antes de eso no sirve para decidir nada.
+
+**El artículo aplica solo al Empleado de farmacia** (art. 7), que es la categoría
+desde la que se asciende; Perfumería está en otro artículo y el farmacéutico ya
+está arriba. **El relevamiento, en cambio, es sobre todo el plantel activo**:
+saber quién se está formando es otra pregunta y el coordinador la hace igual.
+
+**«Sin relevar» no es un estado de la lista: es la ausencia del campo.** En un
+relevamiento la primera pregunta no es quién cursa sino a quién todavía no le
+preguntaste, y un «no sé» mezclado con los demás se tilda de apuro y borra esa
+diferencia. Por eso `Store.marcarAdef()` con estado vacío **borra `c.adef`** en
+vez de guardar una respuesta en blanco. Vive colgado de la persona, como
+`c.baja`, `c.ausencias` y `c.entrenamientos`, y usa un binding propio
+(`data-adef`) porque `data-colab-campo` escribe campos planos.
+
+Es **una tabla y no fichas desplegables**: lo que se hace ahí es una pasada de
+141 respuestas de un tirón, y cada apertura es una razón para dejarlo por la
+mitad. Ordena por lo que apura y no alfabético —el alfabético sirve para buscar
+a alguien, y para eso está la otra solapa—. **Son dos solapas y no dos entradas
+del menú**, por lo mismo que el Panel: es la misma lista de personas mirada de
+dos formas, y una tercera lista de las 141 sería una de más.
+
+**Esto no va a la agenda**, y se probó ponerlo. Quien ya cumplió el artículo se
+deduce del padrón solo, así que el pendiente aparecía **en el momento en que se
+carga el plantel** y no se podía cerrar desde el panel: se cierra cuando la
+liquidación cambia la categoría, que puede tardar meses. Un pendiente que no se
+puede tildar es un número fijo arriba de la agenda, y a los dos días deja de
+leerse — la misma razón por la que los contadores se esconden en cero, vista al
+revés. La cuenta vive en su pantalla, que es donde se la va a buscar.
+
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
 y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box. Ahí se
 decide **a quién mirar**; qué pasó después con esa persona se registra en

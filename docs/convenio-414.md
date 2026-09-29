@@ -50,6 +50,64 @@ que sigue.
 
 Con la nómina de activos (139 personas) las 139 quedan encuadradas.
 
+## El artículo 8 y el curso de ADEF
+
+El art. 8 da **tres vías** a la categoría de *Empleado especializado de
+farmacia*, y alcanza con una:
+
+1. **5 años en el mismo establecimiento.**
+2. **6 años en varios, con 3 en uno.**
+3. El **título de Auxiliar de Farmacia** —el curso de ADEF— o el 2º año de la
+   carrera aprobado.
+
+Las dos primeras llegan solas con el calendario y no se negocian; la tercera es
+la única que se puede empujar. Por eso el panel muestra el relevamiento del
+curso y el reloj del artículo en la misma pantalla, `#/nomina/adef`: son el
+mismo problema visto desde los dos lados. A quien le faltan cuatro años, el
+curso le adelanta la categoría, y a la tienda le adelanta a alguien que puede
+despachar; a quien le faltan seis meses, lo único que el curso cambia es quién
+decide la fecha.
+
+### Por qué no alcanza la antigüedad total
+
+El artículo no pregunta cuánta antigüedad tiene sino **cómo se repartió**.
+`tramosDeAntiguedad(colaborador, hoy)` la parte en tramos usando los traspasos
+**ya aplicados**, que es todo lo que el panel sabe del recorrido de la persona:
+quien nunca se movió tiene un solo tramo y es su antigüedad entera, que es el
+caso de casi todo el plantel.
+
+`situacionArt8(colaborador, hoy)` devuelve las tres vías por separado, cuál se
+cumplió (`via`) y cuántos meses faltan para la primera que llegue por
+calendario. Para la segunda vía, los tres años «en uno» solo pueden crecer en el
+tramo actual: un tramo cerrado ya no suma.
+
+### A quién le aplica
+
+Solo al **Empleado de farmacia** (art. 7), que es la categoría desde la que se
+asciende. Perfumería y caja están en el art. 6 y el farmacéutico en el 9, así
+que para ellos el artículo no dice nada.
+
+El **relevamiento del curso**, en cambio, es sobre **todo el plantel activo**:
+saber quién se está formando es otra pregunta.
+
+### El estado del relevamiento
+
+`ESTADOS_ADEF` son cuatro: *no lo está haciendo*, *cursando*, *terminado* y *no
+corresponde*. **«Sin relevar» no está en la lista y es a propósito**: es la
+ausencia de `c.adef`. En un relevamiento la primera pregunta no es quién cursa
+sino a quién todavía no le preguntaste, y un estado «no sé» mezclado con los
+demás se tilda de apuro y borra esa diferencia. `Store.marcarAdef()` con estado
+vacío borra el campo en vez de guardar una respuesta en blanco.
+
+El aviso sale con **doce meses** de anticipación (`MESES_AVISO_ART8`): es lo que
+tarda el curso, y antes de eso no sirve para decidir nada.
+
+Quien ya cumplió el artículo y sigue cargado como Empleado de farmacia se ve en
+esta pantalla y **no en la agenda**. Se probó ponerlo ahí: como se deduce del
+padrón solo, el pendiente aparece en cuanto se carga el plantel y no se puede
+cerrar desde el panel —se cierra cuando la liquidación cambia la categoría, que
+puede tardar meses—. Un pendiente que no se puede tildar deja de leerse.
+
 ## Los topes del artículo 25
 
 | Licencia | Art. | Cuánto | Tope |
