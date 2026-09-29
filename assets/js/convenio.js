@@ -496,6 +496,173 @@ function relevamientoAdef(estado, hoyISO) {
   };
 }
 
+/* ------------- Topes de horas extras (Decreto 484/2000) -------------
+ *
+ * El CCT 414/05 no pone tope a las horas suplementarias: lo pone el
+ * **Decreto 484/2000**, que fija **30 horas mensuales y 200 anuales** como
+ * máximo sin autorización administrativa previa. Es la vara que se usa en la
+ * práctica y la que le van a mirar al área.
+ *
+ * El panel **no chequea el tope diario**, y no es un olvido: las novedades de
+ * liquidación traen el total del mes por persona, no el reparto por día, así
+ * que un control diario sería un número inventado. Lo que sí trae es el corte
+ * entre 50% y 100% (art. 201 LCT), que suma igual contra los topes: el recargo
+ * cambia lo que se paga, no cuántas horas se trabajaron.
+ *
+ * Es una orientación sobre la norma general, no un dictamen, y la pantalla lo
+ * dice — igual que los plazos de los arts. 208 y 211.
+ */
+const TOPES_HORAS_EXTRAS = {
+  mensual: 30,
+  anual: 200,
+  norma: 'Decreto 484/2000',
+  /* A partir de qué parte del tope conviene mirarlo. No es un límite legal: es
+     cuándo todavía se puede hacer algo con el mes en curso. */
+  avisoDesde: 0.8
+};
+
+/** Las horas extras de un período, con el corte de la LCT art. 201. */
+function horasExtrasDe(colaborador, periodo) {
+  const n = ((colaborador || {}).novedades || {})[periodo] || {};
+  const al50 = +n.he50 || 0;
+  const al100 = +n.he100 || 0;
+  return { al50, al100, total: al50 + al100 };
+}
+
+/**
+ * Los períodos del mismo año calendario que el que se mira, hasta él
+ * inclusive.
+ *
+ * El tope anual es del año, no de los últimos doce meses: se cuenta del enero
+ * al diciembre en que se trabajaron. Mezclar las dos ventanas daría un número
+ * que no se puede llevar a ningún lado.
+ */
+function periodosDelAnio(colaborador, periodo) {
+  const anio = String(periodo || '').slice(0, 4);
+  if (!anio) return [];
+  return Object.keys((colaborador || {}).novedades || {})
+    .filter(p => p.slice(0, 4) === anio && p <= periodo)
+    .sort();
+}
+
+/**
+ * Cómo viene una persona contra los dos topes.
+ *
+ * El mes y el año se contestan por separado porque son dos problemas: pasarse
+ * en un mes se corrige el mes que viene, y pasarse en el año ya no se corrige.
+ * Los dos se miden solo sobre los meses que están cargados, y eso se dice:
+ * un acumulado anual con tres meses adentro no es un acumulado anual.
+ */
+function topeHorasExtras(colaborador, periodo) {
+  const mes = horasExtrasDe(colaborador, periodo);
+  const meses = periodosDelAnio(colaborador, periodo);
+  const anio = meses.reduce((a, p) => {
+    const h = horasExtrasDe(colaborador, p);
+    return { al50: a.al50 + h.al50, al100: a.al100 + h.al100, total: a.total + h.total };
+  }, { al50: 0, al100: 0, total: 0 });
+
+  const estado = (valor, tope) => valor > tope ? 'excedido'
+    : valor >= tope * TOPES_HORAS_EXTRAS.avisoDesde ? 'alBorde' : 'ok';
+
+  return {
+    periodo, mes, anio,
+    mesesCargados: meses.length, meses,
+    topeMensual: TOPES_HORAS_EXTRAS.mensual,
+    topeAnual: TOPES_HORAS_EXTRAS.anual,
+    estadoMes: estado(mes.total, TOPES_HORAS_EXTRAS.mensual),
+    estadoAnio: estado(anio.total, TOPES_HORAS_EXTRAS.anual),
+    excedeMes: mes.total > TOPES_HORAS_EXTRAS.mensual,
+    excedeAnio: anio.total > TOPES_HORAS_EXTRAS.anual,
+    /* Cuántas le quedan en el año sin pedir autorización. Negativo quiere decir
+       que ya se pasó, y se muestra como tal en vez de recortarlo a cero. */
+    restanEnElAnio: TOPES_HORAS_EXTRAS.anual - anio.total
+  };
+}
+
+/**
+ * El cierre del mes leído desde las novedades: por tienda y por persona, las
+ * horas extras contra los topes y los días de ausencia que la liquidación
+ * pagó.
+ *
+ * Sale de `c.novedades` y **no de `c.ausencias`**: son dos cosas distintas y
+ * el panel no las mezcla. `c.ausencias` es la licencia con su certificado —lo
+ * que el coordinador sigue día a día—; esto es lo que la liquidación terminó
+ * pagando, que es contra lo que se cierra el mes. Que los dos números difieran
+ * es información, no un error, y por eso cada uno se lee donde vive.
+ */
+function cierreDelMes(estado, periodo) {
+  const e = estado || {};
+  const tiendas = [];
+  const gente = [];
+
+  (e.sucursales || []).forEach(s => {
+    const fila = {
+      id: s.id, sucursal: s.nombre || s.codigo,
+      personas: 0, conNovedades: 0,
+      he50: 0, he100: 0, horasExtras: 0,
+      diasAusencia: 0, porConcepto: {},
+      excedenMes: 0
+    };
+    (s.colaboradores || []).forEach(c => {
+      fila.personas++;
+      const n = (c.novedades || {})[periodo];
+      if (!n) return;
+      fila.conNovedades++;
+
+      const tope = topeHorasExtras(c, periodo);
+      fila.he50 += tope.mes.al50;
+      fila.he100 += tope.mes.al100;
+      fila.horasExtras += tope.mes.total;
+      if (tope.excedeMes) fila.excedenMes++;
+
+      /* Los días que la liquidación pagó como ausencia, por concepto. Las
+         vacaciones entran en la lista porque el parte las trae, pero no suman
+         al total de ausentismo: son tiempo planificado, la misma regla que en
+         `participacionDeAusencias()`. */
+      let dias = 0;
+      MAPA_AUSENCIAS.forEach(m => {
+        const d = +n[m.campo] || 0;
+        if (!d) return;
+        fila.porConcepto[m.nombre] = (fila.porConcepto[m.nombre] || 0) + d;
+        if (m.campo !== 'vacaciones') dias += d;
+      });
+      fila.diasAusencia += dias;
+
+      gente.push({
+        id: c.id, nombre: c.nombre, sucursal: s.nombre || s.codigo, sucursalId: s.id,
+        cargo: c.cargo || c.posicion || '', tope, dias,
+        porConcepto: MAPA_AUSENCIAS.reduce((a, m) => {
+          const d = +n[m.campo] || 0; if (d) a[m.nombre] = d; return a;
+        }, {})
+      });
+    });
+    if (fila.conNovedades) tiendas.push(fila);
+  });
+
+  tiendas.sort((a, b) => b.horasExtras - a.horasExtras || b.diasAusencia - a.diasAusencia);
+  gente.sort((a, b) => b.tope.mes.total - a.tope.mes.total || b.dias - a.dias);
+
+  const tot = tiendas.reduce((a, x) => ({
+    personas: a.personas + x.conNovedades,
+    he50: a.he50 + x.he50, he100: a.he100 + x.he100,
+    horasExtras: a.horasExtras + x.horasExtras,
+    diasAusencia: a.diasAusencia + x.diasAusencia
+  }), { personas: 0, he50: 0, he100: 0, horasExtras: 0, diasAusencia: 0 });
+
+  return {
+    periodo, tiendas, gente, total: tot,
+    hayDatos: !!gente.length,
+    excedenMes: gente.filter(g => g.tope.excedeMes),
+    excedenAnio: gente.filter(g => g.tope.excedeAnio),
+    alBordeDelAnio: gente.filter(g => !g.tope.excedeAnio && g.tope.estadoAnio === 'alBorde'),
+    /* Los períodos que hay cargados, para el selector y para poder decir sobre
+       cuántos meses está hecho el acumulado del año. */
+    periodosCargados: Array.from(new Set((e.sucursales || [])
+      .flatMap(s => (s.colaboradores || []).flatMap(c => Object.keys(c.novedades || {})))))
+      .sort()
+  };
+}
+
 const JORNADA_CCT = {
   diaria: 8, semanal: 45,                    // art. 14
   nocturnaDiaria: 7, nocturnaSemanal: 42,    // art. 16
@@ -512,6 +679,7 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT,
     jornadaDeVinculo,
     ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,
-    MESES_AVISO_ART8, relevamientoAdef
+    MESES_AVISO_ART8, relevamientoAdef,
+    TOPES_HORAS_EXTRAS, horasExtrasDe, periodosDelAnio, topeHorasExtras, cierreDelMes
   };
 }

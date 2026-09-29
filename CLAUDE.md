@@ -599,6 +599,44 @@ puede tildar es un número fijo arriba de la agenda, y a los dos días deja de
 leerse — la misma razón por la que los contadores se esconden en cero, vista al
 revés. La cuenta vive en su pantalla, que es donde se la va a buscar.
 
+**Los topes de horas extras no los pone el CCT sino el Decreto 484/2000**: 30
+horas mensuales y 200 anuales sin autorización administrativa previa.
+`TOPES_HORAS_EXTRAS` y `topeHorasExtras()` viven en `convenio.js` y se leen en
+`#/nomina/cierre` (*El cierre del mes*), la tercera solapa de `#/nomina`.
+
+**Los dos topes se contestan por separado porque son dos problemas**: pasarse en
+un mes se corrige el mes que viene; pasarse en el año ya no se corrige. Y agarran
+casos distintos —quien hace 34 horas en noviembre excede el mensual, y quien hace
+28 todos los meses nunca excede un mes y termina el año en 224—, así que mostrar
+uno solo dejaría la mitad afuera. El anual es del **año calendario** y no de los
+últimos doce meses: enero arranca de cero.
+
+**El acumulado del año se calcula sobre los meses cargados y la pantalla lo
+dice.** Un acumulado anual con tres meses adentro no es un acumulado anual, y
+sin ese renglón se lee como que nadie se pasó. Es la misma regla que los días
+supuestos del ausentismo: el número nunca se muestra solo.
+
+**No controla el tope diario, y no es un olvido**: las novedades traen el total
+del mes por persona y no el reparto por día, así que un control diario sería un
+número inventado. El corte entre 50% y 100% es el del **art. 201 de la LCT** y
+cambia lo que se paga, no cuántas horas se trabajaron: las dos suman igual
+contra el tope.
+
+**`cierreDelMes()` lee `c.novedades` y no `c.ausencias`.** Son las dos cosas
+distintas de siempre: `c.ausencias` es la licencia con su certificado, lo que el
+coordinador sigue día a día; las novedades son lo que la liquidación terminó
+pagando, que es contra lo que se cierra el mes. **Que los dos números difieran
+es información, no un error** —ahí está el certificado que no llegó a tiempo— y
+por eso cada uno se lee donde vive y no se los promedia. Las vacaciones aparecen
+en el desglose por concepto pero no suman al total de días, igual que en
+`participacionDeAusencias()`.
+
+Va en `#/nomina` y no en la estadística porque la pregunta es «¿alguien se pasó
+del tope?», que es sobre personas y cruza los meses; la estadística mira **una
+tienda en un mes** y desde ahí el tope anual no se puede contestar. Son **dos
+tablas y no una**: la de tiendas dice dónde está la carga y es la que se lleva a
+Operaciones, la de personas dice quién, que es lo que hay que corregir.
+
 La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
 y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box. Ahí se
 decide **a quién mirar**; qué pasó después con esa persona se registra en

@@ -108,6 +108,38 @@ padrón solo, el pendiente aparece en cuanto se carga el plantel y no se puede
 cerrar desde el panel —se cierra cuando la liquidación cambia la categoría, que
 puede tardar meses—. Un pendiente que no se puede tildar deja de leerse.
 
+## Topes de horas extras (Decreto 484/2000)
+
+El CCT 414/05 no pone tope a las horas suplementarias: lo pone el **Decreto
+484/2000**, que fija **30 horas mensuales y 200 anuales** como máximo sin
+autorización administrativa previa.
+
+`topeHorasExtras(colaborador, periodo)` contesta los dos por separado, porque
+son dos problemas distintos: pasarse en un mes se corrige el mes que viene y
+pasarse en el año ya no se corrige. Y agarran casos distintos — quien hace 34
+horas en un mes excede el mensual; quien hace 28 todos los meses no excede
+ninguno y termina el año en 224 —, así que mostrar uno solo deja la mitad
+afuera.
+
+El tope anual es del **año calendario**, no de los últimos doce meses: enero
+arranca de cero. Se calcula sobre los meses que están cargados y **la pantalla
+lo dice**: un acumulado anual con tres meses adentro no es un acumulado anual, y
+sin ese renglón se lee como que nadie se pasó.
+
+**No se controla el tope diario.** Las novedades de liquidación traen el total
+del mes por persona y no el reparto por día, así que un control diario sería un
+número inventado. El corte entre 50% y 100% es el del **art. 201 de la LCT**:
+cambia lo que se paga, no cuántas horas se trabajaron, y las dos suman igual
+contra el tope.
+
+Es una orientación sobre la norma general, no un dictamen, y la pantalla lo dice
+— igual que los plazos de los arts. 208 y 211.
+
+`cierreDelMes(estado, periodo)` lo arma por tienda y por persona sobre
+`c.novedades`, que es lo que la liquidación pagó. **No es `c.ausencias`**, que es
+la licencia con su certificado: que los dos números difieran es información, no
+un error. Se ve en `#/nomina/cierre`.
+
 ## Los topes del artículo 25
 
 | Licencia | Art. | Cuánto | Tope |
