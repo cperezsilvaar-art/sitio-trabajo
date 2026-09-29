@@ -34,25 +34,67 @@ const COLUMNAS_NOVEDADES = {
   AUSENCIAPORFALLECIMIENTO: 'fallecimiento',
   MUDANZA: 'mudanza',
   FALTANTEDECAJERO: 'faltanteCaja',
-  OBSERVACIONES: 'obs'
+  OBSERVACIONES: 'obs',
+
+  /* Cómo viene el libro desde 2026. Los rótulos cambiaron —las licencias
+     pasaron a llamarse «LIC. …»— y aparecieron cinco conceptos que antes no
+     estaban. Los nombres viejos quedan arriba porque los meses ya cargados se
+     leyeron con ellos y un libro guardado tiene que seguir entrando igual. */
+  RAZONSOCIAL: 'razonSocial',
+  AREA: 'area',
+  COLABORADOR: 'colaborador',
+  LICEFERMEDAD: 'enfermedad',     // la errata está en la planilla
+  LICENFERMEDAD: 'enfermedad',
+  LICART: 'art',
+  LICEXAMEN: 'examen',
+  LICVACACIONES: 'vacaciones',
+  LICMUDANZA: 'mudanza',
+  LICFALLECIMIENTO: 'fallecimiento',
+  LICMATRIMONIO: 'matrimonio',
+  LICNACIMIENTO: 'nacimiento',
+  LICMATERNIDAD: 'maternidad',
+  RESERVADEPUESTO: 'reserva'
 };
 
 /* Cada novedad de ausencia cae en un concepto del tablero de estadísticas.
    Los códigos son los de TD01, los mismos que usa la solapa de Ausentismo. */
+/* Los conceptos de ausencia del libro.
+ *
+ * `cod` es el de la planilla TD01 y **está vacío en los que TD01 no tiene**:
+ * esos no se imputan a un código y se cuentan igual, que es mejor que
+ * inventarles uno. `ausentismo: false` marca lo que no es ausentismo aunque
+ * sea una ausencia —tiempo planificado o una licencia que no habla de la
+ * gestión—, la misma regla que `TIPOS_FORMULARIO` y `diasDeAusenciaEntre()`.
+ */
 const MAPA_AUSENCIAS = [
   { campo: 'enfermedad',    cod: '085', nombre: 'Enfermedad' },
-  { campo: 'vacaciones',    cod: '071', nombre: 'Vacaciones' },
+  { campo: 'art',           cod: '',    nombre: 'ART' },
+  { campo: 'vacaciones',    cod: '071', nombre: 'Vacaciones',              ausentismo: false },
   { campo: 'noJustificada', cod: '081', nombre: 'Ausente sin aviso' },
-  { campo: 'fallecimiento', cod: '052', nombre: 'Fallecimiento 1er grado' },
+  { campo: 'fallecimiento', cod: '052', nombre: 'Fallecimiento 1er grado', ausentismo: false },
+  { campo: 'matrimonio',    cod: '',    nombre: 'Matrimonio',              ausentismo: false },
+  { campo: 'nacimiento',    cod: '',    nombre: 'Nacimiento',              ausentismo: false },
+  { campo: 'maternidad',    cod: '',    nombre: 'Maternidad',              ausentismo: false },
   { campo: 'mudanza',       cod: '054', nombre: 'Mudanza' },
+  /* Reserva de puesto es el art. 211: la licencia paga se agotó y la persona
+     sigue sin venir. Cuenta como turno que no se cubre, que es lo que la
+     dotación necesita saber. */
+  { campo: 'reserva',       cod: '',    nombre: 'Reserva de puesto' },
   /* La planilla no distingue examen secundario de universitario; se imputa al
      universitario, que es el caso corriente. Los dos son no controlables, así
      que la lectura del mes no cambia. */
   { campo: 'examen',        cod: '056', nombre: 'Examen universitario' }
 ];
 
+/** Si ese concepto suma al ausentismo. Por defecto sí. */
+const cuentaComoAusentismo = campo => {
+  const m = MAPA_AUSENCIAS.find(x => x.campo === campo);
+  return !!m && m.ausentismo !== false;
+};
+
 const CAMPOS_NOVEDAD = ['nocturnas', 'he50', 'he100', 'feriado', 'gremio', 'examen',
-                        'enfermedad', 'vacaciones', 'noJustificada', 'fallecimiento', 'mudanza'];
+                        'enfermedad', 'art', 'vacaciones', 'noJustificada', 'fallecimiento',
+                        'matrimonio', 'nacimiento', 'maternidad', 'mudanza', 'reserva'];
 
 const _norm = t => String(t == null ? '' : t)
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -127,12 +169,20 @@ function interpretarNovedades(crudo) {
     const txt = i => (i >= 0 && i < c.length && c[i] != null) ? String(c[i]).trim() : '';
     const nov = k => col[k] === undefined ? 0 : numeroNovedad(c[col[k]]);
 
+    /* Con la columna COLABORADOR el nombre viene entero y en su lugar; sin
+       ella, el apellido y el nombre son las dos celdas que siguen al CUIL. */
+    const unaSolaColumna = col.colaborador !== undefined;
     const fila = {
       cuil: soloDigitos(c[iCuil]),
-      apellido: txt(iCuil + 1),
-      nombre: txt(iCuil + 2),
-      legajo: col.legajo === undefined ? '' : txt(iCuil - 1),
+      colaborador: unaSolaColumna ? txt(col.colaborador) : '',
+      apellido: unaSolaColumna ? '' : txt(iCuil + 1),
+      nombre: unaSolaColumna ? '' : txt(iCuil + 2),
+      legajo: col.legajo === undefined ? '' : txt(unaSolaColumna ? col.legajo : iCuil - 1),
       sector: col.sector === undefined ? '' : txt(iCuil - 1),
+      /* La tienda y el área van por fila y no por hoja: el libro entero viene
+         en una sola pestaña y cada fila dice a dónde pertenece. */
+      tienda: col.tienda === undefined ? '' : txt(col.tienda),
+      area: col.area === undefined ? '' : txt(col.area),
       obs: txt(col.obs)
     };
     CAMPOS_NOVEDAD.forEach(k => { fila[k] = nov(k); });
@@ -142,7 +192,7 @@ function interpretarNovedades(crudo) {
     if (!tienda && col.tienda !== undefined && iCuil === col.cuil) tienda = txt(col.tienda);
     if (!mes && col.mes !== undefined) mes = txt(col.mes);
 
-    if (fila.apellido || fila.nombre) filas.push(fila);
+    if (fila.colaborador || fila.apellido || fila.nombre) filas.push(fila);
   });
 
   if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
@@ -150,7 +200,7 @@ function interpretarNovedades(crudo) {
     avisos.push(`${corridas} fila${corridas === 1 ? '' : 's'} venían corridas una columna respecto del encabezado; ` +
                 'se leyeron igual tomando el CUIL como referencia.');
   }
-  if (!filas.length) avisos.push('No se reconoció ninguna persona: revisá que estén las columnas CUIL, APELLIDO y NOMBRE.');
+  if (!filas.length) avisos.push('No se reconoció ninguna persona: revisá que estén las columnas CUIL y COLABORADOR (o APELLIDO y NOMBRE).');
 
   return { filas, avisos, tienda, mes };
 }
@@ -169,6 +219,7 @@ function resumirNovedades(filas) {
 function ausenciasPorCodigo(novedad) {
   const d = {};
   MAPA_AUSENCIAS.forEach(m => {
+    if (!m.cod) return;   // TD01 no tiene código para este concepto
     const v = numeroNovedad((novedad || {})[m.campo]);
     if (v) d[m.cod] = (d[m.cod] || 0) + v;
   });
@@ -179,5 +230,10 @@ function ausenciasPorCodigo(novedad) {
    vienen en mayúsculas y a veces con espacios de más. */
 function nombreDePlanilla(fila) {
   const limpiar = t => String(t || '').replace(/\s+/g, ' ').trim();
+  /* El libro de 2026 trae una sola columna COLABORADOR con el nombre entero;
+     el viejo traía apellido y nombre separados. Se respeta lo que venga en vez
+     de partir el completo por el primer espacio, que rompe los apellidos
+     compuestos —«URBINA LEGUA KEYLA»— y son varios en el área. */
+  if (limpiar(fila.colaborador)) return limpiar(fila.colaborador);
   return [limpiar(fila.apellido), limpiar(fila.nombre)].filter(Boolean).join(', ');
 }

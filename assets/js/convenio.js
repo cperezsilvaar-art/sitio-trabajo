@@ -625,15 +625,16 @@ function cierreDelMes(estado, periodo) {
       if (tope.excedeMes) fila.excedenMes++;
 
       /* Los días que la liquidación pagó como ausencia, por concepto. Las
-         vacaciones entran en la lista porque el parte las trae, pero no suman
-         al total de ausentismo: son tiempo planificado, la misma regla que en
-         `participacionDeAusencias()`. */
+         vacaciones, la maternidad, el matrimonio, el nacimiento y el
+         fallecimiento entran en la lista porque el libro los trae, pero no
+         suman al total: `cuentaComoAusentismo()` decide, y decide en un solo
+         lugar para que la regla no se bifurque. */
       let dias = 0;
       MAPA_AUSENCIAS.forEach(m => {
         const d = +n[m.campo] || 0;
         if (!d) return;
         fila.porConcepto[m.nombre] = (fila.porConcepto[m.nombre] || 0) + d;
-        if (m.campo !== 'vacaciones') dias += d;
+        if (cuentaComoAusentismo(m.campo)) dias += d;
       });
       fila.diasAusencia += dias;
 

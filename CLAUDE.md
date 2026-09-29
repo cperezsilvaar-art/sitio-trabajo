@@ -599,6 +599,31 @@ puede tildar es un número fijo arriba de la agenda, y a los dos días deja de
 leerse — la misma razón por la que los contadores se esconden en cero, vista al
 revés. La cuenta vive en su pantalla, que es donde se la va a buscar.
 
+**El libro de novedades se pega entero, una vez por mes.**
+`importarLibroDeNovedades()` (`store.js`) reparte cada fila por su columna
+**TIENDA** y saltea las de otras áreas —de las 533 filas del libro, 139 son del
+Área 3—. Antes había que separar la hoja de cada tienda y pegar catorce veces, y
+lo peor no era el trabajo: el importador por hoja **crea** a quien no encuentra,
+así que una pegada en la sucursal equivocada metía 141 personas donde no van y
+no se notaba hasta el cierre. **El del libro no crea a nadie**: la fila que no
+cae en el padrón se devuelve con nombre y tienda, que casi siempre es alguien
+que ya se fue. Usa `buscadorDePadron()`, como los otros dos importadores.
+
+**Los encabezados del libro cambiaron en 2026** y hubo que enseñárselos:
+las licencias pasaron a llamarse `LIC. …` —con la errata `LIC. EFERMEDAD`
+incluida, que está en la planilla—, el nombre viene en **una sola columna**
+`COLABORADOR` en vez de apellido y nombre separados, y aparecieron cinco
+conceptos nuevos: **ART, matrimonio, nacimiento, maternidad y reserva de
+puesto**. Los rótulos viejos siguen en `COLUMNAS_NOVEDADES` porque los meses ya
+cargados se leyeron con ellos.
+
+**`MAPA_AUSENCIAS` es la única lista de conceptos** y ahora dice dos cosas más:
+`cod` es el de TD01 y **queda vacío en los que TD01 no tiene** —esos se cuentan
+igual y no se les inventa un código—, y `ausentismo: false` marca lo que no es
+ausentismo aunque sea una ausencia. `cuentaComoAusentismo()` es quien decide, en
+un solo lugar. **No partir el nombre completo por el primer espacio**: rompe los
+apellidos compuestos, y en el área hay varios.
+
 **Los topes de horas extras no los pone el CCT sino el Decreto 484/2000**: 30
 horas mensuales y 200 anuales sin autorización administrativa previa.
 `TOPES_HORAS_EXTRAS` y `topeHorasExtras()` viven en `convenio.js` y se leen en

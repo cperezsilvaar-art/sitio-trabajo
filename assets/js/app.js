@@ -4311,7 +4311,29 @@ const App = (() => {
       </section>
 
       <section class="tarjeta">
-        <h2>Novedades de liquidación</h2>
+        <h2>El libro de novedades, entero</h2>
+        <p class="ayuda">
+          Pegá el libro <strong>completo</strong> —las ${'' + ''}filas de todas las áreas, desde la fila de
+          encabezados— y cada persona cae en su tienda por la columna <strong>TIENDA</strong>. Las filas
+          de otras áreas se saltean solas. <strong>Acá no se crea a nadie</strong>: la que no cae en
+          alguien del padrón se lista con nombre, que casi siempre es alguien que ya se fue.
+        </p>
+        <div class="acciones" style="align-items:flex-end;margin-top:0">
+          <label class="campo" style="max-width:160px">
+            <span>Período</span>
+            <input id="periodo-libro" value="${esc(estadPeriodo)}" placeholder="2026-09">
+          </label>
+        </div>
+        <textarea id="pegar-libro" style="min-height:110px;margin-top:10px"
+          placeholder="RAZON SOCIAL  TIENDA  CUIL  LEGAJO  AREA  COLABORADOR  HORAS NOCTURNAS  HORAS EXTRAS 50%  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-libro">Importar el libro entero</button>
+        </div>
+        <div id="resultado-libro"></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Novedades de liquidación, hoja por hoja</h2>
         <p class="ayuda">
           Pegá acá la hoja de <strong>${esc(s.nombre || s.codigo)}</strong> del libro de novedades
           del mes: abrila en Excel, seleccioná desde la fila de encabezados hasta la última persona,
@@ -7783,6 +7805,44 @@ const App = (() => {
       }
 
       /* --- novedades de liquidación --- */
+      if (a === 'importar-libro') {
+        const crudo = ($('#pegar-libro') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero el libro de novedades.', 'error');
+        const per = (($('#periodo-libro') || {}).value || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(per)) return avisar('El período va como 2026-09.', 'error');
+
+        const leido = interpretarNovedades(crudo);
+        if (!leido.filas.length) {
+          return avisar(leido.avisos[0] || 'No se pudo leer el libro.', 'error');
+        }
+        /* Reemplaza las novedades de todo el período: es una acción que pisa
+           estado de muchas personas a la vez, así que va con resguardo. */
+        const r = Store.importarLibroDeNovedades(per, leido.filas);
+        const caja = $('#resultado-libro');
+        if (caja) {
+          const tiendas = Object.keys(r.porTienda).sort();
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.actualizados} de ${r.leidas} filas entraron en ${esc(per)}.</strong>
+            ${r.otrasAreas ? ` ${r.otrasAreas} son de otras áreas y se saltearon.` : ''}
+            ${tiendas.length ? `<ul>${tiendas.map(k =>
+              `<li>${esc(k)}: ${r.porTienda[k]}</li>`).join('')}</ul>` : ''}
+            ${r.sinPersona.length ? `<p style="margin:8px 0 0"><strong>${r.sinPersona.length} de tus
+              tiendas no cayeron en nadie del padrón:</strong>
+              ${r.sinPersona.map(x => esc(x.nombre) + ' (' + esc(x.tienda) + ')').join(', ')}.
+              Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
+            ${r.enConflicto.length ? `<p style="margin:8px 0 0"><strong>${r.enConflicto.length} con el
+              número y el nombre en contradicción</strong>, que quedaron afuera:
+              ${r.enConflicto.map(esc).join(' · ')}.</p>` : ''}
+            ${r.sinTienda.length ? `<p class="ayuda" style="margin:8px 0 0">${r.sinTienda.length}
+              fila${r.sinTienda.length === 1 ? '' : 's'} con una tienda que el panel no conoce.</p>` : ''}
+          </div>
+          <p class="ayuda">Se lee en <a href="#/nomina/cierre">El cierre del mes</a>.</p>`;
+        }
+        avisar(`${r.actualizados} personas con novedades de ${per}.`);
+        refrescar();
+        return;
+      }
+
       if (a === 'importar-novedades') {
         const crudo = ($('#pegar-novedades') || {}).value || '';
         if (!crudo.trim()) return avisar('Pegá primero la hoja del libro de novedades.', 'error');

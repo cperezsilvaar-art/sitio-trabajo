@@ -1548,6 +1548,76 @@ const Store = (() => {
        si no lo trae, por nombre normalizado. Nunca duplica: si ya está,
        actualiza sus novedades del período y respeta lo cargado a mano
        (posición, evaluación, talent card). */
+    /**
+     * Importa el libro de novedades **entero**, repartiendo por la columna
+     * TIENDA de cada fila.
+     *
+     * El libro es de toda la empresa —533 filas de cinco áreas— y antes había
+     * que abrirlo, separar la hoja de cada tienda y pegar catorce veces. Peor
+     * que el trabajo: el importador por tienda **crea** a quien no encuentra,
+     * así que una pegada en la sucursal equivocada metía 141 personas donde no
+     * van y no había forma de darse cuenta hasta el cierre.
+     *
+     * Acá no se crea a nadie. La fila que no cae en una persona del padrón se
+     * devuelve con nombre y tienda, que es la lista que el coordinador
+     * necesita: casi siempre es alguien que se fue o que todavía no pegó la
+     * nómina del mes.
+     */
+    importarLibroDeNovedades(periodo, filas) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const norm = t => String(t || '').toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
+
+      /* Cada tienda por su nombre y por su código: el libro escribe «SM
+         CENTER» donde el panel dice «San Martín Center». */
+      const porClave = {};
+      (e.sucursales || []).forEach(s => {
+        [s.nombre, s.codigo, s.rvd].forEach(x => { if (x) porClave[norm(x)] = s; });
+      });
+
+      let actualizados = 0;
+      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [];
+      const porTienda = {};
+
+      (filas || []).forEach(f => {
+        const s = porClave[norm(f.tienda)] || null;
+        /* Una fila de otra área se cuenta y se saltea: es ruido esperable del
+           libro entero, no un problema que el coordinador tenga que resolver. */
+        if (!s) {
+          (f.area && norm(f.area) !== norm(e.config.area) ? otrasAreas : sinTienda)
+            .push({ nombre: nombreDePlanilla(f), tienda: f.tienda || '', area: f.area || '' });
+          return;
+        }
+
+        const r = buscar({ cuil: f.cuil, nombre: nombreDePlanilla(f), tienda: f.tienda });
+        /* El número y el nombre apuntan cada uno sin dudas a personas
+           distintas: es un error de carga del libro y no se adivina cuál vale.
+           Es la misma regla de los otros dos importadores. */
+        if (r.conflicto) { enConflicto.push(r.conflicto); return; }
+        if (!r.g) {
+          sinPersona.push({ nombre: nombreDePlanilla(f), tienda: s.nombre || s.codigo });
+          return;
+        }
+        const c = r.g.c;
+        if (f.legajo) c.legajo = f.legajo;
+
+        const nov = {};
+        CAMPOS_NOVEDAD.forEach(k => { nov[k] = numeroNovedad(f[k]); });
+        if (String(f.obs || '').trim()) nov.obs = String(f.obs).trim();
+        if (!c.novedades) c.novedades = {};
+        c.novedades[periodo] = nov;
+
+        actualizados++;
+        const k = s.nombre || s.codigo;
+        porTienda[k] = (porTienda[k] || 0) + 1;
+      });
+
+      guardar();
+      return { periodo, actualizados, porTienda, sinPersona, sinTienda, enConflicto,
+               otrasAreas: otrasAreas.length, leidas: (filas || []).length };
+    },
+
     importarNovedades(sucursalId, periodo, filas) {
       const s = this.sucursal(sucursalId);
       if (!s) return null;

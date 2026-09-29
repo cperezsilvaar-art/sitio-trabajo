@@ -2786,25 +2786,67 @@ const COLUMNAS_NOVEDADES = {
   AUSENCIAPORFALLECIMIENTO: 'fallecimiento',
   MUDANZA: 'mudanza',
   FALTANTEDECAJERO: 'faltanteCaja',
-  OBSERVACIONES: 'obs'
+  OBSERVACIONES: 'obs',
+
+  /* Cómo viene el libro desde 2026. Los rótulos cambiaron —las licencias
+     pasaron a llamarse «LIC. …»— y aparecieron cinco conceptos que antes no
+     estaban. Los nombres viejos quedan arriba porque los meses ya cargados se
+     leyeron con ellos y un libro guardado tiene que seguir entrando igual. */
+  RAZONSOCIAL: 'razonSocial',
+  AREA: 'area',
+  COLABORADOR: 'colaborador',
+  LICEFERMEDAD: 'enfermedad',     // la errata está en la planilla
+  LICENFERMEDAD: 'enfermedad',
+  LICART: 'art',
+  LICEXAMEN: 'examen',
+  LICVACACIONES: 'vacaciones',
+  LICMUDANZA: 'mudanza',
+  LICFALLECIMIENTO: 'fallecimiento',
+  LICMATRIMONIO: 'matrimonio',
+  LICNACIMIENTO: 'nacimiento',
+  LICMATERNIDAD: 'maternidad',
+  RESERVADEPUESTO: 'reserva'
 };
 
 /* Cada novedad de ausencia cae en un concepto del tablero de estadísticas.
    Los códigos son los de TD01, los mismos que usa la solapa de Ausentismo. */
+/* Los conceptos de ausencia del libro.
+ *
+ * `cod` es el de la planilla TD01 y **está vacío en los que TD01 no tiene**:
+ * esos no se imputan a un código y se cuentan igual, que es mejor que
+ * inventarles uno. `ausentismo: false` marca lo que no es ausentismo aunque
+ * sea una ausencia —tiempo planificado o una licencia que no habla de la
+ * gestión—, la misma regla que `TIPOS_FORMULARIO` y `diasDeAusenciaEntre()`.
+ */
 const MAPA_AUSENCIAS = [
   { campo: 'enfermedad',    cod: '085', nombre: 'Enfermedad' },
-  { campo: 'vacaciones',    cod: '071', nombre: 'Vacaciones' },
+  { campo: 'art',           cod: '',    nombre: 'ART' },
+  { campo: 'vacaciones',    cod: '071', nombre: 'Vacaciones',              ausentismo: false },
   { campo: 'noJustificada', cod: '081', nombre: 'Ausente sin aviso' },
-  { campo: 'fallecimiento', cod: '052', nombre: 'Fallecimiento 1er grado' },
+  { campo: 'fallecimiento', cod: '052', nombre: 'Fallecimiento 1er grado', ausentismo: false },
+  { campo: 'matrimonio',    cod: '',    nombre: 'Matrimonio',              ausentismo: false },
+  { campo: 'nacimiento',    cod: '',    nombre: 'Nacimiento',              ausentismo: false },
+  { campo: 'maternidad',    cod: '',    nombre: 'Maternidad',              ausentismo: false },
   { campo: 'mudanza',       cod: '054', nombre: 'Mudanza' },
+  /* Reserva de puesto es el art. 211: la licencia paga se agotó y la persona
+     sigue sin venir. Cuenta como turno que no se cubre, que es lo que la
+     dotación necesita saber. */
+  { campo: 'reserva',       cod: '',    nombre: 'Reserva de puesto' },
   /* La planilla no distingue examen secundario de universitario; se imputa al
      universitario, que es el caso corriente. Los dos son no controlables, así
      que la lectura del mes no cambia. */
   { campo: 'examen',        cod: '056', nombre: 'Examen universitario' }
 ];
 
+/** Si ese concepto suma al ausentismo. Por defecto sí. */
+const cuentaComoAusentismo = campo => {
+  const m = MAPA_AUSENCIAS.find(x => x.campo === campo);
+  return !!m && m.ausentismo !== false;
+};
+
 const CAMPOS_NOVEDAD = ['nocturnas', 'he50', 'he100', 'feriado', 'gremio', 'examen',
-                        'enfermedad', 'vacaciones', 'noJustificada', 'fallecimiento', 'mudanza'];
+                        'enfermedad', 'art', 'vacaciones', 'noJustificada', 'fallecimiento',
+                        'matrimonio', 'nacimiento', 'maternidad', 'mudanza', 'reserva'];
 
 const _norm = t => String(t == null ? '' : t)
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -2879,12 +2921,20 @@ function interpretarNovedades(crudo) {
     const txt = i => (i >= 0 && i < c.length && c[i] != null) ? String(c[i]).trim() : '';
     const nov = k => col[k] === undefined ? 0 : numeroNovedad(c[col[k]]);
 
+    /* Con la columna COLABORADOR el nombre viene entero y en su lugar; sin
+       ella, el apellido y el nombre son las dos celdas que siguen al CUIL. */
+    const unaSolaColumna = col.colaborador !== undefined;
     const fila = {
       cuil: soloDigitos(c[iCuil]),
-      apellido: txt(iCuil + 1),
-      nombre: txt(iCuil + 2),
-      legajo: col.legajo === undefined ? '' : txt(iCuil - 1),
+      colaborador: unaSolaColumna ? txt(col.colaborador) : '',
+      apellido: unaSolaColumna ? '' : txt(iCuil + 1),
+      nombre: unaSolaColumna ? '' : txt(iCuil + 2),
+      legajo: col.legajo === undefined ? '' : txt(unaSolaColumna ? col.legajo : iCuil - 1),
       sector: col.sector === undefined ? '' : txt(iCuil - 1),
+      /* La tienda y el área van por fila y no por hoja: el libro entero viene
+         en una sola pestaña y cada fila dice a dónde pertenece. */
+      tienda: col.tienda === undefined ? '' : txt(col.tienda),
+      area: col.area === undefined ? '' : txt(col.area),
       obs: txt(col.obs)
     };
     CAMPOS_NOVEDAD.forEach(k => { fila[k] = nov(k); });
@@ -2894,7 +2944,7 @@ function interpretarNovedades(crudo) {
     if (!tienda && col.tienda !== undefined && iCuil === col.cuil) tienda = txt(col.tienda);
     if (!mes && col.mes !== undefined) mes = txt(col.mes);
 
-    if (fila.apellido || fila.nombre) filas.push(fila);
+    if (fila.colaborador || fila.apellido || fila.nombre) filas.push(fila);
   });
 
   if (sinCuil) avisos.push(`${sinCuil} fila${sinCuil === 1 ? '' : 's'} sin CUIL reconocible que quedaron afuera.`);
@@ -2902,7 +2952,7 @@ function interpretarNovedades(crudo) {
     avisos.push(`${corridas} fila${corridas === 1 ? '' : 's'} venían corridas una columna respecto del encabezado; ` +
                 'se leyeron igual tomando el CUIL como referencia.');
   }
-  if (!filas.length) avisos.push('No se reconoció ninguna persona: revisá que estén las columnas CUIL, APELLIDO y NOMBRE.');
+  if (!filas.length) avisos.push('No se reconoció ninguna persona: revisá que estén las columnas CUIL y COLABORADOR (o APELLIDO y NOMBRE).');
 
   return { filas, avisos, tienda, mes };
 }
@@ -2921,6 +2971,7 @@ function resumirNovedades(filas) {
 function ausenciasPorCodigo(novedad) {
   const d = {};
   MAPA_AUSENCIAS.forEach(m => {
+    if (!m.cod) return;   // TD01 no tiene código para este concepto
     const v = numeroNovedad((novedad || {})[m.campo]);
     if (v) d[m.cod] = (d[m.cod] || 0) + v;
   });
@@ -2931,6 +2982,11 @@ function ausenciasPorCodigo(novedad) {
    vienen en mayúsculas y a veces con espacios de más. */
 function nombreDePlanilla(fila) {
   const limpiar = t => String(t || '').replace(/\s+/g, ' ').trim();
+  /* El libro de 2026 trae una sola columna COLABORADOR con el nombre entero;
+     el viejo traía apellido y nombre separados. Se respeta lo que venga en vez
+     de partir el completo por el primer espacio, que rompe los apellidos
+     compuestos —«URBINA LEGUA KEYLA»— y son varios en el área. */
+  if (limpiar(fila.colaborador)) return limpiar(fila.colaborador);
   return [limpiar(fila.apellido), limpiar(fila.nombre)].filter(Boolean).join(', ');
 }
 
@@ -3917,15 +3973,16 @@ function cierreDelMes(estado, periodo) {
       if (tope.excedeMes) fila.excedenMes++;
 
       /* Los días que la liquidación pagó como ausencia, por concepto. Las
-         vacaciones entran en la lista porque el parte las trae, pero no suman
-         al total de ausentismo: son tiempo planificado, la misma regla que en
-         `participacionDeAusencias()`. */
+         vacaciones, la maternidad, el matrimonio, el nacimiento y el
+         fallecimiento entran en la lista porque el libro los trae, pero no
+         suman al total: `cuentaComoAusentismo()` decide, y decide en un solo
+         lugar para que la regla no se bifurque. */
       let dias = 0;
       MAPA_AUSENCIAS.forEach(m => {
         const d = +n[m.campo] || 0;
         if (!d) return;
         fila.porConcepto[m.nombre] = (fila.porConcepto[m.nombre] || 0) + d;
-        if (m.campo !== 'vacaciones') dias += d;
+        if (cuentaComoAusentismo(m.campo)) dias += d;
       });
       fila.diasAusencia += dias;
 
@@ -9533,6 +9590,76 @@ const Store = (() => {
        si no lo trae, por nombre normalizado. Nunca duplica: si ya está,
        actualiza sus novedades del período y respeta lo cargado a mano
        (posición, evaluación, talent card). */
+    /**
+     * Importa el libro de novedades **entero**, repartiendo por la columna
+     * TIENDA de cada fila.
+     *
+     * El libro es de toda la empresa —533 filas de cinco áreas— y antes había
+     * que abrirlo, separar la hoja de cada tienda y pegar catorce veces. Peor
+     * que el trabajo: el importador por tienda **crea** a quien no encuentra,
+     * así que una pegada en la sucursal equivocada metía 141 personas donde no
+     * van y no había forma de darse cuenta hasta el cierre.
+     *
+     * Acá no se crea a nadie. La fila que no cae en una persona del padrón se
+     * devuelve con nombre y tienda, que es la lista que el coordinador
+     * necesita: casi siempre es alguien que se fue o que todavía no pegó la
+     * nómina del mes.
+     */
+    importarLibroDeNovedades(periodo, filas) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const norm = t => String(t || '').toUpperCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]/g, '');
+
+      /* Cada tienda por su nombre y por su código: el libro escribe «SM
+         CENTER» donde el panel dice «San Martín Center». */
+      const porClave = {};
+      (e.sucursales || []).forEach(s => {
+        [s.nombre, s.codigo, s.rvd].forEach(x => { if (x) porClave[norm(x)] = s; });
+      });
+
+      let actualizados = 0;
+      const sinPersona = [], otrasAreas = [], sinTienda = [], enConflicto = [];
+      const porTienda = {};
+
+      (filas || []).forEach(f => {
+        const s = porClave[norm(f.tienda)] || null;
+        /* Una fila de otra área se cuenta y se saltea: es ruido esperable del
+           libro entero, no un problema que el coordinador tenga que resolver. */
+        if (!s) {
+          (f.area && norm(f.area) !== norm(e.config.area) ? otrasAreas : sinTienda)
+            .push({ nombre: nombreDePlanilla(f), tienda: f.tienda || '', area: f.area || '' });
+          return;
+        }
+
+        const r = buscar({ cuil: f.cuil, nombre: nombreDePlanilla(f), tienda: f.tienda });
+        /* El número y el nombre apuntan cada uno sin dudas a personas
+           distintas: es un error de carga del libro y no se adivina cuál vale.
+           Es la misma regla de los otros dos importadores. */
+        if (r.conflicto) { enConflicto.push(r.conflicto); return; }
+        if (!r.g) {
+          sinPersona.push({ nombre: nombreDePlanilla(f), tienda: s.nombre || s.codigo });
+          return;
+        }
+        const c = r.g.c;
+        if (f.legajo) c.legajo = f.legajo;
+
+        const nov = {};
+        CAMPOS_NOVEDAD.forEach(k => { nov[k] = numeroNovedad(f[k]); });
+        if (String(f.obs || '').trim()) nov.obs = String(f.obs).trim();
+        if (!c.novedades) c.novedades = {};
+        c.novedades[periodo] = nov;
+
+        actualizados++;
+        const k = s.nombre || s.codigo;
+        porTienda[k] = (porTienda[k] || 0) + 1;
+      });
+
+      guardar();
+      return { periodo, actualizados, porTienda, sinPersona, sinTienda, enConflicto,
+               otrasAreas: otrasAreas.length, leidas: (filas || []).length };
+    },
+
     importarNovedades(sucursalId, periodo, filas) {
       const s = this.sucursal(sucursalId);
       if (!s) return null;
@@ -16054,7 +16181,29 @@ const App = (() => {
       </section>
 
       <section class="tarjeta">
-        <h2>Novedades de liquidación</h2>
+        <h2>El libro de novedades, entero</h2>
+        <p class="ayuda">
+          Pegá el libro <strong>completo</strong> —las ${'' + ''}filas de todas las áreas, desde la fila de
+          encabezados— y cada persona cae en su tienda por la columna <strong>TIENDA</strong>. Las filas
+          de otras áreas se saltean solas. <strong>Acá no se crea a nadie</strong>: la que no cae en
+          alguien del padrón se lista con nombre, que casi siempre es alguien que ya se fue.
+        </p>
+        <div class="acciones" style="align-items:flex-end;margin-top:0">
+          <label class="campo" style="max-width:160px">
+            <span>Período</span>
+            <input id="periodo-libro" value="${esc(estadPeriodo)}" placeholder="2026-09">
+          </label>
+        </div>
+        <textarea id="pegar-libro" style="min-height:110px;margin-top:10px"
+          placeholder="RAZON SOCIAL  TIENDA  CUIL  LEGAJO  AREA  COLABORADOR  HORAS NOCTURNAS  HORAS EXTRAS 50%  …"></textarea>
+        <div class="acciones">
+          <button class="b" data-accion="importar-libro">Importar el libro entero</button>
+        </div>
+        <div id="resultado-libro"></div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Novedades de liquidación, hoja por hoja</h2>
         <p class="ayuda">
           Pegá acá la hoja de <strong>${esc(s.nombre || s.codigo)}</strong> del libro de novedades
           del mes: abrila en Excel, seleccioná desde la fila de encabezados hasta la última persona,
@@ -19526,6 +19675,44 @@ const App = (() => {
       }
 
       /* --- novedades de liquidación --- */
+      if (a === 'importar-libro') {
+        const crudo = ($('#pegar-libro') || {}).value || '';
+        if (!crudo.trim()) return avisar('Pegá primero el libro de novedades.', 'error');
+        const per = (($('#periodo-libro') || {}).value || '').trim();
+        if (!/^\d{4}-\d{2}$/.test(per)) return avisar('El período va como 2026-09.', 'error');
+
+        const leido = interpretarNovedades(crudo);
+        if (!leido.filas.length) {
+          return avisar(leido.avisos[0] || 'No se pudo leer el libro.', 'error');
+        }
+        /* Reemplaza las novedades de todo el período: es una acción que pisa
+           estado de muchas personas a la vez, así que va con resguardo. */
+        const r = Store.importarLibroDeNovedades(per, leido.filas);
+        const caja = $('#resultado-libro');
+        if (caja) {
+          const tiendas = Object.keys(r.porTienda).sort();
+          caja.innerHTML = `<div class="aviso-caja info" style="margin-top:12px">
+            <strong>${r.actualizados} de ${r.leidas} filas entraron en ${esc(per)}.</strong>
+            ${r.otrasAreas ? ` ${r.otrasAreas} son de otras áreas y se saltearon.` : ''}
+            ${tiendas.length ? `<ul>${tiendas.map(k =>
+              `<li>${esc(k)}: ${r.porTienda[k]}</li>`).join('')}</ul>` : ''}
+            ${r.sinPersona.length ? `<p style="margin:8px 0 0"><strong>${r.sinPersona.length} de tus
+              tiendas no cayeron en nadie del padrón:</strong>
+              ${r.sinPersona.map(x => esc(x.nombre) + ' (' + esc(x.tienda) + ')').join(', ')}.
+              Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
+            ${r.enConflicto.length ? `<p style="margin:8px 0 0"><strong>${r.enConflicto.length} con el
+              número y el nombre en contradicción</strong>, que quedaron afuera:
+              ${r.enConflicto.map(esc).join(' · ')}.</p>` : ''}
+            ${r.sinTienda.length ? `<p class="ayuda" style="margin:8px 0 0">${r.sinTienda.length}
+              fila${r.sinTienda.length === 1 ? '' : 's'} con una tienda que el panel no conoce.</p>` : ''}
+          </div>
+          <p class="ayuda">Se lee en <a href="#/nomina/cierre">El cierre del mes</a>.</p>`;
+        }
+        avisar(`${r.actualizados} personas con novedades de ${per}.`);
+        refrescar();
+        return;
+      }
+
       if (a === 'importar-novedades') {
         const crudo = ($('#pegar-novedades') || {}).value || '';
         if (!crudo.trim()) return avisar('Pegá primero la hoja del libro de novedades.', 'error');
