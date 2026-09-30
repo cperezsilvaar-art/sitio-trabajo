@@ -363,6 +363,79 @@ meterlas infla el número con algo que no es un problema—, y tampoco la matern
 ni el fallecimiento: `TIPOS_FORMULARIO` lo marca con `ausentismo: false` y
 `participacionDeAusencias()` los saltea. Los apercibimientos no son una ausencia.
 
+**El panel mide por período de liquidación y no por mes calendario.** El de
+septiembre de 2026 fue **del 21/08 al 17/09**: arranca el día 21 del mes
+anterior y cierra el 17 de este. Los dos días viven en `parametros`
+(`periodoDesdeDia`, `periodoHastaDia`), editables en `#/config`, y de ahí salen
+**las dos únicas funciones que traducen entre un período y sus fechas**, en
+`convenio.js`: `rangoDePeriodo('2026-09')` devuelve `{21/08, 17/09}` y
+`periodoDeFecha('2026-08-25')` devuelve `'2026-09'`. Escribir la conversión a
+mano en cada pantalla garantiza que un día difieran, que es exactamente lo que
+ya pasó con las tres cuentas de ausentismo. Documentado en
+`docs/periodo-de-liquidacion.md`.
+
+Medir por calendario metía los días en la ventana equivocada, y con los datos
+reales no era poco: septiembre calendario daba **166 días** de ausentismo contra
+**120** del período. **52 caían después del corte** —todos del libro, que
+ubicaba sus licencias desde el día 1 y las estiraba— y **6 que la liquidación
+sí pagó** se contaban en agosto.
+
+**Con el día de arranque menor o igual al de cierre el período vive adentro del
+mismo mes**, así que poner 1 y 31 devuelve los meses calendario sin tocar nada
+más. No es una excepción: es el caso general escrito una vez.
+
+**Los días que quedan sueltos no se pierden.** Del 21 al 17 el 18, el 19 y el 20
+quedan fuera del período declarado. `periodoDeFecha()` reparte por el **día de
+cierre** y no por el de arranque —lo que pasa después del corte lo paga el
+recibo que viene—, así que cada día del año cae en un período y en uno solo, y
+está probado sobre los 365. `#/config` los nombra y dice adónde van, sin impedir
+nada: cuál es el corte lo decide Nómina.
+
+**Lo que ya cargó el libro se reubica al volver a pegarlo**, conservando cuántos
+días dura y anotando de dónde venía (`reubicadaEn`). Se mueven **solo las
+suyas**: `fechasSupuestas` marca las fechas que inventó el propio importador, y
+una licencia con fechas de verdad no se toca jamás.
+
+**`diaCierreNovedades` dejó de ser un campo propio**: decía el mismo número que
+cierra el período, y dos campos para un número terminan diciendo cosas
+distintas. `Store.diaCierreNovedades()` lo deriva de `periodoHastaDia`, y
+`periodoDeLiquidacion()` (`agenda.js`), que hacía la misma cuenta escrita dos
+veces, ahora llama a `periodoDeFecha()`.
+
+**El numerador y el denominador tienen que repartir con la misma regla.**
+`rangoDePeriodo()` devuelve el período **declarado** —del 21 al 17— y
+`ventanaDePeriodo()` **los días que caen** en él, que con un corte que no encaja
+incluye los sueltos del período anterior. Son dos funciones y no una porque son
+dos preguntas, y cuando los dos números encajan devuelven lo mismo. La serie
+mensual dividía por el rango declarado mientras `periodoDeFecha()` repartía por
+el día de cierre: los tres días sueltos sumaban arriba de la fracción y no
+abajo, y la serie daba una tasa **más alta que el Panel sobre exactamente los
+mismos días**. Es la misma clase de contradicción que las tres cuentas de
+ausentismo, y se busca igual: correr las tres y compararlas.
+
+**La ventana de medición no arranca en la mitad de un período.**
+`ventanaDeMedicion()` corre el arranque al principio del período que contiene el
+corte. Con `mideDesde` en el 01/09 y períodos que arrancan el 21/08, el
+ausentismo de septiembre caía de 158 días a **74** sin que nada lo dijera. Se
+ajusta **en el cálculo y no en el valor guardado**: el corte sigue siendo la
+fecha que el coordinador escribió.
+
+**Lo que la liquidación paga de más se recorta y se avisa.** Un período de 28
+días no contiene los 30 que el libro le paga a una persona. El importador lo
+recorta al cierre —inventar días afuera sería peor— y nombra a cada uno: «pagó
+30 y entran 28». Recortar en silencio esconde justamente el dato que dice que el
+corte describe un período más corto que el que liquida Nómina.
+
+**Trampa conocida — dos `function` con el mismo nombre no rompen nada: gana la
+última.** La regla de los nombres repetidos entre módulos tiene esta segunda
+mitad, que es peor que la primera. Un segundo `const` tira «already been
+declared» y el chequeo del archivo armado lo agarra; un segundo `function` se
+ejecuta igual y **la que carga después pisa a la anterior en silencio**. Pasó
+con `nombreDePeriodo()`, escrita en `convenio.js` cuando ya existía en
+`agenda.js`: no falló ningún chequeo y se notó porque la pantalla escribía
+«septiembre de 2026» y la nueva decía «septiembre 2026». Antes de escribir una
+función de ayuda hay que buscar el nombre en `assets/js/`.
+
 **Los días de ausencia de un período los cuenta `diasDeAusenciaEntre()`
 (`ausencias.js`) y nadie más.** Toma la licencia y la ventana y devuelve
 **los días que caen adentro**: la que empezó en agosto y sigue hoy aporta sus
@@ -459,8 +532,10 @@ curso marcado, para que nadie lo compare contra uno cerrado.
 
 Es **tabla con una barra y no un gráfico**, como el resto del panel: la barra
 sola perdería los días y cuántos de ellos son supuestos, que es justamente lo que
-hace que el número se pueda defender. Los días se reparten por mes calendario,
-igual que `ausenciasPorMes()` en la ficha.
+hace que el número se pueda defender. Los días se reparten por período de
+liquidación, igual que `ausenciasPorMes()` en la ficha, y **cada fila escribe su
+rango abajo del nombre** —«septiembre de 2026 · del 21/08 al 17/09»—: sin eso
+«septiembre» se lee como el mes del almanaque, que es lo que dejó de ser.
 
 **El mismo bloque, acotado a una tienda, va en la página de la tienda.**
 `serieMensualDeAusentismo()` toma un tercer argumento opcional con el id de la
@@ -479,8 +554,8 @@ dotación media de la rotación.
 
 **El historial va en la ficha de la persona**, no en la de la sucursal: vive en
 `c.ausencias`, así que la acompaña cuando se muda de tienda. `ausenciasPorMes()`
-lo reparte por mes calendario —del 25/08 al 05/09 son siete días de agosto y
-cinco de septiembre, no doce de agosto— y no cuenta lo que todavía no pasó ni el
+lo reparte por **período de liquidación** con `periodoDeFecha()` —una licencia
+que cruza el corte aporta a los dos— y no cuenta lo que todavía no pasó ni el
 día de la reincorporación. Los días se cuentan con los dos extremos, y
 `diasDeAusencia()` y el texto de `estadoDeAusencia()` usan la misma cuenta: dos
 números distintos para lo mismo, uno al lado del otro, es peor que no mostrarlos.
@@ -517,9 +592,9 @@ a mano con la misma casilla: el detector se equivoca y un falso positivo que no
 se puede sacar ensucia el parte del cierre.
 
 El período **no es el mes en curso** sino el que sale de
-`periodoDeLiquidacion(fecha, corte)`: lo que aparece después del día de cierre
-—`parametros.diaCierreNovedades`, 25 por defecto, editable en `#/config`— va al
-recibo siguiente. Juntar en el parte algo que Nómina no va a tomar es peor que no
+`periodoDeLiquidacion(fecha, corte)`, que hoy llama a `periodoDeFecha()`: lo que
+aparece después del día de cierre del período —`parametros.periodoHastaDia`, 17,
+editable en `#/config`— va al recibo siguiente. Juntar en el parte algo que Nómina no va a tomar es peor que no
 marcarlo. El bloque lista apuntes que también están en su cajón por fecha y por
 eso los muestra **siempre plegados**: la misma ficha editable abierta dos veces
 en una pantalla es un lugar de más donde escribir.
@@ -741,7 +816,10 @@ La cuenta de los días de vínculo es `movimientoDelMes()`, que ya la usaba la
 matriz de FTE y era privada de `store.js`: se abrió como
 **`Store.diasDeVinculo()`** en vez de escribir una parecida en `convenio.js`.
 Dos formas de contar los días de un alta terminan difiriendo el día que se toca
-una.
+una. **Se mide contra el período y no contra el mes**: quien entró el 05/09
+aportó 14 días de 30 del período 21/08–17/09, no 26 de septiembre. Los días se
+devuelven en la escala de `diasMes` —30— y no en los que el período dure, así el
+período entero vale 1 FTE aunque mida 28 días.
 
 Va en `#/nomina` y no en la estadística porque la pregunta es «¿alguien se pasó
 del tope?», que es sobre personas y cruza los meses; la estadística mira **una

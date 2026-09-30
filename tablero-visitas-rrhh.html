@@ -1744,10 +1744,27 @@ const PARAMETROS_DEFECTO = {
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
   horasJornada: 8,          // jornada de referencia, para el FTE del día
   coberturaMinima: 0.90,    // por debajo de este % de cobertura, la tienda opera en riesgo
-  /* Día del mes en que cierran las novedades de liquidación. Lo que aparece
-     después ya no entra en este recibo y va al mes siguiente; el panel lo usa
-     para no juntar en el parte del cierre algo que Nómina no va a tomar. */
-  diaCierreNovedades: 25,
+  /* El período de liquidación, que **no es el mes calendario**. El de
+     septiembre de 2026 fue del 21/08 al 17/09: arranca el día 21 del mes
+     anterior y cierra el 17 de este.
+     
+     Trabajar en meses calendario metía los días en la ventana equivocada —lo
+     que la liquidación pagó del 21 al 31 de agosto caía en agosto, y los días
+     del 21 al 30 de septiembre se contaban en un recibo que todavía no
+     existía—. Son los dos números que definen todo: `rangoDePeriodo()` y
+     `periodoDeFecha()` (`convenio.js`) salen de acá y nadie más decide.
+     
+     **Con `desde` mayor que `hasta` el período arranca el mes anterior**, que
+     es el caso normal. Con `desde` 1 y `hasta` 31 vuelven los meses
+     calendario, sin ninguna otra cosa que tocar.
+     
+     **Del 21 al 17 quedan tres días de cada mes afuera** —el 18, el 19 y el
+     20—, que es el calendario que hoy usa Nómina y una decisión del
+     coordinador, no un error del panel. `#/config` los nombra sin impedir
+     nada: cuál es el corte lo decide Nómina, no esta pantalla. Si algún mes
+     pasa a cerrar el 20, es cambiar un número. */
+  periodoDesdeDia: 21,
+  periodoHastaDia: 17,
   /* Desde cuándo miden los indicadores del área: ausentismo y rotación.
    *
    * El coordinador venía midiendo a mano y arranca el panel con el corte del
@@ -1764,7 +1781,12 @@ const PARAMETROS_DEFECTO = {
    * Es una fecha y no un cálculo automático: moverla al próximo septiembre es
    * una decisión suya, y un corte que se corre solo le cambiaría los números
    * sin avisar. */
-  mideDesde: '2026-09-01',
+  /* Arranca con el **período** de septiembre y no con el 1 de septiembre: el
+     ejercicio empieza donde empieza la primera liquidación que se mide, que es
+     el 21/08. Con el corte en el 1 quedaban afuera los primeros once días del
+     año fiscal, y las licencias que el libro ubica al arranque del período no
+     entraban en ninguna tasa. */
+  mideDesde: '2026-08-21',
   moneda: '$'
 };
 
@@ -3589,6 +3611,170 @@ const CCT = {
   ambito: 'Farmacias de CABA y partidos del conurbano bonaerense (art. 3°)'
 };
 
+/* ==================== El período de liquidación ======================= *
+ * El mes de Nómina **no es el mes calendario**. El período de septiembre de
+ * 2026 fue del 21/08 al 17/09: arranca el día 21 del mes anterior y cierra el
+ * 17 de este. Los dos días salen de `parametros` (`periodoDesdeDia` y
+ * `periodoHastaDia`), editables en `#/config`.
+ *
+ * Todo el panel medía en meses calendario y eso metía los días en la ventana
+ * equivocada. Con los datos de septiembre de 2026 la diferencia era grande:
+ * 166 días de ausentismo contra 120 del período real. De esos 166, **52 caían
+ * después del corte** —todos del libro, que ubicaba sus licencias desde el 1 y
+ * las estiraba— y **6 días que la liquidación de septiembre sí pagó** quedaban
+ * contados en agosto.
+ *
+ * Estas dos funciones son **la única traducción entre un período y sus
+ * fechas**, en los dos sentidos. Escribir la conversión a mano en cada
+ * pantalla es garantizar que un día difieran.
+ *
+ * `rangoDePeriodo()` devuelve el período **declarado** —lo que dice el
+ * calendario de Nómina— y `periodoDeFecha()` **reparte los días**: cada día
+ * del año cae en uno y solo uno. Cuando los dos números encajan las dos cosas
+ * coinciden. Cuando no —el corte del 17 con arranque el 21— los días sueltos
+ * caen en el **recibo siguiente**, que es como funciona un corte de verdad: si
+ * Nómina cerró el 17, una falta del 18 la paga el mes que viene. Perderlos
+ * sería peor: desaparecerían de la serie del año sin que nadie lo note.
+ *
+ * **Con `desde` menor o igual que `hasta` el período vive adentro del mismo
+ * mes**, así que poner 1 y 31 devuelve los meses calendario sin tocar nada
+ * más. Es el caso general escrito una vez, no una excepción.
+ */
+
+/* `_isoDelPeriodo` y no `_iso`: ese nombre ya existe en `agenda.js` y los .js
+   comparten ámbito global — una segunda declaración deja la página en blanco.
+   Lo agarró el chequeo del archivo armado, que es para lo que está. */
+const _diasDelMesDe = (anio, mes) => new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+const _isoDelPeriodo = (anio, mes, dia) =>
+  `${anio}-${String(mes).padStart(2, '0')}-${String(Math.min(dia, _diasDelMesDe(anio, mes))).padStart(2, '0')}`;
+
+/** Los dos días que definen el período, saneados. */
+function diasDelPeriodo(parametros) {
+  const p = parametros || {};
+  const n = (v, x) => {
+    const k = Math.round(Number(v));
+    return isNaN(k) || k < 1 || k > 31 ? x : k;
+  };
+  return {
+    desde: n(p.periodoDesdeDia, 21),
+    hasta: n(p.periodoHastaDia, 17)
+  };
+}
+
+/**
+ * De `'2026-09'` a sus fechas: `{ desde: '2026-08-21', hasta: '2026-09-20' }`.
+ *
+ * El día se recorta al último del mes cuando no existe —un 31 en febrero es el
+ * 28—, para que ningún período quede sin fecha o se pase al mes siguiente.
+ */
+function rangoDePeriodo(periodo, parametros) {
+  const t = String(periodo || '');
+  if (!/^\d{4}-\d{2}$/.test(t)) return null;
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7);
+  const d = diasDelPeriodo(parametros);
+  const hasta = _isoDelPeriodo(anio, mes, d.hasta);
+  if (d.desde <= d.hasta) return { desde: _isoDelPeriodo(anio, mes, d.desde), hasta };
+  const anterior = mes === 1 ? { a: anio - 1, m: 12 } : { a: anio, m: mes - 1 };
+  return { desde: _isoDelPeriodo(anterior.a, anterior.m, d.desde), hasta };
+}
+
+/**
+ * Y al revés: en qué período cae una fecha. **El pivote es el día de cierre**,
+ * no el de arranque: lo que pasa después del corte lo paga el recibo que
+ * viene. Así cada día del año cae en un período y en uno solo, también cuando
+ * los dos números no encajan.
+ */
+function periodoDeFecha(fechaISO, parametros) {
+  const t = String(fechaISO || '');
+  if (!/^\d{4}-\d{2}-\d{2}/.test(t)) return '';
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7), dia = +t.slice(8, 10);
+  /* El recorte de fin de mes vale acá también: con cierre el 31, en un febrero
+     de 28 el día 28 todavía es de este período. */
+  const cierre = Math.min(diasDelPeriodo(parametros).hasta, _diasDelMesDe(anio, mes));
+  if (dia <= cierre) return t.slice(0, 7);
+  return mes === 12 ? `${anio + 1}-01` : `${anio}-${String(mes + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Los días que **caen** en este período, que no siempre son los del período
+ * declarado.
+ *
+ * `rangoDePeriodo()` devuelve lo que dice el calendario de Nómina —del 21 al
+ * 17— y `periodoDeFecha()` reparte por el día de cierre, así que el 18, el 19
+ * y el 20 caen en el período siguiente aunque el declarado no los liste. Las
+ * dos cosas tienen que usar la **misma** regla o el número no cierra: contar
+ * un día arriba de la fracción y no abajo daba una tasa de ausentismo más alta
+ * en la serie que en el Panel, sobre exactamente los mismos días.
+ *
+ * Cuando los dos números encajan esto devuelve lo mismo que
+ * `rangoDePeriodo()`. Por eso son dos funciones y no una: son dos preguntas
+ * —qué declaró Nómina y qué días entran acá— que casi siempre tienen la misma
+ * respuesta.
+ */
+function ventanaDePeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return null;
+  const t = String(periodo);
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7);
+  const previo = mes === 1 ? `${anio - 1}-12` : `${anio}-${String(mes - 1).padStart(2, '0')}`;
+  const anterior = rangoDePeriodo(previo, parametros);
+  if (!anterior) return r;
+  const d = new Date(anterior.hasta + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const desde = d.toISOString().slice(0, 10);
+  return { desde: desde < r.desde ? desde : r.desde, hasta: r.hasta };
+}
+
+/** Cuántos días tiene el período. No son 30 ni los del mes: son los que son. */
+function diasQueDuraPeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return 0;
+  return Math.round((new Date(r.hasta + 'T00:00:00') - new Date(r.desde + 'T00:00:00')) / 86400000) + 1;
+}
+
+/**
+ * Si los dos días encajan, es decir si el período siguiente arranca el día
+ * después de que este cierra. Cuando no, hay días de cada mes que quedan fuera
+ * del período **declarado** y se cuentan en el recibo siguiente — `#/config`
+ * los nombra en vez de impedir nada, porque el calendario lo decide Nómina.
+ */
+function periodosEncajan(parametros) {
+  const d = diasDelPeriodo(parametros);
+  if (d.desde <= d.hasta) return d.desde === 1 && d.hasta >= 28;
+  return d.desde === d.hasta + 1;
+}
+
+/** Los días que caen fuera del período declarado, para poder nombrarlos. */
+function diasFueraDePeriodo(parametros) {
+  const d = diasDelPeriodo(parametros);
+  if (periodosEncajan(parametros) || d.desde <= d.hasta) return [];
+  const out = [];
+  for (let x = d.hasta + 1; x < d.desde; x++) out.push(x);
+  return out;
+}
+
+/**
+ * «septiembre de 2026 · del 21/08 al 17/09».
+ *
+ * El rango va escrito al lado del nombre en todas las pantallas del cierre, y
+ * no es adorno: «septiembre» a secas se lee como el mes calendario, que es
+ * justamente lo que el panel dejó de hacer.
+ *
+ * El nombre lo pone `nombreDePeriodo()`, que vive en `agenda.js`. Acá se
+ * escribió una segunda —con su propia lista de meses— y **no rompió nada**:
+ * dos `function` con el mismo nombre no tiran error como dos `const`, gana la
+ * que carga última y la otra desaparece en silencio. Se notó porque la
+ * pantalla decía «septiembre de 2026» y esta escribía «septiembre 2026».
+ * `agenda.js` carga después de este archivo, así que a la hora de llamarla ya
+ * existe.
+ */
+function etiquetaDePeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return nombreDePeriodo(periodo);
+  const dm = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+  return `${nombreDePeriodo(periodo)} · del ${dm(r.desde)} al ${dm(r.hasta)}`;
+}
+
 /* ------------------------- Categorías (art. 5 a 9) ------------------------ */
 const CATEGORIAS_CCT = [
   { id: 'inicialA',    nombre: 'Categoría Inicial "A"', articulo: 5,
@@ -4587,16 +4773,21 @@ const _diaMas = (fecha, n) => {
 };
 
 /**
- * El historial de ausencias de una persona, repartido mes a mes.
+ * El historial de ausencias de una persona, repartido **período a período**.
  *
  * Una licencia del 25/08 al 05/09 son siete días de agosto y cinco de
  * septiembre. Imputarla entera al mes en que arrancó infla un mes y vacía el
  * otro, que es justo lo que se mira cuando se compara contra la liquidación.
  *
+ * El reparto es por **período de liquidación** y no por mes calendario:
+ * `periodoDeFecha()` decide a qué recibo va cada día. Con el corte del área
+ * —del 21 al 17— esa licencia del 25/08 al 05/09 cae entera en septiembre, que
+ * es el recibo que efectivamente la pagó.
+ *
  * @returns {{periodos:string[], porMes:object, porMotivo:object, total:number,
  *            abiertas:number, sinJustificar:number}}
  */
-function ausenciasPorMes(colaborador, hoy) {
+function ausenciasPorMes(colaborador, hoy, parametros) {
   const h = hoy || _diaHoy();
   const out = { periodos: [], porMes: {}, porMotivo: {}, total: 0,
                 abiertas: 0, sinJustificar: 0 };
@@ -4616,7 +4807,7 @@ function ausenciasPorMes(colaborador, hoy) {
        tipeado. */
     let d = a.desde;
     for (let i = 0; i < 1500 && d <= fin; i++) {
-      const per = d.slice(0, 7);
+      const per = periodoDeFecha(d, parametros);
       if (!out.porMes[per]) out.porMes[per] = { total: 0, motivos: {} };
       out.porMes[per].total++;
       out.porMes[per].motivos[motivo] = (out.porMes[per].motivos[motivo] || 0) + 1;
@@ -5558,9 +5749,11 @@ function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
  * cambio, cada mes nuevo es una fila nueva y el año fiscal se construye a la
  * vista.
  *
- * Los días se reparten por mes calendario, igual que `ausenciasPorMes()` en la
- * ficha de la persona: una licencia del 25/09 al 05/10 son seis días de
- * septiembre y cinco de octubre, no once de septiembre.
+ * Los días se reparten por **período de liquidación**, igual que
+ * `ausenciasPorMes()` en la ficha de la persona: `periodoDeFecha()` decide a
+ * qué recibo va cada día, y una licencia que cruza el corte aporta a los dos.
+ * No es el mes del almanaque — el de septiembre de 2026 fue del 21/08 al
+ * 17/09—, porque lo que se compara contra esta serie es lo que se pagó.
  *
  * **El plantel es el de hoy en todos los meses.** El panel guarda la foto
  * actual y no la de cada cierre, así que la tasa de un mes viejo usa la
@@ -5589,8 +5782,10 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
      un mes en cero es una respuesta y saltearlo rompe la lectura de la serie. */
   const meses = {};
   const orden = [];
-  let y = +desde.slice(0, 4), m = +desde.slice(5, 7);
-  while (y * 12 + m <= (+hasta.slice(0, 4)) * 12 + (+hasta.slice(5, 7))) {
+  const par = (e.config || {}).parametros;
+  const pDesde = periodoDeFecha(desde, par), pHasta = periodoDeFecha(hasta, par);
+  let y = +pDesde.slice(0, 4), m = +pDesde.slice(5, 7);
+  while (y * 12 + m <= (+pHasta.slice(0, 4)) * 12 + (+pHasta.slice(5, 7))) {
     const k = y + '-' + String(m).padStart(2, '0');
     meses[k] = { mes: k, dias: 0, diasSupuestos: 0, eventos: 0, personas: new Set() };
     orden.push(k);
@@ -5612,7 +5807,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     let d = a.desde > desde ? a.desde : desde;
     let primero = true;
     while (d <= fin) {
-      const k = d.slice(0, 7);
+      const k = periodoDeFecha(d, par);
       if (meses[k]) {
         meses[k].dias++;
         if (a.diasSupuestos) meses[k].diasSupuestos++;
@@ -5630,7 +5825,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
 
   const filas = orden.map(k => {
     const x = meses[k];
-    const dias = _diasDelMes(k, desde, hasta);
+    const dias = _diasDelPeriodo(k, desde, hasta, par);
     return {
       mes: k, dias: x.dias, diasSupuestos: x.diasSupuestos,
       eventos: x.eventos, personas: x.personas.size,
@@ -5643,7 +5838,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
   const diasTotales = filas.reduce((n, f) => n + f.diasDelMes, 0);
   /* El mes en curso por separado: es el que el coordinador mira todos los días
      y el único que todavía puede cambiar. */
-  const actual = filas.find(f => f.mes === hasta.slice(0, 7)) || null;
+  const actual = filas.find(f => f.mes === pHasta) || null;
 
   const quienes = Object.keys(porPersona).map(k => porPersona[k])
     .sort((x, z) => z.dias - x.dias || z.eventos - x.eventos);
@@ -5657,19 +5852,23 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     tasa: diasTotales > 0 ? total / (plantel * diasTotales) : null,
     /* El mes en curso está a medias por definición: la pantalla lo marca para
        que nadie lo compare contra un mes cerrado. */
-    mesEnCurso: hasta.slice(0, 7)
+    mesEnCurso: pHasta
   };
 }
 
-/* Cuántos días de ese mes caen adentro de la ventana. El primero y el último
-   están cortados —el corte es el día 1 o no, y hoy es el día que es—, y usar
-   30 para todos daría una tasa más baja en los dos extremos. */
-function _diasDelMes(mes, desde, hasta) {
-  const ini = mes + '-01';
-  const y = +mes.slice(0, 4), m = +mes.slice(5, 7);
-  const fin = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-  const a = ini > desde ? ini : desde;
-  const b = fin < hasta ? fin : hasta;
+/* Cuántos días de ese período caen adentro de la ventana. El primero y el
+   último están cortados —el corte del año fiscal cae donde cae, y hoy es el
+   día que es—, y usar un número fijo para todos daría una tasa más baja en los
+   dos extremos. */
+function _diasDelPeriodo(periodo, desde, hasta, parametros) {
+  /* `ventanaDePeriodo()` y no `rangoDePeriodo()`: el denominador tiene que
+     contar los mismos días que `periodoDeFecha()` mete en el numerador. Con el
+     rango declarado, los días sueltos del corte sumaban arriba y no abajo, y
+     la serie daba una tasa más alta que el Panel sobre los mismos días. */
+  const r = ventanaDePeriodo(periodo, parametros);
+  if (!r) return 0;
+  const a = r.desde > desde ? r.desde : desde;
+  const b = r.hasta < hasta ? r.hasta : hasta;
   if (a > b) return 0;
   return (_diasEntreISO(a, b) || 0) + 1;
 }
@@ -5755,10 +5954,24 @@ function _diasEntreISO(a, b) {
  * que se lee como si fuera anual.
  */
 function ventanaDeMedicion(estado, desdeNatural, hasta) {
-  const corte = (((estado || {}).config || {}).parametros || {}).mideDesde || '';
-  const desde = corte && corte > desdeNatural ? corte : desdeNatural;
+  const par = ((estado || {}).config || {}).parametros || {};
+  const corte = par.mideDesde || '';
+  const crudo = corte && corte > desdeNatural ? corte : desdeNatural;
+  /* **La ventana no arranca en la mitad de un período.** Se corre al principio
+     del período que contiene esa fecha.
+     Sin esto, un corte del 01/09 con períodos que arrancan el 21/08 dejaba
+     afuera los primeros once días de cada licencia que el libro ubica al
+     arranque: el ausentismo de septiembre caía de 158 días a 74 sin que nada
+     lo dijera. Se ajusta acá y no en el valor guardado, así el corte sigue
+     siendo la fecha que el coordinador escribió y no una que el panel le
+     cambió por atrás. */
+  const r = rangoDePeriodo(periodoDeFecha(crudo, par), par);
+  const desde = r && r.desde < crudo ? r.desde : crudo;
   return {
-    desde, corte,
+    desde, corte, corteCrudo: crudo,
+    /* Cuánto se corrió, para que la pantalla pueda decirlo en vez de mostrar
+       un período que no es el que se escribió. */
+    corrida: desde !== crudo,
     recortada: !!corte && corte > desdeNatural,
     dias: Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1)
   };
@@ -6825,16 +7038,12 @@ const PALABRAS_LIQUIDACION =
  * aparecería en la lista algo que Nómina no va a tomar.
  */
 function periodoDeLiquidacion(fechaISO, diaCierre) {
-  const f = String(fechaISO || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return '';
-  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
-  let anio = Number(f.slice(0, 4));
-  let mes = Number(f.slice(5, 7));
-  if (Number(f.slice(8, 10)) > corte) {
-    mes += 1;
-    if (mes > 12) { mes = 1; anio += 1; }
-  }
-  return `${anio}-${String(mes).padStart(2, '0')}`;
+  /* Es la misma cuenta que `periodoDeFecha()` (`convenio.js`), que reparte
+     todos los días del panel entre períodos: acá se la llama en vez de
+     repetirla. Estaban escritas dos veces, con la misma regla, y dos cuentas
+     del mismo número terminan difiriendo el día que se toca una. */
+  return periodoDeFecha(String(fechaISO || '').slice(0, 10),
+    { periodoHastaDia: Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO });
 }
 
 /**
@@ -6857,10 +7066,7 @@ function cierreDeNovedades(hoyISO, diaCierre) {
   /* El cierre del período en curso: si hoy ya pasó el corte, el que viene es
      el del mes siguiente, que es justamente el período que devolvió la cuenta
      de arriba. */
-  const [anio, mes] = periodo.split('-').map(Number);
-  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
-  const dia = Math.min(corte, ultimo);
-  const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  const fecha = (rangoDePeriodo(periodo, { periodoHastaDia: corte }) || {}).hasta || hoy;
   return {
     periodo,
     fecha,
@@ -8409,17 +8615,27 @@ const Store = (() => {
    *
    * @returns {{tipo:'estable'|'alta'|'baja', dias:number}}
    */
-  function movimientoDelMes(colaborador, periodo, diasMes) {
+  function movimientoDelMes(colaborador, periodo, diasMes, parametros) {
     const c = colaborador || {};
     const dm = diasMes || PARAMETROS_DEFECTO.diasMes;
-    const diaDe = f => {
-      const t = String(f || '');
-      return t.slice(0, 7) === periodo ? Math.min(dm, Math.max(1, Number(t.slice(8, 10)))) : 0;
-    };
-    const salida = diaDe((c.baja || {}).fecha);
-    if (salida) return { tipo: 'baja', dias: salida };
-    const entrada = diaDe(c.fechaIngreso) || diaDe(c.fechaIngresoFTD);
-    if (entrada) return { tipo: 'alta', dias: dm - entrada + 1 };
+    /* El vínculo se mide contra el **período de liquidación**, no contra el mes
+       calendario: quien entró el 05/09 trabajó 13 días del período 21/08–17/09
+       y no 26 de septiembre. Contarlo por calendario inflaba la dotación con
+       gente que no estuvo, que es justo lo que el cierre viene a mostrar. */
+    const r = rangoDePeriodo(periodo, parametros);
+    if (!r) return { tipo: 'estable', dias: dm };
+    const total = Math.round((new Date(r.hasta + 'T00:00:00') - new Date(r.desde + 'T00:00:00')) / 86400000) + 1;
+    /* Los días se devuelven en la escala del modelo de FTE —`diasMes`, 30— y
+       no en los días que el período dure: así el período entero vale 1 FTE
+       aunque mida 28 días, y la matriz de TD01 sigue dividiendo por 30. */
+    const enEscala = d => Math.max(0, Math.min(dm, Math.round(dm * d / total)));
+    const dentro = f => { const t = String(f || ''); return t >= r.desde && t <= r.hasta ? t : ''; };
+    const entre = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000) + 1;
+
+    const salida = dentro((c.baja || {}).fecha);
+    if (salida) return { tipo: 'baja', dias: enEscala(entre(r.desde, salida)) };
+    const entrada = dentro(c.fechaIngreso) || dentro(c.fechaIngresoFTD);
+    if (entrada) return { tipo: 'alta', dias: enEscala(entre(entrada, r.hasta)) };
     return { tipo: 'estable', dias: dm };
   }
 
@@ -8448,7 +8664,10 @@ const Store = (() => {
 
   function visitaNueva(sucursalId) {
     const hoy = new Date();
-    const periodo = hoy.toISOString().slice(0, 7);
+    /* El período de liquidación al que pertenece hoy, no el mes del almanaque:
+       una visita del 19 de septiembre es del recibo de octubre. */
+    const periodo = periodoDeFecha(hoy.toISOString().slice(0, 10),
+                                   (estado && estado.config && estado.config.parametros) || null);
     return {
       id: uid(),
       sucursalId,
@@ -8829,11 +9048,16 @@ const Store = (() => {
    * los gerentes—, esa es la buena: tiene fechas de verdad. La del libro no
    * entra y los días no se cuentan dos veces.
    */
-  function registrarLicenciasDelLibro(c, periodo, nov, diferencias) {
+  function registrarLicenciasDelLibro(c, periodo, nov, diferencias, parametros) {
     if (!Array.isArray(c.ausencias)) c.ausencias = [];
-    const ini = periodo + '-01';
-    const finMes = new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0)
-      .toISOString().slice(0, 10);
+    /* El período de liquidación y no el mes calendario: arrancar el día 1 y
+       estirar hasta fin de mes empujaba días fuera de la ventana que la
+       liquidación pagó —52 de los 166 de septiembre de 2026— y dejaba afuera
+       los que sí pagó de la última semana del mes anterior. */
+    const r = rangoDePeriodo(periodo, parametros);
+    const ini = r ? r.desde : periodo + '-01';
+    const finMes = r ? r.hasta
+      : new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0).toISOString().slice(0, 10);
     let puestas = 0;
 
     Object.keys(MOTIVO_DE_NOVEDAD).forEach(campo => {
@@ -8846,6 +9070,26 @@ const Store = (() => {
          manda la liquidación**: es lo que efectivamente se pagó. */
       const suyas = c.ausencias.filter(a => a.motivo === motivo && a.desde
         && a.desde <= finMes && (a.hasta || finMes) >= ini);
+
+      /* Las que puso el libro cuando el panel medía por mes calendario
+         arrancan el día 1, que ya no es donde empieza el período. Se las
+         reubica al arranque conservando cuántos días duran.
+         **Solo las suyas**: `fechasSupuestas` marca las fechas que inventó el
+         propio importador, así que moverlas no borra ninguna prueba — una
+         licencia con fechas de verdad, del formulario o del parte, no se toca
+         jamás. */
+      if (r) suyas.forEach(a => {
+        if (!a.fechasSupuestas || a.desde === r.desde) return;
+        const dura = a.hasta
+          ? Math.round((new Date(a.hasta + 'T00:00:00') - new Date(a.desde + 'T00:00:00')) / 86400000)
+          : 0;
+        const fin = new Date(r.desde + 'T00:00:00');
+        fin.setDate(fin.getDate() + dura);
+        a.reubicadaEn = a.reubicadaEn || { desde: a.desde, hasta: a.hasta || '', cierre: periodo };
+        a.desde = r.desde;
+        if (a.hasta) a.hasta = fin.toISOString().slice(0, 10);
+      });
+
       if (suyas.length) {
         /* Los días que la licencia pisa del mes, a secas. No con
            `diasDeAusenciaEntre()`, que devuelve cero para lo que no es
@@ -8898,6 +9142,19 @@ const Store = (() => {
       const fin = new Date(ini + 'T00:00:00');
       fin.setDate(fin.getDate() + Math.round(dias) - 1);
       const hasta = fin.toISOString().slice(0, 10);
+
+      /* La liquidación pagó más días de los que el período tiene. No es un
+         redondeo: es que el corte configurado describe un período más corto
+         que el que Nómina liquidó —con 21 al 17 el período mide 28 días y el
+         libro paga hasta 30—. Se recorta, porque inventar días fuera del
+         período sería peor, pero **se avisa**: recortar en silencio esconde
+         justamente el dato que dice que el corte está mal puesto. */
+      if (hasta > finMes && diferencias) {
+        const caben = Math.round((new Date(finMes + 'T00:00:00') - new Date(ini + 'T00:00:00')) / 86400000) + 1;
+        diferencias.push({ nombre: c.nombre, concepto: campo, pagados: Math.round(dias),
+                           registrados: caben, ajustada: false, noEntra: true,
+                           desde: ini, hasta: finMes });
+      }
 
       c.ausencias.push({
         id: uid(),
@@ -9392,10 +9649,18 @@ const Store = (() => {
       });
     },
 
-    /** El día de corte configurado, para no repetir el Object.assign en cada uso. */
+    /**
+     * El día en que cierra el período de liquidación.
+     *
+     * Era un campo aparte (`diaCierreNovedades`, 25) y pasó a ser el mismo
+     * número que cierra el período (`periodoHastaDia`): son la misma cosa
+     * dicha dos veces, y dos campos para un número terminan diciendo cosas
+     * distintas. Lo guardado con el nombre viejo se sigue leyendo, para no
+     * cambiarle el corte a quien ya lo había movido a mano.
+     */
     diaCierreNovedades() {
       const p = this.get().config.parametros || {};
-      return Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
+      return diasDelPeriodo(p).hasta || Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
     },
 
     /**
@@ -9484,7 +9749,7 @@ const Store = (() => {
     prellenarDiario(fecha) {
       const e = this.get();
       const d = this.asegurarDiario(fecha);
-      const periodo = String(fecha).slice(0, 7);
+      const periodo = periodoDeFecha(fecha, e.config.parametros);
       let completadas = 0;
 
       e.sucursales.forEach(s => {
@@ -9999,7 +10264,7 @@ const Store = (() => {
      * los días de un alta terminan difiriendo el día que se toca una.
      */
     diasDeVinculo(colaborador, periodo, diasMes) {
-      return movimientoDelMes(colaborador, periodo, diasMes);
+      return movimientoDelMes(colaborador, periodo, diasMes, this.get().config.parametros);
     },
 
     importarLibroDeNovedades(periodo, filas) {
@@ -10049,7 +10314,7 @@ const Store = (() => {
         c.novedades[periodo] = nov;
 
         actualizados++;
-        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias);
+        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias, e.config.parametros);
         const k = s.nombre || s.codigo;
         porTienda[k] = (porTienda[k] || 0) + 1;
       });
@@ -12930,9 +13195,11 @@ const App = (() => {
     if (!serie || !serie.filas.length) return '';
     const deTienda = !!sucursalId;
     const tope = Math.max(...serie.filas.map(f => f.tasa || 0), 0.001);
-    const MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
-                 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    const rotulo = k => `${MES[+k.slice(5, 7)]} ${k.slice(0, 4)}`;
+    /* El nombre sale de `nombreDePeriodo()` y la lista de meses ya no se
+       escribe acá: había dos, y la fila de la serie tiene que decir lo mismo
+       que el desplegable del cierre. */
+    const par = (e.config || {}).parametros;
+    const rotulo = k => nombreDePeriodo(k);
     const conDato = serie.filas.filter(f => f.dias).length;
 
     /* La tienda contra el área. Un 2% solo no dice nada; en la página de la
@@ -12979,7 +13246,14 @@ const App = (() => {
           const curso = f.mes === serie.mesEnCurso;
           return `<tr${f.dias ? '' : ' class="inactivo"'}>
             <td><strong>${esc(rotulo(f.mes))}</strong>${curso
-              ? ' <span class="chip azul">en curso</span>' : ''}</td>
+              ? ' <span class="chip azul">en curso</span>' : ''}
+              ${/* El rango abajo del nombre: sin él «septiembre» se lee como el
+                   mes del almanaque, y no lo es. */''}
+              <div class="ayuda">${(() => {
+                const r = rangoDePeriodo(f.mes, par);
+                const dm = x => x.slice(8, 10) + '/' + x.slice(5, 7);
+                return r ? `del ${dm(r.desde)} al ${dm(r.hasta)}` : '';
+              })()}</div></td>
             <td style="width:34%">${barraDato((f.tasa || 0) / tope, '', 'ban3')}</td>
             <td class="num">${f.tasa === null ? '—' : fmtPct(f.tasa, 1)}</td>
             <td class="num">${f.dias || '—'}</td>
@@ -14035,10 +14309,14 @@ const App = (() => {
           <label class="campo" style="max-width:220px">
             <span>Período</span>
             <select id="periodo-cierre">
-              ${periodos.map(x => `<option value="${x}"${x === periodo ? ' selected' : ''}>${esc(x)}</option>`).join('')}
+              ${periodos.map(x => `<option value="${x}"${x === periodo ? ' selected' : ''}
+                >${esc(nombreDePeriodo(x))}</option>`).join('')}
             </select>
           </label>
           <p class="ayuda" style="margin:0 0 6px">
+            ${/* El rango escrito al lado del nombre: «septiembre» a secas se lee
+                 como el mes calendario, que es justo lo que dejó de ser. */''}
+            <strong>${esc(etiquetaDePeriodo(periodo, e.config.parametros))}</strong> ·
             ${r.total.personas} persona${r.total.personas === 1 ? '' : 's'} con novedades cargadas
             en ${r.tiendas.length} tienda${r.tiendas.length === 1 ? '' : 's'}.
             ${periodos.length > 1 ? `Hay ${periodos.length} períodos cargados.` : ''}
@@ -16744,7 +17022,7 @@ const App = (() => {
           <a href="#/diario">pegando la planilla del formulario de recepción</a>.</p>`;
     }
 
-    const r = ausenciasPorMes(c, hoy);
+    const r = ausenciasPorMes(c, hoy, Store.get().config.parametros);
     const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
 
     /* Su ausentismo, con la tienda y el área al lado: un 2% no dice nada suelto
@@ -16779,10 +17057,15 @@ const App = (() => {
       </p>` : ''}
 
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Mes</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
+        <thead><tr><th>Período</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
           <th class="num">Días</th></tr></thead>
         <tbody>${r.periodos.map(per => `<tr>
-          <td><strong>${esc(per)}</strong></td>
+          <td><strong>${esc(nombreDePeriodo(per))}</strong>
+            <div class="ayuda">${esc((() => {
+              const g = rangoDePeriodo(per, Store.get().config.parametros);
+              const dm = x => x.slice(8, 10) + '/' + x.slice(5, 7);
+              return g ? `del ${dm(g.desde)} al ${dm(g.hasta)}` : '';
+            })())}</div></td>
           ${motivos.map(m => `<td class="num">${r.porMes[per].motivos[m.id] || '—'}</td>`).join('')}
           <td class="num"><strong>${r.porMes[per].total}</strong></td>
         </tr>`).join('')}</tbody>
@@ -17267,7 +17550,9 @@ const App = (() => {
           ${campo('Objetivo tickets/hora', 'parametros.ticketsHoraObjetivo', { tipo: 'number', step: '0.5', calc: true })}
           ${campo('Umbral de ausentismo', 'parametros.umbralAusentismo', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Umbral de horas extras', 'parametros.umbralHorasExtras', { tipo: 'number', step: '0.01', calc: true })}
-          ${campo('Cierre de novedades (día del mes)', 'parametros.diaCierreNovedades',
+          ${campo('El período arranca el día', 'parametros.periodoDesdeDia',
+                  { tipo: 'number', step: '1', calc: true })}
+          ${campo('…y cierra el día', 'parametros.periodoHastaDia',
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Los indicadores miden desde', 'parametros.mideDesde',
                   { tipo: 'date', calc: true })}
@@ -17284,12 +17569,25 @@ const App = (() => {
           los números en el medio de una reunión.</p>
         <div class="grid c3" hidden>
         </div>
-        <p class="ayuda">
-          El <strong>cierre de novedades</strong> es el día en que Nómina deja de tomar
-          novedades del mes. Lo que se anote después entra en el recibo siguiente, y es lo que
-          usa <a href="#/asistente">la agenda</a> para no juntar en el parte del cierre algo
-          que ya no va a entrar.
+        ${(() => {
+          const par = Store.get().config.parametros || {};
+          const fuera = diasFueraDePeriodo(par);
+          return `<p class="ayuda">
+          <strong>El período de liquidación no es el mes calendario.</strong> Con estos dos
+          días, ${esc(etiquetaDePeriodo('2026-09', par))}. De acá sale todo lo que el panel
+          cuenta por mes: el ausentismo, la serie del año, los días de vínculo de un alta o
+          una baja, el libro de novedades y a qué recibo va lo que anotás en
+          <a href="#/asistente">la agenda</a>. Poner <strong>1</strong> y <strong>31</strong>
+          devuelve los meses calendario.
         </p>
+        ${fuera.length ? `<div class="aviso-caja">
+          Con el arranque el ${par.periodoDesdeDia} y el cierre el ${par.periodoHastaDia},
+          ${fuera.length === 1 ? `el día ${fuera[0]} queda` : `los días ${fuera.join(', ')} quedan`}
+          fuera del período declarado. <strong>No se pierden</strong>: se cuentan en el recibo
+          siguiente, que es lo que pasa de verdad cuando Nómina cierra antes. Si el corte
+          vuelve al ${par.periodoDesdeDia - 1}, los dos números encajan y no queda ninguno suelto.
+        </div>` : ''}`;
+        })()}
       </section>
 
       <section class="tarjeta">
@@ -20873,8 +21171,16 @@ const App = (() => {
               Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
             ${(() => {
               const ok2 = r.diferencias.filter(x => x.ajustada);
-              const no = r.diferencias.filter(x => !x.ajustada);
-              return `${ok2.length ? `<p style="margin:8px 0 0"><strong>${ok2.length}
+              const no = r.diferencias.filter(x => !x.ajustada && !x.noEntra);
+              const grandes = r.diferencias.filter(x => x.noEntra);
+              return `${grandes.length ? `<p style="margin:8px 0 0"><strong>${grandes.length}
+                ${grandes.length === 1 ? 'licencia no entra' : 'licencias no entran'} en el período</strong>:
+                la liquidación pagó más días de los que el período tiene.
+                ${grandes.map(x => `${esc(x.nombre)}: ${x.pagados} días pagados y entran ${x.registrados}`).join(' · ')}.
+                Se recortaron al cierre del período. Si esto se repite todos los meses, el corte de
+                <a href="#/config">Configuración</a> describe un período más corto que el que
+                liquida Nómina.</p>` : ''}
+              ${ok2.length ? `<p style="margin:8px 0 0"><strong>${ok2.length}
                 ${ok2.length === 1 ? 'licencia corregida' : 'licencias corregidas'} con los días que
                 pagó la liquidación</strong> —la fecha de inicio es la que ya estaba, que es la real—:
                 ${ok2.map(x => `${esc(x.nombre)}: de ${x.registrados} a ${x.pagados} días`).join(' · ')}.</p>` : ''}

@@ -273,16 +273,21 @@ const _diaMas = (fecha, n) => {
 };
 
 /**
- * El historial de ausencias de una persona, repartido mes a mes.
+ * El historial de ausencias de una persona, repartido **período a período**.
  *
  * Una licencia del 25/08 al 05/09 son siete días de agosto y cinco de
  * septiembre. Imputarla entera al mes en que arrancó infla un mes y vacía el
  * otro, que es justo lo que se mira cuando se compara contra la liquidación.
  *
+ * El reparto es por **período de liquidación** y no por mes calendario:
+ * `periodoDeFecha()` decide a qué recibo va cada día. Con el corte del área
+ * —del 21 al 17— esa licencia del 25/08 al 05/09 cae entera en septiembre, que
+ * es el recibo que efectivamente la pagó.
+ *
  * @returns {{periodos:string[], porMes:object, porMotivo:object, total:number,
  *            abiertas:number, sinJustificar:number}}
  */
-function ausenciasPorMes(colaborador, hoy) {
+function ausenciasPorMes(colaborador, hoy, parametros) {
   const h = hoy || _diaHoy();
   const out = { periodos: [], porMes: {}, porMotivo: {}, total: 0,
                 abiertas: 0, sinJustificar: 0 };
@@ -302,7 +307,7 @@ function ausenciasPorMes(colaborador, hoy) {
        tipeado. */
     let d = a.desde;
     for (let i = 0; i < 1500 && d <= fin; i++) {
-      const per = d.slice(0, 7);
+      const per = periodoDeFecha(d, parametros);
       if (!out.porMes[per]) out.porMes[per] = { total: 0, motivos: {} };
       out.porMes[per].total++;
       out.porMes[per].motivos[motivo] = (out.porMes[per].motivos[motivo] || 0) + 1;

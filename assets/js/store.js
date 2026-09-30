@@ -97,17 +97,27 @@ const Store = (() => {
    *
    * @returns {{tipo:'estable'|'alta'|'baja', dias:number}}
    */
-  function movimientoDelMes(colaborador, periodo, diasMes) {
+  function movimientoDelMes(colaborador, periodo, diasMes, parametros) {
     const c = colaborador || {};
     const dm = diasMes || PARAMETROS_DEFECTO.diasMes;
-    const diaDe = f => {
-      const t = String(f || '');
-      return t.slice(0, 7) === periodo ? Math.min(dm, Math.max(1, Number(t.slice(8, 10)))) : 0;
-    };
-    const salida = diaDe((c.baja || {}).fecha);
-    if (salida) return { tipo: 'baja', dias: salida };
-    const entrada = diaDe(c.fechaIngreso) || diaDe(c.fechaIngresoFTD);
-    if (entrada) return { tipo: 'alta', dias: dm - entrada + 1 };
+    /* El vínculo se mide contra el **período de liquidación**, no contra el mes
+       calendario: quien entró el 05/09 trabajó 13 días del período 21/08–17/09
+       y no 26 de septiembre. Contarlo por calendario inflaba la dotación con
+       gente que no estuvo, que es justo lo que el cierre viene a mostrar. */
+    const r = rangoDePeriodo(periodo, parametros);
+    if (!r) return { tipo: 'estable', dias: dm };
+    const total = Math.round((new Date(r.hasta + 'T00:00:00') - new Date(r.desde + 'T00:00:00')) / 86400000) + 1;
+    /* Los días se devuelven en la escala del modelo de FTE —`diasMes`, 30— y
+       no en los días que el período dure: así el período entero vale 1 FTE
+       aunque mida 28 días, y la matriz de TD01 sigue dividiendo por 30. */
+    const enEscala = d => Math.max(0, Math.min(dm, Math.round(dm * d / total)));
+    const dentro = f => { const t = String(f || ''); return t >= r.desde && t <= r.hasta ? t : ''; };
+    const entre = (a, b) => Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000) + 1;
+
+    const salida = dentro((c.baja || {}).fecha);
+    if (salida) return { tipo: 'baja', dias: enEscala(entre(r.desde, salida)) };
+    const entrada = dentro(c.fechaIngreso) || dentro(c.fechaIngresoFTD);
+    if (entrada) return { tipo: 'alta', dias: enEscala(entre(entrada, r.hasta)) };
     return { tipo: 'estable', dias: dm };
   }
 
@@ -136,7 +146,10 @@ const Store = (() => {
 
   function visitaNueva(sucursalId) {
     const hoy = new Date();
-    const periodo = hoy.toISOString().slice(0, 7);
+    /* El período de liquidación al que pertenece hoy, no el mes del almanaque:
+       una visita del 19 de septiembre es del recibo de octubre. */
+    const periodo = periodoDeFecha(hoy.toISOString().slice(0, 10),
+                                   (estado && estado.config && estado.config.parametros) || null);
     return {
       id: uid(),
       sucursalId,
@@ -517,11 +530,16 @@ const Store = (() => {
    * los gerentes—, esa es la buena: tiene fechas de verdad. La del libro no
    * entra y los días no se cuentan dos veces.
    */
-  function registrarLicenciasDelLibro(c, periodo, nov, diferencias) {
+  function registrarLicenciasDelLibro(c, periodo, nov, diferencias, parametros) {
     if (!Array.isArray(c.ausencias)) c.ausencias = [];
-    const ini = periodo + '-01';
-    const finMes = new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0)
-      .toISOString().slice(0, 10);
+    /* El período de liquidación y no el mes calendario: arrancar el día 1 y
+       estirar hasta fin de mes empujaba días fuera de la ventana que la
+       liquidación pagó —52 de los 166 de septiembre de 2026— y dejaba afuera
+       los que sí pagó de la última semana del mes anterior. */
+    const r = rangoDePeriodo(periodo, parametros);
+    const ini = r ? r.desde : periodo + '-01';
+    const finMes = r ? r.hasta
+      : new Date(+periodo.slice(0, 4), +periodo.slice(5, 7), 0).toISOString().slice(0, 10);
     let puestas = 0;
 
     Object.keys(MOTIVO_DE_NOVEDAD).forEach(campo => {
@@ -534,6 +552,26 @@ const Store = (() => {
          manda la liquidación**: es lo que efectivamente se pagó. */
       const suyas = c.ausencias.filter(a => a.motivo === motivo && a.desde
         && a.desde <= finMes && (a.hasta || finMes) >= ini);
+
+      /* Las que puso el libro cuando el panel medía por mes calendario
+         arrancan el día 1, que ya no es donde empieza el período. Se las
+         reubica al arranque conservando cuántos días duran.
+         **Solo las suyas**: `fechasSupuestas` marca las fechas que inventó el
+         propio importador, así que moverlas no borra ninguna prueba — una
+         licencia con fechas de verdad, del formulario o del parte, no se toca
+         jamás. */
+      if (r) suyas.forEach(a => {
+        if (!a.fechasSupuestas || a.desde === r.desde) return;
+        const dura = a.hasta
+          ? Math.round((new Date(a.hasta + 'T00:00:00') - new Date(a.desde + 'T00:00:00')) / 86400000)
+          : 0;
+        const fin = new Date(r.desde + 'T00:00:00');
+        fin.setDate(fin.getDate() + dura);
+        a.reubicadaEn = a.reubicadaEn || { desde: a.desde, hasta: a.hasta || '', cierre: periodo };
+        a.desde = r.desde;
+        if (a.hasta) a.hasta = fin.toISOString().slice(0, 10);
+      });
+
       if (suyas.length) {
         /* Los días que la licencia pisa del mes, a secas. No con
            `diasDeAusenciaEntre()`, que devuelve cero para lo que no es
@@ -586,6 +624,19 @@ const Store = (() => {
       const fin = new Date(ini + 'T00:00:00');
       fin.setDate(fin.getDate() + Math.round(dias) - 1);
       const hasta = fin.toISOString().slice(0, 10);
+
+      /* La liquidación pagó más días de los que el período tiene. No es un
+         redondeo: es que el corte configurado describe un período más corto
+         que el que Nómina liquidó —con 21 al 17 el período mide 28 días y el
+         libro paga hasta 30—. Se recorta, porque inventar días fuera del
+         período sería peor, pero **se avisa**: recortar en silencio esconde
+         justamente el dato que dice que el corte está mal puesto. */
+      if (hasta > finMes && diferencias) {
+        const caben = Math.round((new Date(finMes + 'T00:00:00') - new Date(ini + 'T00:00:00')) / 86400000) + 1;
+        diferencias.push({ nombre: c.nombre, concepto: campo, pagados: Math.round(dias),
+                           registrados: caben, ajustada: false, noEntra: true,
+                           desde: ini, hasta: finMes });
+      }
 
       c.ausencias.push({
         id: uid(),
@@ -1080,10 +1131,18 @@ const Store = (() => {
       });
     },
 
-    /** El día de corte configurado, para no repetir el Object.assign en cada uso. */
+    /**
+     * El día en que cierra el período de liquidación.
+     *
+     * Era un campo aparte (`diaCierreNovedades`, 25) y pasó a ser el mismo
+     * número que cierra el período (`periodoHastaDia`): son la misma cosa
+     * dicha dos veces, y dos campos para un número terminan diciendo cosas
+     * distintas. Lo guardado con el nombre viejo se sigue leyendo, para no
+     * cambiarle el corte a quien ya lo había movido a mano.
+     */
     diaCierreNovedades() {
       const p = this.get().config.parametros || {};
-      return Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
+      return diasDelPeriodo(p).hasta || Number(p.diaCierreNovedades) || CIERRE_NOVEDADES_POR_DEFECTO;
     },
 
     /**
@@ -1172,7 +1231,7 @@ const Store = (() => {
     prellenarDiario(fecha) {
       const e = this.get();
       const d = this.asegurarDiario(fecha);
-      const periodo = String(fecha).slice(0, 7);
+      const periodo = periodoDeFecha(fecha, e.config.parametros);
       let completadas = 0;
 
       e.sucursales.forEach(s => {
@@ -1687,7 +1746,7 @@ const Store = (() => {
      * los días de un alta terminan difiriendo el día que se toca una.
      */
     diasDeVinculo(colaborador, periodo, diasMes) {
-      return movimientoDelMes(colaborador, periodo, diasMes);
+      return movimientoDelMes(colaborador, periodo, diasMes, this.get().config.parametros);
     },
 
     importarLibroDeNovedades(periodo, filas) {
@@ -1737,7 +1796,7 @@ const Store = (() => {
         c.novedades[periodo] = nov;
 
         actualizados++;
-        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias);
+        registradas += registrarLicenciasDelLibro(c, periodo, nov, diferencias, e.config.parametros);
         const k = s.nombre || s.codigo;
         porTienda[k] = (porTienda[k] || 0) + 1;
       });

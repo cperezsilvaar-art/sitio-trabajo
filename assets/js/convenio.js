@@ -19,6 +19,170 @@ const CCT = {
   ambito: 'Farmacias de CABA y partidos del conurbano bonaerense (art. 3°)'
 };
 
+/* ==================== El período de liquidación ======================= *
+ * El mes de Nómina **no es el mes calendario**. El período de septiembre de
+ * 2026 fue del 21/08 al 17/09: arranca el día 21 del mes anterior y cierra el
+ * 17 de este. Los dos días salen de `parametros` (`periodoDesdeDia` y
+ * `periodoHastaDia`), editables en `#/config`.
+ *
+ * Todo el panel medía en meses calendario y eso metía los días en la ventana
+ * equivocada. Con los datos de septiembre de 2026 la diferencia era grande:
+ * 166 días de ausentismo contra 120 del período real. De esos 166, **52 caían
+ * después del corte** —todos del libro, que ubicaba sus licencias desde el 1 y
+ * las estiraba— y **6 días que la liquidación de septiembre sí pagó** quedaban
+ * contados en agosto.
+ *
+ * Estas dos funciones son **la única traducción entre un período y sus
+ * fechas**, en los dos sentidos. Escribir la conversión a mano en cada
+ * pantalla es garantizar que un día difieran.
+ *
+ * `rangoDePeriodo()` devuelve el período **declarado** —lo que dice el
+ * calendario de Nómina— y `periodoDeFecha()` **reparte los días**: cada día
+ * del año cae en uno y solo uno. Cuando los dos números encajan las dos cosas
+ * coinciden. Cuando no —el corte del 17 con arranque el 21— los días sueltos
+ * caen en el **recibo siguiente**, que es como funciona un corte de verdad: si
+ * Nómina cerró el 17, una falta del 18 la paga el mes que viene. Perderlos
+ * sería peor: desaparecerían de la serie del año sin que nadie lo note.
+ *
+ * **Con `desde` menor o igual que `hasta` el período vive adentro del mismo
+ * mes**, así que poner 1 y 31 devuelve los meses calendario sin tocar nada
+ * más. Es el caso general escrito una vez, no una excepción.
+ */
+
+/* `_isoDelPeriodo` y no `_iso`: ese nombre ya existe en `agenda.js` y los .js
+   comparten ámbito global — una segunda declaración deja la página en blanco.
+   Lo agarró el chequeo del archivo armado, que es para lo que está. */
+const _diasDelMesDe = (anio, mes) => new Date(Date.UTC(anio, mes, 0)).getUTCDate();
+const _isoDelPeriodo = (anio, mes, dia) =>
+  `${anio}-${String(mes).padStart(2, '0')}-${String(Math.min(dia, _diasDelMesDe(anio, mes))).padStart(2, '0')}`;
+
+/** Los dos días que definen el período, saneados. */
+function diasDelPeriodo(parametros) {
+  const p = parametros || {};
+  const n = (v, x) => {
+    const k = Math.round(Number(v));
+    return isNaN(k) || k < 1 || k > 31 ? x : k;
+  };
+  return {
+    desde: n(p.periodoDesdeDia, 21),
+    hasta: n(p.periodoHastaDia, 17)
+  };
+}
+
+/**
+ * De `'2026-09'` a sus fechas: `{ desde: '2026-08-21', hasta: '2026-09-20' }`.
+ *
+ * El día se recorta al último del mes cuando no existe —un 31 en febrero es el
+ * 28—, para que ningún período quede sin fecha o se pase al mes siguiente.
+ */
+function rangoDePeriodo(periodo, parametros) {
+  const t = String(periodo || '');
+  if (!/^\d{4}-\d{2}$/.test(t)) return null;
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7);
+  const d = diasDelPeriodo(parametros);
+  const hasta = _isoDelPeriodo(anio, mes, d.hasta);
+  if (d.desde <= d.hasta) return { desde: _isoDelPeriodo(anio, mes, d.desde), hasta };
+  const anterior = mes === 1 ? { a: anio - 1, m: 12 } : { a: anio, m: mes - 1 };
+  return { desde: _isoDelPeriodo(anterior.a, anterior.m, d.desde), hasta };
+}
+
+/**
+ * Y al revés: en qué período cae una fecha. **El pivote es el día de cierre**,
+ * no el de arranque: lo que pasa después del corte lo paga el recibo que
+ * viene. Así cada día del año cae en un período y en uno solo, también cuando
+ * los dos números no encajan.
+ */
+function periodoDeFecha(fechaISO, parametros) {
+  const t = String(fechaISO || '');
+  if (!/^\d{4}-\d{2}-\d{2}/.test(t)) return '';
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7), dia = +t.slice(8, 10);
+  /* El recorte de fin de mes vale acá también: con cierre el 31, en un febrero
+     de 28 el día 28 todavía es de este período. */
+  const cierre = Math.min(diasDelPeriodo(parametros).hasta, _diasDelMesDe(anio, mes));
+  if (dia <= cierre) return t.slice(0, 7);
+  return mes === 12 ? `${anio + 1}-01` : `${anio}-${String(mes + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Los días que **caen** en este período, que no siempre son los del período
+ * declarado.
+ *
+ * `rangoDePeriodo()` devuelve lo que dice el calendario de Nómina —del 21 al
+ * 17— y `periodoDeFecha()` reparte por el día de cierre, así que el 18, el 19
+ * y el 20 caen en el período siguiente aunque el declarado no los liste. Las
+ * dos cosas tienen que usar la **misma** regla o el número no cierra: contar
+ * un día arriba de la fracción y no abajo daba una tasa de ausentismo más alta
+ * en la serie que en el Panel, sobre exactamente los mismos días.
+ *
+ * Cuando los dos números encajan esto devuelve lo mismo que
+ * `rangoDePeriodo()`. Por eso son dos funciones y no una: son dos preguntas
+ * —qué declaró Nómina y qué días entran acá— que casi siempre tienen la misma
+ * respuesta.
+ */
+function ventanaDePeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return null;
+  const t = String(periodo);
+  const anio = +t.slice(0, 4), mes = +t.slice(5, 7);
+  const previo = mes === 1 ? `${anio - 1}-12` : `${anio}-${String(mes - 1).padStart(2, '0')}`;
+  const anterior = rangoDePeriodo(previo, parametros);
+  if (!anterior) return r;
+  const d = new Date(anterior.hasta + 'T00:00:00');
+  d.setDate(d.getDate() + 1);
+  const desde = d.toISOString().slice(0, 10);
+  return { desde: desde < r.desde ? desde : r.desde, hasta: r.hasta };
+}
+
+/** Cuántos días tiene el período. No son 30 ni los del mes: son los que son. */
+function diasQueDuraPeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return 0;
+  return Math.round((new Date(r.hasta + 'T00:00:00') - new Date(r.desde + 'T00:00:00')) / 86400000) + 1;
+}
+
+/**
+ * Si los dos días encajan, es decir si el período siguiente arranca el día
+ * después de que este cierra. Cuando no, hay días de cada mes que quedan fuera
+ * del período **declarado** y se cuentan en el recibo siguiente — `#/config`
+ * los nombra en vez de impedir nada, porque el calendario lo decide Nómina.
+ */
+function periodosEncajan(parametros) {
+  const d = diasDelPeriodo(parametros);
+  if (d.desde <= d.hasta) return d.desde === 1 && d.hasta >= 28;
+  return d.desde === d.hasta + 1;
+}
+
+/** Los días que caen fuera del período declarado, para poder nombrarlos. */
+function diasFueraDePeriodo(parametros) {
+  const d = diasDelPeriodo(parametros);
+  if (periodosEncajan(parametros) || d.desde <= d.hasta) return [];
+  const out = [];
+  for (let x = d.hasta + 1; x < d.desde; x++) out.push(x);
+  return out;
+}
+
+/**
+ * «septiembre de 2026 · del 21/08 al 17/09».
+ *
+ * El rango va escrito al lado del nombre en todas las pantallas del cierre, y
+ * no es adorno: «septiembre» a secas se lee como el mes calendario, que es
+ * justamente lo que el panel dejó de hacer.
+ *
+ * El nombre lo pone `nombreDePeriodo()`, que vive en `agenda.js`. Acá se
+ * escribió una segunda —con su propia lista de meses— y **no rompió nada**:
+ * dos `function` con el mismo nombre no tiran error como dos `const`, gana la
+ * que carga última y la otra desaparece en silencio. Se notó porque la
+ * pantalla decía «septiembre de 2026» y esta escribía «septiembre 2026».
+ * `agenda.js` carga después de este archivo, así que a la hora de llamarla ya
+ * existe.
+ */
+function etiquetaDePeriodo(periodo, parametros) {
+  const r = rangoDePeriodo(periodo, parametros);
+  if (!r) return nombreDePeriodo(periodo);
+  const dm = f => f.slice(8, 10) + '/' + f.slice(5, 7);
+  return `${nombreDePeriodo(periodo)} · del ${dm(r.desde)} al ${dm(r.hasta)}`;
+}
+
 /* ------------------------- Categorías (art. 5 a 9) ------------------------ */
 const CATEGORIAS_CCT = [
   { id: 'inicialA',    nombre: 'Categoría Inicial "A"', articulo: 5,

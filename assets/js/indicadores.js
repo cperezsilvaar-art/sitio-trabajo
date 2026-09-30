@@ -175,9 +175,11 @@ function ausentismoDe(estado, colaboradorId, sucursalId, hastaISO) {
  * cambio, cada mes nuevo es una fila nueva y el año fiscal se construye a la
  * vista.
  *
- * Los días se reparten por mes calendario, igual que `ausenciasPorMes()` en la
- * ficha de la persona: una licencia del 25/09 al 05/10 son seis días de
- * septiembre y cinco de octubre, no once de septiembre.
+ * Los días se reparten por **período de liquidación**, igual que
+ * `ausenciasPorMes()` en la ficha de la persona: `periodoDeFecha()` decide a
+ * qué recibo va cada día, y una licencia que cruza el corte aporta a los dos.
+ * No es el mes del almanaque — el de septiembre de 2026 fue del 21/08 al
+ * 17/09—, porque lo que se compara contra esta serie es lo que se pagó.
  *
  * **El plantel es el de hoy en todos los meses.** El panel guarda la foto
  * actual y no la de cada cierre, así que la tasa de un mes viejo usa la
@@ -206,8 +208,10 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
      un mes en cero es una respuesta y saltearlo rompe la lectura de la serie. */
   const meses = {};
   const orden = [];
-  let y = +desde.slice(0, 4), m = +desde.slice(5, 7);
-  while (y * 12 + m <= (+hasta.slice(0, 4)) * 12 + (+hasta.slice(5, 7))) {
+  const par = (e.config || {}).parametros;
+  const pDesde = periodoDeFecha(desde, par), pHasta = periodoDeFecha(hasta, par);
+  let y = +pDesde.slice(0, 4), m = +pDesde.slice(5, 7);
+  while (y * 12 + m <= (+pHasta.slice(0, 4)) * 12 + (+pHasta.slice(5, 7))) {
     const k = y + '-' + String(m).padStart(2, '0');
     meses[k] = { mes: k, dias: 0, diasSupuestos: 0, eventos: 0, personas: new Set() };
     orden.push(k);
@@ -229,7 +233,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     let d = a.desde > desde ? a.desde : desde;
     let primero = true;
     while (d <= fin) {
-      const k = d.slice(0, 7);
+      const k = periodoDeFecha(d, par);
       if (meses[k]) {
         meses[k].dias++;
         if (a.diasSupuestos) meses[k].diasSupuestos++;
@@ -247,7 +251,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
 
   const filas = orden.map(k => {
     const x = meses[k];
-    const dias = _diasDelMes(k, desde, hasta);
+    const dias = _diasDelPeriodo(k, desde, hasta, par);
     return {
       mes: k, dias: x.dias, diasSupuestos: x.diasSupuestos,
       eventos: x.eventos, personas: x.personas.size,
@@ -260,7 +264,7 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
   const diasTotales = filas.reduce((n, f) => n + f.diasDelMes, 0);
   /* El mes en curso por separado: es el que el coordinador mira todos los días
      y el único que todavía puede cambiar. */
-  const actual = filas.find(f => f.mes === hasta.slice(0, 7)) || null;
+  const actual = filas.find(f => f.mes === pHasta) || null;
 
   const quienes = Object.keys(porPersona).map(k => porPersona[k])
     .sort((x, z) => z.dias - x.dias || z.eventos - x.eventos);
@@ -274,19 +278,23 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     tasa: diasTotales > 0 ? total / (plantel * diasTotales) : null,
     /* El mes en curso está a medias por definición: la pantalla lo marca para
        que nadie lo compare contra un mes cerrado. */
-    mesEnCurso: hasta.slice(0, 7)
+    mesEnCurso: pHasta
   };
 }
 
-/* Cuántos días de ese mes caen adentro de la ventana. El primero y el último
-   están cortados —el corte es el día 1 o no, y hoy es el día que es—, y usar
-   30 para todos daría una tasa más baja en los dos extremos. */
-function _diasDelMes(mes, desde, hasta) {
-  const ini = mes + '-01';
-  const y = +mes.slice(0, 4), m = +mes.slice(5, 7);
-  const fin = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
-  const a = ini > desde ? ini : desde;
-  const b = fin < hasta ? fin : hasta;
+/* Cuántos días de ese período caen adentro de la ventana. El primero y el
+   último están cortados —el corte del año fiscal cae donde cae, y hoy es el
+   día que es—, y usar un número fijo para todos daría una tasa más baja en los
+   dos extremos. */
+function _diasDelPeriodo(periodo, desde, hasta, parametros) {
+  /* `ventanaDePeriodo()` y no `rangoDePeriodo()`: el denominador tiene que
+     contar los mismos días que `periodoDeFecha()` mete en el numerador. Con el
+     rango declarado, los días sueltos del corte sumaban arriba y no abajo, y
+     la serie daba una tasa más alta que el Panel sobre los mismos días. */
+  const r = ventanaDePeriodo(periodo, parametros);
+  if (!r) return 0;
+  const a = r.desde > desde ? r.desde : desde;
+  const b = r.hasta < hasta ? r.hasta : hasta;
   if (a > b) return 0;
   return (_diasEntreISO(a, b) || 0) + 1;
 }
@@ -372,10 +380,24 @@ function _diasEntreISO(a, b) {
  * que se lee como si fuera anual.
  */
 function ventanaDeMedicion(estado, desdeNatural, hasta) {
-  const corte = (((estado || {}).config || {}).parametros || {}).mideDesde || '';
-  const desde = corte && corte > desdeNatural ? corte : desdeNatural;
+  const par = ((estado || {}).config || {}).parametros || {};
+  const corte = par.mideDesde || '';
+  const crudo = corte && corte > desdeNatural ? corte : desdeNatural;
+  /* **La ventana no arranca en la mitad de un período.** Se corre al principio
+     del período que contiene esa fecha.
+     Sin esto, un corte del 01/09 con períodos que arrancan el 21/08 dejaba
+     afuera los primeros once días de cada licencia que el libro ubica al
+     arranque: el ausentismo de septiembre caía de 158 días a 74 sin que nada
+     lo dijera. Se ajusta acá y no en el valor guardado, así el corte sigue
+     siendo la fecha que el coordinador escribió y no una que el panel le
+     cambió por atrás. */
+  const r = rangoDePeriodo(periodoDeFecha(crudo, par), par);
+  const desde = r && r.desde < crudo ? r.desde : crudo;
   return {
-    desde, corte,
+    desde, corte, corteCrudo: crudo,
+    /* Cuánto se corrió, para que la pantalla pueda decirlo en vez de mostrar
+       un período que no es el que se escribió. */
+    corrida: desde !== crudo,
     recortada: !!corte && corte > desdeNatural,
     dias: Math.max(1, (_diasEntreISO(desde, hasta) || 0) + 1)
   };

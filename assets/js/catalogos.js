@@ -418,10 +418,27 @@ const PARAMETROS_DEFECTO = {
   umbralHorasExtras: 0.05,  // HE > 5% de las horas teóricas = desvío
   horasJornada: 8,          // jornada de referencia, para el FTE del día
   coberturaMinima: 0.90,    // por debajo de este % de cobertura, la tienda opera en riesgo
-  /* Día del mes en que cierran las novedades de liquidación. Lo que aparece
-     después ya no entra en este recibo y va al mes siguiente; el panel lo usa
-     para no juntar en el parte del cierre algo que Nómina no va a tomar. */
-  diaCierreNovedades: 25,
+  /* El período de liquidación, que **no es el mes calendario**. El de
+     septiembre de 2026 fue del 21/08 al 17/09: arranca el día 21 del mes
+     anterior y cierra el 17 de este.
+     
+     Trabajar en meses calendario metía los días en la ventana equivocada —lo
+     que la liquidación pagó del 21 al 31 de agosto caía en agosto, y los días
+     del 21 al 30 de septiembre se contaban en un recibo que todavía no
+     existía—. Son los dos números que definen todo: `rangoDePeriodo()` y
+     `periodoDeFecha()` (`convenio.js`) salen de acá y nadie más decide.
+     
+     **Con `desde` mayor que `hasta` el período arranca el mes anterior**, que
+     es el caso normal. Con `desde` 1 y `hasta` 31 vuelven los meses
+     calendario, sin ninguna otra cosa que tocar.
+     
+     **Del 21 al 17 quedan tres días de cada mes afuera** —el 18, el 19 y el
+     20—, que es el calendario que hoy usa Nómina y una decisión del
+     coordinador, no un error del panel. `#/config` los nombra sin impedir
+     nada: cuál es el corte lo decide Nómina, no esta pantalla. Si algún mes
+     pasa a cerrar el 20, es cambiar un número. */
+  periodoDesdeDia: 21,
+  periodoHastaDia: 17,
   /* Desde cuándo miden los indicadores del área: ausentismo y rotación.
    *
    * El coordinador venía midiendo a mano y arranca el panel con el corte del
@@ -438,7 +455,12 @@ const PARAMETROS_DEFECTO = {
    * Es una fecha y no un cálculo automático: moverla al próximo septiembre es
    * una decisión suya, y un corte que se corre solo le cambiaría los números
    * sin avisar. */
-  mideDesde: '2026-09-01',
+  /* Arranca con el **período** de septiembre y no con el 1 de septiembre: el
+     ejercicio empieza donde empieza la primera liquidación que se mide, que es
+     el 21/08. Con el corte en el 1 quedaban afuera los primeros once días del
+     año fiscal, y las licencias que el libro ubica al arranque del período no
+     entraban en ninguna tasa. */
+  mideDesde: '2026-08-21',
   moneda: '$'
 };
 

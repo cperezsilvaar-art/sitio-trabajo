@@ -271,16 +271,12 @@ const PALABRAS_LIQUIDACION =
  * aparecería en la lista algo que Nómina no va a tomar.
  */
 function periodoDeLiquidacion(fechaISO, diaCierre) {
-  const f = String(fechaISO || '').slice(0, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f)) return '';
-  const corte = Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO;
-  let anio = Number(f.slice(0, 4));
-  let mes = Number(f.slice(5, 7));
-  if (Number(f.slice(8, 10)) > corte) {
-    mes += 1;
-    if (mes > 12) { mes = 1; anio += 1; }
-  }
-  return `${anio}-${String(mes).padStart(2, '0')}`;
+  /* Es la misma cuenta que `periodoDeFecha()` (`convenio.js`), que reparte
+     todos los días del panel entre períodos: acá se la llama en vez de
+     repetirla. Estaban escritas dos veces, con la misma regla, y dos cuentas
+     del mismo número terminan difiriendo el día que se toca una. */
+  return periodoDeFecha(String(fechaISO || '').slice(0, 10),
+    { periodoHastaDia: Number(diaCierre) || CIERRE_NOVEDADES_POR_DEFECTO });
 }
 
 /**
@@ -303,10 +299,7 @@ function cierreDeNovedades(hoyISO, diaCierre) {
   /* El cierre del período en curso: si hoy ya pasó el corte, el que viene es
      el del mes siguiente, que es justamente el período que devolvió la cuenta
      de arriba. */
-  const [anio, mes] = periodo.split('-').map(Number);
-  const ultimo = new Date(Date.UTC(anio, mes, 0)).getUTCDate();
-  const dia = Math.min(corte, ultimo);
-  const fecha = `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  const fecha = (rangoDePeriodo(periodo, { periodoHastaDia: corte }) || {}).hasta || hoy;
   return {
     periodo,
     fecha,

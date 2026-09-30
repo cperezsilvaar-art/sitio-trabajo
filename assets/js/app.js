@@ -378,9 +378,11 @@ const App = (() => {
     if (!serie || !serie.filas.length) return '';
     const deTienda = !!sucursalId;
     const tope = Math.max(...serie.filas.map(f => f.tasa || 0), 0.001);
-    const MES = ['', 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
-                 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
-    const rotulo = k => `${MES[+k.slice(5, 7)]} ${k.slice(0, 4)}`;
+    /* El nombre sale de `nombreDePeriodo()` y la lista de meses ya no se
+       escribe acá: había dos, y la fila de la serie tiene que decir lo mismo
+       que el desplegable del cierre. */
+    const par = (e.config || {}).parametros;
+    const rotulo = k => nombreDePeriodo(k);
     const conDato = serie.filas.filter(f => f.dias).length;
 
     /* La tienda contra el área. Un 2% solo no dice nada; en la página de la
@@ -427,7 +429,14 @@ const App = (() => {
           const curso = f.mes === serie.mesEnCurso;
           return `<tr${f.dias ? '' : ' class="inactivo"'}>
             <td><strong>${esc(rotulo(f.mes))}</strong>${curso
-              ? ' <span class="chip azul">en curso</span>' : ''}</td>
+              ? ' <span class="chip azul">en curso</span>' : ''}
+              ${/* El rango abajo del nombre: sin él «septiembre» se lee como el
+                   mes del almanaque, y no lo es. */''}
+              <div class="ayuda">${(() => {
+                const r = rangoDePeriodo(f.mes, par);
+                const dm = x => x.slice(8, 10) + '/' + x.slice(5, 7);
+                return r ? `del ${dm(r.desde)} al ${dm(r.hasta)}` : '';
+              })()}</div></td>
             <td style="width:34%">${barraDato((f.tasa || 0) / tope, '', 'ban3')}</td>
             <td class="num">${f.tasa === null ? '—' : fmtPct(f.tasa, 1)}</td>
             <td class="num">${f.dias || '—'}</td>
@@ -1483,10 +1492,14 @@ const App = (() => {
           <label class="campo" style="max-width:220px">
             <span>Período</span>
             <select id="periodo-cierre">
-              ${periodos.map(x => `<option value="${x}"${x === periodo ? ' selected' : ''}>${esc(x)}</option>`).join('')}
+              ${periodos.map(x => `<option value="${x}"${x === periodo ? ' selected' : ''}
+                >${esc(nombreDePeriodo(x))}</option>`).join('')}
             </select>
           </label>
           <p class="ayuda" style="margin:0 0 6px">
+            ${/* El rango escrito al lado del nombre: «septiembre» a secas se lee
+                 como el mes calendario, que es justo lo que dejó de ser. */''}
+            <strong>${esc(etiquetaDePeriodo(periodo, e.config.parametros))}</strong> ·
             ${r.total.personas} persona${r.total.personas === 1 ? '' : 's'} con novedades cargadas
             en ${r.tiendas.length} tienda${r.tiendas.length === 1 ? '' : 's'}.
             ${periodos.length > 1 ? `Hay ${periodos.length} períodos cargados.` : ''}
@@ -4192,7 +4205,7 @@ const App = (() => {
           <a href="#/diario">pegando la planilla del formulario de recepción</a>.</p>`;
     }
 
-    const r = ausenciasPorMes(c, hoy);
+    const r = ausenciasPorMes(c, hoy, Store.get().config.parametros);
     const nombreMotivo = id => (MOTIVOS_AUSENCIA_LARGA.find(m => m.id === id) || {}).nombre || id;
 
     /* Su ausentismo, con la tienda y el área al lado: un 2% no dice nada suelto
@@ -4227,10 +4240,15 @@ const App = (() => {
       </p>` : ''}
 
       <div class="tabla-scroll"><table>
-        <thead><tr><th>Mes</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
+        <thead><tr><th>Período</th>${motivos.map(m => `<th class="num">${esc(m.nombre)}</th>`).join('')}
           <th class="num">Días</th></tr></thead>
         <tbody>${r.periodos.map(per => `<tr>
-          <td><strong>${esc(per)}</strong></td>
+          <td><strong>${esc(nombreDePeriodo(per))}</strong>
+            <div class="ayuda">${esc((() => {
+              const g = rangoDePeriodo(per, Store.get().config.parametros);
+              const dm = x => x.slice(8, 10) + '/' + x.slice(5, 7);
+              return g ? `del ${dm(g.desde)} al ${dm(g.hasta)}` : '';
+            })())}</div></td>
           ${motivos.map(m => `<td class="num">${r.porMes[per].motivos[m.id] || '—'}</td>`).join('')}
           <td class="num"><strong>${r.porMes[per].total}</strong></td>
         </tr>`).join('')}</tbody>
@@ -4715,7 +4733,9 @@ const App = (() => {
           ${campo('Objetivo tickets/hora', 'parametros.ticketsHoraObjetivo', { tipo: 'number', step: '0.5', calc: true })}
           ${campo('Umbral de ausentismo', 'parametros.umbralAusentismo', { tipo: 'number', step: '0.01', calc: true })}
           ${campo('Umbral de horas extras', 'parametros.umbralHorasExtras', { tipo: 'number', step: '0.01', calc: true })}
-          ${campo('Cierre de novedades (día del mes)', 'parametros.diaCierreNovedades',
+          ${campo('El período arranca el día', 'parametros.periodoDesdeDia',
+                  { tipo: 'number', step: '1', calc: true })}
+          ${campo('…y cierra el día', 'parametros.periodoHastaDia',
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Los indicadores miden desde', 'parametros.mideDesde',
                   { tipo: 'date', calc: true })}
@@ -4732,12 +4752,25 @@ const App = (() => {
           los números en el medio de una reunión.</p>
         <div class="grid c3" hidden>
         </div>
-        <p class="ayuda">
-          El <strong>cierre de novedades</strong> es el día en que Nómina deja de tomar
-          novedades del mes. Lo que se anote después entra en el recibo siguiente, y es lo que
-          usa <a href="#/asistente">la agenda</a> para no juntar en el parte del cierre algo
-          que ya no va a entrar.
+        ${(() => {
+          const par = Store.get().config.parametros || {};
+          const fuera = diasFueraDePeriodo(par);
+          return `<p class="ayuda">
+          <strong>El período de liquidación no es el mes calendario.</strong> Con estos dos
+          días, ${esc(etiquetaDePeriodo('2026-09', par))}. De acá sale todo lo que el panel
+          cuenta por mes: el ausentismo, la serie del año, los días de vínculo de un alta o
+          una baja, el libro de novedades y a qué recibo va lo que anotás en
+          <a href="#/asistente">la agenda</a>. Poner <strong>1</strong> y <strong>31</strong>
+          devuelve los meses calendario.
         </p>
+        ${fuera.length ? `<div class="aviso-caja">
+          Con el arranque el ${par.periodoDesdeDia} y el cierre el ${par.periodoHastaDia},
+          ${fuera.length === 1 ? `el día ${fuera[0]} queda` : `los días ${fuera.join(', ')} quedan`}
+          fuera del período declarado. <strong>No se pierden</strong>: se cuentan en el recibo
+          siguiente, que es lo que pasa de verdad cuando Nómina cierra antes. Si el corte
+          vuelve al ${par.periodoDesdeDia - 1}, los dos números encajan y no queda ninguno suelto.
+        </div>` : ''}`;
+        })()}
       </section>
 
       <section class="tarjeta">
@@ -8321,8 +8354,16 @@ const App = (() => {
               Suele ser gente que ya se fue, o que entra al pegar la nómina del mes.</p>` : ''}
             ${(() => {
               const ok2 = r.diferencias.filter(x => x.ajustada);
-              const no = r.diferencias.filter(x => !x.ajustada);
-              return `${ok2.length ? `<p style="margin:8px 0 0"><strong>${ok2.length}
+              const no = r.diferencias.filter(x => !x.ajustada && !x.noEntra);
+              const grandes = r.diferencias.filter(x => x.noEntra);
+              return `${grandes.length ? `<p style="margin:8px 0 0"><strong>${grandes.length}
+                ${grandes.length === 1 ? 'licencia no entra' : 'licencias no entran'} en el período</strong>:
+                la liquidación pagó más días de los que el período tiene.
+                ${grandes.map(x => `${esc(x.nombre)}: ${x.pagados} días pagados y entran ${x.registrados}`).join(' · ')}.
+                Se recortaron al cierre del período. Si esto se repite todos los meses, el corte de
+                <a href="#/config">Configuración</a> describe un período más corto que el que
+                liquida Nómina.</p>` : ''}
+              ${ok2.length ? `<p style="margin:8px 0 0"><strong>${ok2.length}
                 ${ok2.length === 1 ? 'licencia corregida' : 'licencias corregidas'} con los días que
                 pagó la liquidación</strong> —la fecha de inicio es la que ya estaba, que es la real—:
                 ${ok2.map(x => `${esc(x.nombre)}: de ${x.registrados} a ${x.pagados} días`).join(' · ')}.</p>` : ''}
