@@ -870,6 +870,56 @@ que sentarse a hablar de esa persona. Se lo sacó por redundante con la solapa
 *Al rol de Senior* y no lo era: esa solapa está en `#/desarrollo`, adonde se
 entra cuando ya te acordaste.
 
+**El plan de desarrollo individual es la otra mitad del 9-box** (`c.planes[]`,
+`talento.js`, documentado en `docs/plan-desarrollo.md`): qué se acordó hacer de
+una conversación a la siguiente, y si se hizo. Cada cuadrante ya traía escrita
+su acción sugerida —«plan de mejora con objetivos medibles y plazo»— y no había
+dónde escribir qué se hizo con eso.
+
+**Es para cualquiera del padrón, entrene o no.** Cuelga de la **persona**, como
+`c.ausencias`, `c.casos` y `c.entrenamientos`, así la acompaña si la trasladan.
+El entrenamiento a Senior ya tenía `proximoPaso` por evaluación: un renglón de
+texto libre, sin competencia, sin fecha y sin nadie que vuelva a preguntar si se
+hizo. Sigue guardado y se sigue leyendo en la trazabilidad, pero lo que se
+trabaja es el plan.
+
+**Un solo formulario dibujado en dos pantallas.** `bloquePlanDesarrollo()` va en
+la ficha de la persona y al pie del entrenamiento. **No rompe la regla de una
+sola alta**: la regla existe para que dos formularios no pidan campos distintos,
+y acá es el mismo código sobre el mismo dato, como la talent card. Va donde se
+lo está pensando — mandar a buscar otra pantalla justo al terminar de cargar la
+evaluación del mes es la forma más rápida de que el plan no se escriba.
+
+**Un tramo abierto a la vez**: dos planes en curso son dos listas de
+prioridades, o sea ninguna. **Cuatro estados por acción y no tres** —*se hizo*,
+*sigue abierta*, *no se hizo*, sin revisar—: «no se hizo» cierra el tema y
+«sigue abierta» lo arrastra al plan siguiente, y esa diferencia es lo que le da
+continuidad. Las que siguen abiertas **se heredan solas** al abrir el tramo
+nuevo, y el tramo anterior es **el último, esté abierto o recién cerrado**:
+buscarlo solo entre los abiertos las perdía justo en el camino normal —cerrar y
+después escribir el siguiente—. Volver a tocar un estado lo destilda y
+**destildar no borra la nota**, como el check list y los trámites de la baja.
+
+**El avance se cuenta sobre lo revisado**: «1 de 1 revisadas se hicieron · 2 sin
+revisar», nunca «33%». Cerrar el tramo con acciones sin revisar se puede, y la
+pantalla **nombra lo que falta antes de dejar cerrar en vez de impedirlo**,
+igual que `c.baja.cerradaEl`.
+
+**La competencia es opcional y solo aparece si está entrenando**, con las que le
+faltan y su «hoy 2, pide 3». Para alguien que no entrena, las nueve del rol de
+Senior no significan nada y la columna no se dibuja.
+
+**Un arreglo nuevo colgado de la persona hay que sumarlo a
+`unirColaboradores()`.** `planes` no estaba en su lista y al unir dos fichas
+duplicadas los de la que se iba se perdían en silencio — el mismo agujero que
+tendría cualquier `c.<algo>[]` que se agregue después.
+
+**No avisa, y es una decisión.** Una acción pasada de fecha se marca en su fila
+y nada más: no suma al contador del menú ni a `pendientesDelArea()`. El panel ya
+avisa por el entrenamiento vencido y por el mes sin evaluación; un tercer aviso
+por cada acción de cada plan convierte el contador de *Desarrollo* en un número
+que deja de leerse, que es la regla de los contadores en cero vista al revés.
+
 El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
 con criterio de aprobación, y es el único —la recorrida del HRBP se eliminó por

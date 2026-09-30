@@ -63,6 +63,13 @@ una persona a la vez. No repite el nombre cuando el cuadrante y el grupo se
 llaman igual —«Queda en Especialista», no «Especialista, que se lee como
 Especialista»—, que es la regla del código de la tienda entre paréntesis.
 
+## El plan de desarrollo
+
+El 9-box dice **qué tipo de conversación** hay que tener con cada persona —cada
+cuadrante trae su acción sugerida—. Dónde se escribe **qué se hizo con eso** es
+el plan de desarrollo individual, que vive en la ficha de la persona y está
+documentado en [`docs/plan-desarrollo.md`](plan-desarrollo.md).
+
 ## Dónde vive el dato
 
 Los colaboradores **cuelgan de la sucursal, no de la visita**. Es la decisión de

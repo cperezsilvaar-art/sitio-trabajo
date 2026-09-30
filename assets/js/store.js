@@ -2056,7 +2056,8 @@ const Store = (() => {
       if (!a || !b) return null;
       resguardar('Antes de unir dos fichas');
 
-      ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones'].forEach(k => {
+      ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones',
+       'planes'].forEach(k => {
         if (!Array.isArray(b[k]) || !b[k].length) return;
         if (!Array.isArray(a[k])) a[k] = [];
         b[k].forEach(x => {
@@ -2073,7 +2074,7 @@ const Store = (() => {
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'novedades', 'baja'].indexOf(k) >= 0) return;
+             'sanciones', 'planes', 'novedades', 'baja'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
         if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;
@@ -2293,6 +2294,155 @@ const Store = (() => {
       const c = this.colaboradorPorId(colabId);
       if (!c) return;
       c.entrenamientos = (c.entrenamientos || []).filter(x => x.id !== entId);
+      guardar();
+    },
+
+    /* ------------- plan de desarrollo individual ------------------ *
+     * Lo que se acordó hacer entre una conversación y la siguiente.
+     * Cuelga de la persona, como las ausencias y los casos. */
+
+    /**
+     * Abre el plan del tramo. Si quedó alguno abierto lo cierra primero: dos
+     * planes en curso son dos listas de prioridades, o sea ninguna.
+     *
+     * Las acciones que la revisión anterior dejó en «sigue abierta» se traen
+     * al plan nuevo, porque eso es exactamente lo que ese estado quiere decir.
+     * Vienen sin revisar y con su fecha original, para que se vea que ya
+     * venían arrastrándose.
+     */
+    abrirPlanDesarrollo(colabId, datos) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      if (!Array.isArray(c.planes)) c.planes = [];
+      const hoy = new Date().toISOString().slice(0, 10);
+
+      /* El tramo anterior es el último, esté abierto o recién cerrado. Buscarlo
+         solo entre los abiertos perdía las acciones heredadas justo en el
+         camino normal —se cierra el tramo y después se escribe el siguiente—,
+         que es cuando más importan. */
+      const ultimo = c.planes.slice().sort((x, y) =>
+        String(x.cerradoEl || x.desde || '').localeCompare(String(y.cerradoEl || y.desde || ''))).pop();
+      const previo = c.planes.find(p => !p.cerradoEl) || ultimo || null;
+      const heredadas = previo
+        ? (previo.acciones || []).filter(a => a.estado === 'sigue').map(a => ({
+            id: uid(), competenciaId: a.competenciaId || '', que: a.que || '',
+            acompana: a.acompana || '', para: a.para || '',
+            estado: '', cerradaEl: '', nota: '',
+            vieneDe: previo.id
+          }))
+        : [];
+      if (previo && !previo.cerradoEl) previo.cerradoEl = hoy;
+
+      const plan = Object.assign({
+        id: uid(),
+        desde: hoy,
+        hasta: '',
+        escritoCon: '',
+        /* De qué conversación salió, cuando salió de una: el entrenamiento a
+           Senior y la evaluación puntual. Se guardan para que la trazabilidad
+           diga «este plan es el que abrió el assessment del 05/08». */
+        entrenamientoId: '',
+        evaluacionId: '',
+        acciones: heredadas,
+        cerradoEl: '',
+        notaCierre: '',
+        registradoEl: new Date().toISOString()
+      }, datos || {});
+      c.planes.push(plan);
+      guardar();
+      return plan;
+    },
+
+    planDesarrollo(colabId, planId) {
+      const c = this.colaboradorPorId(colabId);
+      return c ? ((c.planes || []).find(x => x.id === planId) || null) : null;
+    },
+
+    actualizarPlanDesarrollo(colabId, planId, datos) {
+      const plan = this.planDesarrollo(colabId, planId);
+      if (!plan) return null;
+      Object.assign(plan, datos || {});
+      guardar();
+      return plan;
+    },
+
+    agregarAccionPlan(colabId, planId, datos) {
+      const plan = this.planDesarrollo(colabId, planId);
+      if (!plan) return null;
+      if (!Array.isArray(plan.acciones)) plan.acciones = [];
+      const accion = Object.assign({
+        id: uid(),
+        competenciaId: '',   // opcional: una de las nueve del rol de Senior
+        que: '',
+        acompana: '',
+        para: plan.hasta || '',
+        estado: '',
+        cerradaEl: '',
+        nota: ''
+      }, datos || {});
+      plan.acciones.push(accion);
+      guardar();
+      return accion;
+    },
+
+    actualizarAccionPlan(colabId, planId, accionId, datos) {
+      const plan = this.planDesarrollo(colabId, planId);
+      const a = plan && (plan.acciones || []).find(x => x.id === accionId);
+      if (!a) return null;
+      Object.assign(a, datos || {});
+      guardar();
+      return a;
+    },
+
+    /**
+     * Marca qué pasó con una acción. Volver a tocar el mismo estado la
+     * devuelve a «sin revisar», como el check list de la visita: equivocarse
+     * al tildar no puede obligar a borrar y volver a escribir.
+     *
+     * Destildar **no borra la nota**, igual que en los trámites de la baja:
+     * ahí está escrito con quién se habló y qué pasó.
+     */
+    marcarAccionPlan(colabId, planId, accionId, estado) {
+      const plan = this.planDesarrollo(colabId, planId);
+      const a = plan && (plan.acciones || []).find(x => x.id === accionId);
+      if (!a) return null;
+      const nuevo = a.estado === estado ? '' : (estado || '');
+      a.estado = nuevo;
+      a.cerradaEl = nuevo ? new Date().toISOString().slice(0, 10) : '';
+      guardar();
+      return a;
+    },
+
+    quitarAccionPlan(colabId, planId, accionId) {
+      const plan = this.planDesarrollo(colabId, planId);
+      if (!plan) return;
+      plan.acciones = (plan.acciones || []).filter(x => x.id !== accionId);
+      guardar();
+    },
+
+    /** Cierra el tramo. Es una decisión, como `c.baja.cerradaEl`: se puede
+        cerrar con acciones sin revisar y la pantalla lo dice antes. */
+    cerrarPlanDesarrollo(colabId, planId, nota) {
+      const plan = this.planDesarrollo(colabId, planId);
+      if (!plan) return null;
+      plan.cerradoEl = new Date().toISOString().slice(0, 10);
+      plan.notaCierre = nota || plan.notaCierre || '';
+      guardar();
+      return plan;
+    },
+
+    reabrirPlanDesarrollo(colabId, planId) {
+      const plan = this.planDesarrollo(colabId, planId);
+      if (!plan) return null;
+      plan.cerradoEl = '';
+      guardar();
+      return plan;
+    },
+
+    quitarPlanDesarrollo(colabId, planId) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return;
+      c.planes = (c.planes || []).filter(x => x.id !== planId);
       guardar();
     },
 

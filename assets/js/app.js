@@ -3626,6 +3626,7 @@ const App = (() => {
         ${/* Cómo viene: la lectura de hoy y, si está entrenando, hacia dónde. */''}
         ${talentCard(c, { sinCabecera: true })}
         ${fichaEntrenamientos(c)}
+        ${bloquePlanDesarrollo(c)}
 
         ${/* Dos bloques de ausencias y no tres: lo que le pasó a la persona y
              lo que el convenio le permite.
@@ -4030,6 +4031,153 @@ const App = (() => {
           </tr>`;
         }).join('')}</tbody>
       </table></div>`;
+  }
+
+  /* ------------------ Plan de desarrollo individual ------------------ *
+     Qué se acordó hacer entre una conversación y la siguiente.
+
+     La misma función se dibuja en dos lugares —la ficha de la persona y el pie
+     del entrenamiento a Senior— y eso no rompe la regla de una sola alta: es
+     **un formulario mostrado dos veces**, no dos formularios, igual que la
+     talent card. Dos altas distintas terminan pidiendo campos distintos; una
+     sola escrita en dos pantallas no puede divergir.
+
+     Va donde se está pensando el plan: en la ficha, al lado del 9-box que dice
+     qué hacer con ese cuadrante, y en el entrenamiento, al terminar de cargar
+     la evaluación del mes. Mandarlo a buscar a la otra pantalla en el momento
+     justo en que lo está pensando es la forma más rápida de que no lo escriba.
+
+     `opciones.compacto` saca el historial y el copete: en el entrenamiento ya
+     hay una línea de tiempo arriba. */
+  function bloquePlanDesarrollo(c, opciones) {
+    const o = opciones || {};
+    const hoy = hoyISO();
+    const planes = planesDe(c);
+    const abierto = planAbierto(c);
+    const cerrados = planes.filter(x => x.cerradoEl);
+
+    /* Si está entrenando para un rol, cada acción puede apuntar a una de las
+       competencias que le faltan. Es lo que convierte al plan en el puente
+       entre una evaluación y la siguiente en vez de una lista suelta. */
+    const ent = (c.entrenamientos || []).find(x => estadoDeEntrenamiento(x, hoy).abierto) || null;
+    const brechas = ent ? avanceDeEntrenamiento(ent).aDesarrollar.filter(f => !f.alcanzada) : [];
+
+    if (!abierto) {
+      return `<h4>Plan de desarrollo</h4>
+        ${cerrados.length ? planesCerrados(c, cerrados, o) : `<p class="vacio">
+          Todavía no tiene ninguno. Es lo que se acuerda hacer de acá a la próxima
+          conversación: dos o tres cosas concretas, con quién las acompaña y para cuándo.</p>`}
+        <div class="acciones">
+          <button class="b sec" data-accion="abrir-plan" data-id="${c.id}"
+            ${ent ? `data-ent="${ent.id}"` : ''}>Escribir un plan</button>
+        </div>`;
+    }
+
+    const est = estadoDePlan(abierto, hoy);
+    const av = avanceDelPlan(abierto, hoy);
+    const bind = campo => `data-pdi-plan="${c.id}|${abierto.id}|${campo}"`;
+
+    return `<h4>Plan de desarrollo</h4>
+      <div class="cabecera-suc">
+        <span class="chip ${est.tono}">${esc(est.nombre)}</span>
+        ${av.total ? `<span class="ayuda" style="margin:0">
+          ${av.hechas} de ${av.revisadas} revisadas se hicieron${av.sinRevisar
+            ? ` · ${av.sinRevisar} sin revisar` : ''}${av.vencidas
+            ? ` · <strong>${av.vencidas} pasada${av.vencidas === 1 ? '' : 's'} de fecha</strong>` : ''}
+        </span>` : ''}
+      </div>
+
+      <div class="grid c3" style="margin-bottom:10px">
+        <label class="campo"><span>Desde</span>
+          <input type="date" ${bind('desde')} value="${esc(abierto.desde || '')}"></label>
+        <label class="campo"><span>Se revisa el</span>
+          <input type="date" ${bind('hasta')} value="${esc(abierto.hasta || '')}"></label>
+        <label class="campo"><span>Acordado con</span>
+          <input ${bind('escritoCon')} list="jefes-area" value="${esc(abierto.escritoCon || '')}"
+            placeholder="El gerente de la tienda"></label>
+      </div>
+
+      ${av.total ? `<div class="tabla-scroll"><table class="tabla-pdi">
+        <thead><tr>
+          ${brechas.length ? '<th>Competencia</th>' : ''}
+          <th class="col-que">Qué va a hacer</th><th class="col-quien">Quién acompaña</th>
+          <th>Para</th><th class="col-paso">Qué pasó</th><th></th>
+        </tr></thead>
+        <tbody>${av.acciones.map(x => {
+          const a = x.accion;
+          const bi = campo => `data-pdi="${c.id}|${abierto.id}|${a.id}|${campo}"`;
+          const comp = a.competenciaId ? competenciaSenior(a.competenciaId) : null;
+          return `<tr class="${x.vencida ? 'fila-alerta' : ''}">
+            ${brechas.length ? `<td data-r="Competencia"><select ${bi('competenciaId')}>
+              <option value="">— sin atar a una competencia —</option>
+              ${brechas.map(f => `<option value="${f.competencia.id}"${
+                a.competenciaId === f.competencia.id ? ' selected' : ''
+              }>${esc(f.competencia.nombre)} · hoy ${f.actual || '—'}, pide ${f.objetivo}</option>`).join('')}
+              ${comp && !brechas.some(f => f.competencia.id === a.competenciaId)
+                ? `<option value="${comp.id}" selected>${esc(comp.nombre)} · ya alcanzada</option>` : ''}
+            </select></td>` : ''}
+            <td class="col-que" data-r="Qué va a hacer"><input ${bi('que')} value="${esc(a.que || '')}"
+              placeholder="Que lleve ella la apertura los martes"></td>
+            <td class="col-quien" data-r="Quién acompaña"><input ${bi('acompana')} list="jefes-area"
+              value="${esc(a.acompana || '')}"></td>
+            <td data-r="Para"><input type="date" ${bi('para')} value="${esc(a.para || '')}">
+              ${x.vencida ? '<span class="chip rojo">pasó la fecha</span>' : ''}</td>
+            <td class="col-paso" data-r="Qué pasó">
+              <div class="check-estados">
+                ${ESTADOS_ACCION.filter(e => e.id).map(e =>
+                  `<button class="check-op ${a.estado === e.id ? 'activo ' + (
+                     {verde:'verde',ambar:'azul',rojo:'rojo'}[e.tono] || 'azul') : ''}"
+                     data-accion="marcar-accion-plan" data-id="${c.id}" data-plan="${abierto.id}"
+                     data-ax="${a.id}" data-e="${e.id}">${esc(e.nombre)}</button>`).join('')}
+              </div>
+              <input ${bi('nota')} value="${esc(a.nota || '')}" style="margin-top:5px"
+                placeholder="Con quién se habló, qué salió">
+              ${a.vieneDe ? '<span class="ayuda">venía del plan anterior</span>' : ''}
+            </td>
+            <td class="num" data-r=""><button class="mini" data-accion="quitar-accion-plan"
+              data-id="${c.id}" data-plan="${abierto.id}" data-ax="${a.id}">✕</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>`
+      : `<p class="vacio">El plan está abierto y todavía no tiene ninguna acción.</p>`}
+
+      <div class="acciones">
+        <button class="b sec" data-accion="agregar-accion-plan" data-id="${c.id}"
+          data-plan="${abierto.id}">+ Agregar una acción</button>
+        <button class="b sec" data-accion="cerrar-plan" data-id="${c.id}"
+          data-plan="${abierto.id}">Cerrar el tramo</button>
+        ${av.total >= 4 ? `<span class="ayuda" style="margin:0">
+          Son ${av.total} acciones. Dos o tres es lo que se trabaja de verdad entre
+          una conversación y la otra.</span>` : ''}
+      </div>
+
+      ${o.compacto ? '' : (cerrados.length ? planesCerrados(c, cerrados, o) : '')}`;
+  }
+
+  /* Los tramos anteriores, en lectura. Es lo que hace que el plan sea un
+     historial y no una pizarra que se borra: el que dejó tres acciones sin
+     hacer dos tramos seguidos se ve acá y en ningún otro lado. */
+  function planesCerrados(c, cerrados, opciones) {
+    return `<p class="ayuda" style="margin-top:14px"><strong>Tramos anteriores</strong></p>
+      <ol class="linea-tiempo">${cerrados.map(p => {
+        const av = avanceDelPlan(p, hoyISO());
+        return `<li>
+          <div class="lt-cabeza">
+            <strong>${p.desde ? fmtFecha(p.desde) : '—'} al ${p.cerradoEl ? fmtFecha(p.cerradoEl) : '—'}</strong>
+            <span class="chip">${av.hechas} de ${av.total} hechas</span>
+            ${p.escritoCon ? `<em>con ${esc(p.escritoCon)}</em>` : ''}
+            <div class="crece"></div>
+            <button class="mini" data-accion="quitar-plan" data-id="${c.id}" data-plan="${p.id}">Quitar</button>
+          </div>
+          <ul style="margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7">
+            ${av.acciones.map(x => `<li>
+              <span class="chip ${x.estado.tono}">${esc(x.estado.nombre)}</span>
+              ${esc(x.accion.que || 'sin describir')}${x.accion.nota
+                ? ` <span class="ayuda">— ${esc(x.accion.nota)}</span>` : ''}
+            </li>`).join('') || '<li class="ayuda">sin acciones</li>'}
+          </ul>
+        </li>`;
+      }).join('')}</ol>`;
   }
 
   function fichaAusenciasRegistradas(c) {
@@ -6405,6 +6553,13 @@ const App = (() => {
         </li>`;
       }).join('')}</ol>`
       : '<p class="vacio">Todavía no hay ninguna evaluación anotada.</p>'}
+
+      ${/* El plan del tramo, acá mismo: es el momento en que se lo está
+           pensando. Es la misma función que dibuja la ficha de la persona, no
+           un segundo formulario — el plan cuelga de ella, no del
+           entrenamiento, así la acompaña si la trasladan. */''}
+      <hr style="border:0;border-top:1px solid var(--borde);margin:22px 0 4px">
+      ${bloquePlanDesarrollo(c, { compacto: true })}
     </section>`;
   }
 
@@ -6773,6 +6928,45 @@ const App = (() => {
       if (ev.target.id === 'talento-tienda') { talentoTienda = ev.target.value; refrescar(); }
     });
 
+    /* El plan de desarrollo. Binding propio por lo mismo que `data-adef`: el
+       plan y sus acciones son objetos anidados, y `data-colab-campo` escribe
+       campos planos de la persona.
+       **Escribe el objeto y difiere el guardado**, como `data-colab-campo`.
+       Llamar a `Store.actualizarPlanDesarrollo()` en cada `input` guardaba el
+       almacén entero por cada tecla tipeada —y con clave puesta eso es un
+       PBKDF2 y un AES del padrón completo por letra—. */
+    const escribirPdi = el => {
+      if (el.dataset.pdiPlan) {
+        const [colab, plan, campo] = el.dataset.pdiPlan.split('|');
+        const p = Store.planDesarrollo(colab, plan);
+        if (p) { p[campo] = el.value; guardarDiferido(); }
+        return campo;
+      }
+      const [colab, plan, accion, campo] = el.dataset.pdi.split('|');
+      const p = Store.planDesarrollo(colab, plan);
+      const a = p && (p.acciones || []).find(x => x.id === accion);
+      if (a) { a[campo] = el.value; guardarDiferido(); }
+      return campo;
+    };
+
+    cont.addEventListener('input', ev => {
+      const el = ev.target.closest('[data-pdi-plan], [data-pdi]');
+      if (el) escribirPdi(el);
+    });
+
+    /* La fecha y la competencia sí redibujan: cambian el «pasó la fecha» y el
+       nombre de la competencia que se lee en el historial. Se vuelve a escribir
+       antes de redibujar porque no todo control dispara `input` al elegir. */
+    cont.addEventListener('change', ev => {
+      const el = ev.target.closest('[data-pdi-plan], [data-pdi]');
+      if (!el) return;
+      const campo = escribirPdi(el);
+      if (campo === 'para' || campo === 'competenciaId' || campo === 'hasta') {
+        Store.save();
+        refrescar();
+      }
+    });
+
     cont.addEventListener('change', ev => {
       const ad = ev.target.closest('[data-adef]');
       if (!ad) return;
@@ -7134,6 +7328,73 @@ const App = (() => {
           entrenamientoAbierto = null;
           refrescar();
         }
+      }
+
+      /* ------------- plan de desarrollo individual -------------
+         Las acciones viven en `c.planes[].acciones[]`, así que llevan tres
+         ids: la persona, el plan y la acción. */
+      if (a === 'abrir-plan') {
+        const ent = btn.dataset.ent
+          ? Store.entrenamiento(btn.dataset.id, btn.dataset.ent) : null;
+        Store.abrirPlanDesarrollo(btn.dataset.id, {
+          /* Se revisa cuando toca la próxima conversación: el fin del
+             entrenamiento si está entrenando, y si no, en un mes. */
+          hasta: (ent && ent.finTentativo) || _diaMas(hoyISO(), 30),
+          entrenamientoId: (ent && ent.id) || '',
+          evaluacionId: ent ? ((ent.evaluaciones || []).slice(-1)[0] || {}).id || '' : ''
+        });
+        refrescar();
+        return;
+      }
+
+      if (a === 'agregar-accion-plan') {
+        Store.agregarAccionPlan(btn.dataset.id, btn.dataset.plan, {});
+        refrescar();
+        return;
+      }
+
+      if (a === 'marcar-accion-plan') {
+        Store.marcarAccionPlan(btn.dataset.id, btn.dataset.plan, btn.dataset.ax, btn.dataset.e);
+        refrescar();
+        return;
+      }
+
+      if (a === 'quitar-accion-plan') {
+        Store.quitarAccionPlan(btn.dataset.id, btn.dataset.plan, btn.dataset.ax);
+        refrescar();
+        return;
+      }
+
+      /* Cerrar el tramo se puede con acciones sin revisar: la pantalla nombra
+         lo que falta antes de dejar cerrar, en vez de impedirlo. Es lo mismo
+         que `c.baja.cerradaEl` — bloquearlo llevaría a tildar cualquier cosa
+         para poder seguir. */
+      if (a === 'cerrar-plan') {
+        const c = colaboradorDe(btn.dataset.id);
+        const plan = Store.planDesarrollo(btn.dataset.id, btn.dataset.plan);
+        if (!c || !plan) return;
+        const av = avanceDelPlan(plan, hoyISO());
+        confirmar('Cerrar el tramo',
+          av.sinRevisar
+            ? `Quedan ${av.sinRevisar} de ${av.total} acciones sin revisar: al cerrar se guardan así. Las que marques «sigue abierta» pasan solas al plan siguiente.`
+            : `Se cierra el tramo con ${av.hechas} de ${av.total} acciones hechas. Las que marcaste «sigue abierta» pasan solas al plan siguiente.`,
+          'Cerrar').then(ok => {
+            if (!ok) return;
+            Store.cerrarPlanDesarrollo(btn.dataset.id, btn.dataset.plan);
+            refrescar();
+          });
+        return;
+      }
+
+      if (a === 'quitar-plan') {
+        confirmar('Quitar el tramo',
+          'Se borra el plan con sus acciones y lo que se anotó de cada una. No se puede deshacer.',
+          'Quitar').then(ok => {
+            if (!ok) return;
+            Store.quitarPlanDesarrollo(btn.dataset.id, btn.dataset.plan);
+            refrescar();
+          });
+        return;
       }
 
       if (a === 'ir-a-ficha') {

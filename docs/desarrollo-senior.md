@@ -146,6 +146,23 @@ siempre correspondió. Al mudar el 9-box se lo sacó por redundante con la solap
 *Al rol de Senior*, y no lo era: esa solapa está en `#/desarrollo`, adonde se
 entra **cuando ya te acordaste**.
 
+## El plan entre una evaluación y la otra
+
+Al pie de la pantalla está el **plan de desarrollo individual**: qué se acordó
+hacer de esta evaluación a la próxima, con quién y para cuándo. Cuelga de la
+persona y no del entrenamiento —documentado en
+[`docs/plan-desarrollo.md`](plan-desarrollo.md)— así que la acompaña si la
+trasladan y sigue existiendo cuando el entrenamiento cierra.
+
+Cuando la persona está entrenando, cada acción puede apuntar a una de las
+competencias **que le faltan**, con su «hoy 2, pide 3». Eso es lo que convierte
+el plan en el puente entre una evaluación y la siguiente, en vez de una lista
+suelta de buenas intenciones.
+
+El campo **«Próximo paso»** del formulario de evaluación sigue ahí y se sigue
+leyendo en la trazabilidad, porque los meses ya cargados se escribieron con él.
+Lo que se trabaja de acá en adelante es el plan.
+
 ## Lo que esta pantalla no hace
 
 - **No liquida ni recategoriza.** Que alguien quede efectivo como Senior es un

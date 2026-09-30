@@ -1178,3 +1178,47 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .tabla-grupos td { vertical-align: top; }
 .tabla-grupos td .ayuda { margin: 4px 0 0; }
 .tabla-grupos td:first-child { min-width: 290px; }
+
+/* ---- Plan de desarrollo individual ----
+   Cada fila es una acción acordada, y la celda de la derecha lleva los tres
+   botones de qué pasó más la nota. Con el centrado por omisión los botones
+   quedaban a media altura de una fila que mide tres renglones. */
+.tabla-pdi td { vertical-align: top; }
+.tabla-pdi td .check-estados { flex-wrap: wrap; }
+.tabla-pdi td .ayuda { display: block; margin: 4px 0 0; font-size: 11.5px; }
+/* La acción es la columna que se lee; la competencia y el acompañante son
+   contexto. Con todas iguales, «Que arme ella la grilla de la semana» entraba
+   cortada y el plan se volvía ilegible sin hacer clic en cada campo. */
+.tabla-pdi td:nth-child(1) select { min-width: 190px; }
+.tabla-pdi .col-que { min-width: 300px; }
+.tabla-pdi .col-que input { min-width: 290px; }
+.tabla-pdi .col-quien input { min-width: 150px; }
+.tabla-pdi .col-paso { min-width: 230px; }
+.tabla-pdi .col-paso input { width: 100%; min-width: 200px; }
+
+/* En el teléfono las seis columnas no entran, y dentro de `.tabla-scroll`
+   quedaba visible una sola con el resto fuera de pantalla. Cada acción pasa a
+   ser una ficha apilada con el rótulo de cada campo adelante, el mismo trato
+   que el listado de nómina: sin el encabezado de la tabla, una fecha suelta no
+   dice si es «para cuándo» o cualquier otra cosa. */
+@media (max-width: 720px) {
+  .tabla-pdi, .tabla-pdi tbody, .tabla-pdi tr, .tabla-pdi td { display: block; width: auto; }
+  .tabla-pdi thead { display: none; }
+  .tabla-pdi tr {
+    border: 1px solid var(--borde); border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 10px; background: var(--panel);
+  }
+  .tabla-pdi tr.fila-alerta { border-color: var(--rojo-alerta); }
+  .tabla-pdi td { border: 0; padding: 6px 0; }
+  .tabla-pdi td[data-r]:not([data-r=""])::before {
+    content: attr(data-r); display: block; margin-bottom: 4px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--texto-suave); font-weight: 600;
+  }
+  .tabla-pdi td input, .tabla-pdi td select,
+  .tabla-pdi .col-que input, .tabla-pdi .col-quien input,
+  .tabla-pdi .col-paso input, .tabla-pdi td:nth-child(1) select {
+    width: 100%; min-width: 0;
+  }
+  .tabla-pdi td.num { text-align: right; padding-top: 2px; }
+}

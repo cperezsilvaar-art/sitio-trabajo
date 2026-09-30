@@ -202,3 +202,97 @@ function mapaDeTalento(colaboradores) {
     pct: g => (d.evaluados.length ? g.gente.length / d.evaluados.length : 0)
   };
 }
+
+/* ==================== Plan de desarrollo individual ==================== *
+ * Lo que se acordó hacer entre una conversación y la siguiente.
+ *
+ * Vive acá y no en `desarrollo.js` porque es la otra mitad del 9-box: cada
+ * cuadrante trae escrita su acción sugerida —«plan de mejora con objetivos
+ * medibles y plazo», «proyectos que estiren su alcance»— y hasta ahora no
+ * había dónde escribir qué se hizo con eso. Sirve para cualquiera del padrón,
+ * esté o no entrenando para un rol.
+ *
+ * Cuelga de la **persona** (`c.planes[]`), como `c.ausencias`, `c.casos` y
+ * `c.entrenamientos`, así el plan la acompaña si la trasladan de tienda.
+ *
+ * El entrenamiento a Senior ya tenía un campo `proximoPaso` por evaluación:
+ * un renglón de texto libre que servía para acordarse y nada más —sin
+ * competencia, sin fecha y sin nadie que vuelva a preguntar si se hizo—.
+ * Sigue guardado y se sigue leyendo en la trazabilidad; lo que se trabaja de
+ * acá en adelante es el plan.
+ */
+
+/* Qué pasó con cada acción cuando se revisa el plan. Son cuatro y no tres:
+   «no se hizo» y «sigue abierta» parecen lo mismo y no lo son —una cierra el
+   tema y la otra lo arrastra al plan siguiente—, y esa diferencia es la que
+   hace que un plan tenga continuidad en vez de empezar de cero cada mes. */
+const ESTADOS_ACCION = [
+  { id: '',           nombre: 'Sin revisar',  tono: '',      abierta: true },
+  { id: 'hecha',      nombre: 'Se hizo',      tono: 'verde', abierta: false },
+  { id: 'sigue',      nombre: 'Sigue abierta',tono: 'ambar', abierta: true },
+  { id: 'no-se-hizo', nombre: 'No se hizo',   tono: 'rojo',  abierta: false }
+];
+
+const estadoDeAccion = id =>
+  ESTADOS_ACCION.find(x => x.id === (id || '')) || ESTADOS_ACCION[0];
+
+/** El plan que se está trabajando hoy. Hay uno abierto a la vez: dos planes
+    en curso son dos listas de prioridades, que es no tener ninguna. */
+function planAbierto(colaborador) {
+  return ((colaborador || {}).planes || []).find(p => !p.cerradoEl) || null;
+}
+
+/** Los planes de una persona, del más nuevo al más viejo. */
+function planesDe(colaborador) {
+  return ((colaborador || {}).planes || []).slice()
+    .sort((a, b) => String(b.desde || '').localeCompare(String(a.desde || '')));
+}
+
+/**
+ * Cómo viene el plan: cuántas acciones se hicieron y qué está vencido.
+ *
+ * El avance se cuenta sobre las acciones **revisadas**, no sobre el total: un
+ * plan de tres acciones con una hecha y dos sin mirar no es «33% cumplido»,
+ * es una hecha y dos que nadie revisó todavía. Es la misma regla que el
+ * «sin evaluar» del entrenamiento y los días supuestos del ausentismo — el
+ * número no se muestra solo.
+ */
+function avanceDelPlan(plan, hoy) {
+  const h = hoy || new Date().toISOString().slice(0, 10);
+  const acciones = ((plan || {}).acciones || []).map(a => {
+    const est = estadoDeAccion(a.estado);
+    return {
+      accion: a, estado: est,
+      /* Vencida es la que tiene fecha pasada y nadie cerró. Una acción ya
+         revisada no vence: lo que pasó, pasó. */
+      vencida: est.abierta && !!a.para && a.para < h
+    };
+  });
+  const revisadas = acciones.filter(x => x.accion.estado);
+  const hechas = acciones.filter(x => x.accion.estado === 'hecha');
+  return {
+    acciones,
+    total: acciones.length,
+    revisadas: revisadas.length,
+    sinRevisar: acciones.length - revisadas.length,
+    hechas: hechas.length,
+    vencidas: acciones.filter(x => x.vencida).length,
+    siguen: acciones.filter(x => x.accion.estado === 'sigue'),
+    pct: revisadas.length ? hechas.length / revisadas.length : null
+  };
+}
+
+/** En qué anda el plan: abierto, vencido o cerrado. Como el entrenamiento,
+    el panel marca el vencimiento pero no cierra nada solo. */
+function estadoDePlan(plan, hoy) {
+  const h = hoy || new Date().toISOString().slice(0, 10);
+  const p = plan || {};
+  if (p.cerradoEl) return { id: 'cerrado', nombre: 'Cerrado', tono: '', abierto: false };
+  const vencido = !!p.hasta && p.hasta < h;
+  return {
+    id: vencido ? 'vencido' : 'abierto',
+    nombre: vencido ? 'Pasó la fecha de revisión' : 'En curso',
+    tono: vencido ? 'rojo' : 'azul',
+    abierto: true, vencido
+  };
+}

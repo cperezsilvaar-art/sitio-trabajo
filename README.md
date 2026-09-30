@@ -135,6 +135,8 @@ cada uno deja su propio registro de envío.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
   potencial, los nueve cuadrantes, los tres grupos del mapa —talento,
   especialista y CC— y la talent card.
+- [`docs/plan-desarrollo.md`](docs/plan-desarrollo.md) — qué se acordó hacer de
+  una conversación a la siguiente, y si se hizo.
 - [`docs/reclamos.md`](docs/reclamos.md) — el circuito del reclamo, los estados
   y por qué el reloj importa.
 - [`docs/recorrida-hrbp.md`](docs/recorrida-hrbp.md) — los 28 puntos de la
