@@ -801,8 +801,30 @@ en el medio del proceso. Lo que se deja en *sin cambio* en una evaluación
 **mantiene lo de la evaluación anterior**: `nivelesActuales()` se queda con el
 último número de cada competencia, para que una charla sobre tres competencias
 no borre lo que midió el assessment del mes pasado. El avance se cuenta como
-**competencias que llegaron al nivel que pide el rol, sobre once**, nunca como
-promedio: un 2 sobre una escala de 6 y un 2 sobre una de 4 no son lo mismo.
+**competencias que llegaron al nivel que pide el rol**, nunca como promedio: un
+2 sobre una escala de 6 y un 2 sobre una de 4 no son lo mismo.
+
+**El denominador son nueve, no once.** De las once del modelo, *Dirección de
+otros* y *Excelencia operativa* le piden al Senior **el mismo nivel que ya le
+piden al APV**: no hay nada que desarrollar ahí. Contarlas hacía que alguien
+que hizo todo bien quedara en 9 de 11 para siempre, salvo que se puntuaran a
+mano dos competencias que nadie tenía por qué puntuar —y el coordinador miraba
+el número sin entender de dónde salía—. `competenciasConSalto()` existía
+justamente para esto y **no la llamaba nadie**. La tabla las sigue mostrando,
+que es el modelo completo, pero se leen «ya la pide el rol de APV» y no como
+pendientes.
+
+**El número nunca se muestra solo**: al lado va cuántas quedan **sin evaluar**,
+porque «2 de 9» con seis sin mirar no es lo mismo que «2 de 9» con todas
+miradas. Es la misma regla que los días supuestos del ausentismo.
+
+**El formulario pide las nueve y cada opción dice qué significa el número.**
+Antes listaba las once —dos de ellas sin nada que evaluar— y los desplegables
+decían «objetivo 3» y «sin cambio (hoy 3)» sin aclarar de dónde salía el 3.
+Ahora cada competencia dice **de qué nivel parte como APV y a cuál tiene que
+llegar**, y dentro del desplegable el nivel del APV y el del rol están marcados
+al lado del indicador. Sin eso hay que saberse el inventario de memoria para
+poder puntuar.
 El formulario de evaluación está **solo ahí**; la ficha de la persona y el pie de
 *Talento y 9-box* en la visita lo listan en lectura y enlazan, como el
 recordatorio de reclamos.

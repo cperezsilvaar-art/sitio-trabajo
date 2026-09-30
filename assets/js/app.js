@@ -6155,10 +6155,19 @@ const App = (() => {
       </div>` : ''}
 
       <h3 style="margin-top:18px">Perfil de competencias del rol</h3>
+      <p class="ind-lectura">
+        <strong>${av.alcanzadas} de ${av.total} competencias llegaron al nivel que pide el rol.</strong>
+        Son ${av.total} y no ${COMPETENCIAS_SENIOR.length} porque ${av.sinSalto.length} del modelo
+        —${av.sinSalto.map(f => esc(f.competencia.nombre)).join(' y ')}— le piden al Senior el mismo
+        nivel que ya le piden al APV: no hay nada que desarrollar ahí.
+        ${av.sinEvaluar
+          ? `Quedan <strong>${av.sinEvaluar} sin evaluar</strong>, así que el número todavía no está completo.`
+          : 'Están todas evaluadas.'}
+      </p>
       <p class="ayuda">
-        Los niveles del inventario son acumulativos: quien está en 3 hace también lo de 1 y 2.
-        <strong>${av.alcanzadas} de ${av.total}</strong> llegaron al nivel que pide el rol
-        y ${av.total - av.evaluadas === 0 ? 'están todas evaluadas' : `quedan ${av.total - av.evaluadas} sin evaluar`}.
+        Los niveles del inventario son <strong>acumulativos</strong>: quien está en 3 hace también
+        lo de 1 y lo de 2. Por eso alcanza con anotar un número por competencia y no hay que tildar
+        cada indicador.
       </p>
       <div class="tabla-scroll"><table>
         <thead><tr><th>Competencia</th><th>Como APV</th><th>Pide el Senior</th>
@@ -6169,11 +6178,13 @@ const App = (() => {
           <td class="tipo">${f.competencia.apv || '—'}</td>
           <td class="tipo">${f.competencia.senior} de ${f.competencia.escala}</td>
           <td class="tipo">${f.evaluada ? f.actual : '<span class="ayuda">sin evaluar</span>'}</td>
-          <td>${f.alcanzada
-            ? '<span class="chip verde">en nivel</span>'
-            : f.evaluada
-              ? `<span class="chip ambar">${f.brecha} nivel${f.brecha === 1 ? '' : 'es'}</span>`
-              : '<span class="chip">—</span>'}</td>
+          <td>${f.sinSalto
+            ? '<span class="ayuda">nada: ya la pide el rol de APV</span>'
+            : f.alcanzada
+              ? '<span class="chip verde">en nivel</span>'
+              : f.evaluada
+                ? `<span class="chip ambar">${f.brecha} nivel${f.brecha === 1 ? '' : 'es'}</span>`
+                : '<span class="chip">sin evaluar</span>'}</td>
         </tr>`).join('')}</tbody>
       </table></div>
       <p class="ayuda">
@@ -6195,20 +6206,26 @@ const App = (() => {
             placeholder="Gerente de tienda"></label>
       </div>
       <p class="ayuda">
-        Poné el nivel que hoy le reconocés en cada competencia. Lo que dejes en
-        <em>sin cambio</em> mantiene lo de la evaluación anterior: una charla que habló de tres
-        competencias no tiene por qué volver a puntuar las once.
+        Elegí <strong>qué hace hoy</strong> en cada competencia: cada opción es un indicador del
+        inventario, y el número es el nivel. Lo que dejes en <em>sin cambio</em> mantiene lo de la
+        evaluación anterior —una charla que habló de tres competencias no tiene por qué volver a
+        puntuar las nueve—. Van las ${av.total} que tienen que crecer; las otras
+        ${av.sinSalto.length} el rol de APV ya las pide en el mismo nivel.
       </p>
       <div class="grid c2" style="margin-top:8px">
-        ${COMPETENCIAS_SENIOR.map(comp => {
-          const actual = av.filas.find(f => f.competencia.id === comp.id);
+        ${av.aDesarrollar.map(f => {
+          const comp = f.competencia;
           return `<label class="campo">
             <span title="${esc(comp.definicion)}">${esc(comp.nombre)}
-              <em class="ayuda">objetivo ${comp.senior}</em></span>
+              <em class="ayuda">de ${comp.apv} como APV a ${comp.senior} como Senior${
+                f.evaluada ? ` · hoy ${f.actual}` : ' · sin evaluar'}</em></span>
             <select data-ev-nivel="${comp.id}">
-              <option value="">— sin cambio ${actual.evaluada ? `(hoy ${actual.actual})` : ''} —</option>
-              ${comp.indicadores.map((t, i) =>
-                `<option value="${i + 1}">${i + 1} · ${esc(t)}</option>`).join('')}
+              <option value="">— sin cambio ${f.evaluada ? `(hoy ${f.actual})` : '(nunca se evaluó)'} —</option>
+              ${comp.indicadores.map((t, i) => {
+                const n = i + 1;
+                return `<option value="${n}">${n} · ${esc(t)}${
+                  n === comp.apv ? ' — lo que trae como APV' : n === comp.senior ? ' — el nivel del rol' : ''}</option>`;
+              }).join('')}
               ${comp.senior < comp.escala
                 ? `<option value="${comp.senior + 1}">${comp.senior + 1} · por encima de lo que pide el rol</option>` : ''}
             </select></label>`;

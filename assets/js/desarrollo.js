@@ -232,33 +232,50 @@ function nivelesActuales(entrenamiento) {
 }
 
 /**
- * Cuánto del perfil de Senior ya alcanzó, en competencias listas sobre once.
- * Es la cuenta que el panel muestra como avance: no promedia niveles de
- * escalas distintas —un 2 de Liderazgo sobre 6 y un 2 de Seguimiento sobre 4
- * no son lo mismo— sino que cuenta cuántas llegaron al nivel que pide el rol.
+ * Cuánto del perfil de Senior ya alcanzó.
+ *
+ * **Se cuenta sobre las que tienen salto, no sobre las once.** De las once del
+ * modelo, dos —*Dirección de otros* y *Excelencia operativa*— le piden al
+ * Senior el mismo nivel que ya le piden al APV: no hay nada que desarrollar
+ * ahí, y meterlas en el denominador hacía que alguien que hizo todo bien
+ * quedara en 9 de 11 para siempre, salvo que se puntuaran a mano dos
+ * competencias que nadie tenía por qué puntuar. `competenciasConSalto()`
+ * existía justamente para esto y no la llamaba nadie.
+ *
+ * No promedia niveles de escalas distintas —un 2 de Liderazgo sobre 6 y un 2
+ * de Seguimiento sobre 4 no son lo mismo— sino que cuenta cuántas llegaron al
+ * nivel que pide el rol.
  */
 function avanceDeEntrenamiento(entrenamiento) {
   const niveles = nivelesActuales(entrenamiento);
   const filas = COMPETENCIAS_SENIOR.map(c => {
     const actual = niveles[c.id] || 0;
+    /* Sin salto: el rol de Senior le pide lo mismo que el de APV, así que no
+       es un objetivo de desarrollo sino un requisito que ya trae el puesto. */
+    const sinSalto = c.senior <= c.apv;
     return {
       competencia: c,
       actual,
       objetivo: c.senior,
+      sinSalto,
       evaluada: actual > 0,
-      alcanzada: actual >= c.senior,
+      alcanzada: sinSalto || actual >= c.senior,
       brecha: Math.max(0, c.senior - actual)
     };
   });
-  const evaluadas = filas.filter(f => f.evaluada).length;
-  const alcanzadas = filas.filter(f => f.alcanzada).length;
+  const aDesarrollar = filas.filter(f => !f.sinSalto);
+  const evaluadas = aDesarrollar.filter(f => f.evaluada).length;
+  const alcanzadas = aDesarrollar.filter(f => f.alcanzada).length;
   return {
     filas,
+    aDesarrollar,
+    sinSalto: filas.filter(f => f.sinSalto),
     evaluadas,
     alcanzadas,
-    total: COMPETENCIAS_SENIOR.length,
-    pendientes: filas.filter(f => !f.alcanzada),
-    pct: COMPETENCIAS_SENIOR.length ? alcanzadas / COMPETENCIAS_SENIOR.length : 0
+    sinEvaluar: aDesarrollar.length - evaluadas,
+    total: aDesarrollar.length,
+    pendientes: aDesarrollar.filter(f => !f.alcanzada),
+    pct: aDesarrollar.length ? alcanzadas / aDesarrollar.length : 0
   };
 }
 
