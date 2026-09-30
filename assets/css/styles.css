@@ -1170,3 +1170,11 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .tarjeta.caso.ambar { border-left-color: var(--ambar); }
 .tarjeta.caso.azul  { border-left-color: var(--azul-claro); }
 .tarjeta.caso.verde { border-left-color: var(--verde); }
+
+/* El mapa de talento por grupo y el detalle por cuadrante: la celda de la
+   izquierda lleva la lectura y la acción, así que la fila es alta y con el
+   centrado por omisión el nombre del grupo quedaba abajo de todo, lejos de la
+   lista de personas con la que hay que leerlo. */
+.tabla-grupos td { vertical-align: top; }
+.tabla-grupos td .ayuda { margin: 4px 0 0; }
+.tabla-grupos td:first-child { min-width: 290px; }

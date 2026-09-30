@@ -1,5 +1,68 @@
 # Talento: desempeño, potencial y talent card
 
+## Dónde está la pantalla
+
+`#/desarrollo/talento`, la primera solapa de **Desarrollo**. Antes era una solapa
+de la visita (`#/visita/<id>/talento`), y eso hacía que **el mapa del área no
+existiera**: para saber a quién tenía mapeado como talento había que abrir una
+visita por tienda y sumar catorce parciales de memoria. La pregunta del
+coordinador es sobre el área, así que la pantalla arranca en el área.
+
+El **selector de tienda** sigue estando, para la conversación con un gerente.
+Está en segundo lugar a propósito: si la lista arrancara en una tienda habría que
+recorrer las catorce para tener el panorama, que es justo lo que se venía
+haciendo.
+
+Son **dos solapas y no dos entradas del menú**, por lo mismo que el Panel y
+Nómina: *Talento y 9-box* decide **a quién mirar** y *Al rol de Senior* registra
+**qué pasó después con esa persona**. Es la misma conversación, mirada de dos
+lados.
+
+La visita quedó con el check list y el recordatorio de sucesión, en **una sola
+página y sin barra de solapas**: con un solo instrumento, una barra de una solapa
+es ruido.
+
+## Los tres grupos del mapa
+
+Nueve cuadrantes son el detalle de la charla con un gerente. Para mirar el área
+de conjunto el coordinador la lee en **tres grupos**, que es la pregunta que se
+hace todos los días: a quién tengo mapeado como **talento**, quién como
+**especialista** y quién como **contribuidor consistente (CC)**.
+
+| Grupo | Cuadrantes | Qué dice |
+|---|---|---|
+| **Talento** | Estrella, Promesa, Alto desempeño, Profesional sólido | Entrega lo que la posición pide y puede asumir una de mayor alcance. De acá sale la sucesión. |
+| **Especialista** | Especialista | Muy bueno en lo suyo, sin proyección de cambio de nivel. Referente técnico, y perderlo se nota en el piso. |
+| **Contribuidor consistente (CC)** | Eficaz | Hace lo que la posición pide y no busca crecer. Es el sostén de la operación. |
+| **En plan de mejora** | Enigma, Inconsistente, Riesgo | Hoy no alcanza lo esperado, con o sin potencial visible. |
+
+Cuatro decisiones que hay que respetar al tocarlo:
+
+- **Se derivan del cuadrante y no se cargan aparte.** `GRUPOS_TALENTO` y
+  `grupoDeTalento()` (`talento.js`) los calculan sobre desempeño y potencial. Un
+  campo propio sería una segunda respuesta a la misma pregunta, y el día que
+  difieran no hay forma de saber cuál vale.
+- **El cuarto grupo no es uno de los tres y va igual.** Quien hoy no alcanza lo
+  esperado tiene que estar en algún lado: dejarlo afuera daría un mapa que no
+  suma el plantel, y el que falta es justamente el que pide trabajo.
+- **Los sin evaluar van al pie, no como un grupo más.** Es lo mismo que «sin
+  relevar» en el curso de ADEF: que a alguien todavía no lo miraste no es una
+  lectura sobre esa persona, y mezclarlo borra la única diferencia que importa
+  al empezar.
+- **Los porcentajes son sobre los evaluados**, y la línea de abajo dice cuántos
+  faltan sobre el plantel. Un porcentaje sin su denominador se lleva a una
+  reunión como si cubriera a todos, igual que los días supuestos del ausentismo.
+
+Abajo del mapa sigue el detalle **por cuadrante**, ordenado del que hay que
+retener al que hay que resolver, y abajo de ese la tabla de evaluación y la
+matriz.
+
+La **ficha de la persona**, en *Nómina*, dice en qué grupo queda con la misma
+función (`grupoDeTalento()`), abajo de los dos desplegables: es la misma lectura,
+una persona a la vez. No repite el nombre cuando el cuadrante y el grupo se
+llaman igual —«Queda en Especialista», no «Especialista, que se lee como
+Especialista»—, que es la regla del código de la tienda entre paréntesis.
+
 ## Dónde vive el dato
 
 Los colaboradores **cuelgan de la sucursal, no de la visita**. Es la decisión de
@@ -89,8 +152,14 @@ Dos caminos, equivalentes:
   gerente te dice "a este lo veo mejor". El movimiento se confirma con un aviso
   que dice de dónde a dónde fue.
 
-En ambos casos la fecha que se guarda es la de la visita abierta, y el evaluador
-es el gerente que figura en la minuta, o el gerente de la sucursal.
+En ambos casos la fecha que se guarda es **la del día y el gerente de su
+tienda**; con una visita abierta se fecha con la visita y el evaluador es el
+gerente que figura en la minuta, que es el dato bueno cuando existe.
+
+El `drop` de la matriz **exigía una visita abierta** y buscaba a la persona
+adentro de esa visita. Con la pantalla movida al área eso dejaba la matriz de
+adorno: se arrastraba y no pasaba nada, sin ningún aviso. Ahora la busca en el
+padrón, como el desplegable de la tabla, que nunca tuvo el problema.
 
 ## Talent card
 

@@ -1173,6 +1173,14 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
 .tarjeta.caso.azul  { border-left-color: var(--azul-claro); }
 .tarjeta.caso.verde { border-left-color: var(--verde); }
 
+/* El mapa de talento por grupo y el detalle por cuadrante: la celda de la
+   izquierda lleva la lectura y la acción, así que la fila es alta y con el
+   centrado por omisión el nombre del grupo quedaba abajo de todo, lejos de la
+   lista de personas con la que hay que leerlo. */
+.tabla-grupos td { vertical-align: top; }
+.tabla-grupos td .ayuda { margin: 4px 0 0; }
+.tabla-grupos td:first-child { min-width: 290px; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -2747,6 +2755,66 @@ function distribucion9Box(colaboradores) {
     listosParaCrecer: evaluados.filter(c => c.potencial >= 2 && c.desempeno >= 2),
     riesgoDeSalida: activos.filter(c => c.riesgoSalida === 'alto'),
     estudiando: activos.filter(c => c.estudia && c.estudia !== 'noEstudia')
+  };
+}
+
+/* ------------------------ Los tres grupos del mapa -------------------- *
+ * Nueve cuadrantes son el detalle de la conversación con un gerente; para
+ * mirar el área de conjunto son demasiados. El coordinador la lee en tres
+ * grupos —talento, especialista y contribuidor consistente (CC)— que es lo
+ * que contesta «a quién tengo mapeado como qué» sin abrir la matriz.
+ *
+ * Los tres se derivan del cuadrante y no se cargan aparte: un campo nuevo
+ * sería una segunda respuesta a la misma pregunta, y el día que difieran no
+ * hay forma de saber cuál vale.
+ *
+ * El cuarto grupo no es uno de los tres y va igual: quien hoy no alcanza lo
+ * esperado tiene que estar en algún lado, y dejarlo afuera daría un mapa que
+ * no suma el plantel. */
+const GRUPOS_TALENTO = [
+  { id: 'talento', nombre: 'Talento', tono: 'verde',
+    cuadrantes: ['33', '32', '23', '22'],
+    lectura: 'Entrega lo que la posición pide y puede asumir una de mayor alcance.',
+    accion: 'Es de acá que sale la sucesión: plan de carrera, proyectos que estiren y retención.' },
+  { id: 'especialista', nombre: 'Especialista', tono: 'azul',
+    cuadrantes: ['13'],
+    lectura: 'Muy bueno en lo suyo, sin proyección de cambio de nivel.',
+    accion: 'Referente técnico del equipo y quien forma a los que entran. Perderlo se nota en el piso.' },
+  { id: 'cc', nombre: 'Contribuidor consistente (CC)', tono: 'azul',
+    cuadrantes: ['12'],
+    lectura: 'Hace lo que la posición pide, y no busca crecer.',
+    accion: 'Es el sostén de la operación: cuidar la motivación y no forzarle un crecimiento que no pidió.' },
+  { id: 'enPlan', nombre: 'En plan de mejora', tono: 'rojo',
+    cuadrantes: ['31', '21', '11'],
+    lectura: 'Hoy no alcanza lo esperado, con o sin potencial visible.',
+    accion: 'Feedback concreto y un plazo para ver movimiento. No es un grupo donde quedarse.' }
+];
+
+const grupoDeTalento = c => {
+  if (!c || !c.desempeno || !c.potencial) return null;
+  const k = String(c.potencial) + String(c.desempeno);
+  return GRUPOS_TALENTO.find(g => g.cuadrantes.indexOf(k) >= 0) || null;
+};
+
+/**
+ * El plantel repartido en los grupos, en el orden en que se leen.
+ *
+ * `sinEvaluar` va aparte y no como un grupo más, por lo mismo que «sin
+ * relevar» en el curso de ADEF: que a alguien todavía no lo miraste no es una
+ * lectura sobre esa persona, y mezclarlo borra la única diferencia que
+ * importa al empezar.
+ */
+function mapaDeTalento(colaboradores) {
+  const d = distribucion9Box(colaboradores);
+  const grupos = GRUPOS_TALENTO.map(g => ({
+    ...g,
+    gente: g.cuadrantes.reduce((a, k) => a.concat(d.celdas[k] || []), [])
+      .slice().sort((x, y) => (x.nombre || '').localeCompare(y.nombre || '', 'es'))
+  }));
+  return {
+    grupos, sinEvaluar: d.sinEvaluar,
+    activos: d.activos, evaluados: d.evaluados,
+    pct: g => (d.evaluados.length ? g.gente.length / d.evaluados.length : 0)
   };
 }
 
@@ -15793,10 +15861,26 @@ const App = (() => {
               ${ESCALA_POTENCIAL.map(x => `<option value="${x.valor}"${Number(c.potencial) === x.valor ? ' selected' : ''}>${x.valor} · ${esc(x.nombre)}</option>`).join('')}
             </select></label>
         </div>
+        ${/* Cómo queda mapeada con esos dos valores: es la lectura que el
+             coordinador se lleva del área, y acá está la persona sola. */''}
+        ${(() => {
+          const q = cuadranteDe(c.potencial, c.desempeno);
+          const g = grupoDeTalento(c);
+          if (!q) return '';
+          const tono = x => ({ verde: 'verde', amarillo: 'ambar', rojo: 'rojo', azul: 'azul' })[x];
+          /* «Especialista, que se lee como Especialista» es el mismo nombre dos
+             veces, igual que el código de la tienda entre paréntesis. */
+          const repite = g && g.nombre === q.nombre;
+          return `<p class="ayuda" style="margin:8px 0 0">
+            Queda en <span class="chip ${tono(q.tono)}">${esc(q.nombre)}</span>${g && !repite
+              ? `, que en el mapa del área se lee como
+                 <span class="chip ${tono(g.tono)}">${esc(g.nombre)}</span>` : ''}.
+          </p>`;
+        })()}
         <p class="ayuda" style="margin-top:8px">
-          La evaluación se hace junto con el Gerente de Tienda durante la visita, en la solapa
-          <em>Talento y 9-box</em>, donde además se puede mover a la persona de cuadrante arrastrándola.
-          Lo que cargues acá queda igual y se refleja en el 9-box.
+          La evaluación se hace junto con el Gerente de Tienda. En
+          <a href="#/desarrollo/talento">Desarrollo → Talento y 9-box</a> se ve toda el área
+          y se puede mover a la persona de cuadrante arrastrándola. Lo que cargues acá es lo mismo.
         </p>
 
         ${fichaConvenio(c, anios)}
@@ -15804,7 +15888,7 @@ const App = (() => {
         ${fichaMovimientos(c, s)}
 
         ${/* Cómo viene: la lectura de hoy y, si está entrenando, hacia dónde. */''}
-        ${talentCard(c, s, { sinCabecera: true })}
+        ${talentCard(c, { sinCabecera: true })}
         ${fichaEntrenamientos(c)}
 
         ${/* Dos bloques de ausencias y no tres: lo que le pasó a la persona y
@@ -16900,12 +16984,7 @@ const App = (() => {
   /* ========================== VISTA: VISITA ========================= */
   /* La visita es lo de todas las semanas: recorrer la tienda y mirar a la
      gente. Los números del período viven en Estadística mensual. */
-  const PESTANAS = [
-    ['checklist', 'Check list RRHH'],
-    ['talento',   'Talento y 9-box']
-  ];
-
-  function vistaVisita(id, pestana) {
+  function vistaVisita(id) {
     const e = Store.get();
     const v = Store.visita(id);
     if (!v) return `<p class="vacio">La visita no existe o fue eliminada.</p>`;
@@ -16914,12 +16993,12 @@ const App = (() => {
     visitaEnCurso = v;
     const c = Reporte.calcular(v, s, e.config);
 
-    const cuerpo = {
-      checklist: () => panelChecklist(v, s),
-      /* La sucesión es una conversación sobre gente, no un número del mes
-         cerrado: se hace mirando el 9-box con el Gerente de Tienda. */
-      talento:   () => panelTalento(v, s) + panelSucesion(v, c)
-    }[pestana] || (() => panelChecklist(v, s));
+    /* Una sola página y sin solapas. Eran dos —check list y talento— y el
+       talento se fue a `#/desarrollo`: una barra de solapas con una sola
+       adentro es ruido, la misma regla que un rótulo de grupo sobre un solo
+       ítem en el menú. La sucesión sí se queda: vive en `v.sucesion`, es de
+       esta visita, y es la conversación que sigue al check list. */
+    const cuerpo = () => panelChecklist(v, s) + panelSucesion(v, c) + bloqueDesarrollo(s);
 
     return `
       <h1 class="titulo">${esc(Store.etiquetaSucursal(s))}</h1>
@@ -16937,10 +17016,6 @@ const App = (() => {
               c.matriz.total.ratioExtras !== null && c.matriz.total.ratioExtras > e.config.parametros.umbralHorasExtras ? 'alerta' : 'ok')}
         ${kpi('Rotación anualizada', c.rotacion.proyeccionAnual === null ? '—' : fmtPct(c.rotacion.proyeccionAnual, 1), `${c.rotacion.bajas} bajas en el mes`)}
       </div>
-
-      <nav class="tabs" style="border-radius:10px;border:1px solid var(--borde);margin-bottom:18px">
-        ${PESTANAS.map(([k, t]) => `<a href="#/visita/${v.id}/${k}" class="${k === pestana ? 'activo' : ''}">${t}</a>`).join('')}
-      </nav>
 
       ${cuerpo()}`;
   }
@@ -17645,8 +17720,13 @@ const App = (() => {
 
   let fichaAbierta = null;   // id del colaborador con la talent card desplegada
 
-  function panelTalento(v, s) {
-    const d = distribucion9Box(s.colaboradores);
+  /* El 9-box y la evaluación de desempeño y potencial. **No recibe la visita**
+     y nunca la usó: lo que evalúa vive en el colaborador (`c.desempeno`,
+     `c.potencial`), así que es dato de la tienda y no de una visita puntual.
+     Estaba adentro de la solapa de una visita por costumbre, y eso obligaba a
+     abrir una visita para poder mirar el talento de una tienda. */
+  function panelTalento(gente, etiqueta) {
+    const d = distribucion9Box(gente);
     /* La misma lista que usa la matriz: el plantel activo de la tienda. Antes
        la tabla iba por su cuenta sobre `s.colaboradores` y listaba a los de
        baja, mientras el contador de «sin evaluar» ya los excluía. */
@@ -17673,9 +17753,9 @@ const App = (() => {
       <section class="tarjeta">
         <h2>Evaluación de desempeño y potencial</h2>
         <p class="ayuda">
-          Evaluación hecha en conjunto con el Gerente de Tienda. Vive en la sucursal, no en esta visita:
-          cuando el gerente aporte algo nuevo, cambiás el valor acá o arrastrás a la persona en la matriz
-          y el movimiento queda fechado en su historial.
+          Evaluación hecha en conjunto con el Gerente de Tienda. Cuando el gerente aporte algo
+          nuevo, cambiás el valor acá o arrastrás a la persona en la matriz, y el movimiento queda
+          fechado en su historial.
           <strong>Acá solo se evalúa:</strong> el nombre, el puesto y la fecha de ingreso se leen, y se
           corrigen en la ficha de la persona, desde <a href="#/nomina">Nómina</a>. Estaban editables y
           era fácil pisar el dato de la nómina sin querer mientras se evaluaba a otro.
@@ -17709,13 +17789,13 @@ const App = (() => {
                 <button class="mini" data-accion="ficha" data-id="${c.id}" style="color:var(--azul);border-color:var(--azul)">${fichaAbierta === c.id ? 'Cerrar' : 'Ficha'}</button>
               </td>
             </tr>
-            ${fichaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${talentCard(c, s)}</td></tr>` : ''}`;
+            ${fichaAbierta === c.id ? `<tr class="ficha-fila"><td colspan="9">${talentCard(c)}</td></tr>` : ''}`;
           }).join('') : '<tr><td colspan="9" class="vacio">Sin colaboradores cargados. Agregá el plantel de la sucursal para poder evaluarlo.</td></tr>'}
           </tbody>
         </table></div>
         <div class="acciones">
           <span class="ayuda" style="margin:0">
-            La lista sale sola de la nómina de ${esc(s.nombre || s.codigo)}: ${equipo.length}
+            La lista sale sola de la nómina de ${esc(etiqueta)}: ${equipo.length}
             persona${equipo.length === 1 ? '' : 's'} activa${equipo.length === 1 ? '' : 's'}.
             Para sumar o quitar a alguien, <a href="#/nomina">Nómina</a>.
           </span>
@@ -17726,8 +17806,9 @@ const App = (() => {
       <section class="tarjeta">
         <h2>Matriz 9-box</h2>
         <p class="ayuda">
-          Arrastrá a una persona de un cuadrante a otro para reubicarla; el cambio queda registrado con la fecha
-          de esta visita y el nombre del gerente con quien lo evaluaste.
+          Arrastrá a una persona de un cuadrante a otro para reubicarla; el cambio queda registrado
+          con la fecha y el gerente de su tienda. Si lo estás haciendo con una visita abierta, se
+          fecha con la visita.
         </p>
 
         <div class="ninebox">
@@ -17776,61 +17857,11 @@ const App = (() => {
           }).join('')}
         </div>
       </section>` : ''}
-
-      ${bloqueDesarrollo(s)}`;
-  }
-
-  /**
-   * Los entrenamientos a Senior de esta tienda, al pie del 9-box.
-   *
-   * Recordatorio, no formulario, por el mismo motivo que los reclamos: la
-   * evaluación se carga en `#/desarrollo` y en ningún otro lado. Lo que hace
-   * falta durante la visita es acordarse de que este mes hay que sentarse con
-   * el gerente a hablar de esta persona, que es justo cuando el gerente está
-   * enfrente.
-   */
-  function bloqueDesarrollo(s) {
-    const hoy = hoyISO();
-    const filas = cuadrantesDeDesarrollo({ sucursales: [s] }, hoy)
-      .todas.filter(f => f.estado.abierto);
-
-    if (!filas.length) {
-      return `<section class="tarjeta">
-        <h2>Desarrollo al rol de Senior</h2>
-        <p class="ayuda">
-          Nadie de esta tienda está propuesto ni entrenando para el rol.
-          Si el gerente propone a alguien, se anota en <em>Desarrollo</em>.
-        </p>
-        <div class="acciones"><a class="b sec" href="#/desarrollo">Ir a Desarrollo</a></div>
-      </section>`;
-    }
-
-    return `<section class="tarjeta">
-      <div class="cabecera-suc">
-        <h2>Desarrollo al rol de Senior</h2>
-        <span class="chip azul">${filas.length} en proceso</span>
-      </div>
-      <p class="ayuda">
-        El seguimiento es una conversación por mes con el gerente, y la visita es
-        el momento. Se anota en <em>Desarrollo</em>, que es donde vive.
-      </p>
-      <ul style="font-size:13.5px;line-height:1.8;margin:0 0 4px;padding-left:20px">
-        ${filas.map(f => `<li>
-          <strong>${esc(f.nombre)}</strong> — ${esc(f.estado.texto)}
-          · ${f.avance.alcanzadas} de ${f.avance.total} competencias en nivel
-          ${f.seguimiento.delMes
-            ? '<span class="chip verde">evaluado este mes</span>'
-            : '<span class="chip ambar">falta la evaluación del mes</span>'}
-        </li>`).join('')}
-      </ul>
-      <div class="acciones">
-        <a class="b" href="#/desarrollo">Anotar la evaluación del mes</a>
-      </div>
-    </section>`;
+`;
   }
 
   /* ---------------------------- Talent card --------------------------- */
-  function talentCard(c, s, opciones) {
+  function talentCard(c, opciones) {
     const q = cuadranteDe(c.potencial, c.desempeno);
     const ant = antiguedadAnios(c.fechaIngreso);
     const campoC = (etiqueta, campo, opciones) => {
@@ -17902,6 +17933,58 @@ const App = (() => {
           }).join('')}</tbody>
         </table></div>` : ''}
     </div>`;
+  }
+
+  /**
+   * Los entrenamientos a Senior de esta tienda, al pie de la visita.
+   *
+   * Se lo había sacado junto con el 9-box, por redundante con la solapa *Al rol
+   * de Senior*. No lo era: esa solapa está en `#/desarrollo` y lo que hace falta
+   * es acordarse **mientras el gerente está enfrente** de que este mes hay que
+   * sentarse a hablar de esta persona. Es la misma razón por la que el
+   * recordatorio de reclamos se quedó acá cuando el formulario se fue.
+   *
+   * Recordatorio, no formulario: el alta y la evaluación viven en
+   * `#/desarrollo` y en ningún otro lado.
+   */
+  function bloqueDesarrollo(s) {
+    const hoy = hoyISO();
+    const filas = cuadrantesDeDesarrollo({ sucursales: [s] }, hoy)
+      .todas.filter(f => f.estado.abierto);
+
+    if (!filas.length) {
+      return `<section class="tarjeta">
+        <h2>Desarrollo al rol de Senior</h2>
+        <p class="ayuda">
+          Nadie de esta tienda está propuesto ni entrenando para el rol.
+          Si el gerente propone a alguien, se anota en <em>Desarrollo</em>.
+        </p>
+        <div class="acciones"><a class="b sec" href="#/desarrollo">Ir a Desarrollo</a></div>
+      </section>`;
+    }
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Desarrollo al rol de Senior</h2>
+        <span class="chip azul">${filas.length} en proceso</span>
+      </div>
+      <p class="ayuda">
+        El seguimiento es una conversación por mes con el gerente, y la visita es
+        el momento. Se anota en <em>Desarrollo</em>, que es donde vive.
+      </p>
+      <ul style="font-size:13.5px;line-height:1.8;margin:0 0 4px;padding-left:20px">
+        ${filas.map(f => `<li>
+          <strong>${esc(f.nombre)}</strong> — ${esc(f.estado.texto)}
+          · ${f.avance.alcanzadas} de ${f.avance.total} competencias en nivel
+          ${f.seguimiento.delMes
+            ? '<span class="chip verde">evaluado este mes</span>'
+            : '<span class="chip ambar">falta la evaluación del mes</span>'}
+        </li>`).join('')}
+      </ul>
+      <div class="acciones">
+        <a class="b" href="#/desarrollo">Anotar la evaluación del mes</a>
+      </div>
+    </section>`;
   }
 
   /* --------------------------- 7. Sucesión -------------------------- */
@@ -18169,6 +18252,133 @@ const App = (() => {
   let entrenamientoAbierto = null;   // id del entrenamiento en la ficha
   let proponerAbierto = false;       // el formulario de propuesta, desplegado
 
+  /* `#/desarrollo` mira a las personas del área desde dos lados, y por eso son
+     dos solapas y no dos entradas del menú: *Talento y 9-box* decide **a quién
+     mirar** y *Al rol de Senior* registra **qué pasó después con esa persona**.
+     Estaban en dos lugares distintos —el 9-box adentro de una visita— y para
+     ver el mapa del área había que abrir una visita por tienda. */
+  function solapasDeDesarrollo(cual) {
+    const item = (id, ruta, nombre) =>
+      `<a href="${ruta}" class="${cual === id ? 'activo' : ''}">${nombre}</a>`;
+    return `<nav class="tabs">
+      ${item('talento', '#/desarrollo/talento', 'Talento y 9-box')}
+      ${item('senior', '#/desarrollo', 'Al rol de Senior')}
+    </nav>`;
+  }
+
+  let talentoTienda = '';
+
+  /* El mapa de talento del área entera, que es la pregunta que se hace el
+     coordinador: quién está mapeado dónde, en las catorce tiendas juntas. El
+     filtro por tienda existe para la conversación con un gerente, pero el
+     valor por omisión es el área: si la lista arrancara en una tienda habría
+     que recorrer catorce para tener el panorama. */
+  function vistaTalento() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const conGente = e.sucursales.filter(s => (s.colaboradores || []).length);
+    const suc = conGente.find(s => s.id === talentoTienda) || null;
+    const gente = suc ? (suc.colaboradores || [])
+                      : e.sucursales.flatMap(s => s.colaboradores || []);
+    const etiqueta = suc ? Store.etiquetaSucursal(suc) : (e.config.area || 'el área');
+    /* `m` es la misma cuenta que `d`, leída en grupos: `mapaDeTalento()` llama
+       a `distribucion9Box()` adentro, así que no pueden diferir. */
+    const d = distribucion9Box(gente);
+    const m = mapaDeTalento(gente);
+
+    /* De qué tienda es cada uno: en la vista del área el nombre solo no
+       alcanza para saber a quién llamar. */
+    const tiendaDe = {};
+    e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => {
+      tiendaDe[c.id] = s.nombre || s.codigo;
+    }));
+
+    const orden = ['33', '32', '23', '31', '22', '12', '21', '13', '11'];
+    const filas = orden.filter(k => NINE_BOX[k]).map(k => ({
+      k, q: NINE_BOX[k], gente: (d.celdas[k] || [])
+    }));
+
+    return `
+      <h1 class="titulo">Talento y 9-box</h1>
+      <p class="subtitulo">
+        Quién está mapeado dónde, en ${suc ? 'una tienda' : 'toda el área'}. El 9-box cruza
+        <strong>desempeño</strong> —lo que entrega hoy— con <strong>potencial</strong> —hasta dónde
+        puede llegar—, y la evaluación se hace con el Gerente de Tienda.
+      </p>
+      ${solapasDeDesarrollo('talento')}
+
+      <section class="tarjeta" style="margin-top:18px">
+        <div class="acciones" style="align-items:flex-end;margin-top:0">
+          <label class="campo" style="max-width:260px">
+            <span>Mirar</span>
+            <select id="talento-tienda">
+              <option value="">Toda el área</option>
+              ${conGente.map(s => `<option value="${s.id}"${s.id === talentoTienda ? ' selected' : ''}
+                >${esc(Store.etiquetaSucursal(s))}</option>`).join('')}
+            </select>
+          </label>
+          <p class="ayuda" style="margin:0 0 6px">
+            <strong>${d.evaluados.length} de ${d.activos.length}</strong> evaluados en
+            ${esc(etiqueta)}${d.sinEvaluar.length
+              ? ` · quedan ${d.sinEvaluar.length} sin ubicar, así que el mapa está incompleto`
+              : ' · el plantel está entero'}.
+          </p>
+        </div>
+      </section>
+
+      ${m.evaluados.length ? `<section class="tarjeta">
+        <h2>Cómo está mapeada ${suc ? 'la tienda' : 'el área'}</h2>
+        <p class="ayuda">
+          Los nueve cuadrantes son el detalle de la conversación con un gerente; para mirar
+          ${suc ? 'la tienda' : 'el área'} de conjunto se leen en tres grupos. Salen del mismo cuadrante,
+          no se cargan aparte.
+        </p>
+        <div class="tabla-scroll"><table class="tabla-grupos">
+          <thead><tr><th>Grupo</th><th class="num">Personas</th><th class="num">Del mapa</th>
+            <th>Quiénes</th></tr></thead>
+          <tbody>${m.grupos.filter(g => g.gente.length).map(g => `<tr>
+            <td>
+              <span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[g.tono]}">${esc(g.nombre)}</span>
+              <div class="ayuda">${esc(g.lectura)}</div>
+              <div class="ayuda">${esc(g.accion)}</div>
+            </td>
+            <td class="num"><strong>${g.gente.length}</strong></td>
+            <td class="num">${fmtPct(m.pct(g), 0)}</td>
+            <td>${g.gente.map(c => `<button class="check-titulo" data-accion="ir-a-ficha"
+                data-id="${c.id}">${esc(c.nombre)}</button>${suc ? ''
+                : ` <span class="ayuda">(${esc(tiendaDe[c.id] || '')})</span>`}`).join('<br>')}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+        <p class="ayuda">
+          Los porcentajes son sobre las ${m.evaluados.length} personas evaluadas y no sobre el
+          plantel${m.sinEvaluar.length ? `: faltan ${m.sinEvaluar.length} de ${m.activos.length},
+          así que el mapa todavía no cubre a todos` : ', que está entero'}.
+        </p>
+      </section>` : ''}
+
+      ${d.evaluados.length ? `<section class="tarjeta">
+        <h2>Quién está en cada cuadrante</h2>
+        <p class="ayuda">De arriba hacia abajo, del que hay que retener al que hay que resolver.</p>
+        <div class="tabla-scroll"><table class="tabla-grupos">
+          <thead><tr><th>Cuadrante</th><th class="num">Personas</th><th>Quiénes</th>
+            <th>Qué hacer</th></tr></thead>
+          <tbody>${filas.filter(f => f.gente.length).map(f => `<tr>
+            <td><strong>${esc(f.q.nombre)}</strong>
+              <div class="ayuda">${esc(f.q.lectura)}</div></td>
+            <td class="num">${f.gente.length}</td>
+            <td>${f.gente.map(c => `<button class="check-titulo" data-accion="ir-a-ficha"
+                data-id="${c.id}">${esc(c.nombre)}</button>${suc ? ''
+                : ` <span class="ayuda">(${esc(tiendaDe[c.id] || '')})</span>`}`).join('<br>')}</td>
+            <td class="ayuda">${esc(f.q.accion)}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>` : ''}
+
+      ${panelTalento(gente, etiqueta)}`;
+  }
+
   function vistaDesarrollo() {
     const e = Store.get();
     contexto = e;
@@ -18184,7 +18394,8 @@ const App = (() => {
 
     return `
       <h1 class="titulo">Desarrollo al rol de Senior</h1>
-      <p class="subtitulo">
+      ${solapasDeDesarrollo('senior')}
+      <p class="subtitulo" style="margin-top:14px">
         A quién propuso cada gerente, desde cuándo lo está entrenando, hasta cuándo se estimó
         y cómo viene. Lo que se evalúa sale del <strong>inventario de competencias de
         Farmatodo</strong>: las once que la matriz de roles le pide a un APV Senior, con el
@@ -18594,10 +18805,13 @@ const App = (() => {
       vistaActual = vistaSucursales; html = vistaSucursales();
     }
     else if (ruta[0] === 'desarrollo') {
-      /* `#/desarrollo/<entrenamiento>` abre esa ficha: es como se llega desde
-         el aviso del menú y desde la ficha de la persona. */
-      if (ruta[1] !== undefined) entrenamientoAbierto = ruta[1] || null;
-      vistaActual = vistaDesarrollo; html = vistaDesarrollo();
+      if (ruta[1] === 'talento') { vistaActual = vistaTalento; html = vistaTalento(); }
+      else {
+        /* `#/desarrollo/<entrenamiento>` abre esa ficha: es como se llega desde
+           el aviso del menú y desde la ficha de la persona. */
+        if (ruta[1] !== undefined) entrenamientoAbierto = ruta[1] || null;
+        vistaActual = vistaDesarrollo; html = vistaDesarrollo();
+      }
     }
     else if (ruta[0] === 'casos') {
       /* `#/casos/<colaboradorId>` abre el alta con esa persona ya elegida, como
@@ -18628,9 +18842,13 @@ const App = (() => {
     }
     else if (ruta[0] === 'config')     { vistaActual = vistaConfig;     html = vistaConfig(); }
     else if (ruta[0] === 'visita' && ruta[1]) {
-      const id = ruta[1], tab = ruta[2] || 'minutas';
-      vistaActual = () => vistaVisita(id, tab);
-      html = vistaVisita(id, tab);
+      /* La visita es una sola página. `#/visita/<id>/talento` sigue andando
+         —hay enlaces guardados— y cae acá igual: el 9-box se mudó a
+         `#/desarrollo/talento` y lo que queda de la visita es el check list
+         con la sucesión. */
+      const id = ruta[1];
+      vistaActual = () => vistaVisita(id);
+      html = vistaVisita(id);
     } else {
       const tab = ruta[0] === 'red' ? (ruta[1] || 'situacion') : 'situacion';
       vistaActual = () => vistaRed(tab);
@@ -18816,6 +19034,7 @@ const App = (() => {
        un anidado de más. Es la misma razón por la que existe `data-diario`. */
     cont.addEventListener('change', ev => {
       if (ev.target.id === 'periodo-cierre') { cierrePeriodo = ev.target.value; refrescar(); }
+      if (ev.target.id === 'talento-tienda') { talentoTienda = ev.target.value; refrescar(); }
     });
 
     cont.addEventListener('change', ev => {
@@ -20407,17 +20626,23 @@ const App = (() => {
     cont.addEventListener('drop', ev => {
       const caja = ev.target.closest('.caja');
       const id = arrastrando || ev.dataTransfer.getData('text/plain');
-      if (!caja || !id || !visitaEnCurso) return;
+      if (!caja || !id) return;
       ev.preventDefault();
-      const suc = Store.sucursal(visitaEnCurso.sucursalId);
-      const c = suc && suc.colaboradores.find(x => x.id === id);
+      /* La matriz vive en `#/desarrollo/talento` y mira toda el área, así que la
+         persona se busca en el padrón y no dentro de la visita. Con una visita
+         abierta el movimiento se fecha con ella, que es el dato bueno. */
+      const c = colaboradorDe(id);
       if (!c) return;
+      const suc = visitaEnCurso ? Store.sucursal(visitaEnCurso.sucursalId) : sucursalDeColaborador(id);
       const antes = cuadranteDe(c.potencial, c.desempeno);
-      const cambio = registrarEvaluacion(c, caja.dataset.des, caja.dataset.pot, {
-        fecha: visitaEnCurso.fecha,
-        evaluadoCon: visitaEnCurso.minutaGerente.participante || suc.gerente || '',
-        motivo: 'Reubicado en la matriz'
-      });
+      const cambio = registrarEvaluacion(c, caja.dataset.des, caja.dataset.pot,
+        visitaEnCurso
+          ? { fecha: visitaEnCurso.fecha,
+              evaluadoCon: visitaEnCurso.minutaGerente.participante || (suc ? suc.gerente : '') || '',
+              motivo: 'Reubicado en la matriz' }
+          : { fecha: hoyISO(),
+              evaluadoCon: (suc ? suc.gerente : '') || '',
+              motivo: 'Reubicado en la matriz' });
       Store.save(); refrescar();
       if (cambio) {
         const ahora = cuadranteDe(c.potencial, c.desempeno);

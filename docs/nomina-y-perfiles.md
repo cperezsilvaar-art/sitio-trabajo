@@ -188,12 +188,12 @@ camisa, pantalón, campera y calzado—, la posición si el cargo no se reconoci
 las notas. La nómina no trae los talles: no hay ninguna columna con esa
 información.
 
-**La talent card completa**, la misma que se usa en la visita: formación
+**La talent card completa**, la misma que se usa en el 9-box: formación
 (si estudia, qué carrera y en qué avance), desarrollo (dónde quiere crecer, a
 qué posición aspira, qué movilidad acepta), lectura del desempeño (fortalezas y
 qué necesita para el próximo paso), riesgo de salida y notas. Se edita tanto
-desde acá como desde la solapa *Talento y 9-box* de una visita: es el mismo
-lugar de datos.
+desde acá como desde *Desarrollo → Talento y 9-box*: es el mismo lugar de
+datos.
 
 **Del resto del panel:** el desempeño y el potencial con su cuadrante del 9-box
 y el historial de evaluaciones —cambiarlos desde el perfil también queda

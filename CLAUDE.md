@@ -749,10 +749,46 @@ tienda en un mes** y desde ahí el tope anual no se puede contestar. Son **dos
 tablas y no una**: la de tiendas dice dónde está la carga y es la que se lleva a
 Operaciones, la de personas dice quién, que es lo que hay que corregir.
 
-La **sucesión** no es un número del mes cerrado: es una conversación sobre gente
-y vive en la solapa *Talento y 9-box* de la visita, junto al 9-box. Ahí se
-decide **a quién mirar**; qué pasó después con esa persona se registra en
-`#/desarrollo`.
+La **sucesión** no es un número del mes cerrado: es una conversación sobre
+gente, y por eso vive en `#/desarrollo`, que tiene **dos solapas y no dos
+entradas del menú**: *Talento y 9-box* (`#/desarrollo/talento`) decide **a quién
+mirar** y *Al rol de Senior* (`#/desarrollo`) registra **qué pasó después con
+esa persona**. Son las dos mitades de la misma conversación.
+
+**El 9-box mira toda el área y estaba adentro de una visita.** Era una solapa de
+`#/visita/<id>`, así que para tener el mapa del área había que abrir una visita
+por tienda y acordarse de los catorce parciales. Ahora `vistaTalento()` arranca
+en el área entera y el selector de tienda es para la charla con un gerente: si
+la lista arrancara en una tienda habría que recorrer catorce para el panorama.
+La visita quedó con el check list y el recordatorio de sucesión, en una sola
+página y sin barra de solapas.
+
+**El área se lee en tres grupos y no en nueve cuadrantes**, que es la pregunta
+que el coordinador se hace todos los días: a quién tengo mapeado como
+**talento**, quién como **especialista** y quién como **contribuidor consistente
+(CC)**. `GRUPOS_TALENTO` (`talento.js`) los define sobre los cuadrantes que ya
+existen —talento es potencial y desempeño de 2 o 3; especialista es el que
+rinde muy bien sin proyección de nivel; CC es el que cumple y no busca crecer— y
+`grupoDeTalento()` es quien decide. **No se cargan aparte**: un campo propio
+sería una segunda respuesta a la misma pregunta y el día que difieran no hay
+forma de saber cuál vale. El cuarto grupo —*En plan de mejora*, los tres
+cuadrantes de desempeño por debajo— **no es uno de los tres y va igual**: dejarlo
+afuera daría un mapa que no suma el plantel. La ficha de cada persona dice el
+suyo con la misma función, y **no repite el nombre cuando el cuadrante y el grupo
+se llaman igual** —«Queda en Especialista» y no «Especialista, que se lee como
+Especialista»—, que es la regla del código de la tienda entre paréntesis. Los
+**sin evaluar** van al pie y no como un grupo más, por lo mismo que «sin relevar»
+en el curso de ADEF: que a alguien todavía no lo miraste no es una lectura sobre
+esa persona, y mezclarlo borra la única diferencia que importa al empezar. Los
+porcentajes son **sobre los evaluados** y la pantalla dice cuántos faltan, como
+los días supuestos del ausentismo.
+
+**Arrastrar en la matriz funciona sin visita abierta.** El `drop` pedía
+`visitaEnCurso` y buscaba a la persona adentro de esa visita, así que en la
+pantalla nueva la matriz quedaba de adorno: se arrastraba y no pasaba nada.
+Ahora la busca en el padrón y fecha el movimiento con el día y el gerente de su
+tienda; con una visita abierta sigue fechando con la visita, que es el dato
+bueno.
 
 **En *Talento y 9-box* solo se evalúa.** El nombre, el puesto y la fecha de
 ingreso se leen: eran campos editables al lado de los desplegables de evaluación
@@ -826,8 +862,13 @@ llegar**, y dentro del desplegable el nivel del APV y el del rol están marcados
 al lado del indicador. Sin eso hay que saberse el inventario de memoria para
 poder puntuar.
 El formulario de evaluación está **solo ahí**; la ficha de la persona y el pie de
-*Talento y 9-box* en la visita lo listan en lectura y enlazan, como el
-recordatorio de reclamos.
+la visita lo listan en lectura y enlazan, como el recordatorio de reclamos.
+`bloqueDesarrollo()` colgaba del 9-box y ahora cuelga de la **visita**, que es a
+lo que siempre correspondió: lo que hace falta no es tenerlo al lado de la
+matriz, es acordarse **mientras el gerente está enfrente** de que este mes hay
+que sentarse a hablar de esa persona. Se lo sacó por redundante con la solapa
+*Al rol de Senior* y no lo era: esa solapa está en `#/desarrollo`, adonde se
+entra cuando ya te acordaste.
 
 El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos
@@ -919,8 +960,9 @@ apareciera nada en su lugar**. Eso es peor que el guión que la lista venía a
 evitar. Un indicador nuevo se agrega con su cálculo, o no se agrega.
 
 **Tres no se repiten acá a propósito** —cumplimiento del check list, distribución
-del 9-box y costo sobre venta—: ya viven donde se cargan, en la visita y en la
-estadística del mes, y traerlos sería el sexto lugar con los mismos números.
+del 9-box y costo sobre venta—: ya viven donde se cargan, en la visita, en
+*Desarrollo → Talento y 9-box* y en la estadística del mes, y traerlos sería el
+sexto lugar con los mismos números.
 `DONDE_VIVEN_LOS_OTROS` los enlaza en vez de prometerlos.
 
 **La rotación separa renuncias de despidos** porque no son el mismo problema: una

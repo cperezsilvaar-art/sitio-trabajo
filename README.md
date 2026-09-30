@@ -48,7 +48,11 @@ El trabajo está partido en dos, porque son dos cosas distintas:
 | Solapa | Contenido |
 |---|---|
 | **Recorrida** | El check de la visita: 21 puntos en cuatro bloques, en el orden en que transcurre |
-| **Talento y 9-box** | Plantel de la sucursal, evaluación de desempeño y potencial con el gerente, matriz 9-box arrastrable y talent card por persona |
+
+El **9-box** era la segunda solapa de la visita y se mudó a
+*Desarrollo → Talento y 9-box*: mira toda el área, que es la pregunta del
+coordinador. Antes, para saber a quién tenía mapeado como talento, había que
+abrir una visita por tienda.
 
 **Estadística mensual** — los números del período, una vez por mes.
 
@@ -94,7 +98,7 @@ persona— se pega directo en *Estadística mensual* y carga de una sola vez el 
 las horas extras y los días de ausencia abiertos por concepto.
 
 Lo que esa planilla **no** trae es la posición de cada persona: se asigna una vez
-en *Talento y 9-box* y los meses siguientes la conservan. Con las posiciones
+en la ficha de la persona, desde *Nómina*, y los meses siguientes la conservan. Con las posiciones
 puestas, la solapa *FTE y Costo* de la visita ofrece **Traer la dotación del
 padrón** y la matriz queda cargada sin tipear nada.
 
@@ -129,7 +133,8 @@ cada uno deja su propio registro de envío.
 - [`docs/acceso-y-clave.md`](docs/acceso-y-clave.md) — qué protege la clave, qué
   no, y por qué no hay recuperación.
 - [`docs/talento-9box.md`](docs/talento-9box.md) — escalas de desempeño y
-  potencial, los nueve cuadrantes y la talent card.
+  potencial, los nueve cuadrantes, los tres grupos del mapa —talento,
+  especialista y CC— y la talent card.
 - [`docs/reclamos.md`](docs/reclamos.md) — el circuito del reclamo, los estados
   y por qué el reloj importa.
 - [`docs/recorrida-hrbp.md`](docs/recorrida-hrbp.md) — los 28 puntos de la

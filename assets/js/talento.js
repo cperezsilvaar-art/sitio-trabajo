@@ -142,3 +142,63 @@ function distribucion9Box(colaboradores) {
     estudiando: activos.filter(c => c.estudia && c.estudia !== 'noEstudia')
   };
 }
+
+/* ------------------------ Los tres grupos del mapa -------------------- *
+ * Nueve cuadrantes son el detalle de la conversación con un gerente; para
+ * mirar el área de conjunto son demasiados. El coordinador la lee en tres
+ * grupos —talento, especialista y contribuidor consistente (CC)— que es lo
+ * que contesta «a quién tengo mapeado como qué» sin abrir la matriz.
+ *
+ * Los tres se derivan del cuadrante y no se cargan aparte: un campo nuevo
+ * sería una segunda respuesta a la misma pregunta, y el día que difieran no
+ * hay forma de saber cuál vale.
+ *
+ * El cuarto grupo no es uno de los tres y va igual: quien hoy no alcanza lo
+ * esperado tiene que estar en algún lado, y dejarlo afuera daría un mapa que
+ * no suma el plantel. */
+const GRUPOS_TALENTO = [
+  { id: 'talento', nombre: 'Talento', tono: 'verde',
+    cuadrantes: ['33', '32', '23', '22'],
+    lectura: 'Entrega lo que la posición pide y puede asumir una de mayor alcance.',
+    accion: 'Es de acá que sale la sucesión: plan de carrera, proyectos que estiren y retención.' },
+  { id: 'especialista', nombre: 'Especialista', tono: 'azul',
+    cuadrantes: ['13'],
+    lectura: 'Muy bueno en lo suyo, sin proyección de cambio de nivel.',
+    accion: 'Referente técnico del equipo y quien forma a los que entran. Perderlo se nota en el piso.' },
+  { id: 'cc', nombre: 'Contribuidor consistente (CC)', tono: 'azul',
+    cuadrantes: ['12'],
+    lectura: 'Hace lo que la posición pide, y no busca crecer.',
+    accion: 'Es el sostén de la operación: cuidar la motivación y no forzarle un crecimiento que no pidió.' },
+  { id: 'enPlan', nombre: 'En plan de mejora', tono: 'rojo',
+    cuadrantes: ['31', '21', '11'],
+    lectura: 'Hoy no alcanza lo esperado, con o sin potencial visible.',
+    accion: 'Feedback concreto y un plazo para ver movimiento. No es un grupo donde quedarse.' }
+];
+
+const grupoDeTalento = c => {
+  if (!c || !c.desempeno || !c.potencial) return null;
+  const k = String(c.potencial) + String(c.desempeno);
+  return GRUPOS_TALENTO.find(g => g.cuadrantes.indexOf(k) >= 0) || null;
+};
+
+/**
+ * El plantel repartido en los grupos, en el orden en que se leen.
+ *
+ * `sinEvaluar` va aparte y no como un grupo más, por lo mismo que «sin
+ * relevar» en el curso de ADEF: que a alguien todavía no lo miraste no es una
+ * lectura sobre esa persona, y mezclarlo borra la única diferencia que
+ * importa al empezar.
+ */
+function mapaDeTalento(colaboradores) {
+  const d = distribucion9Box(colaboradores);
+  const grupos = GRUPOS_TALENTO.map(g => ({
+    ...g,
+    gente: g.cuadrantes.reduce((a, k) => a.concat(d.celdas[k] || []), [])
+      .slice().sort((x, y) => (x.nombre || '').localeCompare(y.nombre || '', 'es'))
+  }));
+  return {
+    grupos, sinEvaluar: d.sinEvaluar,
+    activos: d.activos, evaluados: d.evaluados,
+    pct: g => (d.evaluados.length ? g.gente.length / d.evaluados.length : 0)
+  };
+}

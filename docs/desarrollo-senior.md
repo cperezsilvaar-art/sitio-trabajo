@@ -134,12 +134,17 @@ número que no significa nada.
 
 ## En la visita
 
-Al pie de *Talento y 9-box* la visita muestra quiénes de esa tienda están
-propuestos o entrenando, con su avance y si el mes ya tuvo su evaluación. Es un
-**recordatorio, no un formulario**, por el mismo motivo que los reclamos: el
-alta y la evaluación viven en `#/desarrollo` y en ningún otro lado. Lo que hace
-falta durante la visita es acordarse de que hay que sentarse con el gerente a
-hablar de esta persona, que es justo cuando el gerente está enfrente.
+La visita muestra quiénes de esa tienda están propuestos o entrenando, con su
+avance y si el mes ya tuvo su evaluación. Es un **recordatorio, no un
+formulario**, por el mismo motivo que los reclamos: el alta y la evaluación viven
+en `#/desarrollo` y en ningún otro lado. Lo que hace falta durante la visita es
+acordarse de que hay que sentarse con el gerente a hablar de esta persona, que es
+justo cuando el gerente está enfrente.
+
+Colgaba del pie de *Talento y 9-box* y ahora cuelga de la visita, que es a lo que
+siempre correspondió. Al mudar el 9-box se lo sacó por redundante con la solapa
+*Al rol de Senior*, y no lo era: esa solapa está en `#/desarrollo`, adonde se
+entra **cuando ya te acordaste**.
 
 ## Lo que esta pantalla no hace
 
@@ -148,5 +153,6 @@ hablar de esta persona, que es justo cuando el gerente está enfrente.
   `#/movimientos`, como cualquier otra modificación.
 - **No decide.** El panel marca vencimientos y meses sin evaluar; efectivizar,
   extender o interrumpir lo decide el coordinador con el gerente.
-- **No reemplaza al 9-box.** *Talento y 9-box*, en la visita, es donde se decide
-  **a quién mirar**. Acá se registra **qué pasó después**.
+- **No reemplaza al 9-box.** *Talento y 9-box*, la otra solapa de esta misma
+  pantalla, es donde se decide **a quién mirar**. Acá se registra **qué pasó
+  después**.
