@@ -1547,9 +1547,9 @@ const Store = (() => {
         if (!Array.isArray(c.ausencias)) c.ausencias = [];
 
         /* La misma licencia que ya estaba: mismo motivo y fechas que se tocan.
-           Se le corrige el hasta en vez de sumar una segunda. */
-        const ya = c.ausencias.find(a => a.motivo === motivo && !a.reincorporado &&
-          a.desde && a.desde <= (hasta || desde) && (!a.hasta || a.hasta >= desde));
+           Se le corrige el hasta en vez de sumar una segunda. La regla vive en
+           `ausenciaQueSeSolapa()` y la comparte con el alta a mano. */
+        const ya = ausenciaQueSeSolapa(c, motivo, desde, hasta);
         if (ya) {
           if (hasta && ya.hasta !== hasta) { ya.hasta = hasta; ya.diasSupuestos = false; out.extendidas++; }
           else out.repetidas++;
@@ -2177,20 +2177,53 @@ const Store = (() => {
      * certificado a veces no la trae— y en ese caso el panel avisa igual,
      * porque una ausencia sin fecha de vuelta es la que más se olvida.
      */
+    /**
+     * Registra una ausencia, **o corrige la que ya estaba**.
+     *
+     * No duplicaba nada a propósito: simplemente no miraba. Volver a cargar la
+     * ausencia de alguien —porque se estiró, porque no te acordabas si la
+     * habías puesto— creaba una segunda, la persona aparecía dos veces en
+     * Presentismo y sus días se contaban dos veces en el ausentismo. El
+     * importador del parte ya resolvía esto desde el principio; el alta a mano
+     * usa ahora **la misma regla**, `ausenciaQueSeSolapa()`.
+     *
+     * Devuelve `{ ausencia, accion, hastaAnterior }` para que la pantalla pueda
+     * decir qué hizo: crear en silencio una y corregir en silencio otra se
+     * leen igual, y una de las dos sería mentira. **El `accion` va afuera y no
+     * adentro de la ausencia**: es lo que pasó en esta llamada, no un campo de
+     * la licencia, y guardarlo la ensuciaría para siempre.
+     */
     agregarAusencia(colabId, datos) {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;
       if (!Array.isArray(c.ausencias)) c.ausencias = [];
+      const d = datos || {};
+      const motivo = d.motivo || 'enfermedad';
+
+      const ya = ausenciaQueSeSolapa(c, motivo, d.desde, d.hasta);
+      if (ya) {
+        const antes = ya.hasta || '';
+        /* El `hasta` se corrige, nunca se recorta a ciegas: una licencia que
+           ya estaba abierta y sigue abierta no pierde su fecha por volver a
+           pasar por el alta. */
+        if (d.hasta && d.hasta !== ya.hasta) { ya.hasta = d.hasta; ya.diasSupuestos = false; }
+        if (d.diagnostico && !ya.diagnostico) ya.diagnostico = d.diagnostico;
+        if (d.certificado && !tieneCertificado(ya)) ya.certificado = d.certificado;
+        guardar();
+        return { ausencia: ya, hastaAnterior: antes,
+                 accion: (d.hasta && d.hasta !== antes) ? 'corregida' : 'repetida' };
+      }
+
       const a = Object.assign({
         id: uid(),
         desde: '', hasta: '', motivo: 'enfermedad',
         diagnostico: '', certificado: '', notas: '',
         reincorporado: false, fechaReincorporacion: '',
         registradaEl: new Date().toISOString()
-      }, datos || {});
+      }, d);
       c.ausencias.push(a);
       guardar();
-      return a;
+      return { ausencia: a, accion: 'nueva', hastaAnterior: '' };
     },
 
     ausencia(colabId, ausenciaId) {
@@ -2658,6 +2691,33 @@ const Store = (() => {
     },
 
     /** Vuelca el movimiento sobre la ficha: mueve de tienda o cambia el puesto. */
+    /**
+     * Cómo escribe Nómina el empleador de esta tienda.
+     *
+     * **No es la razón social formal.** La columna de la nómina trae un nombre
+     * corto y propio de cada tienda —«FTD ARG BOTANICO», «OLIVOS», «SM
+     * CENTER», «BARCELONA»— y todos los de una misma tienda comparten el
+     * mismo. Escribir «FARMATODO ARGENTINA S.A.» donde sus trece compañeros
+     * dicen «FTD ARG BOTANICO» dejaría a esa persona distinta de su propia
+     * tienda hasta la nómina siguiente.
+     *
+     * Por eso sale del padrón: es el valor que Nómina le va a poner el mes que
+     * viene. La razón social de la ficha de la tienda queda de respaldo, para
+     * cuando la tienda todavía no tiene gente cargada.
+     */
+    razonSocialDeTienda(sucursalId, exceptoColabId) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return '';
+      const cuenta = {};
+      (s.colaboradores || []).forEach(c => {
+        if (c.id === exceptoColabId) return;
+        const v = String(c.razonSocialContrato || '').trim();
+        if (v) cuenta[v] = (cuenta[v] || 0) + 1;
+      });
+      const top = Object.keys(cuenta).sort((a, b) => cuenta[b] - cuenta[a])[0];
+      return top || String(s.razonSocial || '').trim();
+    },
+
     aplicarMovimiento(colabId, movId) {
       const m = this.movimiento(colabId, movId);
       const c = this.colaboradorPorId(colabId);
@@ -2667,8 +2727,19 @@ const Store = (() => {
         const origen = this.sucursalDe(colabId);
         const destino = this.sucursal(m.haciaSucursalId);
         if (origen && destino && origen.id !== destino.id) {
+          /* **El empleador es de la tienda y tiene que viajar con la persona.**
+             El traspaso movía a la gente de una lista a la otra y nada más, así
+             que la ficha seguía diciendo la razón social de la tienda vieja: se
+             pasaba a alguien a Botánico y su contrato seguía figurando en Iron
+             Lynx. Se calcula antes de moverla, para no contar su propio valor
+             viejo entre los de la tienda de destino. */
+          const nueva = this.razonSocialDeTienda(destino.id, c.id);
           origen.colaboradores = origen.colaboradores.filter(x => x.id !== c.id);
           destino.colaboradores.push(c);
+          if (nueva && nueva !== String(c.razonSocialContrato || '').trim()) {
+            m.razonSocialAnterior = c.razonSocialContrato || '';
+            c.razonSocialContrato = nueva;
+          }
         }
       } else if (m.tipo === 'modificacion') {
         if (m.cargoNuevo) {

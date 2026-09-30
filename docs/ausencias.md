@@ -382,3 +382,37 @@ cuándo»: lo urgente es una columna de esa lista, no una lista aparte.
 Con el historial cargado y nadie ausente, el bloque dice **«hoy no falta nadie»**
 en vez de desaparecer —un cero es una respuesta—. Sin ninguna ausencia cargada sí
 desaparece, como los contadores del menú.
+
+## Cargar dos veces la misma no la duplica
+
+`agregarAusencia()` no miraba nada: volver a cargar la ausencia de alguien
+—porque se estiró, porque no te acordabas si ya la habías puesto— creaba una
+segunda. La persona aparecía dos veces en Presentismo y **sus días se contaban
+dos veces en el ausentismo**.
+
+El importador del parte de las tiendas ya resolvía esto desde el principio. La
+regla salió a `ausenciaQueSeSolapa()` y ahora la usan los dos, por lo mismo que
+`buscadorDePadron()` es uno solo: la misma licencia es mismo motivo, todavía
+abierta, y fechas que se tocan.
+
+**Otro motivo en las mismas fechas sí es otra licencia.**
+
+La pantalla dice cuál de las tres cosas hizo:
+
+| | |
+|---|---|
+| No había nada | «Ausencia registrada…» |
+| Ya estaba, con las mismas fechas | «Esa ausencia ya estaba cargada desde el 20/09. No se duplicó.» |
+| Ya estaba y el certificado se estiró | «Ya tenía una cargada desde el 20/09: se le corrigió el alta del 25/09 al 30/09 en vez de duplicarla.» |
+
+Crear en silencio una y corregir en silencio otra se leen igual, y una de las
+dos sería mentira. Lo que hizo se devuelve **afuera** de la licencia
+—`{ ausencia, accion, hastaAnterior }`—: es lo que pasó en esa llamada, no un
+campo de la licencia, y guardarlo la ensuciaría para siempre.
+
+## Quitar una se hace desde donde se la ve
+
+El botón *Quitar* vivía solo adentro del formulario de alta, así que para
+borrar una había que apretar **+ Registrar ausencia**, bajar hasta *Ausencias
+anteriores* y encontrarla entre varias iguales. Ahora está también en la fila
+de la tabla de Presentismo, al lado de *Se reincorporó*.

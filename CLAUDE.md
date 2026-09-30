@@ -208,6 +208,31 @@ Lo guardado como `tipo: 'cesion'` sigue funcionando: `esTraspaso()` lo trata com
 traspaso y se lee *con cesión*, que es lo que era. **No agregar un tipo de
 movimiento nuevo para la cesión**: es un atributo del traspaso.
 
+**El empleador es de la tienda y viaja con la persona.** El traspaso movía a la
+gente de una lista de colaboradores a la otra y nada más, así que
+`c.razonSocialContrato` se quedaba con el de la tienda vieja: se pasaba a
+alguien a Botánico y su contrato seguía figurando en Iron Lynx.
+`aplicarMovimiento()` lo actualiza al aplicar el traspaso y anota de dónde
+venía (`m.razonSocialAnterior`).
+
+**Ese campo no guarda la razón social formal.** La columna de la nómina trae un
+nombre corto y propio de cada tienda —«FTD ARG BOTANICO», «OLIVOS», «SM
+CENTER», «BARCELONA»— y **todos los de una misma tienda comparten el mismo**.
+Escribir «FARMATODO ARGENTINA S.A.», que es lo que dice la ficha de la tienda,
+dejaría a esa persona distinta de sus trece compañeros hasta la nómina
+siguiente. Por eso `Store.razonSocialDeTienda()` lo saca **del padrón**: es el
+valor que Nómina le va a poner el mes que viene. La `razonSocial` de la ficha
+de la tienda queda de respaldo, para cuando todavía no tiene gente cargada.
+
+**No depende de la cesión.** La cesión dice si hace falta instrumento legal;
+esto es cómo se llama el empleador en la nómina, y cambia con la tienda. Entre
+dos tiendas que liquidan igual no cambia nada y no se anota nada.
+
+**A quien ya se traspasó antes, la ficha se lo dice.** Si su
+`razonSocialContrato` no coincide con el de su tienda, aparece un aviso con un
+botón para alinearlo. Se nombra y se ofrece corregir en vez de pisarlo solo: es
+un dato de la nómina y lo cambia el coordinador.
+
 **Una baja es un proceso, no un evento.** La persona deja de venir el día de la
 baja —eso sale de la dotación en el momento y no espera a nadie— pero atrás
 quedan cinco trámites, en cinco lugares distintos: `TRAMITES_BAJA`
@@ -263,6 +288,25 @@ Lo que el motor necesitaba de esa carga sale ahora del padrón:
 `presentesDelPadron(sucursal, fecha)` en `diario.js` cuenta la gente con turno de
 una tienda —activa y que cubre turno— menos quien tiene una ausencia abierta esa
 fecha. Es lo único que alimenta la venta por persona presente.
+
+**Volver a cargar la ausencia de alguien corrige la que estaba, no agrega otra.**
+`agregarAusencia()` no miraba nada: cargar dos veces la misma —porque se
+estiró, porque no te acordabas si ya la habías puesto— creaba una segunda, la
+persona aparecía dos veces en Presentismo y **sus días se contaban dos veces en
+el ausentismo**. El importador del parte ya resolvía esto desde el principio;
+la regla salió a `ausenciaQueSeSolapa()` (`ausencias.js`) y ahora la usan los
+dos, como `buscadorDePadron()`.
+
+Lo devuelve afuera de la licencia —`{ ausencia, accion, hastaAnterior }`— y la
+pantalla **dice cuál de las tres cosas hizo**: la creó, le corrigió el alta o
+ya estaba. Crear en silencio una y corregir en silencio otra se leen igual, y
+una de las dos sería mentira. El `accion` no se guarda adentro de la licencia:
+es lo que pasó en esa llamada, no un campo suyo.
+
+**Quitar una ausencia se hace desde la fila donde se la ve.** El botón vivía
+solo adentro del formulario de alta, así que para borrar una había que apretar
+«+ Registrar ausencia», bajar hasta *Ausencias anteriores* y encontrarla entre
+varias iguales. Se ve el problema en la tabla: se arregla en la tabla.
 
 La ausencia se anota eligiendo a la persona: el panel completa su sucursal, su
 antigüedad y los plazos de los arts. 208 y 211. **Sin la marca de certificado

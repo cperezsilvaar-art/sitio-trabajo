@@ -2209,8 +2209,12 @@ const App = (() => {
               <td class="tipo">${cob.aplica
                 ? `hasta el ${fmtFecha(cob.finReserva)}`
                 : '<span class="ayuda">otro régimen</span>'}</td>
-              <td class="tipo">
+              ${/* El «Quitar» vivía solo adentro del formulario de alta, o sea
+                    que para borrar una había que apretar «+ Registrar
+                    ausencia». Se ve el problema acá: se arregla acá. */''}
+              <td class="tipo" style="white-space:nowrap">
                 <button class="mini" data-accion="reincorporar" data-id="${c.id}" data-aus="${x.ausencia.id}">Se reincorporó</button>
+                <button class="mini" data-accion="quitar-ausencia" data-id="${c.id}" data-aus="${x.ausencia.id}">Quitar</button>
               </td>
             </tr>`;
           }).join('')}</tbody>
@@ -3553,6 +3557,24 @@ const App = (() => {
           ${dato('Unidad de negocio', c.unidadNegocio)}
           ${dato('Dirección', c.direccionArea)}
         </div>
+        ${/* El empleador es de la tienda: si no coincide con el de sus
+             compañeros es que la persona se traspasó antes de que el panel
+             arrastrara este dato. Se nombra y se ofrece corregir en vez de
+             pisarlo solo — es un dato de la nómina y lo cambia el coordinador. */''}
+        ${(() => {
+          const suya = String(c.razonSocialContrato || '').trim();
+          const deLaTienda = s ? Store.razonSocialDeTienda(s.id, c.id) : '';
+          if (!deLaTienda || !suya || suya === deLaTienda) return '';
+          return `<div class="aviso-caja" style="margin-top:4px">
+            Su contrato figura en <strong>${esc(suya)}</strong> y el resto de
+            ${esc(Store.etiquetaSucursal(s))} liquida por <strong>${esc(deLaTienda)}</strong>.
+            Suele pasar cuando el traspaso se aplicó antes de que el panel arrastrara este dato.
+            <div class="acciones" style="margin-top:8px">
+              <button class="b sec" data-accion="alinear-razon-social" data-id="${c.id}"
+                >Pasarlo a ${esc(deLaTienda)}</button>
+            </div>
+          </div>`;
+        })()}
 
         ${bloqueAdef(c)}
 
@@ -7634,19 +7656,35 @@ const App = (() => {
         const hasta = valorDe('#aus-hasta');
         if (hasta && hasta < desde) return avisar('El alta no puede ser anterior al inicio.', 'error');
         const cert = !!($('#aus-certificado') || {}).checked;
-        Store.agregarAusencia(btn.dataset.id, {
+        const r = Store.agregarAusencia(btn.dataset.id, {
           desde, hasta,
           motivo: valorDe('#aus-motivo') || 'enfermedad',
           diagnostico: valorDe('#aus-nota'),
           certificado: cert
         });
         ausenciaAbierta = null;
-        refrescar();
-        avisar(!cert
-          ? 'Ausencia registrada, pendiente de justificar hasta que traiga el certificado.'
-          : hasta
-            ? `Ausencia registrada hasta el ${fmtFecha(hasta)}. Te aviso cuando se acerque.`
-            : 'Ausencia registrada sin fecha de alta: va a quedar avisando hasta que la cargues.');
+        /* La ruta lleva a la persona (`#/diario/<id>`) y el formulario acaba de
+           cerrarse: si no se vuelve a `#/diario`, la barra dice que está
+           abierto algo que no está, y volver a ese mismo hash no dispara nada
+           —no hay `hashchange`— así que el enlace de la ficha deja de abrirlo. */
+        if ((location.hash || '').indexOf('#/diario/') === 0) location.hash = '#/diario';
+        else refrescar();
+
+        /* **Corregir y crear no se anuncian igual.** Antes decía «registrada»
+           en los dos casos, y como además duplicaba, el coordinador terminaba
+           con dos licencias creyendo que había cargado una. */
+        if (r && r.accion === 'corregida') {
+          avisar(`Ya tenía una cargada desde el ${fmtFecha(r.ausencia.desde)}: se le corrigió el alta${
+            r.hastaAnterior ? ` del ${fmtFecha(r.hastaAnterior)}` : ''} al ${fmtFecha(hasta)} en vez de duplicarla.`);
+        } else if (r && r.accion === 'repetida') {
+          avisar(`Esa ausencia ya estaba cargada desde el ${fmtFecha(r.ausencia.desde)}. No se duplicó.`);
+        } else {
+          avisar(!cert
+            ? 'Ausencia registrada, pendiente de justificar hasta que traiga el certificado.'
+            : hasta
+              ? `Ausencia registrada hasta el ${fmtFecha(hasta)}. Te aviso cuando se acerque.`
+              : 'Ausencia registrada sin fecha de alta: va a quedar avisando hasta que la cargues.');
+        }
         return;
       }
 
@@ -7656,6 +7694,19 @@ const App = (() => {
         avisar('Marcada como reincorporada.');
         return;
       }
+      if (a === 'alinear-razon-social') {
+        const c = colaboradorDe(btn.dataset.id);
+        const suc = sucursalDeColaborador(btn.dataset.id);
+        if (!c || !suc) return;
+        const nueva = Store.razonSocialDeTienda(suc.id, c.id);
+        if (!nueva) return;
+        c.razonSocialContrato = nueva;
+        Store.save();
+        refrescar();
+        avisar(`Su contrato ahora figura en ${nueva}, como el resto de la tienda.`);
+        return;
+      }
+
       if (a === 'quitar-ausencia') {
         const ok = await confirmar('Quitar la ausencia',
           'Se borra el registro con sus fechas. Si la persona volvió, mejor marcala como reincorporada: así queda el historial.',

@@ -80,6 +80,44 @@ El panel calcula además **qué tienda absorbe el costo del mes**, con la regla 
 procedimiento de Empleos: del 1 al 15 lo paga la tienda de destino, del 16 en
 adelante la de origen (`tiendaQueAbsorbeElCosto()`).
 
+## El empleador viaja con la persona
+
+El traspaso movía a la gente de una lista de colaboradores a la otra y nada
+más. `c.razonSocialContrato` se quedaba con el de la tienda vieja: se pasaba a
+alguien a Botánico y su contrato seguía figurando en Iron Lynx, la razón social
+de Scalabrini. `aplicarMovimiento()` lo actualiza al aplicar el traspaso y
+anota de dónde venía en `m.razonSocialAnterior`.
+
+**Ese campo no guarda la razón social formal.** La columna de la nómina trae un
+nombre corto y propio de cada tienda, y todos los de una misma tienda comparten
+el mismo:
+
+| Tienda | Ficha de la tienda | Lo que dice la nómina |
+|---|---|---|
+| Botánico | FARMATODO ARGENTINA S.A. | **FTD ARG BOTANICO** |
+| Olivos | FARMACIA VASSALLO OLIVOS SCS | **OLIVOS** |
+| Olleros | FARMACIA BARCELONA S.R.L. | **BARCELONA** |
+| San Martín Center | FARMACIA SAN MARTIN CENTER | **SM CENTER** |
+| Scalabrini | IRON LYNX SAS | **IRON LYNXS** |
+
+Escribir «FARMATODO ARGENTINA S.A.» donde sus trece compañeros de Botánico
+dicen «FTD ARG BOTANICO» dejaría a esa persona distinta de su propia tienda
+hasta la nómina siguiente. Por eso `Store.razonSocialDeTienda()` lo saca **del
+padrón** —el valor que comparten los de esa tienda, que es literalmente el que
+Nómina le va a poner el mes que viene— y deja la `razonSocial` de la ficha de
+la tienda como respaldo, para cuando todavía no hay gente cargada.
+
+**No depende de la cesión.** La cesión dice si hace falta instrumento legal
+porque cambia el empleador; esto es cómo se escribe el empleador en la nómina, y
+va con la tienda. Entre dos tiendas que liquidan igual no cambia nada y no se
+anota nada.
+
+**A quien se traspasó antes de esto, la ficha se lo dice.** Si su
+`razonSocialContrato` no coincide con el de su tienda, aparece un aviso —«su
+contrato figura en X y el resto de la tienda liquida por Y»— con un botón para
+alinearlo. Se nombra y se ofrece corregir en vez de pisarlo solo: es un dato de
+la nómina y lo cambia el coordinador.
+
 ## Modificación
 
 Botón **Modificación**, para el cambio de puesto o de jornada. Pide el cargo

@@ -118,6 +118,23 @@ const _sumarMeses = (fecha, meses) => {
 };
 
 /** Si la persona ya trajo el certificado que respalda la ausencia. */
+/**
+ * La licencia que ya está cargada y que la que viene pisaría: mismo motivo,
+ * todavía abierta, y fechas que se tocan.
+ *
+ * **La usan el alta a mano y el importador del parte**, que antes tenían cada
+ * uno su versión —en realidad el alta no tenía ninguna—. El panel duplicaba
+ * ausencias cada vez que el coordinador volvía a cargar la de alguien: la
+ * persona aparecía dos veces en Presentismo y sus días se contaban dos veces.
+ * Es la misma razón por la que `buscadorDePadron()` es uno solo.
+ */
+function ausenciaQueSeSolapa(colaborador, motivo, desde, hasta) {
+  if (!desde) return null;
+  return ((colaborador || {}).ausencias || []).find(a =>
+    a.motivo === motivo && !a.reincorporado && a.desde &&
+    a.desde <= (hasta || desde) && (!a.hasta || a.hasta >= desde)) || null;
+}
+
 function tieneCertificado(a) {
   const v = (a || {}).certificado;
   return v === true || v === 'si' || v === 'sí';
