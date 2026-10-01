@@ -1551,8 +1551,19 @@ const Store = (() => {
            `ausenciaQueSeSolapa()` y la comparte con el alta a mano. */
         const ya = ausenciaQueSeSolapa(c, motivo, desde, hasta);
         if (ya) {
-          if (hasta && ya.hasta !== hasta) { ya.hasta = hasta; ya.diasSupuestos = false; out.extendidas++; }
-          else out.repetidas++;
+          /* Igual que el alta a mano: el `hasta` se estira y no se recorta, y
+             la que figuraba cerrada se reabre —con un `hasta` más lejano o sin
+             ninguno, porque el parte de la tienda dice quién no está **hoy**—
+             conservando la fecha que tenía. */
+          const estira = hasta && (!ya.hasta || hasta > ya.hasta);
+          if (estira) { ya.hasta = hasta; ya.diasSupuestos = false; }
+          const reabre = ya.reincorporado && (estira || !hasta);
+          if (reabre) {
+            ya.reincorporacionAnterior = ya.fechaReincorporacion || '';
+            ya.reincorporado = false;
+            ya.fechaReincorporacion = '';
+          }
+          if (estira || reabre) out.extendidas++; else out.repetidas++;
           return;
         }
 
@@ -2203,15 +2214,43 @@ const Store = (() => {
       const ya = ausenciaQueSeSolapa(c, motivo, d.desde, d.hasta);
       if (ya) {
         const antes = ya.hasta || '';
-        /* El `hasta` se corrige, nunca se recorta a ciegas: una licencia que
-           ya estaba abierta y sigue abierta no pierde su fecha por volver a
-           pasar por el alta. */
-        if (d.hasta && d.hasta !== ya.hasta) { ya.hasta = d.hasta; ya.diasSupuestos = false; }
+        /* El `hasta` se estira, nunca se recorta a ciegas: la licencia de un
+           día que puso el formulario —un certificado que no decía cuánto
+           duraba— es el eslabón débil, y la que trae fechas de verdad la
+           reemplaza. Hacia abajo no se toca, por lo mismo que en el libro de
+           novedades: recortarla borraría la prueba. */
+        const estira = d.hasta && (!ya.hasta || d.hasta > ya.hasta);
+        if (estira) { ya.hasta = d.hasta; ya.diasSupuestos = false; }
+
+        /* **Si figuraba cerrada, la vuelta que decía ya no es cierta**: lo que
+           se está cargando dice que la licencia seguía después. Se reabre y se
+           anota cuál era (`reincorporacionAnterior`), en vez de dejar una ficha
+           que se contradice sola —«se reincorporó el 18/07» arriba de una
+           licencia que termina el 29/09—.
+           Pasa con un `hasta` más lejano y también **sin ninguno**: cargarla
+           sin fecha de alta es decir que todavía no volvió. Ahí el `hasta` que
+           estaba no se borra, se conserva y la licencia queda en rojo pidiendo
+           la vuelta: tirar una fecha que alguien midió para poner un vacío es
+           peor que preguntar.
+           Se devuelve afuera, como `accion`: deshacer una marca que puso el
+           coordinador sin decírselo es de lo que se descubre un mes después. */
+        let reabierta = '';
+        if (ya.reincorporado && (estira || !d.hasta)) {
+          reabierta = ya.fechaReincorporacion || 'si';
+          ya.reincorporacionAnterior = ya.fechaReincorporacion || '';
+          ya.reincorporado = false;
+          ya.fechaReincorporacion = '';
+        }
+
+        const desdeAntes = ya.desde;
+        const corrioDesde = d.desde && d.desde < ya.desde;
+        if (corrioDesde) ya.desde = d.desde;
         if (d.diagnostico && !ya.diagnostico) ya.diagnostico = d.diagnostico;
         if (d.certificado && !tieneCertificado(ya)) ya.certificado = d.certificado;
         guardar();
-        return { ausencia: ya, hastaAnterior: antes,
-                 accion: (d.hasta && d.hasta !== antes) ? 'corregida' : 'repetida' };
+        return { ausencia: ya, hastaAnterior: antes, reabierta,
+                 desdeAnterior: corrioDesde ? desdeAntes : '',
+                 accion: (estira || reabierta || corrioDesde) ? 'corregida' : 'repetida' };
       }
 
       const a = Object.assign({

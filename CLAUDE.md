@@ -303,6 +303,32 @@ ya estaba. Crear en silencio una y corregir en silencio otra se leen igual, y
 una de las dos sería mentira. El `accion` no se guarda adentro de la licencia:
 es lo que pasó en esa llamada, no un campo suyo.
 
+**La comparación tiene que ver también las cerradas.** Pedía que la licencia
+estuviera abierta, y lo que entra por el formulario de recepción entra cerrado
+si ya terminó: la de un día que el formulario supuso era invisible, así que el
+parte de la tienda —que trae las fechas de verdad— creaba una segunda y la
+ficha mostraba la misma licencia dos veces, «17/07 → 17/07, se reincorporó» y
+«17/07 → 29/09, 75 días». La que se estira **se reabre** y queda anotada la
+reincorporación que decía antes (`reincorporacionAnterior`): si no, la ficha
+diría que volvió el 18/07 arriba de una licencia que termina el 29/09. Volver y
+enfermarse de nuevo más tarde sí son dos licencias, porque las fechas no se
+tocan.
+
+**Cargarla sin fecha de alta también la reabre** —no tener alta es no haber
+vuelto— pero ahí el `hasta` que estaba **no se borra**: se conserva y la
+licencia queda en rojo pidiendo la vuelta, porque tirar una fecha medida para
+poner un vacío es peor que preguntar. Y cada cosa que se corrige se nombra en
+el aviso, **la reincorporación sobre todo**: es una marca que puso el
+coordinador y que el panel acaba de deshacer.
+
+**Una licencia vencida no es una a la que le falta el papel.** Eso es
+`pendienteJustificar`, que se decide antes. En `vencida` el certificado está
+presentado y lo que pasó es que su fecha de alta quedó atrás sin que nadie
+marque la vuelta, así que decir «el certificado venció hace 2 días» al lado del
+chip verde de *presentado* se lee como una contradicción. Dice «Debería haber
+vuelto el 29/09/2026 · 2 días sin marcar la vuelta», que es además lo que hay
+que hacer.
+
 **Quitar una ausencia se hace desde la fila donde se la ve.** El botón vivía
 solo adentro del formulario de alta, así que para borrar una había que apretar
 «+ Registrar ausencia», bajar hasta *Ausencias anteriores* y encontrarla entre

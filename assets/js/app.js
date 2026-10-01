@@ -7674,8 +7674,27 @@ const App = (() => {
            en los dos casos, y como además duplicaba, el coordinador terminaba
            con dos licencias creyendo que había cargado una. */
         if (r && r.accion === 'corregida') {
-          avisar(`Ya tenía una cargada desde el ${fmtFecha(r.ausencia.desde)}: se le corrigió el alta${
-            r.hastaAnterior ? ` del ${fmtFecha(r.hastaAnterior)}` : ''} al ${fmtFecha(hasta)} en vez de duplicarla.`);
+          /* Cada cosa que cambió se nombra. **La reincorporación sobre todo**:
+             es una marca que puso el coordinador a mano y el panel la acaba de
+             deshacer porque la licencia seguía. Enterarse de eso al mes
+             siguiente, mirando una ficha, es tarde. */
+          const cambios = [];
+          if (r.ausencia.hasta && r.ausencia.hasta !== r.hastaAnterior) {
+            cambios.push(`se le corrigió el alta${
+              r.hastaAnterior ? ` del ${fmtFecha(r.hastaAnterior)}` : ''} al ${
+              fmtFecha(r.ausencia.hasta)}`);
+          }
+          if (r.reabierta) {
+            cambios.push(r.reabierta !== 'si'
+              ? `se dio de baja la reincorporación del ${fmtFecha(r.reabierta)}, porque la licencia seguía`
+              : 'se volvió a abrir, porque figuraba cerrada y la licencia seguía');
+          }
+          if (r.desdeAnterior) {
+            cambios.push(`se le corrió el inicio del ${fmtFecha(r.desdeAnterior)} al ${
+              fmtFecha(r.ausencia.desde)}`);
+          }
+          avisar(`Ya tenía una cargada desde el ${fmtFecha(r.desdeAnterior || r.ausencia.desde)}: ${
+            cambios.join(' y ')} en vez de duplicarla.`);
         } else if (r && r.accion === 'repetida') {
           avisar(`Esa ausencia ya estaba cargada desde el ${fmtFecha(r.ausencia.desde)}. No se duplicó.`);
         } else {

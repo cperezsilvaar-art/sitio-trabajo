@@ -119,19 +119,31 @@ const _sumarMeses = (fecha, meses) => {
 
 /** Si la persona ya trajo el certificado que respalda la ausencia. */
 /**
- * La licencia que ya está cargada y que la que viene pisaría: mismo motivo,
- * todavía abierta, y fechas que se tocan.
+ * La licencia que ya está cargada y que la que viene pisaría: mismo motivo y
+ * fechas que se tocan.
  *
  * **La usan el alta a mano y el importador del parte**, que antes tenían cada
  * uno su versión —en realidad el alta no tenía ninguna—. El panel duplicaba
  * ausencias cada vez que el coordinador volvía a cargar la de alguien: la
  * persona aparecía dos veces en Presentismo y sus días se contaban dos veces.
  * Es la misma razón por la que `buscadorDePadron()` es uno solo.
+ *
+ * **También mira las cerradas**, y esa era la mitad que faltaba. Exigir que
+ * estuviera abierta dejaba pasar justo el caso más común: el formulario de
+ * recepción trae un certificado sin duración, el panel lo toma como un día y
+ * lo **importa cerrado porque ya terminó**; después llega el parte con las
+ * fechas de verdad —del 17/07 al 29/09— y como la de un día estaba cerrada no
+ * la veía, así que creaba una segunda. Quedaban las dos en la ficha, una de 1
+ * día y otra de 75.
+ *
+ * Que una esté cerrada no la hace otra licencia: lo que decide si son la misma
+ * es que **las fechas se toquen**, y eso ya separa a quien volvió en agosto y
+ * se enfermó de nuevo en septiembre.
  */
 function ausenciaQueSeSolapa(colaborador, motivo, desde, hasta) {
   if (!desde) return null;
   return ((colaborador || {}).ausencias || []).find(a =>
-    a.motivo === motivo && !a.reincorporado && a.desde &&
+    a.motivo === motivo && a.desde &&
     a.desde <= (hasta || desde) && (!a.hasta || a.hasta >= desde)) || null;
 }
 
@@ -182,7 +194,17 @@ function estadoDeAusencia(a, hoy) {
   }
   const faltan = _dias(h, x.hasta);
   if (faltan < 0) {
-    return { clase: 'vencida', texto: `El certificado venció hace ${-faltan} día${-faltan === 1 ? '' : 's'}`,
+    /* **No es que falte el papel.** Eso es `pendienteJustificar`, que se decide
+       más arriba y es otro estado. Acá el certificado está presentado: lo que
+       pasa es que su fecha de alta ya pasó y nadie marcó la vuelta.
+       Decía «el certificado venció hace 2 días» al lado del chip verde de
+       «presentado», y las dos cosas juntas se leen como una contradicción
+       —«si ya lo trajo y lo justifiqué, ¿qué venció?»—. Lo que hay que hacer
+       es marcar que volvió o cargar el certificado nuevo, así que eso es lo
+       que dice. */
+    return { clase: 'vencida',
+             texto: `Debería haber vuelto el ${_fecha(x.hasta)} · ${-faltan} día${
+               -faltan === 1 ? '' : 's'} sin marcar la vuelta`,
              diasParaVencer: faltan, diasLlevados: llevados, tono: 'rojo' };
   }
   if (faltan === 0) {

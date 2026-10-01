@@ -145,6 +145,16 @@ Al volver se marca **Se reincorporó**. Si en cambio trae otro certificado, se
 extiende la misma ausencia: el vínculo con el art. 208 se cuenta desde el primer
 día, no desde el último parte.
 
+**La que venció no es la que le falta el papel.** El papel que falta es
+`pendienteJustificar`, que se decide antes y es otro estado. En `vencida` el
+certificado está presentado: lo que pasó es que su fecha de alta quedó atrás y
+nadie marcó la vuelta. Decía «el certificado venció hace 2 días» al lado del
+chip verde de *presentado*, y las dos cosas juntas se leen como una
+contradicción —«si ya lo trajo y lo justifiqué, ¿qué venció?»—. Ahora dice
+**«Debería haber vuelto el 29/09/2026 · 2 días sin marcar la vuelta»**, que es
+además lo que hay que hacer: marcar la reincorporación o cargar el certificado
+nuevo.
+
 ## Traer las ausencias del formulario de recepción
 
 Los gerentes cargan las ausencias en un formulario de Google —*Recepción de
@@ -392,10 +402,36 @@ dos veces en el ausentismo**.
 
 El importador del parte de las tiendas ya resolvía esto desde el principio. La
 regla salió a `ausenciaQueSeSolapa()` y ahora la usan los dos, por lo mismo que
-`buscadorDePadron()` es uno solo: la misma licencia es mismo motivo, todavía
-abierta, y fechas que se tocan.
+`buscadorDePadron()` es uno solo: la misma licencia es mismo motivo y fechas que
+se tocan.
 
 **Otro motivo en las mismas fechas sí es otra licencia.**
+
+**La comparación mira también las cerradas, y eso es lo que faltaba.** Pedía
+que la licencia estuviera abierta, y lo que entra por el formulario de
+recepción entra **cerrado si ya terminó** —es un registro de lo que pasó—: la
+de un día que el formulario supuso quedaba invisible para la comparación, así
+que el parte de la tienda, que traía las fechas de verdad, creaba una segunda
+licencia. En la ficha de Falavigna se veían las dos: 17/07 → 17/07, «se
+reincorporó», y 17/07 → 29/09, 75 días. La misma licencia contada dos veces.
+
+Una licencia cerrada que se estira **se reabre**, y queda anotado qué
+reincorporación decía antes (`reincorporacionAnterior`): si no, la ficha
+quedaría diciendo que la persona volvió el 18/07 arriba de una licencia que
+termina el 29/09.
+
+**Cargarla sin fecha de alta también la reabre**, porque decir que no hay alta
+es decir que todavía no volvió. Ahí el `hasta` que estaba **no se borra**: se
+conserva y la licencia queda en rojo pidiendo la vuelta. Tirar una fecha que
+alguien midió para poner un vacío es peor que preguntar.
+
+Cada cosa que se corrige se nombra en el aviso, **la reincorporación sobre
+todo**: es una marca que el coordinador puso a mano y que el panel acaba de
+deshacer. Enterarse de eso al mes siguiente, mirando una ficha, es tarde.
+
+**Volver y enfermarse de nuevo más tarde sí son dos licencias**, porque las
+fechas no se tocan. Lo que se unifica es la misma ausencia cargada dos veces,
+no dos ausencias parecidas.
 
 La pantalla dice cuál de las tres cosas hizo:
 

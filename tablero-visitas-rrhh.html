@@ -4619,19 +4619,31 @@ const _sumarMeses = (fecha, meses) => {
 
 /** Si la persona ya trajo el certificado que respalda la ausencia. */
 /**
- * La licencia que ya está cargada y que la que viene pisaría: mismo motivo,
- * todavía abierta, y fechas que se tocan.
+ * La licencia que ya está cargada y que la que viene pisaría: mismo motivo y
+ * fechas que se tocan.
  *
  * **La usan el alta a mano y el importador del parte**, que antes tenían cada
  * uno su versión —en realidad el alta no tenía ninguna—. El panel duplicaba
  * ausencias cada vez que el coordinador volvía a cargar la de alguien: la
  * persona aparecía dos veces en Presentismo y sus días se contaban dos veces.
  * Es la misma razón por la que `buscadorDePadron()` es uno solo.
+ *
+ * **También mira las cerradas**, y esa era la mitad que faltaba. Exigir que
+ * estuviera abierta dejaba pasar justo el caso más común: el formulario de
+ * recepción trae un certificado sin duración, el panel lo toma como un día y
+ * lo **importa cerrado porque ya terminó**; después llega el parte con las
+ * fechas de verdad —del 17/07 al 29/09— y como la de un día estaba cerrada no
+ * la veía, así que creaba una segunda. Quedaban las dos en la ficha, una de 1
+ * día y otra de 75.
+ *
+ * Que una esté cerrada no la hace otra licencia: lo que decide si son la misma
+ * es que **las fechas se toquen**, y eso ya separa a quien volvió en agosto y
+ * se enfermó de nuevo en septiembre.
  */
 function ausenciaQueSeSolapa(colaborador, motivo, desde, hasta) {
   if (!desde) return null;
   return ((colaborador || {}).ausencias || []).find(a =>
-    a.motivo === motivo && !a.reincorporado && a.desde &&
+    a.motivo === motivo && a.desde &&
     a.desde <= (hasta || desde) && (!a.hasta || a.hasta >= desde)) || null;
 }
 
@@ -4682,7 +4694,17 @@ function estadoDeAusencia(a, hoy) {
   }
   const faltan = _dias(h, x.hasta);
   if (faltan < 0) {
-    return { clase: 'vencida', texto: `El certificado venció hace ${-faltan} día${-faltan === 1 ? '' : 's'}`,
+    /* **No es que falte el papel.** Eso es `pendienteJustificar`, que se decide
+       más arriba y es otro estado. Acá el certificado está presentado: lo que
+       pasa es que su fecha de alta ya pasó y nadie marcó la vuelta.
+       Decía «el certificado venció hace 2 días» al lado del chip verde de
+       «presentado», y las dos cosas juntas se leen como una contradicción
+       —«si ya lo trajo y lo justifiqué, ¿qué venció?»—. Lo que hay que hacer
+       es marcar que volvió o cargar el certificado nuevo, así que eso es lo
+       que dice. */
+    return { clase: 'vencida',
+             texto: `Debería haber vuelto el ${_fecha(x.hasta)} · ${-faltan} día${
+               -faltan === 1 ? '' : 's'} sin marcar la vuelta`,
              diasParaVencer: faltan, diasLlevados: llevados, tono: 'rojo' };
   }
   if (faltan === 0) {
@@ -10086,8 +10108,19 @@ const Store = (() => {
            `ausenciaQueSeSolapa()` y la comparte con el alta a mano. */
         const ya = ausenciaQueSeSolapa(c, motivo, desde, hasta);
         if (ya) {
-          if (hasta && ya.hasta !== hasta) { ya.hasta = hasta; ya.diasSupuestos = false; out.extendidas++; }
-          else out.repetidas++;
+          /* Igual que el alta a mano: el `hasta` se estira y no se recorta, y
+             la que figuraba cerrada se reabre —con un `hasta` más lejano o sin
+             ninguno, porque el parte de la tienda dice quién no está **hoy**—
+             conservando la fecha que tenía. */
+          const estira = hasta && (!ya.hasta || hasta > ya.hasta);
+          if (estira) { ya.hasta = hasta; ya.diasSupuestos = false; }
+          const reabre = ya.reincorporado && (estira || !hasta);
+          if (reabre) {
+            ya.reincorporacionAnterior = ya.fechaReincorporacion || '';
+            ya.reincorporado = false;
+            ya.fechaReincorporacion = '';
+          }
+          if (estira || reabre) out.extendidas++; else out.repetidas++;
           return;
         }
 
@@ -10738,15 +10771,43 @@ const Store = (() => {
       const ya = ausenciaQueSeSolapa(c, motivo, d.desde, d.hasta);
       if (ya) {
         const antes = ya.hasta || '';
-        /* El `hasta` se corrige, nunca se recorta a ciegas: una licencia que
-           ya estaba abierta y sigue abierta no pierde su fecha por volver a
-           pasar por el alta. */
-        if (d.hasta && d.hasta !== ya.hasta) { ya.hasta = d.hasta; ya.diasSupuestos = false; }
+        /* El `hasta` se estira, nunca se recorta a ciegas: la licencia de un
+           día que puso el formulario —un certificado que no decía cuánto
+           duraba— es el eslabón débil, y la que trae fechas de verdad la
+           reemplaza. Hacia abajo no se toca, por lo mismo que en el libro de
+           novedades: recortarla borraría la prueba. */
+        const estira = d.hasta && (!ya.hasta || d.hasta > ya.hasta);
+        if (estira) { ya.hasta = d.hasta; ya.diasSupuestos = false; }
+
+        /* **Si figuraba cerrada, la vuelta que decía ya no es cierta**: lo que
+           se está cargando dice que la licencia seguía después. Se reabre y se
+           anota cuál era (`reincorporacionAnterior`), en vez de dejar una ficha
+           que se contradice sola —«se reincorporó el 18/07» arriba de una
+           licencia que termina el 29/09—.
+           Pasa con un `hasta` más lejano y también **sin ninguno**: cargarla
+           sin fecha de alta es decir que todavía no volvió. Ahí el `hasta` que
+           estaba no se borra, se conserva y la licencia queda en rojo pidiendo
+           la vuelta: tirar una fecha que alguien midió para poner un vacío es
+           peor que preguntar.
+           Se devuelve afuera, como `accion`: deshacer una marca que puso el
+           coordinador sin decírselo es de lo que se descubre un mes después. */
+        let reabierta = '';
+        if (ya.reincorporado && (estira || !d.hasta)) {
+          reabierta = ya.fechaReincorporacion || 'si';
+          ya.reincorporacionAnterior = ya.fechaReincorporacion || '';
+          ya.reincorporado = false;
+          ya.fechaReincorporacion = '';
+        }
+
+        const desdeAntes = ya.desde;
+        const corrioDesde = d.desde && d.desde < ya.desde;
+        if (corrioDesde) ya.desde = d.desde;
         if (d.diagnostico && !ya.diagnostico) ya.diagnostico = d.diagnostico;
         if (d.certificado && !tieneCertificado(ya)) ya.certificado = d.certificado;
         guardar();
-        return { ausencia: ya, hastaAnterior: antes,
-                 accion: (d.hasta && d.hasta !== antes) ? 'corregida' : 'repetida' };
+        return { ausencia: ya, hastaAnterior: antes, reabierta,
+                 desdeAnterior: corrioDesde ? desdeAntes : '',
+                 accion: (estira || reabierta || corrioDesde) ? 'corregida' : 'repetida' };
       }
 
       const a = Object.assign({
@@ -20579,8 +20640,27 @@ const App = (() => {
            en los dos casos, y como además duplicaba, el coordinador terminaba
            con dos licencias creyendo que había cargado una. */
         if (r && r.accion === 'corregida') {
-          avisar(`Ya tenía una cargada desde el ${fmtFecha(r.ausencia.desde)}: se le corrigió el alta${
-            r.hastaAnterior ? ` del ${fmtFecha(r.hastaAnterior)}` : ''} al ${fmtFecha(hasta)} en vez de duplicarla.`);
+          /* Cada cosa que cambió se nombra. **La reincorporación sobre todo**:
+             es una marca que puso el coordinador a mano y el panel la acaba de
+             deshacer porque la licencia seguía. Enterarse de eso al mes
+             siguiente, mirando una ficha, es tarde. */
+          const cambios = [];
+          if (r.ausencia.hasta && r.ausencia.hasta !== r.hastaAnterior) {
+            cambios.push(`se le corrigió el alta${
+              r.hastaAnterior ? ` del ${fmtFecha(r.hastaAnterior)}` : ''} al ${
+              fmtFecha(r.ausencia.hasta)}`);
+          }
+          if (r.reabierta) {
+            cambios.push(r.reabierta !== 'si'
+              ? `se dio de baja la reincorporación del ${fmtFecha(r.reabierta)}, porque la licencia seguía`
+              : 'se volvió a abrir, porque figuraba cerrada y la licencia seguía');
+          }
+          if (r.desdeAnterior) {
+            cambios.push(`se le corrió el inicio del ${fmtFecha(r.desdeAnterior)} al ${
+              fmtFecha(r.ausencia.desde)}`);
+          }
+          avisar(`Ya tenía una cargada desde el ${fmtFecha(r.desdeAnterior || r.ausencia.desde)}: ${
+            cambios.join(' y ')} en vez de duplicarla.`);
         } else if (r && r.accion === 'repetida') {
           avisar(`Esa ausencia ya estaba cargada desde el ${fmtFecha(r.ausencia.desde)}. No se duplicó.`);
         } else {
