@@ -219,7 +219,8 @@ function leerReportesDeGerentes(texto) {
        poder decir cuánto se ignoró— pero se conserva en el crudo, que es lo
        que se le muestra cuando algo no entró. */
     if (!par) { actual.crudo += '\n' + linea; sobras++; return; }
-    /* «Legajo/DNI» y «Período» se normalizan a `legajo` y `periodo`: la clave
+    /* «Fecha de llegada» y «Período» se normalizan a `fechadellegada` y
+       `periodo`: sin acentos, sin espacios y en minúsculas. La clave
        la escribe la plantilla, pero un acento perdido en el camino no tiene
        por qué costar una fila. */
     const clave = _llanoAnexo(par[1]).replace(/[^A-Z]/g, '').toLowerCase();

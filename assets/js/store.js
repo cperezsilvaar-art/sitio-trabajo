@@ -1403,7 +1403,13 @@ const Store = (() => {
         const suc = (e.sucursales || []).find(x =>
           llano(x.nombre) === llano(f.tienda) || llano(x.codigo) === llano(f.tienda)) || null;
 
-        const hallado = buscar({ cuil: f.legajo, legajo: f.legajo,
+        /* El número puede venir con varios rótulos: el anexo decía «Legajo/DNI»
+           y ahora dice «DNI» —el padrón tiene DNI en 139 de 141 personas y
+           legajo en ninguna—, y los links ya repartidos siguen mandando el
+           viejo. Se aceptan los dos, más «Documento», porque un mensaje en
+           camino no tiene por qué perderse por un cambio de etiqueta. */
+        const numero = f.dni || f.legajo || f.legajodni || f.dniolegajo || f.documento || '';
+        const hallado = buscar({ cuil: numero, legajo: numero,
                                  nombre: quien, tienda: f.tienda });
         if (hallado.conflicto) {
           out.enConflicto.push(Object.assign({ porque: hallado.conflicto }, resumen));

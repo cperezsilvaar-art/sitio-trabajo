@@ -7021,7 +7021,8 @@ function leerReportesDeGerentes(texto) {
        poder decir cuánto se ignoró— pero se conserva en el crudo, que es lo
        que se le muestra cuando algo no entró. */
     if (!par) { actual.crudo += '\n' + linea; sobras++; return; }
-    /* «Legajo/DNI» y «Período» se normalizan a `legajo` y `periodo`: la clave
+    /* «Fecha de llegada» y «Período» se normalizan a `fechadellegada` y
+       `periodo`: sin acentos, sin espacios y en minúsculas. La clave
        la escribe la plantilla, pero un acento perdido en el camino no tiene
        por qué costar una fila. */
     const clave = _llanoAnexo(par[1]).replace(/[^A-Z]/g, '').toLowerCase();
@@ -10234,7 +10235,13 @@ const Store = (() => {
         const suc = (e.sucursales || []).find(x =>
           llano(x.nombre) === llano(f.tienda) || llano(x.codigo) === llano(f.tienda)) || null;
 
-        const hallado = buscar({ cuil: f.legajo, legajo: f.legajo,
+        /* El número puede venir con varios rótulos: el anexo decía «Legajo/DNI»
+           y ahora dice «DNI» —el padrón tiene DNI en 139 de 141 personas y
+           legajo en ninguna—, y los links ya repartidos siguen mandando el
+           viejo. Se aceptan los dos, más «Documento», porque un mensaje en
+           camino no tiene por qué perderse por un cambio de etiqueta. */
+        const numero = f.dni || f.legajo || f.legajodni || f.dniolegajo || f.documento || '';
+        const hallado = buscar({ cuil: numero, legajo: numero,
                                  nombre: quien, tienda: f.tienda });
         if (hallado.conflicto) {
           out.enConflicto.push(Object.assign({ porque: hallado.conflicto }, resumen));
@@ -16526,7 +16533,7 @@ const App = (() => {
         caso <em>esperando</em>, porque desde el minuto uno la pelota está en el estudio—.
         No duplica: el mismo aviso pegado dos veces entra una sola vez.</p>
       <textarea id="pegar-anexo" style="min-height:130px"
-        placeholder="${esc(MARCA_ANEXO)} RECLAMO&#10;Tienda: Botánico&#10;Colaborador: …&#10;Legajo/DNI: …&#10;Motivo: …"></textarea>
+        placeholder="${esc(MARCA_ANEXO)} RECLAMO&#10;Tienda: Botánico&#10;Colaborador: …&#10;DNI: …&#10;Motivo: …"></textarea>
       <div class="acciones">
         <button class="b" data-accion="importar-anexo">Importar los avisos</button>
         ${r ? '<button class="b sec" data-accion="limpiar-anexo">Limpiar</button>' : ''}

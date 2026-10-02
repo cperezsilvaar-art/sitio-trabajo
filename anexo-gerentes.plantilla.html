@@ -164,8 +164,8 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
   <form id="form" hidden autocomplete="off">
     <section>
       <h2>2. De quién se trata</h2>
-      <p class="ayuda">El legajo o el DNI no es obligatorio, pero con eso no hay
-         forma de que se confunda con un homónimo.</p>
+      <p class="ayuda">El DNI no es obligatorio, pero con eso no hay forma de que
+         se confunda con un homónimo.</p>
 
       <label class="campo"><span>Tienda</span>
         <select id="tienda" required></select></label>
@@ -173,8 +173,14 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
       <label class="campo"><span>Nombre del colaborador</span>
         <input id="colaborador" placeholder="Apellido y nombre" required></label>
 
-      <label class="campo"><span>Legajo o DNI</span>
-        <input id="legajo" inputmode="numeric" placeholder="Si lo tenés a mano"></label>
+      <!-- **El DNI primero, y no el legajo.** Se midió el padrón: el legajo está
+           cargado en 0 de 141 personas y el DNI en 139. Pedir primero el que no
+           sirve es pedir un dato que no va a emparejar con nada. El legajo se
+           sigue aceptando para cuando la nómina lo traiga.
+           (Esto es un comentario de HTML y no `${...}`: la página no es un
+           template literal, así que un `${}` acá se imprime como texto.) -->
+      <label class="campo"><span>DNI</span>
+        <input id="legajo" inputmode="numeric" placeholder="Sin puntos. O el legajo, si es lo que tenés"></label>
     </section>
 
     <section>
@@ -342,7 +348,7 @@ function armarTexto() {
 
   poner('Tienda', v('#tienda'));
   poner('Colaborador', v('#colaborador'));
-  poner('Legajo/DNI', v('#legajo'));
+  poner('DNI', v('#legajo'));
   poner(rama.id === 'RECLAMO' ? 'Motivo' : rama.id === 'LEGAL' ? 'Recibido' : 'Situación', v('#motivo'));
   if (rama.plata) { poner('Período', v('#periodo')); poner('Monto', v('#monto')); }
   if (rama.recibido) poner('Fecha de llegada', v('#recibido'));

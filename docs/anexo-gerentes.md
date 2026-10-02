@@ -49,7 +49,7 @@ pensar qué contar. Del otro lado llega esto:
 #RRHH3 RECLAMO
 Tienda: Botánico
 Colaborador: PEREZ, MARIA EUGENIA
-Legajo/DNI: 12345
+DNI: 12345
 Motivo: Horas extras no liquidadas
 Período: septiembre 2026
 Monto: 45000
@@ -94,9 +94,18 @@ los referentes de las tiendas, sus mails, los CUIT ni las direcciones.
 Lo que **sí** lleva son los nombres de las doce tiendas: sin eso el gerente no
 puede decir de dónde carga, y eso es dato de la empresa.
 
-**Por eso el legajo importa.** Con número el emparejamiento contra el padrón es
+**Por eso el número importa.** Con número el emparejamiento contra el padrón es
 exacto; sin número el panel hace lo que puede por nombre y **nombra las filas
 que no cayeron en nadie** en vez de perderlas.
+
+El anexo pide **DNI**, no legajo, y eso sale de medir el padrón: el legajo está
+cargado en **0 de 141** personas y el DNI en 139. El legajo se sigue aceptando
+—`buscadorDePadron()` lo empareja— para cuando la nómina lo traiga, pero pedirlo
+primero sería pedir un dato que hoy no engancha con nada.
+
+El importador acepta el número con varios rótulos —`DNI`, `Legajo/DNI`,
+`Documento`— porque los links ya repartidos siguen mandando el viejo: un mensaje
+en camino no tiene por qué perderse por un cambio de etiqueta.
 
 ## Una sola lista de motivos
 
@@ -183,7 +192,10 @@ Lo que el gerente ve, en orden:
 2. **Tienda** — desplegable con las doce. Nunca texto libre. Los flotantes del
    área no están: no son una tienda y ningún gerente carga por ellos.
 3. **Nombre del colaborador** — texto.
-4. **Legajo o DNI** — opcional, pero pedido.
+4. **DNI** — opcional, pero pedido. **Es el DNI y no el legajo**: se midió el
+   padrón y el legajo está cargado en **0 de 141** personas, el DNI en 139.
+   Pedir primero el que no sirve es pedir un dato que no va a emparejar con
+   nada. El legajo se sigue aceptando, para cuando la nómina lo traiga.
 5. **Qué le pagaron mal** / **qué llegó** / **de qué se trata** — según la rama.
 6. **Período** y **monto aproximado** — solo en la rama de reclamo.
 7. **Cuándo llegó** — solo en la rama legal.

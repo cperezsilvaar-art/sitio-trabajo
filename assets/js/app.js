@@ -3090,7 +3090,7 @@ const App = (() => {
         caso <em>esperando</em>, porque desde el minuto uno la pelota está en el estudio—.
         No duplica: el mismo aviso pegado dos veces entra una sola vez.</p>
       <textarea id="pegar-anexo" style="min-height:130px"
-        placeholder="${esc(MARCA_ANEXO)} RECLAMO&#10;Tienda: Botánico&#10;Colaborador: …&#10;Legajo/DNI: …&#10;Motivo: …"></textarea>
+        placeholder="${esc(MARCA_ANEXO)} RECLAMO&#10;Tienda: Botánico&#10;Colaborador: …&#10;DNI: …&#10;Motivo: …"></textarea>
       <div class="acciones">
         <button class="b" data-accion="importar-anexo">Importar los avisos</button>
         ${r ? '<button class="b sec" data-accion="limpiar-anexo">Limpiar</button>' : ''}
