@@ -77,6 +77,15 @@ function casoNuevo(datos) {
     responsable: d.responsable || '',
     proximoPaso: d.proximoPaso || '',
     proximoPasoEl: d.proximoPasoEl || '',
+    /* De dónde salió el caso y quién lo contó. Lo pide el anexo de los
+       gerentes: sin `origen` el importador no puede reconocer lo que ya cargó
+       y vuelve a crear el caso cada vez que se pega el mismo aviso, y sin
+       `informadoPor` no se sabe a quién contestarle —que es justo lo que el
+       WhatsApp daba gratis—. La forma del caso se define acá y en ningún otro
+       lado, así que una clave que `casoNuevo()` no conoce se pierde en
+       silencio: agregar un dato nuevo a un caso es agregarlo acá. */
+    origen: d.origen || '',
+    informadoPor: d.informadoPor || '',
     hitos: []
   };
 }

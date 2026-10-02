@@ -2315,6 +2315,7 @@ const App = (() => {
      tiene patologías adentro y eso vive solo en este navegador. */
   let resultadoAusencias = null;
   let resultadoParte = null;
+  let resultadoAnexo = null;
   let casoPersona = '';       // a quién se le abre un caso desde el alta
   let casoAbierto = null;     // qué caso está desplegado
   let verCasosCerrados = false;
@@ -3062,7 +3063,78 @@ const App = (() => {
             }).join('')}
           </tbody>
         </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
-      </section>`;
+      </section>
+
+      ${bloquePegarAnexo()}`;
+  }
+
+  /* ------------- Lo que mandan los gerentes por el anexo -------------
+     Va al pie de Reclamos y no en una pantalla propia: es una entrada de
+     reclamos, igual que el parte de ausentes vive al pie de Presentismo. Que
+     algunos reportes terminen en Casos no lo convierte en otra cosa — el
+     gerente manda «esto pasó» y el panel decide dónde va. */
+  function bloquePegarAnexo() {
+    const r = resultadoAnexo;
+    const nombres = x => esc(x.slice(0, 8).map(y =>
+      `${y.nombre}${y.tienda ? ` (${y.tienda})` : ''}`).join(' · ')) + (x.length > 8 ? '…' : '');
+
+    return `<section class="tarjeta">
+      <h2>Pegar lo que mandaron los gerentes</h2>
+      <p class="ayuda">Lo que sale del <strong>anexo</strong> que tienen los Gerentes de Tienda.
+        Pegá el mensaje tal como llegó —da igual si vino por WhatsApp, por mail o copiado— y
+        podés pegar <strong>varios de una</strong>: lo de toda la mañana junto. Lo que no empieza
+        con <code>${esc(MARCA_ANEXO)}</code> se ignora, así que pegar la conversación entera
+        también funciona.</p>
+      <p class="ayuda">Según lo que marcó el gerente, entra como <strong>reclamo</strong> acá
+        mismo o como <strong>caso</strong> en la ficha de la persona —una carta documento abre un
+        caso <em>esperando</em>, porque desde el minuto uno la pelota está en el estudio—.
+        No duplica: el mismo aviso pegado dos veces entra una sola vez.</p>
+      <textarea id="pegar-anexo" style="min-height:130px"
+        placeholder="${esc(MARCA_ANEXO)} RECLAMO&#10;Tienda: Botánico&#10;Colaborador: …&#10;Legajo/DNI: …&#10;Motivo: …"></textarea>
+      <div class="acciones">
+        <button class="b" data-accion="importar-anexo">Importar los avisos</button>
+        ${r ? '<button class="b sec" data-accion="limpiar-anexo">Limpiar</button>' : ''}
+      </div>
+
+      ${r && r.error ? `<div class="aviso-caja" style="margin-top:14px">${esc(r.error)}</div>` : ''}
+
+      ${r && !r.error ? `<div class="aviso-caja ${r.reclamos.length + r.casos.length ? 'info' : ''}"
+        style="margin-top:14px">
+        <strong>Entraron ${r.reclamos.length} reclamo${r.reclamos.length === 1 ? '' : 's'} y
+          ${r.casos.length} caso${r.casos.length === 1 ? '' : 's'}.</strong>
+        ${r.repetidos.length ? ` ${r.repetidos.length} ya ${r.repetidos.length === 1 ? 'estaba' : 'estaban'} y no se ${r.repetidos.length === 1 ? 'duplicó' : 'duplicaron'}.` : ''}
+        ${r.sobras ? ` Se ignoraron ${r.sobras} línea${r.sobras === 1 ? '' : 's'} que no eran parte de un aviso.` : ''}
+
+        ${/* Lo que no entró, con nombre. Un aviso que desaparece sin decir nada
+             es peor que no tener el anexo. */''}
+        ${r.sinPersona.filter(x => !x.entro).length ? `<br><strong class="chip rojo">
+          ${r.sinPersona.filter(x => !x.entro).length} no ${r.sinPersona.filter(x => !x.entro).length === 1 ? 'entró' : 'entraron'}</strong>
+          ${nombres(r.sinPersona.filter(x => !x.entro))}: los casos cuelgan de la persona y no
+          ${r.sinPersona.filter(x => !x.entro).length === 1 ? 'la' : 'las'} encontré en el padrón.
+          ${r.sinPersona.some(x => !x.entro && x.rama === 'LEGAL')
+            ? '<strong>Hay una carta documento entre esas: resolvelo ahora, los plazos corren.</strong>'
+            : 'Pegá la nómina del mes o cargá el alta a mano y volvé a pegar.'}` : ''}
+
+        ${r.sinPersona.filter(x => x.entro).length ? `<br>${r.sinPersona.filter(x => x.entro).length}
+          reclamo${r.sinPersona.filter(x => x.entro).length === 1 ? '' : 's'}
+          ${r.sinPersona.filter(x => x.entro).length === 1 ? 'entró' : 'entraron'} con el nombre
+          escrito pero <strong>sin ficha del padrón</strong>: ${nombres(r.sinPersona.filter(x => x.entro))}.
+          Se ${r.sinPersona.filter(x => x.entro).length === 1 ? 'puede' : 'pueden'} trabajar igual;
+          lo que falta es el vínculo con la persona.` : ''}
+
+        ${r.enConflicto.length ? `<br><strong>${r.enConflicto.length} ${r.enConflicto.length === 1 ? 'trae' : 'traen'}
+          el número de una persona y el nombre de otra</strong>:
+          ${esc(r.enConflicto.map(x => x.porque).slice(0, 6).join(' · '))}.
+          No ${r.enConflicto.length === 1 ? 'entró' : 'entraron'}: hay que verlo con el gerente.` : ''}
+
+        ${r.invalidos.length ? `<br>${r.invalidos.length} ${r.invalidos.length === 1 ? 'aviso vino' : 'avisos vinieron'}
+          incompleto${r.invalidos.length === 1 ? '' : 's'}:
+          ${esc(r.invalidos.map(x => x.porque).slice(0, 4).join(' · '))}.` : ''}
+
+        ${r.casos.length ? `<br>Los casos quedaron en la ficha de cada persona y en
+          <a href="#/casos">Casos en seguimiento</a>.` : ''}
+      </div>` : ''}
+    </section>`;
   }
 
   /** Ficha de un reclamo: todo lo que hay que registrar para poder responderlo. */
@@ -8030,6 +8102,29 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'importar-anexo') {
+        const crudo = (document.getElementById('pegar-anexo') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá el aviso primero.', 'error'); return; }
+        resultadoAnexo = Store.importarReportesDeGerentes(crudo);
+        refrescar();
+        if (resultadoAnexo.error) { avisar(resultadoAnexo.error, 'error'); return; }
+        const n = resultadoAnexo.reclamos.length + resultadoAnexo.casos.length;
+        /* El aviso dice el total y el detalle queda en la caja: lo que no entró
+           necesita más de un renglón para explicarse. */
+        avisar(n
+          ? `${n} ${n === 1 ? 'aviso entró' : 'avisos entraron'}. Mirá el detalle abajo.`
+          : 'No entró ninguno: mirá el detalle abajo.', n ? '' : 'error');
+        return;
+      }
+
+      if (a === 'limpiar-anexo') {
+        resultadoAnexo = null;
+        const caja = document.getElementById('pegar-anexo');
+        if (caja) caja.value = '';
+        refrescar();
+        return;
+      }
 
       if (a === 'importar-parte') {
         const crudo = (document.getElementById('pegar-parte') || {}).value || '';

@@ -670,12 +670,19 @@ const Store = (() => {
       (s.colaboradores || []).forEach(c => gente.push({ c, s })));
 
     const soloDigitos = x => String(x == null ? '' : x).replace(/\D/g, '');
-    const porCuil = {}, porDni = {};
+    const porCuil = {}, porDni = {}, porLegajo = {};
     gente.forEach(g => {
       const cu = soloDigitos(g.c.cuil);
       if (cu.length === 11) porCuil[cu] = g;
       const dn = soloDigitos(g.c.dni);
       if (dn.length >= 7 && dn.length <= 8) porDni[dn] = g;
+      /* El legajo es la tercera forma de identificar a alguien y la que el
+         gerente tiene a mano: lo lee del recibo. No lo pedía nadie hasta que
+         apareció el anexo de los gerentes, y agregarlo acá en vez de en ese
+         importador es lo que evita un cuarto emparejamiento con su propio
+         criterio. Los que no lo pasan no cambian de comportamiento. */
+      const lg = soloDigitos(g.c.legajo);
+      if (lg && lg.length <= 6) porLegajo[lg] = g;
     });
     const tokens = x => new Set(String(x || '').normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '').toUpperCase()
@@ -695,6 +702,13 @@ const Store = (() => {
       let g = null, via = '';
       if (doc.cuil && porCuil[doc.cuil]) { g = porCuil[doc.cuil]; via = 'cuil'; }
       if (!g && doc.dni && porDni[doc.dni]) { g = porDni[doc.dni]; via = 'dni'; }
+      /* El legajo va último de los números porque es el más corto y el que más
+         fácil choca: un CUIL de once dígitos no se parece a nada, un legajo de
+         cuatro sí. Quien no manda `legajo` no entra nunca acá. */
+      if (!g && f.legajo) {
+        const lg = soloDigitos(f.legajo);
+        if (lg && porLegajo[lg]) { g = porLegajo[lg]; via = 'legajo'; }
+      }
 
       const t = tokens(f.nombre);
       const cand = gente.filter(x => {
@@ -1287,6 +1301,157 @@ const Store = (() => {
 
       guardar();
       return { error: null, cargadas, sinUbicar, leidas: r.filas.length };
+    },
+
+    /* ------------- lo que manda el anexo de los gerentes ------------- *
+       El anexo arma un mensaje de una línea por dato y el gerente lo manda por
+       donde quiera. Acá se pega, entero y de a varios: el coordinador junta los
+       de la mañana y los pega todos juntos. El formato lo lee
+       `leerReportesDeGerentes()` (`reclamos.js`); esto hace lo que el panel no
+       puede delegarle a una página que abren catorce personas: ubicar a la
+       persona en el padrón y escribir donde corresponde. */
+
+    /**
+     * Mete en el panel los reportes que vengan en un texto pegado.
+     *
+     * **Separa lo que es ruido de lo que es trabajo**, igual que el importador
+     * de la planilla de ausencias: lo que entró se cuenta, y lo que no entró se
+     * devuelve **con su texto** para que se pueda resolver a mano. Un reporte
+     * que no se pudo ubicar y desaparece sin decir nada es peor que no tener el
+     * anexo.
+     *
+     * Un reclamo entra aunque no se identifique a la persona —el reclamo vive
+     * en la raíz del estado y guarda el nombre escrito— pero **un caso no**:
+     * los casos cuelgan de la persona, así que sin ficha no hay dónde colgarlo.
+     * Esa asimetría se nombra en el resultado en vez de taparse, y los legales
+     * van aparte porque una carta documento que no entró tiene plazos corriendo.
+     */
+    importarReportesDeGerentes(texto) {
+      if (typeof leerReportesDeGerentes !== 'function') {
+        return { error: 'No está cargado el lector del anexo.' };
+      }
+      const leido = leerReportesDeGerentes(texto);
+      if (!leido.reportes.length) {
+        return { error: 'No encontré ningún reporte del anexo. El mensaje tiene que ' +
+                        'empezar con «' + MARCA_ANEXO + ' RECLAMO» y venir completo.' };
+      }
+
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const llano = x => String(x == null ? '' : x).normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+
+      const out = {
+        error: null, leidos: leido.reportes.length, sobras: leido.sobras,
+        reclamos: [], casos: [], repetidos: [],
+        sinPersona: [], enConflicto: [], invalidos: []
+      };
+
+      /* Se resguarda antes porque una pegada puede crear veinte registros en
+         veinte fichas distintas y deshacer eso a mano no es una opción. */
+      resguardar('Antes de importar reportes de los gerentes');
+
+      leido.reportes.forEach(rep => {
+        const rama = RAMAS_ANEXO[rep.rama];
+        const f = rep.campos;
+        const quien = f.colaborador || '';
+        const resumen = { rama: rep.rama, nombre: quien, tienda: f.tienda || '',
+                          informa: f.informa || '', texto: rep.crudo };
+
+        if (!rama || !quien) {
+          out.invalidos.push(Object.assign({
+            porque: !rama ? 'no reconozco esa clase de aviso' : 'no vino el nombre del colaborador'
+          }, resumen));
+          return;
+        }
+
+        /* La tienda la eligió de un desplegable, así que viene bien escrita;
+           igual se compara sin acentos y también contra el código, porque el
+           nombre de una tienda se puede corregir en el padrón sin que el anexo
+           se vuelva a repartir. */
+        const suc = (e.sucursales || []).find(x =>
+          llano(x.nombre) === llano(f.tienda) || llano(x.codigo) === llano(f.tienda)) || null;
+
+        const hallado = buscar({ cuil: f.legajo, legajo: f.legajo,
+                                 nombre: quien, tienda: f.tienda });
+        if (hallado.conflicto) {
+          out.enConflicto.push(Object.assign({ porque: hallado.conflicto }, resumen));
+          return;
+        }
+        const c = hallado.g ? hallado.g.c : null;
+        const sucId = (hallado.g && hallado.g.s.id) || (suc && suc.id) || '';
+        const fecha = /^\d{4}-\d{2}-\d{2}$/.test(f.fecha || '') ? f.fecha : _diaHoy();
+        /* De quién vino: es lo que WhatsApp daba gratis y un formulario pierde.
+           Sin esto no se sabe a quién contestarle. */
+        const firma = f.informa ? `Lo informó ${f.informa}` : 'Vino por el anexo';
+
+        if (rama.destino === 'reclamo') {
+          const tipo = tipoDeReclamoPorNombre(f.motivo);
+          /* Si el motivo no está en la lista cayó en «otro», y entonces lo que
+             el gerente eligió se escribe en el detalle: la etiqueta se puede
+             corregir después, el dato no se puede recuperar. */
+          const etiquetaPerdida = !!f.motivo &&
+            !TIPOS_RECLAMO.some(t => llano(t.nombre) === llano(f.motivo));
+          const detalle = [f.detalle || '', etiquetaPerdida ? `(marcó: ${f.motivo})` : '', firma]
+            .filter(Boolean).join(' · ');
+
+          const ya = (e.reclamos || []).find(r =>
+            r.origen === 'anexo' && r.fecha === fecha && r.tipo === tipo &&
+            llano(r.colaborador) === llano(quien));
+          if (ya) { out.repetidos.push(Object.assign({ id: ya.id }, resumen)); return; }
+
+          const r = this.agregarReclamo({
+            sucursalId: sucId, colaborador: c ? c.nombre : quien,
+            colaboradorId: c ? c.id : '',
+            tipo, periodoAfectado: f.periodo || '',
+            monto: String(f.monto || '').replace(/[^\d.,-]/g, ''),
+            detalle, fecha, estado: 'abierto', aCargo: 'rrhh',
+            origen: 'anexo', informadoPor: f.informa || ''
+          });
+          out.reclamos.push(Object.assign({ id: r.id, sinFicha: !c }, resumen));
+          if (!c) out.sinPersona.push(Object.assign({ entro: true }, resumen));
+          return;
+        }
+
+        /* Los casos cuelgan de la persona y sin ficha no hay dónde colgarlos. */
+        if (!c) {
+          out.sinPersona.push(Object.assign({ entro: false }, resumen));
+          return;
+        }
+
+        const tipoCaso = rama.tipoCaso || tipoDeCasoPorNombre(f.situacion);
+        const queLlego = f.recibido || f.situacion || '';
+        const ya = (c.casos || []).find(k =>
+          k.origen === 'anexo' && k.abiertoEl === fecha && k.tipo === tipoCaso);
+        if (ya) { out.repetidos.push(Object.assign({ id: ya.id }, resumen)); return; }
+
+        const k = this.abrirCaso(c.id, {
+          tipo: tipoCaso,
+          /* El resumen es la línea que se lee en la lista de casos, así que la
+             fecha en que llegó el papel va adentro: un caso no tiene un campo
+             de notas y no hace falta inventarle uno para un dato de una línea. */
+          /* `fechadellegada` es «Fecha de llegada» pasada por la normalización
+             de claves: sin acentos, sin espacios y en minúsculas. */
+          resumen: [queLlego, f.detalle || '',
+                    f.fechadellegada ? `(llegó el ${f.fechadellegada})` : '']
+            .filter(Boolean).join(': ').replace(': (llegó', ' (llegó'),
+          abiertoEl: fecha,
+          /* La carta documento entra como «esperando» y no como «abierto»: la
+             pelota está del lado del estudio desde el minuto uno, y el próximo
+             paso es pasársela. */
+          estado: rep.rama === 'LEGAL' ? 'esperando' : 'abierto',
+          riesgo: rep.rama === 'LEGAL' ? 'alto' : 'medio',
+          proximoPaso: rep.rama === 'LEGAL'
+            ? 'Pasarla al estudio jurídico y anotar la fecha de recepción'
+            : 'Hablar con el gerente y definir qué se hace',
+          proximoPasoEl: rep.rama === 'LEGAL' ? fecha : '',
+          origen: 'anexo', informadoPor: f.informa || ''
+        });
+        out.casos.push(Object.assign({ id: k.id, tipo: tipoCaso }, resumen));
+      });
+
+      guardar();
+      return out;
     },
 
     /* -------------------------- reclamos -------------------------- *

@@ -1245,6 +1245,68 @@ las tres semanas ya no se está siguiendo, se está olvidando—.
 trasladan. Lo que pide algo entra en `pendientesDelArea()` y en el contador del
 menú, no en `e.agenda`: es la misma regla de *lee, no copia*.
 
+**Los Gerentes de Tienda tienen su propio anexo, y el dato viaja por un
+mensaje.** `anexo-gerentes.html` es la página que usan para avisar algo: abre en
+el teléfono, sin login y sin conexión, con la paleta del panel. Documentado en
+`docs/anexo-gerentes.md`.
+
+Lo que molestaba **no era el WhatsApp: era la informalidad** —«cris fulanito de
+tal cobró mal»—, y esa distinción decide el diseño: el gerente sigue mandando un
+mensaje, pero el anexo se lo arma. Lo que llega es una línea por dato con la
+clave adelante, que **se lee en el chat y se parsea sin ambigüedad**; si fuera un
+bloque cifrado el gerente no sabría qué está mandando. Van las tres salidas
+—WhatsApp, mail y copiar— con el texto idéntico, así el canal no queda amarrado.
+
+**No hay otra forma de que el dato llegue, y las dos alternativas se
+descartaron con el motivo escrito.** El panel no tiene servidor, así que el dato
+solo viaja por un canal que las dos partes toquen. Un formulario de Google se
+descartó porque el coordinador no lo quiso —es la herramienta de otro y se lee
+como un trámite—. Una página publicada con la capacidad `db` **no sirve**: el
+contrato es explícito en que quien entra con el link lee pero **no escribe**
+—«never Viewers, Commenters or outside link visitors»—, así que harían falta
+catorce cuentas de Claude con permiso de escritura. **No proponer ninguna de las
+dos de vuelta.**
+
+**Tres ramas, dos destinos, un solo link**: `RECLAMO` cae en `#/reclamos`;
+`LEGAL` y `SITUACION` abren un caso. El gerente no tiene por qué saber que del
+lado del panel viven en lugares distintos. La **carta documento entra
+`esperando` y con riesgo alto**, no `abierto`: desde el minuto uno la pelota está
+en el estudio.
+
+**El anexo no lleva el padrón** y no hay que agregárselo: el nombre lo escribe el
+gerente. Listar a las 136 personas en una página que abren catorce es lo que la
+regla de `--demo` existe para evitar. Lo verifica `check-anexo.js`, que también
+chequea los referentes, sus mails, los CUIT y las direcciones. Las doce tiendas
+sí van: sin eso no se puede decir de dónde se carga.
+
+**`anexo-gerentes.html` es generado y no se edita a mano.** La fuente es
+`anexo-gerentes.plantilla.html` y `build-anexo.py` le inyecta las tiendas de
+`sucursales-area3.js` y los motivos de `TIPOS_RECLAMO` y `TIPOS_CASO`. Una
+segunda lista de motivos adentro de la página se desincronizaría de la del panel
+sin que nada falle, que es lo que `MAPA_CARGOS` ya evitó derivándose de
+`CARGOS_NOMINA`.
+
+**`buscadorDePadron()` ahora empareja también por legajo**, que es el número que
+el gerente tiene a mano porque lo lee del recibo. Va después del CUIL y del DNI
+—un CUIL de once dígitos no se parece a nada, un legajo de cuatro sí— y quien no
+pasa `legajo` no cambia de comportamiento. Se agregó ahí y no en el importador
+nuevo: cuatro emparejamientos con cuatro criterios es la garantía de que un día
+difieran.
+
+**Un reclamo entra sin ficha; un caso no.** El reclamo vive en la raíz del estado
+y guarda el nombre escrito, así que se puede trabajar igual. Los casos cuelgan de
+la persona, así que sin ficha no hay dónde colgarlos: la asimetría **se nombra en
+la pantalla en vez de taparse**, y los legales van aparte y en rojo porque una
+carta documento que no entró tiene plazos corriendo.
+
+**Trampa conocida — `casoNuevo()` arma una forma fija y descarta las claves que
+no conoce.** Un dato nuevo de un caso se agrega *ahí*, no pasándolo a
+`abrirCaso()`: el caso se crea igual y la clave se pierde en silencio. Pasó con
+`origen`, y sin esa marca el antiduplicado del anexo no reconocía lo ya cargado
+—pegar el mismo aviso dos veces habría duplicado el caso—. Se agregaron `origen`
+e `informadoPor`; `origen: 'anexo'` sigue la convención de `c.ausencias`, que ya
+usa `origen: 'formulario'`.
+
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos
 y obligaba a acordarse de cuál de las dos pantallas estaba más completa.
@@ -1274,6 +1336,18 @@ llevar esa etiqueta escrita en un comentario**: parte el archivo en dos y el
 chequeo falla en una línea que no tiene nada malo.
 Más las pruebas e2e con Playwright (`/opt/node22/lib/node_modules/playwright`)
 y Chromium headless, que viven en el directorio de trabajo temporal de la sesión.
+
+**Si se tocó el anexo de los gerentes**, además:
+
+```
+python3 build-anexo.py
+node check-anexo.js
+```
+
+El segundo no es opcional y es el que importa: el anexo se reparte por link a
+catorce personas, así que es una página publicada en todo sentido y no puede
+llevar un solo nombre de persona adentro. `anexo-gerentes.html` es **generado**:
+lo que se edita es `anexo-gerentes.plantilla.html`.
 
 ## Privacidad
 

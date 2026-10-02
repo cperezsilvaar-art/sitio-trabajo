@@ -142,3 +142,116 @@ function patronesDeReclamos(lista, sucursales) {
     })
     .sort((a, b) => b.casos - a.casos);
 }
+
+/* ===================================================================== *
+ *  Lo que manda el anexo de los gerentes
+ * ===================================================================== *
+ *
+ * El anexo (`anexo-gerentes.html`) no tiene servidor y no lo va a tener: el
+ * panel es un archivo que abre en el navegador del coordinador. Así que el dato
+ * viaja por donde ya viajaba —un mensaje— y lo único que cambió es que ahora
+ * llega ordenado. Lo que molestaba no era el WhatsApp: era recibir «cris
+ * fulanito de tal cobró mal».
+ *
+ * El formato es una línea por dato con la clave adelante. Se lee bien en el
+ * chat, que es la mitad del punto —si el mensaje fuera un bloque cifrado, el
+ * gerente no sabría qué está mandando— y se parsea sin ambigüedad.
+ *
+ * La primera línea es la marca, y es también por donde se parte cuando se pegan
+ * varios de una: el coordinador junta los de la mañana y los pega todos juntos.
+ */
+
+const MARCA_ANEXO = '#RRHH3';
+
+/* Las tres ramas del anexo y dónde cae cada una. `RECLAMO` es un reclamo;
+   `LEGAL` y `SITUACION` son casos, porque una carta documento y un desempeño
+   que no levanta son seguimientos y no un pedido de plata. El gerente no tiene
+   por qué saber que del lado del panel viven en dos lugares. */
+const RAMAS_ANEXO = {
+  RECLAMO:   { destino: 'reclamo', nombre: 'Reclamo de liquidación' },
+  LEGAL:     { destino: 'caso', tipoCaso: 'legal', nombre: 'Carta documento o intimación' },
+  SITUACION: { destino: 'caso', nombre: 'Situación para seguir' }
+};
+
+/** Sin acentos y en mayúsculas, para comparar lo que alguien escribió a mano. */
+function _llanoAnexo(x) {
+  return String(x == null ? '' : x).normalize('NFD')
+    .replace(/[̀-ͯ]/g, '').trim().toUpperCase();
+}
+
+/**
+ * Los reportes que vengan adentro de un texto pegado.
+ *
+ * Devuelve `{ reportes[], sobras }`: lo que no arrancó con la marca se cuenta
+ * en `sobras` en vez de hacerse pasar por un reporte. Pegar la conversación
+ * entera, con los «hola Cris» del medio, tiene que funcionar.
+ */
+function leerReportesDeGerentes(texto) {
+  const crudo = String(texto == null ? '' : texto).replace(/\r\n?/g, '\n');
+
+  /* WhatsApp escribe en negrita con asteriscos y, si en vez de copiar el
+     mensaje se exporta el chat, le pone «[2/10/26, 15:30] Juan Gómez: » a cada
+     línea. Las dos cosas se sacan antes de mirar el contenido: el gerente no
+     tiene que saber de qué manera copiar. */
+  const lineas = crudo.split('\n').map(l => l
+    .replace(/^\s*\[[^\]]{4,40}\]\s*[^:]{1,60}:\s*/, '')
+    .replace(/\*/g, '')
+    .trim());
+
+  const reportes = [];
+  let actual = null;
+  let sobras = 0;
+
+  lineas.forEach(linea => {
+    const marca = linea.match(new RegExp('^' + MARCA_ANEXO + '\\s+([A-Z]+)\\s*$', 'i'));
+    if (marca) {
+      const rama = marca[1].toUpperCase();
+      actual = { rama, campos: {}, valida: !!RAMAS_ANEXO[rama], crudo: linea };
+      reportes.push(actual);
+      return;
+    }
+    if (!linea) return;
+    if (!actual) { sobras++; return; }
+
+    const par = linea.match(/^([^:]{2,30}):\s*(.*)$/);
+    /* Una línea que no tiene la forma `Clave: valor` no es un dato del aviso:
+       es el «hola cris, te mando esto» del medio. Se cuenta como sobra —para
+       poder decir cuánto se ignoró— pero se conserva en el crudo, que es lo
+       que se le muestra cuando algo no entró. */
+    if (!par) { actual.crudo += '\n' + linea; sobras++; return; }
+    /* «Legajo/DNI» y «Período» se normalizan a `legajo` y `periodo`: la clave
+       la escribe la plantilla, pero un acento perdido en el camino no tiene
+       por qué costar una fila. */
+    const clave = _llanoAnexo(par[1]).replace(/[^A-Z]/g, '').toLowerCase();
+    actual.campos[clave] = par[2].trim();
+    actual.crudo += '\n' + linea;
+  });
+
+  return { reportes, sobras };
+}
+
+/**
+ * El tipo de reclamo que corresponde a lo que el anexo escribió.
+ *
+ * Compara contra `TIPOS_RECLAMO`, que es la única lista: el anexo se genera
+ * desde ahí, así que lo normal es que coincida exacto. Si no coincide —porque
+ * la lista cambió después de repartir el link— cae en `otro` en vez de
+ * perderse, y el nombre original queda escrito en el detalle. Que el reclamo
+ * exista importa más que su etiqueta.
+ */
+function tipoDeReclamoPorNombre(nombre) {
+  const q = _llanoAnexo(nombre);
+  if (!q) return '';
+  const exacto = TIPOS_RECLAMO.find(t => _llanoAnexo(t.nombre) === q);
+  if (exacto) return exacto.id;
+  const parcial = TIPOS_RECLAMO.find(t => _llanoAnexo(t.nombre).indexOf(q) === 0);
+  return parcial ? parcial.id : 'otro';
+}
+
+/** Lo mismo para los tipos de caso. */
+function tipoDeCasoPorNombre(nombre) {
+  const q = _llanoAnexo(nombre);
+  if (!q || typeof TIPOS_CASO === 'undefined') return 'otro';
+  const exacto = TIPOS_CASO.find(t => _llanoAnexo(t.nombre) === q);
+  return exacto ? exacto.id : 'otro';
+}
