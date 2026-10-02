@@ -3748,6 +3748,8 @@ const App = (() => {
         ${fichaAusenciasRegistradas(c)}
         ${fichaLicencias(c)}
 
+        ${fichaDocumentos(c)}
+
         ${fichaSanciones(c)}
       </section>`;
   }
@@ -4051,6 +4053,70 @@ const App = (() => {
   }
 
   /* --------------------- Sanciones disciplinarias --------------------- */
+  /* ----------------- Documentos del legajo -----------------
+     **El panel registra que el documento existe, no el documento.** Lo que se
+     pidió fue poder subir archivos; lo que se midió fue que no hay dónde
+     ponerlos sin romper algo —ver `TIPOS_DOCUMENTO`—. Así que esto guarda el
+     registro con su vencimiento y un enlace al original, que es lo que hace
+     falta para no perderle el rastro.
+
+     Lo que vuelve útil al bloque es la **fecha de vencimiento**: una constancia
+     de alumno regular no es un papel que se guarda, es un papel que se renueva,
+     y quién tiene constancia vigente no estaba en ningún lado. */
+  function fichaDocumentos(c) {
+    const hoy = hoyISO();
+    const docs = (c.documentos || []).slice().sort((a, b) => {
+      /* Lo que pide algo arriba: primero lo vencido, después lo que vence, y
+         el resto por fecha. */
+      const ea = estadoDeDocumento(a, hoy), eb = estadoDeDocumento(b, hoy);
+      const peso = e => e.clase === 'vencido' ? 0 : e.clase === 'porVencer' ? 1 : 2;
+      if (peso(ea) !== peso(eb)) return peso(ea) - peso(eb);
+      return String(b.recibidoEl || '').localeCompare(String(a.recibidoEl || ''));
+    });
+
+    return `<h4>Documentos del legajo</h4>
+      ${docs.length ? `<div class="tabla-scroll"><table>
+        <thead><tr><th>Documento</th><th>Recibido</th><th>Vence</th><th>Dónde está</th>
+          <th>Enlace</th><th>Nota</th><th></th></tr></thead>
+        <tbody>${docs.map(d => {
+          const est = estadoDeDocumento(d, hoy);
+          const tipo = TIPOS_DOCUMENTO_POR_ID[d.tipo] || {};
+          const url = enlaceSeguro(d.enlace);
+          return `<tr class="${est.clase === 'vencido' ? 'fila-alerta' : ''}">
+            <td><select data-doc="${c.id}|${d.id}|tipo">
+              ${TIPOS_DOCUMENTO.map(t => `<option value="${t.id}"${d.tipo === t.id ? ' selected' : ''}>${esc(t.nombre)}</option>`).join('')}
+            </select>${tipo.ayuda ? `<br><span class="ayuda" style="font-size:11.5px">${esc(tipo.ayuda)}</span>` : ''}</td>
+            <td><input type="date" data-doc="${c.id}|${d.id}|recibidoEl" value="${esc(d.recibidoEl || '')}"></td>
+            <td><input type="date" data-doc="${c.id}|${d.id}|venceEl" value="${esc(d.venceEl || '')}"
+                  title="${tipo.vence ? 'Este documento se renueva: sin fecha el panel no te lo puede recordar' : 'Dejalo vacío si no vence'}">
+              ${est.clase !== 'sinVencimiento'
+                ? `<br><span class="chip ${est.tono}">${esc(est.texto)}</span>`
+                : tipo.vence ? '<br><span class="chip ambar">se renueva: poné hasta cuándo vale</span>' : ''}</td>
+            <td><input data-doc="${c.id}|${d.id}|donde" value="${esc(d.donde || '')}"
+                  placeholder="Legajo físico, carpeta compartida…"></td>
+            <td><input data-doc="${c.id}|${d.id}|enlace" value="${esc(d.enlace || '')}"
+                  placeholder="https://…" style="min-width:150px">
+              ${url ? `<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Abrir</a>`
+                    : d.enlace ? '<br><span class="chip ambar">no es un enlace</span>' : ''}</td>
+            <td><input data-doc="${c.id}|${d.id}|notas" value="${esc(d.notas || '')}"
+                  placeholder="Nº de trámite, con quién se hizo"></td>
+            <td class="num"><button class="b peligro mini" data-accion="quitar-documento"
+              data-id="${c.id}" data-doc="${d.id}">Quitar</button></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>` : `<p class="vacio">Sin documentos registrados.</p>`}
+
+      <div class="acciones">
+        <button class="b sec mini" data-accion="agregar-documento" data-id="${c.id}">+ Registrar un documento</button>
+      </div>
+
+      <p class="ayuda" style="margin-top:10px"><strong>Acá va el registro, no el
+        archivo.</strong> El original se queda en el legajo o en la carpeta compartida y el
+        enlace te lleva en un clic; lo que el panel agrega es avisarte cuando algo
+        <strong>vence</strong> —una constancia de alumno regular se renueva cada cuatrimestre—.
+        Lo que vence aparece en <a href="#/asistente">la agenda</a>, entre los pendientes.</p>`;
+  }
+
   function fichaSanciones(c) {
     const propias = (c.sanciones || [])
       .slice().sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
@@ -7160,11 +7226,12 @@ const App = (() => {
     }
 
     cont.addEventListener('input', ev => {
-      const el = ev.target.closest('[data-lic], [data-san]');
+      const el = ev.target.closest('[data-lic], [data-san], [data-doc]');
       if (!el) return;
       const r = el.dataset.lic
         ? registroDe(el.dataset.lic, 'licencias')
-        : registroDe(el.dataset.san, 'sanciones');
+        : el.dataset.san ? registroDe(el.dataset.san, 'sanciones')
+        : registroDe(el.dataset.doc, 'documentos');
       if (!r) return;
       r.reg[r.campo] = el.value;
       guardarDiferido();
@@ -7184,11 +7251,12 @@ const App = (() => {
         refrescar();
         return;
       }
-      const el = ev.target.closest('[data-lic], [data-san]');
+      const el = ev.target.closest('[data-lic], [data-san], [data-doc]');
       if (!el) return;
       Store.save();
       /* Los días, el tipo y la fecha cambian el saldo contra el tope: se
-         redibuja para que el contador diga la verdad. */
+         redibuja para que el contador diga la verdad. Lo mismo el vencimiento
+         de un documento, que cambia su chip y el contador del menú. */
       refrescar();
     });
 
@@ -8040,6 +8108,22 @@ const App = (() => {
 
       if (a === 'quitar-licencia') {
         Store.quitarLicencia(btn.dataset.id, btn.dataset.lic);
+        refrescar();
+      }
+
+      if (a === 'agregar-documento') {
+        Store.agregarDocumento(btn.dataset.id);
+        refrescar();
+      }
+
+      if (a === 'quitar-documento') {
+        const c = Store.colaboradorPorId(btn.dataset.id);
+        const ok = await confirmar('Quitar el documento',
+          `Se borra el registro del legajo de ${c ? c.nombre : 'la persona'}. ` +
+          'El original no se toca: esto es solo la anotación de que existe.',
+          'Quitar');
+        if (!ok) return;
+        Store.quitarDocumento(btn.dataset.id, btn.dataset.doc);
         refrescar();
       }
 

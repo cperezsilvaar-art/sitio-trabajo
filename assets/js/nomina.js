@@ -350,6 +350,88 @@ function composicionPorSucursal(estado, hoyISO) {
   return { filas, total: composicionDe(todas, hoyISO) };
 }
 
+/* ===================================================================== *
+ *  Documentos del legajo
+ * ===================================================================== *
+ *
+ * El panel registra que el documento existe —tipo, cuándo se recibió, hasta
+ * cuándo vale, dónde está el original y un enlace— y no el documento. El por
+ * qué está escrito arriba de `TIPOS_DOCUMENTO`, en `catalogos.js`.
+ *
+ * Lo único que avisa es lo que **vence**. Un contrato firmado es un registro y
+ * nada más; una constancia de alumno regular con fecha es trabajo que vuelve.
+ */
+
+/**
+ * Qué le pasa a un documento hoy: `{ clase, texto, tono, dias }`.
+ *
+ * Un documento sin vencimiento no está incompleto: hay papeles que no vencen.
+ * Devuelve `sinVencimiento` y no pide nada, igual que un contador en cero no
+ * se muestra.
+ */
+function estadoDeDocumento(doc, hoyISO) {
+  const d = doc || {};
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.venceEl || ''))) {
+    return { clase: 'sinVencimiento', texto: 'No vence', tono: '', dias: null };
+  }
+  const dias = Math.round(
+    (Date.parse(d.venceEl + 'T00:00:00Z') - Date.parse(hoy + 'T00:00:00Z')) / 86400000);
+  if (dias < 0) {
+    return { clase: 'vencido', tono: 'rojo', dias,
+             texto: `Venció hace ${-dias} día${-dias === 1 ? '' : 's'}` };
+  }
+  if (dias === 0) return { clase: 'vencido', tono: 'rojo', dias, texto: 'Vence hoy' };
+  if (dias <= DIAS_AVISO_DOCUMENTO) {
+    return { clase: 'porVencer', tono: 'ambar', dias,
+             texto: `Vence en ${dias} día${dias === 1 ? '' : 's'}` };
+  }
+  return { clase: 'vigente', tono: 'verde', dias, texto: `Vigente hasta el ${d.venceEl}` };
+}
+
+/**
+ * Los documentos del área que piden algo: vencidos y por vencer.
+ *
+ * Solo mira el plantel activo. Perseguirle la constancia a alguien que ya se
+ * fue es ruido, y el historial sigue en su ficha igual.
+ */
+function documentosQueVencen(estado, hoyISO) {
+  const hoy = hoyISO || new Date().toISOString().slice(0, 10);
+  const out = [];
+  ((estado || {}).sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    if (c.activo === false || c.baja) return;
+    (c.documentos || []).forEach(doc => {
+      const est = estadoDeDocumento(doc, hoy);
+      if (est.clase !== 'vencido' && est.clase !== 'porVencer') return;
+      out.push({
+        colaboradorId: c.id, nombre: c.nombre,
+        sucursalId: s.id, sucursal: s.nombre || s.codigo,
+        doc, estado: est,
+        tipo: (TIPOS_DOCUMENTO_POR_ID[doc.tipo] || {}).nombre || doc.tipo || 'Documento'
+      });
+    });
+  }));
+  /* Lo más vencido primero: es el orden en que hay que llamar. */
+  return out.sort((a, b) => (a.estado.dias || 0) - (b.estado.dias || 0));
+}
+
+/**
+ * El enlace, si se puede confiar en él.
+ *
+ * El campo lo escribe una persona y el valor termina en un `href`. Un
+ * `javascript:` ahí es código corriendo adentro de la página que tiene el
+ * padrón entero, así que se aceptan **solo `http` y `https`** y cualquier otra
+ * cosa se muestra como texto. No es una precaución teórica: es el único lugar
+ * del panel donde algo escrito a mano se convierte en un enlace.
+ */
+function enlaceSeguro(url) {
+  const u = String(url == null ? '' : url).trim();
+  if (!u) return '';
+  if (!/^https?:\/\//i.test(u)) return '';
+  return u;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { edadAnios, composicionDe, composicionPorSucursal };
+  module.exports = { edadAnios, composicionDe, composicionPorSucursal,
+                     estadoDeDocumento, documentosQueVencen, enlaceSeguro };
 }

@@ -223,6 +223,56 @@ const MOTIVOS_BAJA = [
  * El orden es el que se sigue en la práctica. No están enumerados a
  * propósito: si uno se adelanta no hay que pelearse con el panel.
  */
+/**
+ * Los documentos del legajo que el coordinador persigue.
+ *
+ * **El panel registra que el documento existe, no el documento.** Se midió el
+ * lugar que hay: `localStorage` desde `file://` aguanta unos 4.800 KB y el
+ * padrón cifrado ya usa 456, así que entrarían diez u once PDF escaneados y
+ * después `guardar()` **borra las copias automáticas para hacer lugar** y deja
+ * de guardar. Y en `IndexedDB` —que sí anda y tiene cerca de un giga— quedarían
+ * afuera del cifrado, del respaldo `.json` y de las copias: el único archivo
+ * sin resguardo del panel. El original vive en el legajo o en la carpeta
+ * compartida, y acá queda el registro y el enlace para llegar en un clic.
+ *
+ * `vence` es lo que hace que esto sirva para algo: una constancia de alumno
+ * regular no es un papel que se guarda, es un papel que **se renueva**, y lo
+ * que no estaba en ningún lado era quién tiene constancia vigente y a quién hay
+ * que pedirle la nueva. El tipo trae ese dato para que el formulario sepa si
+ * pedir vencimiento, igual que `CARGOS_NOMINA` trae la jornada.
+ *
+ * No hay un tipo para el certificado médico del día: eso es una ausencia y vive
+ * en `c.ausencias` con su propio circuito. Acá van los papeles del legajo.
+ */
+const TIPOS_DOCUMENTO = [
+  { id: 'alumnoRegular', nombre: 'Constancia de alumno regular', vence: true,
+    ayuda: 'Habilita los dos días por examen del art. 25 e). Se renueva cada cuatrimestre o año.' },
+  { id: 'examenRendido', nombre: 'Constancia de examen rendido', vence: false,
+    ayuda: 'El comprobante de cada licencia por examen que ya se tomó.' },
+  { id: 'tituloAuxiliar', nombre: 'Título de Auxiliar de Farmacia', vence: false,
+    ayuda: 'Es la tercera vía del art. 8 a Empleado especializado.' },
+  { id: 'matricula', nombre: 'Matrícula profesional', vence: true,
+    ayuda: 'Del farmacéutico y del director técnico. Si vence, la tienda queda sin habilitación.' },
+  { id: 'periodico', nombre: 'Examen médico periódico', vence: true,
+    ayuda: 'Que se hizo y hasta cuándo vale. El informe no va acá: queda en el legajo.' },
+  { id: 'preocupacional', nombre: 'Examen preocupacional', vence: false,
+    ayuda: 'Que está hecho. El informe queda en el legajo.' },
+  { id: 'altaTemprana', nombre: 'Alta temprana en AFIP', vence: false },
+  { id: 'contrato', nombre: 'Contrato firmado', vence: false },
+  { id: 'cuil', nombre: 'Constancia de CUIL', vence: false },
+  { id: 'domicilio', nombre: 'Constancia de domicilio', vence: false },
+  { id: 'familia', nombre: 'Partidas y actas de familia', vence: false,
+    ayuda: 'Matrimonio, nacimiento o adopción: los comprobantes del art. 25.' },
+  { id: 'otro', nombre: 'Otro', vence: false }
+];
+
+const TIPOS_DOCUMENTO_POR_ID = TIPOS_DOCUMENTO.reduce((m, x) => { m[x.id] = x; return m; }, {});
+
+/* Con cuánta anticipación avisar que un documento vence. Treinta días: renovar
+   una constancia de alumno regular es ir a la facultad, y avisar la semana
+   anterior es avisar tarde. No es un plazo legal. */
+const DIAS_AVISO_DOCUMENTO = 30;
+
 const TRAMITES_BAJA = [
   { id: 'carta', nombre: 'Carta solicitada al estudio',
     ayuda: 'El telegrama o la carta documento que prepara el estudio.' },

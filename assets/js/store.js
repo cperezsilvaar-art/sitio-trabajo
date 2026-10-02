@@ -958,6 +958,37 @@ const Store = (() => {
       guardar();
     },
 
+    /* ------------------ documentos del legajo --------------------- *
+       Se registra que el documento existe, no el documento: el por qué está
+       arriba de `TIPOS_DOCUMENTO`. Cuelgan de la persona, como `c.baja`,
+       `c.ausencias`, `c.casos` y `c.planes`, así la acompañan si la trasladan. */
+
+    agregarDocumento(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      if (!Array.isArray(c.documentos)) c.documentos = [];
+      const d = Object.assign({
+        id: uid(),
+        tipo: TIPOS_DOCUMENTO[0].id,
+        recibidoEl: _diaHoy(),
+        venceEl: '',
+        donde: '',
+        enlace: '',
+        notas: '',
+        registradoEl: new Date().toISOString()
+      }, datos || {});
+      c.documentos.push(d);
+      guardar();
+      return d;
+    },
+
+    quitarDocumento(colaboradorId, docId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return;
+      c.documentos = (c.documentos || []).filter(x => x.id !== docId);
+      guardar();
+    },
+
     /* --------------------------- casos ---------------------------- */
 
     abrirCaso(colaboradorId, datos) {
@@ -2292,7 +2323,7 @@ const Store = (() => {
       resguardar('Antes de unir dos fichas');
 
       ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones',
-       'planes'].forEach(k => {
+       'planes', 'documentos'].forEach(k => {
         if (!Array.isArray(b[k]) || !b[k].length) return;
         if (!Array.isArray(a[k])) a[k] = [];
         b[k].forEach(x => {
@@ -2309,7 +2340,7 @@ const Store = (() => {
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'planes', 'novedades', 'baja'].indexOf(k) >= 0) return;
+             'sanciones', 'planes', 'documentos', 'novedades', 'baja'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
         if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;

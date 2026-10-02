@@ -233,6 +233,39 @@ dos tiendas que liquidan igual no cambia nada y no se anota nada.
 botón para alinearlo. Se nombra y se ofrece corregir en vez de pisarlo solo: es
 un dato de la nómina y lo cambia el coordinador.
 
+**Los documentos del legajo se registran, no se suben.** `c.documentos[]`, en
+la ficha de la persona, documentado en `docs/documentos-legajo.md`: tipo, cuándo
+se recibió, hasta cuándo vale, dónde está el original y un enlace opcional. Lo
+que se pidió fue poder subir archivos, y se midió el terreno antes de contestar:
+`localStorage` desde `file://` aguanta **4.864 KB** y el padrón cifrado ya usa
+456, así que entrarían diez u once PDF escaneados y después `guardar()` **borra
+las copias automáticas para hacer lugar** y deja de guardar —el modo de falla del
+bug de `b64()`, donde parece que el panel se borra solo—. `IndexedDB` sí anda
+desde `file://` y tiene cerca de un giga, pero queda afuera del cifrado, del
+respaldo `.json` y de las copias: los archivos serían lo único del panel sin
+resguardo. **No reponer la idea de guardar el archivo adentro.**
+
+**Lo que el panel agrega es el vencimiento**, que es lo que no estaba en ningún
+lado: una constancia de alumno regular no es un papel que se guarda sino uno que
+se renueva por cuatrimestre. `TIPOS_DOCUMENTO` (`catalogos.js`) trae `vence`,
+como `CARGOS_NOMINA` trae la jornada, y `estadoDeDocumento()` (`nomina.js`)
+decide. **Solo lo que vence avisa**: un contrato firmado es un registro y no pide
+nada, que es la regla de los contadores en cero. El aviso sale con 30 días
+(`DIAS_AVISO_DOCUMENTO`) porque renovar una constancia es ir a la facultad.
+`documentosQueVencen()` alimenta `pendientesDelArea()` —**lee, no copia**— y solo
+mira el plantel activo: perseguirle el papel a quien ya se fue es ruido, y el
+historial queda en su ficha igual.
+
+**`enlaceSeguro()` (`nomina.js`) es el único lugar del panel donde algo escrito a
+mano se vuelve un `href`.** Acepta solo `http` y `https`; `javascript:`, `data:`
+y `file:` se muestran como texto. Un `javascript:` ahí es código corriendo
+adentro de la página que tiene el padrón entero.
+
+**El certificado médico del día no es un documento del legajo**: es una ausencia,
+vive en `c.ausencias` y tiene su propio circuito. De los exámenes médicos se
+registra que están hechos y hasta cuándo valen, nunca su contenido — por lo mismo
+que los casos no guardan documentación.
+
 **Una baja es un proceso, no un evento.** La persona deja de venir el día de la
 baja —eso sale de la dotación en el momento y no espera a nadie— pero atrás
 quedan cinco trámites, en cinco lugares distintos: `TRAMITES_BAJA`

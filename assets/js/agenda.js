@@ -543,6 +543,26 @@ function pendientesDelArea(estado, hoyISO) {
     id: 'ausencias', titulo: 'Ausencias que piden algo', ruta: '#/diario', items: aus
   });
 
+  /* 2 bis. Documentos del legajo que vencieron o están por vencer. Van acá y
+        no en una pantalla propia: lo que hay que hacer es pedirle el papel a
+        alguien, igual que reclamar un certificado. Solo lo que vence entra —un
+        contrato firmado es un registro y no pide nada—, que es la regla de los
+        contadores en cero vista de este lado. */
+  const docs = (typeof documentosQueVencen === 'function' ? documentosQueVencen(e, hoy) : [])
+    .map(x => ({
+      que: `${x.nombre} — ${x.tipo.toLowerCase()}`,
+      quien: x.sucursal,
+      detalle: x.estado.texto.toLowerCase() +
+               (x.doc.donde ? ` · el original está en ${x.doc.donde}` : ''),
+      desde: x.doc.venceEl, dias: x.estado.dias === null ? null : -x.estado.dias,
+      tono: x.estado.tono === 'rojo' ? 'rojo' : 'ambar',
+      ruta: '#/nomina'
+    }));
+  if (docs.length) grupos.push({
+    id: 'documentos', titulo: 'Documentos que hay que renovar',
+    ruta: '#/nomina', items: docs
+  });
+
   /* 3. Reclamos abiertos: son de plata y el que los hizo está esperando. */
   const rec = (e.reclamos || [])
     .filter(r => !((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
