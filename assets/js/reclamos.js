@@ -256,3 +256,128 @@ function tipoDeCasoPorNombre(nombre) {
   const exacto = TIPOS_CASO.find(t => _llanoAnexo(t.nombre) === q);
   return exacto ? exacto.id : 'otro';
 }
+
+/* ===================================================================== *
+ *  Leer el WhatsApp que llegó
+ * ===================================================================== *
+ *
+ * El coordinador decidió seguir recibiendo los avisos como siempre y cargarlos
+ * él. Eso tiene un costo que el anexo no tenía: lo que queda registrado es su
+ * reconstrucción y no la palabra del gerente, y para el reclamo que termina en
+ * un telegrama «lo informó Juan Gómez el 02/10» no es la misma prueba que
+ * «Christian anotó que alguien le dijo».
+ *
+ * Se arregla barato: **que pegue el mensaje tal como llegó**. Queda textual, y
+ * de paso el panel lo lee y propone el concepto y la persona.
+ *
+ * **Propone, no decide.** El que confirma es el coordinador, porque un mensaje
+ * de WhatsApp es prosa y adivinar mal el concepto ensucia justamente el número
+ * que se le va a llevar a Nómina.
+ */
+
+/**
+ * Las palabras con las que cada concepto aparece escrito en un WhatsApp.
+ *
+ * No reemplaza a `TIPOS_RECLAMO`: la completa. Los `id` son los de esa lista
+ * —si uno no coincide, el chequeo de abajo lo grita— y lo que se agrega acá es
+ * cómo lo escribe un gerente apurado, que no es el nombre formal del concepto:
+ * nadie tipea «Adicional nocturno», tipea «el nocturno».
+ */
+const PALABRAS_DE_RECLAMO = {
+  horasExtras:  ['hora extra', 'horas extra', 'extras', 'he al 50', 'he al 100', 'hs extra'],
+  nocturno:     ['nocturno', 'nocturnidad', 'turno noche'],
+  feriado:      ['feriado', 'feriados'],
+  presentismo:  ['presentismo', 'presentisimo'],
+  francos:      ['franco', 'francos', 'dia franco'],
+  vacaciones:   ['vacacion', 'vacaciones', 'plus vacacional'],
+  sac:          ['aguinaldo', 'sac', 'medio aguinaldo'],
+  descuento:    ['descuento', 'descontaron', 'descontado', 'faltante', 'faltante de caja'],
+  categoria:    ['categoria', 'recategorizacion', 'encuadre'],
+  antiguedad:   ['antiguedad', 'años de antiguedad'],
+  aumento:      ['aumento', 'paritaria', 'escala', 'basico nuevo'],
+  asignaciones: ['asignacion', 'asignaciones', 'salario familiar', 'anses', 'suaf'],
+  obraSocial:   ['obra social', 'osfarm', 'aseguradora', 'art'],
+  uniforme:     ['uniforme', 'chaqueta', 'calzado', 'zapatos', 'ambo']
+};
+
+/* Un `id` que no esté en `TIPOS_RECLAMO` sería una palabra que nunca propone
+   nada, y nadie se enteraría. Se grita al cargar. */
+Object.keys(PALABRAS_DE_RECLAMO).forEach(id => {
+  if (!TIPOS_RECLAMO_POR_ID[id]) {
+    console.error('PALABRAS_DE_RECLAMO tiene un concepto que no existe en TIPOS_RECLAMO:', id);
+  }
+});
+
+const _MESES_RECLAMO = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                        'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/**
+ * Lo que se puede sacar de un mensaje pegado, para proponérselo.
+ *
+ * Devuelve `{ tipo, periodo, monto, detalle, pistas[] }`. `pistas` dice **por
+ * qué** propuso cada cosa: sin eso el coordinador tiene que confiar a ciegas en
+ * una adivinanza, y una adivinanza sin su motivo al lado se acepta de apuro.
+ *
+ * El nombre de la persona **no lo resuelve esta función**: lo hace
+ * `buscadorDePadron()` desde `store.js`, que es el único emparejamiento del
+ * panel. Acá no se escribe un segundo criterio.
+ */
+function leerMensajeDeReclamo(texto) {
+  const crudo = String(texto == null ? '' : texto).replace(/\r\n?/g, '\n').trim();
+  const out = { tipo: '', periodo: '', monto: '', detalle: crudo, pistas: [] };
+  if (!crudo) return out;
+
+  /* Si pegó la conversación exportada, cada línea trae «[2/10, 15:30] Juan: ».
+     Se saca para leer, pero **el detalle guarda el crudo**: lo que el gerente
+     escribió, con su hora y su nombre, es parte de la prueba. */
+  const plano = _llanoAnexo(crudo.split('\n')
+    .map(l => l.replace(/^\s*\[[^\]]{4,40}\]\s*[^:]{1,60}:\s*/, ''))
+    .join(' ')).toLowerCase();
+
+  /* El concepto: la palabra más larga que aparezca gana. «hora extra» tiene que
+     ganarle a «extras» cuando están las dos, porque es la más específica. */
+  let mejor = null;
+  Object.keys(PALABRAS_DE_RECLAMO).forEach(id => {
+    PALABRAS_DE_RECLAMO[id].forEach(p => {
+      /* Con borde de palabra: «art» no puede salir de «cuarto» ni «sac» de
+         «sacaron», que es exactamente el falso positivo que haría que un
+         reclamo de francos se cuente como aguinaldo. */
+      const re = new RegExp('(^|[^a-z0-9])' + p.replace(/ /g, '[ -]?') + '([^a-z0-9]|$)');
+      if (re.test(plano) && (!mejor || p.length > mejor.palabra.length)) {
+        mejor = { id, palabra: p };
+      }
+    });
+  });
+  if (mejor) {
+    out.tipo = mejor.id;
+    out.pistas.push(`el concepto sale de «${mejor.palabra}»`);
+  }
+
+  /* El período: un mes escrito con nombre, o 09/2026. */
+  const conNombre = _MESES_RECLAMO.findIndex(m => plano.indexOf(m) >= 0);
+  const anio = (plano.match(/\b(20\d\d)\b/) || [])[1] || '';
+  if (conNombre >= 0) {
+    out.periodo = _MESES_RECLAMO[conNombre] + (anio ? ' ' + anio : '');
+    out.pistas.push(`el período sale de «${_MESES_RECLAMO[conNombre]}»`);
+  } else {
+    const numerico = plano.match(/\b(0?[1-9]|1[0-2])\s*\/\s*(20\d\d)\b/);
+    if (numerico) {
+      out.periodo = _MESES_RECLAMO[Number(numerico[1]) - 1] + ' ' + numerico[2];
+      out.pistas.push(`el período sale de «${numerico[0]}»`);
+    }
+  }
+
+  /* El monto: solo si viene con signo de pesos o la palabra. Un número suelto
+     puede ser una cantidad de horas o un día del mes, y meterlo como plata
+     inventa una cifra que después se suma en el reporte de Nómina. */
+  const plata = crudo.match(/\$\s*([\d.,]+)|([\d.,]{4,})\s*pesos/i);
+  if (plata) {
+    const bruto = (plata[1] || plata[2] || '').replace(/\./g, '').replace(',', '.');
+    if (bruto && !isNaN(parseFloat(bruto))) {
+      out.monto = String(parseFloat(bruto));
+      out.pistas.push(`el monto sale de «${plata[0].trim()}»`);
+    }
+  }
+
+  return out;
+}

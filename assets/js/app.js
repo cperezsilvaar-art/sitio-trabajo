@@ -2921,6 +2921,30 @@ const App = (() => {
     </section>`;
   }
 
+  /* Lo que el panel entendió del mensaje pegado, y **por qué**.
+
+     Propone y no decide: una adivinanza sin su motivo al lado se acepta de
+     apuro, y el concepto mal puesto ensucia justo el número que después se le
+     lleva a Nómina. Por eso cada pista dice de qué palabra salió. */
+  let pegadoDeReclamo = null;
+
+  function pistasDelPegado() {
+    const p = pegadoDeReclamo;
+    if (!p || (!p.tipo && !p.periodo && !p.monto && !p.colaborador)) return '';
+    const partes = [];
+    if (p.colaborador) {
+      partes.push(`<strong>${esc(p.colaborador)}</strong>${p.viaNombre ? '' : ''}`);
+    }
+    if (p.tipo) partes.push(esc((TIPOS_RECLAMO_POR_ID[p.tipo] || {}).nombre || p.tipo));
+    if (p.periodo) partes.push(esc(p.periodo));
+    if (p.monto) partes.push(dinero(p.monto));
+    return `<div class="aviso-caja info" style="margin:0 0 12px">
+      <strong>Entendí:</strong> ${partes.join(' · ')}.
+      ${p.pistas.length ? `<br><span class="ayuda">Porque ${esc(p.pistas.join(', '))}.</span>` : ''}
+      <br><span class="ayuda">Revisalo arriba antes de registrar: lo propongo, no lo decido.</span>
+    </div>`;
+  }
+
   function vistaReclamos() {
     const e = Store.get();
     contexto = e;
@@ -3022,6 +3046,14 @@ const App = (() => {
                        : e.sucursales.reduce((a, x) => a.concat(x.colaboradores || []), []))
             .map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
         </datalist>
+        <label class="campo" style="margin-top:4px"><span>Pegá el mensaje como llegó</span>
+          <textarea id="reclamo-pegado" style="min-height:70px"
+            placeholder="«cris a la Gonzalez le falta el feriado del 8, septiembre»"></textarea>
+          <em style="font-style:normal;font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:5px;font-size:12.5px;color:var(--texto-suave)">
+            Queda <strong>textual</strong> en el detalle: las palabras del gerente y no tu
+            reconstrucción, que es lo que vale el día que el reclamo se convierte en un
+            telegrama. Y de paso te propongo el concepto y la persona.</em></label>
+        <div id="pistas-pegado">${pistasDelPegado()}</div>
         <div class="acciones">
           <button class="b" data-accion="agregar-reclamo">+ Registrar</button>
         </div>
@@ -7225,6 +7257,43 @@ const App = (() => {
       return reg ? { reg, campo } : null;
     }
 
+    /* El mensaje pegado en el alta del reclamo: se lee y se propone. El
+       emparejamiento de la persona lo hace `buscadorDePadron()` y no un
+       criterio nuevo — se le pasa el mensaje entero como nombre y la tienda
+       elegida, y él decide, incluida la regla de que un nombre ambiguo no
+       engancha a nadie. */
+    cont.addEventListener('input', ev => {
+      if (!ev.target.closest('#reclamo-pegado')) return;
+      const texto = ev.target.value || '';
+      if (!texto.trim()) { pegadoDeReclamo = null; return; }
+      const leido = leerMensajeDeReclamo(texto);
+      const suc = ($('#reclamo-sucursal') || {}).value || '';
+      const s = Store.sucursal(suc);
+      const hallado = Store.buscarEnPadron({
+        nombre: texto, tienda: s ? (s.nombre || s.codigo) : ''
+      });
+      pegadoDeReclamo = Object.assign({}, leido, {
+        colaborador: hallado && hallado.c ? hallado.c.nombre : '',
+        colaboradorId: hallado && hallado.c ? hallado.c.id : ''
+      });
+      if (pegadoDeReclamo.colaborador) {
+        pegadoDeReclamo.pistas.unshift('el nombre coincide con el padrón');
+      }
+      /* Se completan los campos de arriba, que es donde se corrige. Nunca se
+         pisa lo que el coordinador ya escribió a mano. */
+      const campo = (sel, val) => {
+        const el2 = $(sel);
+        if (el2 && val && !String(el2.value || '').trim()) el2.value = val;
+      };
+      campo('#reclamo-colaborador', pegadoDeReclamo.colaborador);
+      if (pegadoDeReclamo.tipo) {
+        const sel = $('#reclamo-tipo');
+        if (sel && sel.selectedIndex === 0) sel.value = pegadoDeReclamo.tipo;
+      }
+      const caja = $('#pistas-pegado');
+      if (caja) caja.innerHTML = pistasDelPegado();
+    });
+
     cont.addEventListener('input', ev => {
       const el = ev.target.closest('[data-lic], [data-san], [data-doc]');
       if (!el) return;
@@ -7743,12 +7812,22 @@ const App = (() => {
         const tipo = ($('#reclamo-tipo') || {}).value || TIPOS_RECLAMO[0].id;
         if (!String(nombre).trim()) return avisar('Poné al menos el nombre de quien reclama.', 'error');
 
+        /* Lo pegado entra textual en el detalle: es la palabra del gerente y
+           no la reconstrucción de nadie. */
+        const pegado = String((($('#reclamo-pegado') || {}).value) || '').trim();
+        const p = pegadoDeReclamo || {};
         const r = Store.agregarReclamo({
-          sucursalId, colaborador: String(nombre).trim(), tipo, fecha: hoyISO()
+          sucursalId, colaborador: String(nombre).trim(), tipo, fecha: hoyISO(),
+          colaboradorId: (p.colaborador === String(nombre).trim() && p.colaboradorId) || '',
+          detalle: pegado, periodoAfectado: p.periodo || '', monto: p.monto || '',
+          origen: pegado ? 'whatsapp' : 'manual'
         });
+        pegadoDeReclamo = null;
         reclamoAbierto = r.id;
         refrescar();
-        avisar('Reclamo registrado. Completá el detalle para poder seguirlo.');
+        avisar(pegado
+          ? 'Reclamo registrado con el mensaje textual. Revisá el concepto y el período.'
+          : 'Reclamo registrado. Completá el detalle para poder seguirlo.');
       }
 
       if (a === 'abrir-reclamo') {

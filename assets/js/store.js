@@ -1334,6 +1334,25 @@ const Store = (() => {
       return { error: null, cargadas, sinUbicar, leidas: r.filas.length };
     },
 
+    /**
+     * Busca una persona en el padrón con **el mismo criterio que los
+     * importadores**: número primero, después nombre y solo sin ambigüedad.
+     *
+     * `buscadorDePadron()` era privada de `store.js` y la necesitaba también la
+     * pantalla —el alta de un reclamo lee el WhatsApp pegado y propone a quién
+     * se refiere—. Se abre acá en vez de escribir una búsqueda parecida en
+     * `app.js`, por lo mismo que `Store.diasDeVinculo()`: dos formas de
+     * encontrar a la misma persona terminan difiriendo el día que se toca una.
+     *
+     * Toma `{ nombre, cuil, legajo, tienda }` y devuelve `{ c, s, via,
+     * conflicto }`, con `c` en null cuando no hay una respuesta sin dudas.
+     */
+    buscarEnPadron(fila) {
+      const r = buscadorDePadron(this.get())(fila || {});
+      return { c: r.g ? r.g.c : null, s: r.g ? r.g.s : null,
+               via: r.via, conflicto: r.conflicto };
+    },
+
     /* ------------- lo que manda el anexo de los gerentes ------------- *
        El anexo arma un mensaje de una línea por dato y el gerente lo manda por
        donde quiera. Acá se pega, entero y de a varios: el coordinador junta los
