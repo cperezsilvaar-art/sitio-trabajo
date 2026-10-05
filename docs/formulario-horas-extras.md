@@ -125,3 +125,23 @@ administrativa previa. Lo que cada persona ya tiene liquidado se lee en
 *El cierre del mes* del panel, mes a mes. Los dos topes son dos problemas
 distintos: pasarse en un mes se corrige el mes que viene, y **pasarse en el año
 ya no se corrige**.
+
+## No hace falta armarlo a mano
+
+`apps-script/CrearFormularios.gs` crea **los tres** —reclamos, ausencias del
+día y horas extras— con todas sus preguntas, sus opciones y sus mensajes de
+confirmación, más una planilla de respuestas con las tres pestañas y la
+configuración regional en Argentina.
+
+Se corre una sola vez y **no se publica nada**: no es una aplicación web, no hay
+que implementar ni configurar quién tiene acceso, que es donde se complicó la
+vez anterior. Se pega en script.google.com, se aprieta Ejecutar, se autoriza, y
+los tres links quedan escritos en la hoja «Links» de la planilla.
+
+Las listas del script **se verificaron contra las del panel**: los quince
+conceptos de reclamo son los de `TIPOS_RECLAMO` en el mismo orden, las doce
+tiendas son las de `sucursales-area3.js`, y los ocho tipos de licencia caen en
+el motivo correcto al pasar por `motivoDelParte()`. Los encabezados del
+formulario de ausencias caen en las ocho columnas de
+`COLUMNAS_PARTE_AUSENTES`, que es lo que hace que la planilla se pueda pegar al
+pie de Presentismo sin tocar nada.
