@@ -1,14 +1,15 @@
 /**
- * CrearFormularios.gs — arma los tres buzones de los Gerentes de Tienda.
+ * CrearFormularios.gs — arma el buzón único de los Gerentes de Tienda.
+ *
+ * **Un solo formulario y un solo link.** El gerente entra, dice qué viene a
+ * avisar y el formulario lo lleva a la sección que corresponde: un reclamo de
+ * sueldo, una ausencia del día o un pedido de horas extras.
  *
  * Esto se corre **una sola vez** y no se publica nada: no es una aplicación
  * web, no hay que implementar, no hay URL que configurar. Se pega, se aprieta
- * Ejecutar, se autoriza, y quedan creados los tres formularios con todas sus
- * preguntas, sus opciones y su mensaje de confirmación, más una planilla de
- * respuestas con las tres pestañas adentro.
- *
- * Los links aparecen al final, en la hoja «Links» de esa planilla y también en
- * el registro de ejecución.
+ * Ejecutar, se autoriza, y queda el formulario armado con todas sus preguntas,
+ * sus opciones y su mensaje de confirmación, más la planilla de respuestas con
+ * la configuración regional en Argentina.
  *
  * ──────────────────────────────────────────────────────────────────────────
  *  Cómo se corre
@@ -16,14 +17,33 @@
  *
  *  1. Entrá a script.google.com con tu cuenta de Farmatodo → Nuevo proyecto.
  *  2. Borrá todo lo que diga el editor y pegá este archivo entero.
- *  3. Arriba, en el desplegable de funciones, elegí `crearLosTresBuzones`.
+ *  3. Arriba, en el desplegable de funciones, elegí `crearElBuzon`.
  *  4. Ejecutar. Google te va a pedir autorizar: aceptá. Si aparece «Google no
  *     verificó esta aplicación», entrá en Configuración avanzada → Ir a (tu
- *     proyecto): es tu propio script creando formularios en tu propio Drive.
- *  5. Cuando termina, abajo salen los tres links. Listo.
+ *     proyecto): es tu propio script creando un formulario en tu propio Drive.
+ *  5. Cuando termina, el link sale abajo, en el registro de ejecución.
  *
- * Si lo corrés dos veces te crea tres formularios nuevos, no pisa los
- * anteriores. Si te equivocaste, borrá los de Drive y volvé a correrlo.
+ * Correrlo dos veces crea un formulario nuevo, no pisa el anterior.
+ *
+ * ──────────────────────────────────────────────────────────────────────────
+ *  Por qué las preguntas dicen exactamente lo que dicen
+ * ──────────────────────────────────────────────────────────────────────────
+ *
+ * La planilla de respuestas se pega al pie de Presentismo en el panel, y el
+ * panel ubica cada columna **por lo que dice su encabezado**, quedándose con la
+ * primera que coincide. Con las tres cosas en un mismo formulario eso deja de
+ * ser una formalidad:
+ *
+ * - **La persona se pregunta UNA sola vez, antes de la bifurcación.** Si cada
+ *   sección tuviera su propio «Apellido y nombre…», habría tres columnas con
+ *   ese encabezado y el panel se quedaría con la primera — que para una
+ *   ausencia estaría vacía, y entonces ninguna ausencia caería en nadie. Es
+ *   además el diseño correcto: las tres cosas son sobre una persona.
+ * - **La sección de ausencias va antes que la de horas extras**, porque «Si es
+ *   para cubrir a alguien» y el motivo de las horas no pueden ganarle a «Tipo
+ *   de licencia».
+ * - **La pregunta de quién avisa no puede decir «nombre»**: se llevaría el
+ *   nombre del gerente al lugar del colaborador.
  */
 
 /* Las doce tiendas del Área 3. Los flotantes no están: no son una tienda y
@@ -55,9 +75,10 @@ var CONCEPTOS_RECLAMO = [
   'Otro'
 ];
 
-/* Los tipos de licencia del parte de ausentes. **El ART va aparte de la
-   enfermedad** y no es un detalle de redacción: el accidente de trabajo lo
-   cubre la aseguradora y no corre por los plazos del art. 208 de la LCT. */
+/* Los tipos de licencia. **El ART va aparte de la enfermedad** y no es un
+   detalle de redacción: el accidente de trabajo lo cubre la aseguradora y no
+   corre por los plazos del art. 208 de la LCT, así que meterlo en enfermedad
+   inculpable mostraría un vencimiento de licencia paga que no existe. */
 var TIPOS_LICENCIA = [
   'Enfermedad con certificado',
   'Accidente de trabajo (ART)',
@@ -71,81 +92,52 @@ var TIPOS_LICENCIA = [
 
 var MOTIVOS_HORAS = [
   'Afluencia de público',
-  'Cubrir una licencia',
+  'Cubrir a alguien que falta',
   'Inventario o tarea puntual',
-  'Otro motivo'
+  'Otro'
 ];
 
 /** Lo único que hay que ejecutar. */
-function crearLosTresBuzones() {
-  var planilla = SpreadsheetApp.create('Respuestas — Buzones Área 3');
-  /* La configuración regional decide cómo se copian las fechas. Sin esto, una
-     planilla en formato de Estados Unidos escribe 10/5/2026 para el 5 de
-     octubre, y al pegarla en el panel todo octubre entra como mayo sin que
-     nada falle a la vista. */
-  planilla.setSpreadsheetLocale('es_AR');
+function crearElBuzon() {
+  var f = FormApp.create('RRHH Área 3 — avisos de tienda');
+  f.setDescription(
+    'Para avisarle a RRHH de tu equipo: un error en el sueldo de alguien, una ' +
+    'ausencia del día o un pedido de horas extras. Elegís qué venís a avisar y ' +
+    'el formulario te lleva a las preguntas que corresponden.');
 
-  var links = [['Formulario', 'Link para los gerentes', 'Link para editarlo']];
+  /* Sin iniciar sesión y sin pedir el mail: los gerentes no tienen mail
+     corporativo, así que cualquier cosa que pida cuenta hace que no lo usen.
+     Por eso el formulario pregunta a mano quién carga. */
+  try { f.setRequireLogin(false); } catch (err) { /* cuenta sin dominio */ }
+  f.setCollectEmail(false);
+  f.setLimitOneResponsePerUser(false);
+  f.setAllowResponseEdits(false);
+  f.setProgressBar(true);
 
-  links.push(crearReclamos(planilla));
-  links.push(crearAusencias(planilla));
-  links.push(crearHorasExtras(planilla));
-
-  var hoja = planilla.getSheets()[0];
-  hoja.setName('Links');
-  hoja.getRange(1, 1, links.length, 3).setValues(links);
-  hoja.getRange(1, 1, 1, 3).setFontWeight('bold');
-  hoja.setColumnWidth(1, 220).setColumnWidth(2, 420).setColumnWidth(3, 420);
-
-  Logger.log('Listo. Los links quedaron en la hoja «Links» de:');
-  Logger.log(planilla.getUrl());
-  links.slice(1).forEach(function (f) { Logger.log(f[0] + ' → ' + f[1]); });
-}
-
-/* ------------------------------------------------------------------ *
- * 1. Reclamos de sueldo                                               *
- * ------------------------------------------------------------------ */
-function crearReclamos(planilla) {
-  var f = FormApp.create('Reclamos de sueldo — Área 3');
-  prepararFormulario(f, planilla,
-    'Para avisarle a RRHH que a alguien de tu equipo le pagaron mal. Lo llenás ' +
-    'en un minuto y queda registrado con su fecha. Si llegó una carta documento ' +
-    'o una intimación, no uses este formulario: llamá a RRHH.',
-    'Listo, quedó registrado con su fecha. Si hace falta algo más, te escribo.');
-
-  /* La pregunta de quién carga **no puede decir «nombre»**: el panel busca al
-     colaborador por esa palabra y gana la primera columna que coincide, así que
-     se llevaría el nombre del gerente al lugar del empleado. */
-  texto(f, 'Tu nombre', true);
-  opciones(f, 'Tienda', TIENDAS, true);
-  texto(f, 'Apellido y nombre del colaborador', true);
-  /* Se pide pero no se exige: está cargado en 139 de 141 personas del padrón y
-     exigirlo haría que inventen uno. */
-  texto(f, 'DNI del colaborador', false);
-  opciones(f, '¿Qué le pagaron mal?', CONCEPTOS_RECLAMO, true);
-  texto(f, '¿De qué período?', true);
-  texto(f, 'Monto aproximado', false);
-  parrafo(f, 'Contalo en dos renglones', true);
-
-  return ['Reclamos de sueldo', f.getPublishedUrl(), f.getEditUrl()];
-}
-
-/* ------------------------------------------------------------------ *
- * 2. Ausencias del día                                                *
- * ------------------------------------------------------------------ */
-function crearAusencias(planilla) {
-  var f = FormApp.create('Ausencias del día — Área 3');
-  prepararFormulario(f, planilla,
-    'Para avisarle a RRHH que alguien de tu equipo no vino. Llenalo el mismo ' +
-    'día, aunque todavía no sepas hasta cuándo falta ni tengas el certificado ' +
-    'en la mano: eso se completa después.',
-    'Listo, gracias por avisar. Si después conseguís la fecha de alta o el ' +
-    'certificado, cargá otra respuesta con los datos completos.');
-
+  /* ---------- Lo que vale para las tres cosas, antes de bifurcar ---------- */
   opciones(f, 'Tu tienda', TIENDAS, true);
   texto(f, 'Gerente que avisa', true);
   texto(f, 'Apellido y nombre del colaborador', true);
-  texto(f, 'DNI del colaborador', false);
+  /* Se pide pero no se exige: está cargado en 139 de 141 personas del padrón,
+     así que sirve para no confundir homónimos, pero exigirlo haría que
+     inventen uno. */
+  texto(f, 'DNI del colaborador', false)
+    .setHelpText('Si lo tenés a mano. Sirve para no confundirlo con un homónimo.');
+
+  /* La pregunta que bifurca. Se agrega acá —antes de las secciones— para que
+     quede en la primera página, y sus opciones se enganchan al final, cuando
+     las secciones ya existen. */
+  var cual = f.addMultipleChoiceItem()
+    .setTitle('¿Qué venís a avisar?')
+    .setRequired(true);
+
+  /* ---------- 1. Ausencia del día ----------
+     Va primera de las tres secciones a propósito: «Tipo de licencia» tiene que
+     ganarle a cualquier otra pregunta que diga «licencia» o «motivo». */
+  var pAusencia = f.addPageBreakItem()
+    .setTitle('Alguien no vino')
+    .setHelpText('Cargalo el mismo día, aunque todavía no sepas hasta cuándo ' +
+                 'falta ni tengas el certificado en la mano.');
   opciones(f, 'Tipo de licencia', TIPOS_LICENCIA, true);
   fecha(f, '¿Desde qué día no viene?', true);
   /* **No obligatoria**: una ART recién abierta no tiene alta, y pedir una fecha
@@ -158,71 +150,82 @@ function crearAusencias(planilla) {
   opciones(f, '¿Te dejó el certificado?', ['Sí', 'No', 'Todavía no'], true);
   parrafo(f, 'Observaciones', false);
 
-  return ['Ausencias del día', f.getPublishedUrl(), f.getEditUrl()];
-}
+  /* ---------- 2. Reclamo de sueldo ---------- */
+  var pReclamo = f.addPageBreakItem()
+    .setTitle('A alguien le pagaron mal')
+    .setHelpText('Si llegó una carta documento o una intimación, no uses el ' +
+                 'formulario: llamá a RRHH.');
+  opciones(f, '¿Qué le pagaron mal?', CONCEPTOS_RECLAMO, true);
+  texto(f, '¿De qué período?', true)
+    .setHelpText('Sin esto Nómina no sabe qué liquidación revisar.');
+  texto(f, 'Monto aproximado', false);
+  parrafo(f, 'Contalo en dos renglones', true);
 
-/* ------------------------------------------------------------------ *
- * 3. Horas extras                                                     *
- * ------------------------------------------------------------------ */
-function crearHorasExtras(planilla) {
-  var f = FormApp.create('Horas extras — Área 3');
-  prepararFormulario(f, planilla,
-    'Para pedirle a RRHH autorización de horas extras. Cargalo antes de que se ' +
-    'hagan: hay topes por persona y por mes, y una vez hechas no se pueden ' +
-    'deshacer. Te contesto por el mismo canal de siempre.',
-    /* El renglón más importante de los tres formularios: sin esto el gerente
-       lee «respuesta enviada» como «aprobado» y las horas se hacen igual. */
-    'Listo. ESTO ES UN PEDIDO, NO UNA AUTORIZACIÓN: esperá la respuesta de RRHH ' +
-    'antes de darle las horas a nadie.');
-
-  opciones(f, 'Tu tienda', TIENDAS, true);
-  texto(f, 'Gerente que solicita', true);
-  texto(f, 'Apellido y nombre de quien haría las horas', true);
-  texto(f, 'DNI de quien haría las horas', false);
-  opciones(f, 'Motivo de las horas extras', MOTIVOS_HORAS, true);
-  texto(f, 'Si es para cubrir una licencia, de quién', false);
+  /* ---------- 3. Horas extras ---------- */
+  var pHoras = f.addPageBreakItem()
+    .setTitle('Necesito autorización de horas extras')
+    .setHelpText('Cargalo antes de que se hagan: hay topes por persona y por ' +
+                 'mes, y una vez hechas no se pueden deshacer.');
+  /* Ni «motivo» ni «licencia» en estos dos títulos: las dos palabras son las
+     que el panel usa para encontrar el tipo de licencia de una ausencia. */
+  opciones(f, '¿Por qué hacen falta?', MOTIVOS_HORAS, true);
+  texto(f, 'Si es para cubrir a alguien, a quién', false);
   texto(f, 'Cantidad de horas solicitadas', true);
   fecha(f, '¿Qué día se harían?', true);
   parrafo(f, 'Algo más que RRHH tenga que saber', false);
 
-  return ['Horas extras', f.getPublishedUrl(), f.getEditUrl()];
+  /* Cada sección termina mandando: sin esto, al terminar una el formulario
+     sigue con la siguiente y le pide al gerente las preguntas de las otras. */
+  pAusencia.setGoToPage(FormApp.PageNavigationType.SUBMIT);
+  pReclamo.setGoToPage(FormApp.PageNavigationType.SUBMIT);
+  pHoras.setGoToPage(FormApp.PageNavigationType.SUBMIT);
+
+  cual.setChoices([
+    cual.createChoice('Alguien no vino', pAusencia),
+    cual.createChoice('A alguien le pagaron mal', pReclamo),
+    cual.createChoice('Necesito autorización de horas extras', pHoras)
+  ]);
+
+  /* El mensaje de confirmación lo leen los tres, así que tiene que servir para
+     el que acaba de pedir horas extras: **sin ese renglón el gerente lee
+     «respuesta enviada» como «aprobado» y las horas se hacen igual**. */
+  f.setConfirmationMessage(
+    'Listo, quedó registrado con su fecha.\n\n' +
+    'Si pediste horas extras, ojo: ESO ES UN PEDIDO, NO UNA AUTORIZACIÓN. ' +
+    'Esperá la respuesta de RRHH antes de dárselas a nadie.');
+
+  /* La configuración regional decide cómo se copian las fechas. Sin esto, una
+     planilla en formato de Estados Unidos escribe 10/5/2026 para el 5 de
+     octubre, y al pegarla en el panel todo octubre entra como mayo sin que
+     nada falle a la vista. */
+  var planilla = SpreadsheetApp.create('Respuestas — RRHH Área 3');
+  planilla.setSpreadsheetLocale('es_AR');
+  f.setDestination(FormApp.DestinationType.SPREADSHEET, planilla.getId());
+
+  Logger.log('LINK PARA LOS GERENTES:  ' + f.getPublishedUrl());
+  Logger.log('Para editarlo:           ' + f.getEditUrl());
+  Logger.log('Planilla de respuestas:  ' + planilla.getUrl());
 }
 
 /* ------------------------------------------------------------------ *
- * Lo que comparten los tres                                           *
+ * Ayudas                                                              *
  * ------------------------------------------------------------------ */
-function prepararFormulario(f, planilla, descripcion, confirmacion) {
-  f.setDescription(descripcion);
-  f.setConfirmationMessage(confirmacion);
-  /* **Sin iniciar sesión y sin pedir el mail**: los gerentes no tienen mail
-     corporativo, así que cualquier cosa que pida cuenta hace que no lo usen.
-     Por eso cada formulario pregunta a mano quién carga. */
-  try { f.setRequireLogin(false); } catch (err) { /* cuenta sin dominio */ }
-  f.setCollectEmail(false);
-  /* Responden varias veces: un gerente carga más de un reclamo por semana y
-     puede faltarle más de uno el mismo día. */
-  f.setLimitOneResponsePerUser(false);
-  f.setAllowResponseEdits(false);
-  f.setProgressBar(false);
-  f.setDestination(FormApp.DestinationType.SPREADSHEET, planilla.getId());
-}
-
 function texto(f, titulo, obligatoria) {
-  f.addTextItem().setTitle(titulo).setRequired(!!obligatoria);
+  return f.addTextItem().setTitle(titulo).setRequired(!!obligatoria);
 }
 
 function parrafo(f, titulo, obligatoria) {
-  f.addParagraphTextItem().setTitle(titulo).setRequired(!!obligatoria);
+  return f.addParagraphTextItem().setTitle(titulo).setRequired(!!obligatoria);
 }
 
 function fecha(f, titulo, obligatoria) {
-  f.addDateItem().setTitle(titulo).setRequired(!!obligatoria);
+  return f.addDateItem().setTitle(titulo).setRequired(!!obligatoria);
 }
 
 /* Opción múltiple y no desplegable: en un teléfono un desplegable obliga a
    scrollear a ciegas adentro de una ventanita, y los conceptos de reclamo son
    quince. La opción múltiple los muestra todos y se elige con un toque. */
 function opciones(f, titulo, lista, obligatoria) {
-  f.addMultipleChoiceItem().setTitle(titulo)
+  return f.addMultipleChoiceItem().setTitle(titulo)
     .setChoiceValues(lista).setRequired(!!obligatoria);
 }
