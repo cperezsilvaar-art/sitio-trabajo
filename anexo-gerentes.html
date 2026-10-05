@@ -168,9 +168,9 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
     <span><strong>Avisar a RRHH</strong><em>Área 3 · Farmatodo</em></span>
   </div>
-  <p>Para los <strong>reclamos de sueldo</strong> de tu gente. Lo llenás en un minuto
-     y le llega ordenado al coordinador, con su fecha: así no se pierde y te puede
-     contestar.</p>
+  <p>Para los <strong>reclamos de sueldo</strong> de tu gente. Lo llenás en un minuto,
+     lo copiás y se lo mandás a RRHH ordenado y con su fecha: así no se pierde y te
+     puede contestar.</p>
   <p class="no-es-el-panel">Esto <strong>no es el panel de RRHH</strong>: es solo el
      formulario para avisar un reclamo. No guarda ningún dato de nadie y no hay nada
      que buscar acá adentro.</p>
@@ -231,15 +231,29 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
     </section>
 
     <section>
-      <h2>4. Mandalo</h2>
-      <p class="ayuda">Esto es lo que se va a enviar. Revisalo antes.</p>
+      <h2>4. Mandalo vos</h2>
+      <!-- **«Mandalo vos» y no «Mandalo».** Esta página no se conecta con
+           ningún lado: arma el texto y alguien lo tiene que enviar. El propio
+           coordinador cargó un reclamo de prueba y esperó que apareciera en su
+           panel — tres veces—. Si le pasó a él, que sabe cómo funciona, el
+           botón solo no alcanza: hay que decir que el envío es un acto de la
+           persona, antes de que lo apriete. -->
+      <p class="ayuda">Esto es lo que vas a mandar. Revisalo antes.</p>
       <p class="falta" id="falta" hidden></p>
       <pre class="previo" id="previo"></pre>
+      <!-- Copiar va primero y como botón principal: es el único que funciona
+           en cualquier lado. El de mail abre el programa de correo, y adentro
+           de un visor o de algunos navegadores de teléfono eso está bloqueado
+           y no pasa nada visible — que es exactamente cómo se siente un error
+           sin serlo. -->
       <div class="botones">
-        <a class="b" id="btnMail" href="#" hidden>Enviar por mail</a>
-        <button class="b sec" type="button" id="btnCopiar">Copiar el texto</button>
+        <button class="b" type="button" id="btnCopiar">Copiar el texto</button>
+        <a class="b sec" id="btnMail" href="#" hidden>Abrir el mail ya escrito</a>
       </div>
       <p class="listo" id="listo" hidden></p>
+      <p class="nota"><strong>Esta página no manda nada sola.</strong> Copiá el
+         texto y pegalo en el mensaje que le mandás a RRHH. Hasta que no lo
+         mandes, acá no quedó registrado nada.</p>
       <p class="nota">No adjuntes certificados ni documentación acá: eso se
          entrega como siempre. Esto es el aviso, para que quede asentado y con
          fecha.</p>
@@ -424,7 +438,8 @@ async function copiar() {
     $('#listo').hidden = false;
     return;
   }
-  $('#listo').textContent = 'Copiado. Pegalo en el chat o en un mail y mandalo.';
+  $('#listo').textContent = 'Copiado. Ahora pegalo en un mensaje para RRHH y mandalo: ' +
+    'si no lo mandás, no llegó a ningún lado.';
   $('#listo').hidden = false;
 }
 
