@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Avisar a RRHH — Área 3</title>
+<title>Avisar un reclamo a RRHH — Área 3 (no es el panel)</title>
 <!--
   anexo-gerentes.html — lo que usan los Gerentes de Tienda.
 
@@ -84,6 +84,16 @@ header em {
   text-transform: uppercase; letter-spacing: .12em; color: rgba(255,255,255,.6);
 }
 header p { margin: 16px 0 0; font-size: 14.5px; color: rgba(255,255,255,.88); max-width: 46ch; }
+/* **Esta página no es el panel y tiene que decirlo.** Comparte la paleta y la
+   marca con el tablero de RRHH, así que se confunde con él: el propio
+   coordinador la abrió buscando su padrón y creyó que se le había borrado
+   todo. Es el mismo error que ya había pasado con la página de demostración y
+   se arregló igual — diciéndolo en la portada, no esperando que se deduzca. */
+header p.no-es-el-panel {
+  margin-top: 12px; font-size: 13px; line-height: 1.55;
+  color: rgba(255,255,255,.72);
+  border-left: 2px solid rgba(255,255,255,.3); padding-left: 11px;
+}
 
 main { max-width: 620px; margin: 0 auto; padding: 18px 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
 section {
@@ -161,6 +171,9 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
   <p>Para los <strong>reclamos de sueldo</strong> de tu gente. Lo llenás en un minuto
      y le llega ordenado al coordinador, con su fecha: así no se pierde y te puede
      contestar.</p>
+  <p class="no-es-el-panel">Esto <strong>no es el panel de RRHH</strong>: es solo el
+     formulario para avisar un reclamo. No guarda ningún dato de nadie y no hay nada
+     que buscar acá adentro.</p>
 </header>
 
 <main>
