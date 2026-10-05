@@ -989,176 +989,6 @@ const Store = (() => {
       guardar();
     },
 
-    /* ------------------- horas extras pedidas --------------------- */
-
-    /**
-     * Una solicitud de horas extras, colgada de **quien las haría**.
-     *
-     * Cuelga de la persona como `c.baja`, `c.ausencias` y `c.entrenamientos`,
-     * y por un motivo concreto: los dos topes del Decreto 484/2000 son por
-     * persona, así que lo pedido tiene que estar donde está lo liquidado para
-     * poder sumarse. Y si la trasladan de tienda en el medio del mes, su
-     * acumulado del año la acompaña.
-     *
-     * Entra como `pedida` y nada más: autorizarla es una decisión del
-     * coordinador y nunca la consecuencia de haberla cargado.
-     */
-    agregarSolicitudHoras(colaboradorId, datos) {
-      const c = this.colaboradorPorId(colaboradorId);
-      if (!c) return null;
-      if (!Array.isArray(c.solicitudesHoras)) c.solicitudesHoras = [];
-      const x = Object.assign({
-        id: uid(),
-        fecha: '',
-        horas: 0,
-        motivo: 'afluencia',
-        cubreA: '',
-        estado: 'pedida',
-        pedidaPor: '',
-        pedidaEl: _diaHoy(),
-        resueltaEl: '',
-        nota: '',
-        origen: 'mano',
-        marca: '',
-        registradaEl: new Date().toISOString()
-      }, datos || {});
-      x.horas = +x.horas || 0;
-      c.solicitudesHoras.push(x);
-      guardar();
-      return x;
-    },
-
-    /**
-     * Autoriza, rechaza o la devuelve a pedida.
-     *
-     * **Volver a tocar el mismo estado la destilda**, como el check list y los
-     * trámites de la baja: autorizar por error se deshace en el mismo lugar.
-     * Y **destildar no borra la nota** —por qué se había autorizado sigue
-     * siendo lo que hay que leer—.
-     */
-    resolverSolicitudHoras(colaboradorId, solicitudId, estado, nota) {
-      const c = this.colaboradorPorId(colaboradorId);
-      if (!c) return null;
-      const x = (c.solicitudesHoras || []).find(y => y.id === solicitudId);
-      if (!x) return null;
-      const vuelve = x.estado === estado;
-      x.estado = vuelve ? 'pedida' : estado;
-      x.resueltaEl = vuelve ? '' : _diaHoy();
-      if (nota !== undefined && nota !== null) x.nota = String(nota);
-      guardar();
-      return x;
-    },
-
-    editarSolicitudHoras(colaboradorId, solicitudId, campo, valor) {
-      const c = this.colaboradorPorId(colaboradorId);
-      if (!c) return null;
-      const x = (c.solicitudesHoras || []).find(y => y.id === solicitudId);
-      if (!x) return null;
-      x[campo] = campo === 'horas' ? (+valor || 0) : valor;
-      guardar();
-      return x;
-    },
-
-    quitarSolicitudHoras(colaboradorId, solicitudId) {
-      const c = this.colaboradorPorId(colaboradorId);
-      if (!c) return;
-      c.solicitudesHoras = (c.solicitudesHoras || []).filter(x => x.id !== solicitudId);
-      guardar();
-    },
-
-    /** Todas las solicitudes del área con su persona y su tienda al lado. */
-    solicitudesDeHoras(estado) {
-      const e = this.get();
-      const out = [];
-      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => {
-        (c.solicitudesHoras || []).forEach(x => {
-          if (estado && x.estado !== estado) return;
-          out.push({ x, c, s });
-        });
-      }));
-      /* Por el día en que se harían: lo que es para mañana se contesta hoy. */
-      return out.sort((a, b) => String(a.x.fecha).localeCompare(String(b.x.fecha)));
-    },
-
-    /**
-     * Las respuestas del formulario de horas extras.
-     *
-     * **No duplica**: la marca temporal que Google agrega sola identifica cada
-     * respuesta, así que la planilla se puede volver a pegar entera todos los
-     * días. Sin marca —una fila cargada a mano en la planilla— se compara por
-     * persona, día y horas, que es lo que define el pedido.
-     *
-     * **Lo que no cae en nadie no se inventa**: una solicitud cuelga de la
-     * persona, así que sin ficha no hay dónde ponerla. Se devuelve con nombre
-     * en `sinPersona`, como el libro de novedades.
-     */
-    importarSolicitudesDeHoras(filas) {
-      const e = this.get();
-      const buscar = buscadorDePadron(e);
-      const out = { cargadas: 0, repetidas: 0, sinFecha: 0, sinHoras: 0,
-                    sinPersona: [], otrasAreas: 0, enConflicto: [],
-                    excedenTope: [] };
-      const p = e.config.parametros;
-
-      filas.forEach(f => {
-        const fecha = fechaDelParte(f.fecha);
-        if (!fecha) { out.sinFecha++; return; }
-        const horas = +String(f.horas || '').replace(',', '.').replace(/[^\d.]/g, '');
-        if (!horas) { out.sinHoras++; return; }
-
-        /* El número va por las dos puertas: `documentoDelFormulario()` lee el
-           CUIL y el DNI del mismo campo, y lo que tiene cuatro dígitos cae en
-           el legajo. Es el único emparejamiento del panel y no se escribe otro
-           acá: `buscadorDePadron()`. */
-        const m = buscar({ cuil: f.dni, legajo: f.dni,
-                           nombre: f.nombre, tienda: f.tienda });
-        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
-        if (!m.g) {
-          if (m.propia) out.sinPersona.push(String(f.nombre || '').trim());
-          else out.otrasAreas++;
-          return;
-        }
-        const c = m.g.c;
-        if (!Array.isArray(c.solicitudesHoras)) c.solicitudesHoras = [];
-
-        const marca = String(f.marca || '').trim();
-        const ya = c.solicitudesHoras.find(x => marca
-          ? x.marca === marca
-          : (x.fecha === fecha && (+x.horas || 0) === horas));
-        if (ya) { out.repetidas++; return; }
-
-        const x = {
-          id: uid(), fecha, horas,
-          motivo: motivoDeSolicitud(f.motivo) || 'otro',
-          cubreA: String(f.cubreA || '').trim(),
-          estado: 'pedida',
-          pedidaPor: String(f.pide || '').trim(),
-          pedidaEl: fechaDelParte(marca) || _diaHoy(),
-          resueltaEl: '', nota: String(f.notas || '').trim(),
-          origen: 'formulario', marca,
-          registradaEl: new Date().toISOString()
-        };
-        c.solicitudesHoras.push(x);
-        out.cargadas++;
-
-        /* El dato que hace que esto sirva: con la solicitud ya cargada, decir
-           cuál de las que entraron se pasa de un tope. Antes de autorizar es el
-           único momento en que el número cambia una decisión —pasarse del anual
-           ya no se corrige—, y el aviso del pegado es donde se lo va a leer. */
-        const t = topeConLoPedido(c, horas, fecha, p);
-        if (t.excedeMes || t.excedeAnio) {
-          out.excedenTope.push({
-            nombre: c.nombre, horas, fecha,
-            mes: t.excedeMes ? t.conLoPedidoMes : 0,
-            anio: t.excedeAnio ? t.conLoPedidoAnio : 0
-          });
-        }
-      });
-
-      guardar();
-      return out;
-    },
-
     /* --------------------------- casos ---------------------------- */
 
     abrirCaso(colaboradorId, datos) {
@@ -2521,7 +2351,7 @@ const Store = (() => {
       resguardar('Antes de unir dos fichas');
 
       ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones',
-       'planes', 'documentos', 'solicitudesHoras'].forEach(k => {
+       'planes', 'documentos'].forEach(k => {
         if (!Array.isArray(b[k]) || !b[k].length) return;
         if (!Array.isArray(a[k])) a[k] = [];
         b[k].forEach(x => {
@@ -2538,8 +2368,7 @@ const Store = (() => {
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'planes', 'documentos', 'solicitudesHoras',
-             'novedades', 'baja'].indexOf(k) >= 0) return;
+             'sanciones', 'planes', 'documentos', 'novedades', 'baja'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
         if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;

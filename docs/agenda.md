@@ -113,27 +113,17 @@ bien guardada en su pantalla —y ahí es donde tiene que estar— pero **ningun
 esas pantallas es la que se abre a la mañana para ver qué hay que hacer**: esa
 es la agenda.
 
-El bloque **Lo que quedó pendiente**, arriba de los cajones por fecha, junta de
-donde vive cada una:
+El bloque **Lo que quedó pendiente**, arriba de los cajones por fecha, junta seis
+cosas de donde vive cada una:
 
 | Grupo | De dónde sale | Lleva a |
 |---|---|---|
 | Trámites de baja sin terminar | `c.baja.tramites`, proceso sin cerrar | `#/movimientos/bajas` |
 | Ausencias que piden algo | `alertasDeAusencias()` | `#/diario/<persona>` |
-| Documentos que hay que renovar | `documentosQueVencen()` | `#/nomina` |
-| Horas extras esperando autorización | `c.solicitudesHoras[]` en `pedida` | `#/nomina/horas` |
 | Reclamos abiertos | `e.reclamos` sin estado cerrado | `#/reclamos/<tienda>` |
 | Movimientos sin autorizar | `c.movimientos[]` en `pendiente` | `#/movimientos` |
 | Desarrollo al rol de Senior | `alertasDeDesarrollo()` | `#/desarrollo/<persona>` |
-| Casos que piden algo | `casosDelArea()` | `#/casos` |
 | Compromisos de la última visita | `v.diagnostico.plan`, sin cumplir | la visita |
-
-**Las horas extras son el único grupo que mira hacia adelante.** Todos los demás
-cuentan desde que la cosa quedó abierta; una solicitud de horas extras tiene su
-propia fecha de vencimiento —el día en que se harían— y contestar el martes lo
-que era para el sábado no es contestar: el gerente ya decidió sin respuesta. Por
-eso su color sale de los días que **faltan** y no de los que lleva, y la línea
-dice ahí mismo si autorizarla pasa un tope.
 
 ### No copia nada
 

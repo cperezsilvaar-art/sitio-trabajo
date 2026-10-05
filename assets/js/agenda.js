@@ -563,45 +563,6 @@ function pendientesDelArea(estado, hoyISO) {
     ruta: '#/nomina', items: docs
   });
 
-  /* 2 ter. Horas extras pedidas y sin contestar. Esto **sí tiene fecha de
-        vencimiento propia**, y es la única clase de pendiente del panel que la
-        tiene: el día en que se harían. Contestarla el martes cuando era para el
-        sábado no es contestarla, y el gerente ya decidió sin respuesta. Por eso
-        el tono no sale de los días que lleva abierta sino de los que faltan
-        para ese día. */
-  const hrs = [];
-  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
-    (c.solicitudesHoras || []).forEach(x => {
-      if (x.estado !== 'pedida') return;
-      const faltan = x.fecha ? _diasDesde(hoy, x.fecha) : null;
-      const t = typeof topeConLoPedido === 'function'
-        ? topeConLoPedido(c, x.horas, x.fecha, (e.config || {}).parametros) : null;
-      const motivo = (typeof MOTIVOS_HORAS_POR_ID !== 'undefined'
-        && MOTIVOS_HORAS_POR_ID[x.motivo] || {}).nombre || '';
-      hrs.push({
-        que: `${c.nombre} — ${_n(x.horas, 1)} h`,
-        quien: s.nombre || s.codigo,
-        /* El tope va en el detalle y no en una columna: es lo que decide la
-           respuesta, así que tiene que estar en la línea que se lee. */
-        detalle: [motivo.toLowerCase(),
-                  x.cubreA ? `cubre a ${x.cubreA}` : '',
-                  t && t.excedeAnio ? `pasa el tope anual: ${_n(t.conLoPedidoAnio, 1)} de ${t.topeAnual} h`
-                    : t && t.excedeMes ? `pasa el tope del mes: ${_n(t.conLoPedidoMes, 1)} de ${t.topeMensual} h` : '',
-                  x.fecha ? `para el ${x.fecha.slice(8, 10)}/${x.fecha.slice(5, 7)}` : ''
-                 ].filter(Boolean).join(' · '),
-        desde: x.pedidaEl,
-        dias: _diasDesde(x.pedidaEl, hoy),
-        tono: (t && (t.excedeMes || t.excedeAnio)) || (faltan !== null && faltan <= 1)
-          ? 'rojo' : 'ambar',
-        ruta: '#/nomina/horas'
-      });
-    });
-  }));
-  if (hrs.length) grupos.push({
-    id: 'horas', titulo: 'Horas extras esperando tu autorización',
-    ruta: '#/nomina/horas', items: hrs
-  });
-
   /* 3. Reclamos abiertos: son de plata y el que los hizo está esperando. */
   const rec = (e.reclamos || [])
     .filter(r => !((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
