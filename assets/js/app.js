@@ -2316,6 +2316,9 @@ const App = (() => {
   let resultadoAusencias = null;
   let resultadoParte = null;
   let resultadoAnexo = null;
+  /* El reporte que se está mirando: `{ titulo, texto }`. Uno a la vez, porque
+     son documentos para copiar y mandar, no dos cosas que se comparan. */
+  let reporteReclamos = null;
   let casoPersona = '';       // a quién se le abre un caso desde el alta
   let casoAbierto = null;     // qué caso está desplegado
   let verCasosCerrados = false;
@@ -3097,7 +3100,89 @@ const App = (() => {
         </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
       </section>
 
+      ${bloqueOrigenReclamos(e, todos)}
+
       ${bloquePegarAnexo()}`;
+  }
+
+  /* ---------------- De dónde vienen los reclamos ----------------
+     Esto es lo que se lleva a Nómina, y la razón por la que el coordinador
+     quiso el anexo: un reclamo suelto es un trámite, el mismo concepto
+     repetido es un proceso roto.
+
+     Va en `#/reclamos` y no en Indicadores del Panel, aunque sea un
+     indicador: ahí se cargan y ahí se los mira, y traerlo al Panel sería el
+     sexto lugar con los mismos números —la regla de `DONDE_VIVEN_LOS_OTROS`—.
+
+     Tabla y no gráfico, como el resto: la barra sola perdería de quién es el
+     problema, que es justamente lo único que hace que el número sirva. */
+  function bloqueOrigenReclamos(e, lista) {
+    const o = origenDeReclamos(e, lista, e.parametros);
+    if (!o.total) return '';
+
+    const chip = de => {
+      const q = DE_QUIEN_ES[de] || {};
+      return `<span class="chip ${q.tono || ''}">${esc(q.nombre || de)}</span>`;
+    };
+
+    return `<section class="tarjeta">
+      <h2>De dónde vienen</h2>
+      <p class="ayuda">Un reclamo suelto es un trámite. <strong>El mismo concepto
+        repetido es un proceso roto</strong>, y de quién es depende de en cuántas tiendas
+        aparece: en varias se liquida mal en general y es de Nómina; en una sola es cómo
+        se carga ahí.</p>
+
+      ${o.cerrados ? `<p class="ind-lectura">De los ${o.cerrados} resueltos,
+        <strong>${o.procedieron}</strong> se ajustaron y <strong>${o.noProcedieron}</strong>
+        no procedían${o.abiertos ? `, y quedan ${o.abiertos} sin resolver` : ''}.
+        ${o.diasPromedio != null
+          ? `Tardan ${fmtNum(o.diasPromedio, 0)} días en resolverse.` : ''}
+        ${o.noProcedieron > o.cerrados / 2
+          ? '<strong>Que la mayoría no proceda no dice que los reclamos estén mal hechos:'
+            + ' dice que la gente no entiende su recibo.</strong>' : ''}</p>`
+        : `<p class="ind-lectura">Todavía no hay ninguno resuelto, así que no se puede
+           decir qué parte procede. Son ${o.abiertos} abiertos.</p>`}
+
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Concepto</th><th class="num">Casos</th><th class="num">Tiendas</th>
+          <th class="num">Monto</th><th>De quién es</th><th>Por qué</th></tr></thead>
+        <tbody>${o.porConcepto.map(c => `<tr class="${c.de === 'sinCorregir' || c.de === 'nomina' ? 'fila-alerta' : ''}">
+          <td><strong>${esc(c.nombre)}</strong>${c.grupo ? `<br><span class="ayuda" style="font-size:11.5px">${esc(c.grupo)}</span>` : ''}</td>
+          <td class="num">${fmtNum(c.casos, 0)}${c.abiertos ? `<br><span class="ayuda" style="font-size:11.5px">${c.abiertos} abiertos</span>` : ''}</td>
+          <td class="num">${fmtNum(c.tiendas, 0)}</td>
+          <td class="num">${c.monto ? dinero(c.monto) : '—'}</td>
+          <td>${chip(c.de)}</td>
+          <td><span class="ayuda">${esc(c.porque)}</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+
+      <h4 style="margin-top:22px">Por tienda</h4>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Tienda</th><th class="num">Casos</th><th class="num">Sin resolver</th>
+          <th class="num">Monto</th><th class="num">Días</th><th></th></tr></thead>
+        <tbody>${o.porTienda.map(t => `<tr>
+          <td><a href="#/reclamos/${t.sucursalId}">${esc(t.sucursal)}</a>
+            ${t.conceptos.length ? `<br><span class="ayuda" style="font-size:11.5px">${esc(t.conceptos.slice(0, 3).join(' · '))}${t.conceptos.length > 3 ? '…' : ''}</span>` : ''}</td>
+          <td class="num">${fmtNum(t.casos, 0)}</td>
+          <td class="num">${t.abiertos ? `<strong>${fmtNum(t.abiertos, 0)}</strong>` : '0'}</td>
+          <td class="num">${t.monto ? dinero(t.monto) : '—'}</td>
+          <td class="num">${t.diasPromedio != null ? fmtNum(t.diasPromedio, 0) : '—'}</td>
+          <td class="num"><button class="mini" data-accion="reporte-tienda"
+            data-id="${t.sucursalId}" title="Lo que le devolvés al gerente">Reporte</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+
+      <div class="acciones">
+        <button class="b" data-accion="reporte-nomina">Armar el reporte para Nómina</button>
+      </div>
+
+      ${reporteReclamos ? `<h4 style="margin-top:18px">${esc(reporteReclamos.titulo)}</h4>
+        <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
+        <div class="acciones">
+          <button class="b sec" data-accion="copiar-reporte-reclamos">Copiar</button>
+          <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
+        </div>` : ''}
+    </section>`;
   }
 
   /* ------------- Lo que mandan los gerentes por el anexo -------------
@@ -8265,6 +8350,39 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      /* --- los dos reportes de reclamos --- */
+      if (a === 'reporte-nomina') {
+        reporteReclamos = {
+          titulo: 'Para Nómina',
+          texto: Reporte.textoReclamosNomina(),
+          asunto: Reporte.asuntoReclamosNomina()
+        };
+        refrescar();
+        return;
+      }
+
+      if (a === 'reporte-tienda') {
+        const s = Store.sucursal(btn.dataset.id);
+        reporteReclamos = {
+          titulo: `Para el gerente de ${s ? (s.nombre || s.codigo) : 'la tienda'}`,
+          texto: Reporte.textoReclamosDeTienda(btn.dataset.id),
+          asunto: Reporte.asuntoReclamosDeTienda(btn.dataset.id)
+        };
+        refrescar();
+        return;
+      }
+
+      if (a === 'copiar-reporte-reclamos') {
+        if (!reporteReclamos) return;
+        try {
+          await navigator.clipboard.writeText(reporteReclamos.texto);
+          avisar('Copiado, listo para mandar.');
+        } catch (err) { avisar('No pude copiarlo: seleccionalo y copialo a mano.', 'error'); }
+        return;
+      }
+
+      if (a === 'cerrar-reporte-reclamos') { reporteReclamos = null; refrescar(); return; }
 
       if (a === 'importar-anexo') {
         const crudo = (document.getElementById('pegar-anexo') || {}).value || '';

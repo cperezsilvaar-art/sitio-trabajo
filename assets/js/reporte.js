@@ -1230,8 +1230,221 @@ const Reporte = (() => {
     return `Novedades de liquidación${area} - ${nombreDePeriodo(periodo)}`;
   }
 
+  /* ------------------- De dónde vienen los reclamos -------------------
+     Dos documentos y no uno, porque son dos lectores y dos preguntas.
+
+     El de Nómina contesta «qué hay que arreglar en el proceso» y por eso abre
+     con el veredicto y no con la lista: catorce renglones de casos se leen
+     como catorce trámites, y lo que hay que ver es que seis son el mismo.
+
+     El de la tienda contesta «qué pasó con lo que cargué». Ese es el que hace
+     que el gerente se apropie: sin devolverle el estado, carga en un vacío y
+     en dos semanas vuelve a preguntar por WhatsApp, que es justo lo que el
+     anexo viene a sacar. */
+
+  function _plataReclamo(r) {
+    const n = parseFloat(String(r.monto == null ? '' : r.monto).replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  }
+
+  function textoReclamosNomina(config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const mon = (e.parametros || {}).moneda;
+    const o = origenDeReclamos(e, null, e.parametros);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'DE DÓNDE VIENEN LOS RECLAMOS'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    if (cfg.coordinador) L.push('Informa: ' + cfg.coordinador);
+    L.push('Al ' + fmtFecha(new Date().toISOString().slice(0, 10)));
+    L.push(barra, '');
+
+    if (!o.total) {
+      L.push('No hay reclamos registrados.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    L.push(`${o.total} reclamo${o.total === 1 ? '' : 's'} registrado${o.total === 1 ? '' : 's'}` +
+           (o.monto ? `, por ${fmtMoneda(o.monto, mon)}` : '') + '.');
+    /* El número nunca solo: cuántos siguen abiertos cambia cómo se lee todo lo
+       de abajo. */
+    L.push(`${o.cerrados} resuelto${o.cerrados === 1 ? '' : 's'} y ${o.abiertos} abierto${
+      o.abiertos === 1 ? '' : 's'}.` +
+      (o.cerrados ? ` De los resueltos, ${o.procedieron} se ${
+        o.procedieron === 1 ? 'ajustó' : 'ajustaron'} y ${o.noProcedieron} no ${
+        o.noProcedieron === 1 ? 'procedía' : 'procedían'}.` : ''));
+    if (o.diasPromedio != null) {
+      L.push(`Tardan ${fmtNum(o.diasPromedio, 0)} días en resolverse. Lo que rompe la ` +
+             'confianza no es el «no»: es el silencio.');
+    }
+    L.push('');
+
+    const aEscalar = o.porConcepto.filter(c => c.de === 'sinCorregir' || c.de === 'nomina');
+    if (aEscalar.length) {
+      L.push('LO QUE HAY QUE MIRAR EN EL PROCESO');
+      L.push('-'.repeat(60));
+      aEscalar.forEach(c => {
+        L.push(`• ${c.nombre} — ${c.casos} caso${c.casos === 1 ? '' : 's'}` +
+               (c.monto ? ` · ${fmtMoneda(c.monto, mon)}` : ''));
+        L.push(`  ${c.porque}.`);
+        if (c.nombresTiendas.length) L.push(`  Tiendas: ${c.nombresTiendas.join(', ')}.`);
+        if (c.periodos.length > 1) {
+          L.push(`  Períodos: ${c.periodos.map(x => nombreDePeriodo(x)).join(', ')}.`);
+        }
+        L.push('');
+      });
+    }
+
+    const explicar = o.porConcepto.filter(c => c.de === 'explicacion');
+    if (explicar.length) {
+      L.push('LO QUE NO ES DE LIQUIDACIÓN SINO DE EXPLICACIÓN');
+      L.push('-'.repeat(60));
+      L.push('Acá la liquidación estaba bien. Que un reclamo no proceda no quiere decir');
+      L.push('que esté mal hecho: quiere decir que alguien no pudo leer su recibo y');
+      L.push('nadie se lo explicó. Se resuelve con el gerente, no con Nómina.');
+      L.push('');
+      explicar.forEach(c => {
+        L.push(`• ${c.nombre} — ${c.porque}.`);
+      });
+      L.push('');
+    }
+
+    const deTienda = o.porConcepto.filter(c => c.de === 'tienda');
+    if (deTienda.length) {
+      L.push('LO QUE SE RESUELVE EN UNA TIENDA');
+      L.push('-'.repeat(60));
+      deTienda.forEach(c => L.push(`• ${c.nombre} — ${c.porque}.`));
+      L.push('');
+    }
+
+    L.push('TODOS LOS CONCEPTOS');
+    L.push('-'.repeat(60));
+    o.porConcepto.forEach(c => {
+      const q = DE_QUIEN_ES[c.de] || {};
+      L.push(`${String(c.casos).padStart(3)}  ${c.nombre}` +
+             `  ·  ${c.tiendas} tienda${c.tiendas === 1 ? '' : 's'}` +
+             (c.monto ? `  ·  ${fmtMoneda(c.monto, mon)}` : '') +
+             `  ·  ${q.nombre || ''}`);
+    });
+    L.push('');
+
+    L.push('POR TIENDA');
+    L.push('-'.repeat(60));
+    o.porTienda.forEach(t => {
+      L.push(`${String(t.casos).padStart(3)}  ${t.sucursal}` +
+             (t.abiertos ? `  ·  ${t.abiertos} sin resolver` : '') +
+             (t.monto ? `  ·  ${fmtMoneda(t.monto, mon)}` : ''));
+    });
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoReclamosNomina(config) {
+    const cfg = config || Store.get().config;
+    const o = origenDeReclamos(Store.get(), null, Store.get().parametros);
+    const escalar = o.porConcepto.filter(c => c.de === 'sinCorregir' || c.de === 'nomina').length;
+    return `Reclamos de haberes${cfg.area ? ' · ' + cfg.area : ''} — ${o.total} casos` +
+           (escalar ? `, ${escalar} para revisar en el proceso` : '');
+  }
+
+  /**
+   * Lo que se le devuelve al Gerente de Tienda.
+   *
+   * No es el reporte de Nómina recortado: contesta otra cosa. Él quiere saber
+   * qué pasó con lo que cargó, para poder contestarle a su gente sin
+   * preguntarle a RRHH. Por eso va caso por caso con su estado, y el patrón de
+   * su tienda al final —que es lo único que puede corregir él—.
+   */
+  function textoReclamosDeTienda(sucursalId, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const s = Store.sucursal(sucursalId);
+    if (!s) return '';
+    const suyos = (e.reclamos || []).filter(r => r.sucursalId === sucursalId)
+      .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const mon = (e.parametros || {}).moneda;
+    const o = origenDeReclamos(e, suyos, e.parametros);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'RECLAMOS DE HABERES — ' + (s.nombre || s.codigo).toUpperCase()];
+    L.push('Al ' + fmtFecha(new Date().toISOString().slice(0, 10)));
+    if (cfg.coordinador) L.push('RRHH: ' + cfg.coordinador);
+    L.push(barra, '');
+
+    if (!suyos.length) {
+      L.push('No hay reclamos registrados de esta tienda.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    const abiertos = suyos.filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+    L.push(`${suyos.length} reclamo${suyos.length === 1 ? '' : 's'}: ${
+      abiertos.length} sin cerrar y ${suyos.length - abiertos.length} resuelto${
+      suyos.length - abiertos.length === 1 ? '' : 's'}.`);
+    L.push('');
+
+    L.push('UNO POR UNO');
+    L.push('-'.repeat(60));
+    suyos.forEach(r => {
+      const est = ESTADOS_RECLAMO_POR_ID[r.estado] || {};
+      const tipo = (TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo;
+      L.push(`• ${r.colaborador || 'Sin nombre'} — ${tipo}` +
+             (r.periodoAfectado ? ` (${r.periodoAfectado})` : ''));
+      L.push(`  Planteado el ${fmtFecha(r.fecha)} · ${est.nombre || r.estado}` +
+             (r.monto ? ` · ${fmtMoneda(_plataReclamo(r) || null, mon)}` : ''));
+      /* La respuesta es lo que el gerente le repite al colaborador, así que va
+         completa y no resumida. */
+      if (String(r.respuesta || '').trim()) L.push(`  Respuesta: ${r.respuesta.trim()}`);
+      else if (!est.cerrado) L.push('  Todavía sin respuesta.');
+      L.push('');
+    });
+
+    const patron = o.porConcepto.filter(c => c.casos >= 2);
+    if (patron.length) {
+      L.push('LO QUE SE REPITE EN TU TIENDA');
+      L.push('-'.repeat(60));
+      L.push('Dos personas con el mismo concepto no son dos reclamos: es un error');
+      L.push('de proceso. Esto es lo que conviene mirar antes de que vuelva.');
+      L.push('');
+      patron.forEach(c => {
+        L.push(`• ${c.nombre}: ${c.casos} casos` +
+               (c.noProcedieron ? ` · ${c.noProcedieron} no procedían` : ''));
+      });
+      L.push('');
+    }
+
+    const noProc = suyos.filter(r => r.estado === 'sinLugar');
+    if (noProc.length) {
+      L.push('LOS QUE NO PROCEDÍAN');
+      L.push('-'.repeat(60));
+      L.push('La liquidación estaba bien. No quiere decir que el reclamo estuviera mal');
+      L.push('hecho: quiere decir que la persona no pudo leer su recibo. Vale la pena');
+      L.push('sentarse a explicárselo, porque si no vuelve el mes que viene.');
+      L.push('');
+      noProc.forEach(r => L.push(`• ${r.colaborador || 'Sin nombre'} — ` +
+        ((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)));
+      L.push('');
+    }
+
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoReclamosDeTienda(sucursalId) {
+    const s = Store.sucursal(sucursalId);
+    const n = (Store.get().reclamos || []).filter(r => r.sucursalId === sucursalId).length;
+    return `Reclamos de haberes — ${s ? (s.nombre || s.codigo) : 'tienda'} (${n})`;
+  }
+
   return {
     calcular, datosMensuales,
+    textoReclamosNomina, asuntoReclamosNomina,
+    textoReclamosDeTienda, asuntoReclamosDeTienda,
     textoVentasDia,
     textoNovedadesLiquidacion, asuntoNovedadesLiquidacion,
     textoVisita, textoMensual, textoChecklist,

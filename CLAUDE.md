@@ -1340,6 +1340,75 @@ no conoce.** Un dato nuevo de un caso se agrega *ahí*, no pasándolo a
 e `informadoPor`; `origen: 'anexo'` sigue la convención de `c.ausencias`, que ya
 usa `origen: 'formulario'`.
 
+**Lo que el coordinador quiere del anexo no es dejar de recibir WhatsApps: es
+poder decirle a Nómina de dónde salen los reclamos.** Esa es la razón de
+`origenDeReclamos()` (`reclamos.js`), y la regla que lo ordena todo es: **un
+reclamo suelto es un trámite; el mismo concepto repetido es un proceso roto.**
+De quién es depende de cómo se reparte:
+
+- en **varias tiendas** (`TIENDAS_PARA_SER_DE_NOMINA`, 3) es de **Nómina**: así
+  se liquida en todas partes, y no son cinco errores sueltos;
+- concentrado en **una** es de **esa tienda**: cómo carga o cómo comunica;
+- que vuelva en **dos períodos** es *no se corrigió*, y gana sobre todo lo demás
+  —un concepto que vuelve es peor que uno más grande que pasó una vez—;
+- y donde la mayoría de los resueltos **no procede** es de **explicación**, no de
+  liquidación. Ese es el que más se malinterpreta: «no procede» se lee como
+  «reclamo infundado» cuando lo que dice es que alguien no pudo leer su propio
+  recibo y nadie se lo explicó.
+
+Los porcentajes van **sobre los cerrados** y la pantalla dice cuántos siguen
+abiertos: «el 70% no procedió» con la mitad sin resolver no es un 70%.
+`patronesDeReclamos()` se queda —contesta «qué tienda mirar»— y no se
+reemplaza. El bloque va en `#/reclamos` y no en *Panel → Indicadores*, que
+sería el sexto lugar con los mismos números.
+
+**`periodoReclamado()` lee `periodoAfectado`, que es texto libre**, y si no lo
+entiende cae en la fecha en que se planteó. Nunca inventa un período: el que no
+se pudo ubicar no ensucia uno ajeno.
+
+**Son dos reportes y no uno recortado**, porque son dos lectores y dos
+preguntas. `Reporte.textoReclamosNomina()` contesta «qué hay que arreglar en el
+proceso» y **abre con el veredicto y no con la lista**: catorce renglones de
+casos se leen como catorce trámites, y lo que hay que ver es que seis son el
+mismo. `Reporte.textoReclamosDeTienda()` contesta «qué pasó con lo que cargué»,
+va caso por caso con su estado y su respuesta textual, y es **lo que hace que el
+gerente se apropie**: sin devolverle el estado carga en un vacío y en dos
+semanas vuelve a preguntar por WhatsApp, que es justo lo que el anexo viene a
+sacar. No lleva la comparación entre tiendas: los números de las otras no son
+suyos.
+
+**El WhatsApp se pega en el alta y queda textual.** El coordinador decidió
+seguir recibiendo los avisos como siempre y cargarlos él, y eso tiene un costo:
+lo registrado es su reconstrucción y no la palabra del gerente. Pegando el
+mensaje queda textual en el detalle, y `leerMensajeDeReclamo()` propone el
+concepto, el período y el monto. **Propone y no decide, y cada pista dice de qué
+palabra salió**: una adivinanza sin su motivo al lado se acepta de apuro, y el
+concepto mal puesto ensucia justo el número que se le lleva a Nómina. Nunca pisa
+lo que ya está escrito a mano.
+
+`PALABRAS_DE_RECLAMO` **completa a `TIPOS_RECLAMO`, no la reemplaza**: los `id`
+son los de esa lista y uno que no exista se grita por consola al cargar. Lo que
+agrega es cómo lo escribe un gerente apurado, que no es el nombre formal
+—nadie tipea «Adicional nocturno», tipea «el nocturno»—. Se buscan **con borde
+de palabra**: «sacaron» no puede dar SAC ni «cuarto» dar ART, que es el falso
+positivo que contaría un reclamo de francos como aguinaldo. Y el monto entra
+**solo con signo de pesos**: un número suelto puede ser una cantidad de horas, y
+tomarlo como plata inventa una cifra que después se suma.
+
+**`buscadorDePadron()` se abrió como `Store.buscarEnPadron()`** para que la
+pantalla lo use, en vez de escribir una búsqueda parecida en `app.js`. Es lo
+mismo que `Store.diasDeVinculo()`.
+
+**Lo que se descartó para que el dato viaje solo, con el motivo escrito.** El
+coordinador pidió un link donde los gerentes completen y que eso llegue
+**automáticamente** a `#/reclamos`. No se puede con lo que hay: ninguna página
+escribe dentro del navegador donde vive el panel. Se evaluaron una web app de
+**Apps Script** —que sí lo daría: link propio, planilla de la empresa, y el
+panel leyéndola al abrir— y el `db` de una página publicada —que **no**, porque
+quien entra con el link lee pero no escribe—. **El coordinador eligió quedarse
+con el anexo**, que arma el mensaje y se pega. No reproponer ninguna de las dos
+sin que él lo pida.
+
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos
 y obligaba a acordarse de cuál de las dos pantallas estaba más completa.

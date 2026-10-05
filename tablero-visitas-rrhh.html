@@ -7184,6 +7184,174 @@ function leerMensajeDeReclamo(texto) {
   return out;
 }
 
+/* ===================================================================== *
+ *  De dónde vienen los reclamos
+ * ===================================================================== *
+ *
+ * Esto es lo que se lleva a una reunión con Nómina, y la razón por la que el
+ * coordinador quiso el anexo: **un reclamo suelto es un trámite; el mismo
+ * concepto repetido es un proceso roto.**
+ *
+ * `patronesDeReclamos()` ya miraba una parte —mismo tipo repetido en la misma
+ * sucursal— y se queda, porque contesta «qué tienda mirar». Lo que faltaba es
+ * la otra mitad, que es la que cambia de quién es el problema:
+ *
+ * - un concepto que aparece en **varias tiendas** es de **Nómina**: así se
+ *   liquida en todas partes, y no son cinco errores sueltos;
+ * - un concepto concentrado en **una tienda** es de **esa tienda**: cómo carga
+ *   o cómo comunica;
+ * - un concepto que vuelve en **períodos distintos** no se corrigió, y eso es
+ *   peor que su cantidad;
+ * - y un concepto donde la mayoría **no procede** no es un problema de
+ *   liquidación sino **de explicación**: la gente no entiende su recibo. Ese es
+ *   el que más se malinterpreta, porque «no procede» se lee como «reclamo
+ *   infundado» cuando en realidad dice que alguien no pudo leer su propio
+ *   recibo y nadie se lo explicó.
+ */
+
+/* Cuántas tiendas distintas hacen que un concepto deje de ser de una tienda y
+   pase a ser del proceso. Con dos todavía puede ser casualidad; con tres ya es
+   cómo se liquida. No es un umbral estadístico: es cuándo conviene sentarse con
+   Nómina en vez de con un gerente. */
+const TIENDAS_PARA_SER_DE_NOMINA = 3;
+
+/** El período de liquidación al que apunta un reclamo. */
+function periodoReclamado(r, parametros) {
+  /* `periodoAfectado` es texto libre —«septiembre 2026»— porque lo escribe
+     quien carga. Se intenta leer, y si no se entiende se cae en la fecha en que
+     se planteó, que siempre está. Nunca se inventa: el que no se pudo ubicar
+     se cuenta aparte en vez de ensuciar un período ajeno. */
+  const t = _llanoAnexo(r && r.periodoAfectado).toLowerCase();
+  const mes = _MESES_RECLAMO.findIndex(m => t.indexOf(m) >= 0);
+  const anio = (t.match(/\b(20\d\d)\b/) || [])[1];
+  if (mes >= 0 && anio) return `${anio}-${String(mes + 1).padStart(2, '0')}`;
+  if (r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.fecha || '')) &&
+      typeof periodoDeFecha === 'function') {
+    return periodoDeFecha(r.fecha, parametros);
+  }
+  return '';
+}
+
+/**
+ * El origen de los reclamos: por concepto y por tienda, con el veredicto.
+ *
+ * `{ total, monto, porConcepto[], porTienda[], cerrados, procedieron,
+ *    noProcedieron, diasPromedio, periodos[] }`
+ *
+ * Los porcentajes se calculan **sobre los cerrados** y la pantalla dice
+ * cuántos siguen abiertos: «el 70% no procedió» con la mitad sin resolver no es
+ * un 70%. Es la misma regla que los días supuestos del ausentismo.
+ */
+function origenDeReclamos(estado, lista, parametros) {
+  const e = estado || {};
+  const todos = (lista || e.reclamos || []).slice();
+  const cerrado = r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado;
+  const plata = r => {
+    const n = parseFloat(String(r.monto == null ? '' : r.monto).replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  };
+  const nombreSuc = id => {
+    const s = (e.sucursales || []).find(x => x.id === id);
+    return s ? (s.nombre || s.codigo) : 'Sin tienda';
+  };
+
+  const porConcepto = [];
+  const porTienda = [];
+  const periodos = new Set();
+
+  TIPOS_RECLAMO.forEach(t => {
+    const suyos = todos.filter(r => r.tipo === t.id);
+    if (!suyos.length) return;
+    const tiendas = [...new Set(suyos.map(r => r.sucursalId).filter(Boolean))];
+    const peris = [...new Set(suyos.map(r => periodoReclamado(r, parametros)).filter(Boolean))].sort();
+    peris.forEach(p => periodos.add(p));
+    const cerr = suyos.filter(cerrado);
+    const proc = cerr.filter(r => r.estado === 'ajustado');
+    const noProc = cerr.filter(r => r.estado === 'sinLugar');
+
+    /* El veredicto. El orden importa: lo de Nómina primero porque es lo que se
+       escala, y «no se corrigió» gana sobre todo lo demás porque un concepto
+       que vuelve es peor que uno más grande que pasó una vez. */
+    let de = 'pocos', porque = 'son casos sueltos, todavía no hay patrón';
+    if (peris.length >= 2 && suyos.length >= 2) {
+      de = 'sinCorregir';
+      porque = `volvió en ${peris.length} períodos: la primera vez no se corrigió`;
+    } else if (tiendas.length >= TIENDAS_PARA_SER_DE_NOMINA) {
+      de = 'nomina';
+      porque = `aparece en ${tiendas.length} tiendas: no son ${suyos.length} errores, es cómo se liquida`;
+    } else if (tiendas.length === 1 && suyos.length >= 2) {
+      de = 'tienda';
+      porque = `los ${suyos.length} son de ${nombreSuc(tiendas[0])}: mirá cómo se carga ahí`;
+    }
+    /* La explicación gana sobre el resto cuando hay con qué afirmarlo: si la
+       mayoría de los resueltos no procedía, la liquidación estaba bien y lo que
+       falló fue que nadie supo leer el recibo. */
+    if (cerr.length >= 2 && noProc.length > cerr.length / 2) {
+      de = 'explicacion';
+      porque = `${noProc.length} de ${cerr.length} resueltos no procedían: ` +
+               'la liquidación estaba bien y lo que falta es explicar el recibo';
+    }
+
+    porConcepto.push({
+      tipo: t.id, nombre: t.nombre, grupo: t.grupo,
+      casos: suyos.length, tiendas: tiendas.length,
+      nombresTiendas: tiendas.map(nombreSuc),
+      periodos: peris, monto: suyos.reduce((a, r) => a + plata(r), 0),
+      abiertos: suyos.length - cerr.length,
+      procedieron: proc.length, noProcedieron: noProc.length,
+      de, porque
+    });
+  });
+
+  (e.sucursales || []).forEach(s => {
+    const suyos = todos.filter(r => r.sucursalId === s.id);
+    if (!suyos.length) return;
+    const cerr = suyos.filter(cerrado);
+    const dias = cerr.map(r => typeof diasDeReclamo === 'function'
+      ? diasDeReclamo(r, r.fechaCierre || undefined) : null).filter(x => x != null);
+    porTienda.push({
+      sucursalId: s.id, sucursal: s.nombre || s.codigo,
+      casos: suyos.length, abiertos: suyos.length - cerr.length,
+      monto: suyos.reduce((a, r) => a + plata(r), 0),
+      conceptos: [...new Set(suyos.map(r => (TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo))],
+      procedieron: cerr.filter(r => r.estado === 'ajustado').length,
+      noProcedieron: cerr.filter(r => r.estado === 'sinLugar').length,
+      diasPromedio: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null,
+      personas: [...new Set(suyos.map(r => r.colaborador).filter(Boolean))]
+    });
+  });
+
+  const cerr = todos.filter(cerrado);
+  const dias = cerr.map(r => typeof diasDeReclamo === 'function'
+    ? diasDeReclamo(r, r.fechaCierre || undefined) : null).filter(x => x != null);
+
+  return {
+    total: todos.length,
+    monto: todos.reduce((a, r) => a + plata(r), 0),
+    cerrados: cerr.length,
+    abiertos: todos.length - cerr.length,
+    procedieron: cerr.filter(r => r.estado === 'ajustado').length,
+    noProcedieron: cerr.filter(r => r.estado === 'sinLugar').length,
+    diasPromedio: dias.length ? dias.reduce((a, b) => a + b, 0) / dias.length : null,
+    periodos: [...periodos].sort(),
+    /* Lo que se escala primero arriba: no se corrigió, después Nómina. */
+    porConcepto: porConcepto.sort((a, b) => {
+      const peso = x => ({ sinCorregir: 0, nomina: 1, explicacion: 2, tienda: 3, pocos: 4 })[x.de];
+      return peso(a) - peso(b) || b.casos - a.casos;
+    }),
+    porTienda: porTienda.sort((a, b) => b.casos - a.casos)
+  };
+}
+
+/* Cómo se lee cada veredicto y de quién es el problema. */
+const DE_QUIEN_ES = {
+  sinCorregir: { nombre: 'No se corrigió', tono: 'rojo',  quien: 'Nómina' },
+  nomina:      { nombre: 'Es de Nómina',   tono: 'rojo',  quien: 'Nómina' },
+  explicacion: { nombre: 'Falta explicar', tono: 'ambar', quien: 'RRHH y el gerente' },
+  tienda:      { nombre: 'Es de la tienda', tono: 'ambar', quien: 'el Gerente de Tienda' },
+  pocos:       { nombre: 'Casos sueltos',  tono: '',      quien: '—' }
+};
+
 /* ================================ AGENDA ================================
  *
  * La agenda de trabajo del coordinador: lo que tiene que hacer, lo que está
@@ -13573,8 +13741,221 @@ const Reporte = (() => {
     return `Novedades de liquidación${area} - ${nombreDePeriodo(periodo)}`;
   }
 
+  /* ------------------- De dónde vienen los reclamos -------------------
+     Dos documentos y no uno, porque son dos lectores y dos preguntas.
+
+     El de Nómina contesta «qué hay que arreglar en el proceso» y por eso abre
+     con el veredicto y no con la lista: catorce renglones de casos se leen
+     como catorce trámites, y lo que hay que ver es que seis son el mismo.
+
+     El de la tienda contesta «qué pasó con lo que cargué». Ese es el que hace
+     que el gerente se apropie: sin devolverle el estado, carga en un vacío y
+     en dos semanas vuelve a preguntar por WhatsApp, que es justo lo que el
+     anexo viene a sacar. */
+
+  function _plataReclamo(r) {
+    const n = parseFloat(String(r.monto == null ? '' : r.monto).replace(/\./g, '').replace(',', '.'));
+    return isNaN(n) ? 0 : n;
+  }
+
+  function textoReclamosNomina(config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const mon = (e.parametros || {}).moneda;
+    const o = origenDeReclamos(e, null, e.parametros);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'DE DÓNDE VIENEN LOS RECLAMOS'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    if (cfg.coordinador) L.push('Informa: ' + cfg.coordinador);
+    L.push('Al ' + fmtFecha(new Date().toISOString().slice(0, 10)));
+    L.push(barra, '');
+
+    if (!o.total) {
+      L.push('No hay reclamos registrados.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    L.push(`${o.total} reclamo${o.total === 1 ? '' : 's'} registrado${o.total === 1 ? '' : 's'}` +
+           (o.monto ? `, por ${fmtMoneda(o.monto, mon)}` : '') + '.');
+    /* El número nunca solo: cuántos siguen abiertos cambia cómo se lee todo lo
+       de abajo. */
+    L.push(`${o.cerrados} resuelto${o.cerrados === 1 ? '' : 's'} y ${o.abiertos} abierto${
+      o.abiertos === 1 ? '' : 's'}.` +
+      (o.cerrados ? ` De los resueltos, ${o.procedieron} se ${
+        o.procedieron === 1 ? 'ajustó' : 'ajustaron'} y ${o.noProcedieron} no ${
+        o.noProcedieron === 1 ? 'procedía' : 'procedían'}.` : ''));
+    if (o.diasPromedio != null) {
+      L.push(`Tardan ${fmtNum(o.diasPromedio, 0)} días en resolverse. Lo que rompe la ` +
+             'confianza no es el «no»: es el silencio.');
+    }
+    L.push('');
+
+    const aEscalar = o.porConcepto.filter(c => c.de === 'sinCorregir' || c.de === 'nomina');
+    if (aEscalar.length) {
+      L.push('LO QUE HAY QUE MIRAR EN EL PROCESO');
+      L.push('-'.repeat(60));
+      aEscalar.forEach(c => {
+        L.push(`• ${c.nombre} — ${c.casos} caso${c.casos === 1 ? '' : 's'}` +
+               (c.monto ? ` · ${fmtMoneda(c.monto, mon)}` : ''));
+        L.push(`  ${c.porque}.`);
+        if (c.nombresTiendas.length) L.push(`  Tiendas: ${c.nombresTiendas.join(', ')}.`);
+        if (c.periodos.length > 1) {
+          L.push(`  Períodos: ${c.periodos.map(x => nombreDePeriodo(x)).join(', ')}.`);
+        }
+        L.push('');
+      });
+    }
+
+    const explicar = o.porConcepto.filter(c => c.de === 'explicacion');
+    if (explicar.length) {
+      L.push('LO QUE NO ES DE LIQUIDACIÓN SINO DE EXPLICACIÓN');
+      L.push('-'.repeat(60));
+      L.push('Acá la liquidación estaba bien. Que un reclamo no proceda no quiere decir');
+      L.push('que esté mal hecho: quiere decir que alguien no pudo leer su recibo y');
+      L.push('nadie se lo explicó. Se resuelve con el gerente, no con Nómina.');
+      L.push('');
+      explicar.forEach(c => {
+        L.push(`• ${c.nombre} — ${c.porque}.`);
+      });
+      L.push('');
+    }
+
+    const deTienda = o.porConcepto.filter(c => c.de === 'tienda');
+    if (deTienda.length) {
+      L.push('LO QUE SE RESUELVE EN UNA TIENDA');
+      L.push('-'.repeat(60));
+      deTienda.forEach(c => L.push(`• ${c.nombre} — ${c.porque}.`));
+      L.push('');
+    }
+
+    L.push('TODOS LOS CONCEPTOS');
+    L.push('-'.repeat(60));
+    o.porConcepto.forEach(c => {
+      const q = DE_QUIEN_ES[c.de] || {};
+      L.push(`${String(c.casos).padStart(3)}  ${c.nombre}` +
+             `  ·  ${c.tiendas} tienda${c.tiendas === 1 ? '' : 's'}` +
+             (c.monto ? `  ·  ${fmtMoneda(c.monto, mon)}` : '') +
+             `  ·  ${q.nombre || ''}`);
+    });
+    L.push('');
+
+    L.push('POR TIENDA');
+    L.push('-'.repeat(60));
+    o.porTienda.forEach(t => {
+      L.push(`${String(t.casos).padStart(3)}  ${t.sucursal}` +
+             (t.abiertos ? `  ·  ${t.abiertos} sin resolver` : '') +
+             (t.monto ? `  ·  ${fmtMoneda(t.monto, mon)}` : ''));
+    });
+    L.push('');
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoReclamosNomina(config) {
+    const cfg = config || Store.get().config;
+    const o = origenDeReclamos(Store.get(), null, Store.get().parametros);
+    const escalar = o.porConcepto.filter(c => c.de === 'sinCorregir' || c.de === 'nomina').length;
+    return `Reclamos de haberes${cfg.area ? ' · ' + cfg.area : ''} — ${o.total} casos` +
+           (escalar ? `, ${escalar} para revisar en el proceso` : '');
+  }
+
+  /**
+   * Lo que se le devuelve al Gerente de Tienda.
+   *
+   * No es el reporte de Nómina recortado: contesta otra cosa. Él quiere saber
+   * qué pasó con lo que cargó, para poder contestarle a su gente sin
+   * preguntarle a RRHH. Por eso va caso por caso con su estado, y el patrón de
+   * su tienda al final —que es lo único que puede corregir él—.
+   */
+  function textoReclamosDeTienda(sucursalId, config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const s = Store.sucursal(sucursalId);
+    if (!s) return '';
+    const suyos = (e.reclamos || []).filter(r => r.sucursalId === sucursalId)
+      .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+    const mon = (e.parametros || {}).moneda;
+    const o = origenDeReclamos(e, suyos, e.parametros);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'RECLAMOS DE HABERES — ' + (s.nombre || s.codigo).toUpperCase()];
+    L.push('Al ' + fmtFecha(new Date().toISOString().slice(0, 10)));
+    if (cfg.coordinador) L.push('RRHH: ' + cfg.coordinador);
+    L.push(barra, '');
+
+    if (!suyos.length) {
+      L.push('No hay reclamos registrados de esta tienda.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    const abiertos = suyos.filter(r => !(ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+    L.push(`${suyos.length} reclamo${suyos.length === 1 ? '' : 's'}: ${
+      abiertos.length} sin cerrar y ${suyos.length - abiertos.length} resuelto${
+      suyos.length - abiertos.length === 1 ? '' : 's'}.`);
+    L.push('');
+
+    L.push('UNO POR UNO');
+    L.push('-'.repeat(60));
+    suyos.forEach(r => {
+      const est = ESTADOS_RECLAMO_POR_ID[r.estado] || {};
+      const tipo = (TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo;
+      L.push(`• ${r.colaborador || 'Sin nombre'} — ${tipo}` +
+             (r.periodoAfectado ? ` (${r.periodoAfectado})` : ''));
+      L.push(`  Planteado el ${fmtFecha(r.fecha)} · ${est.nombre || r.estado}` +
+             (r.monto ? ` · ${fmtMoneda(_plataReclamo(r) || null, mon)}` : ''));
+      /* La respuesta es lo que el gerente le repite al colaborador, así que va
+         completa y no resumida. */
+      if (String(r.respuesta || '').trim()) L.push(`  Respuesta: ${r.respuesta.trim()}`);
+      else if (!est.cerrado) L.push('  Todavía sin respuesta.');
+      L.push('');
+    });
+
+    const patron = o.porConcepto.filter(c => c.casos >= 2);
+    if (patron.length) {
+      L.push('LO QUE SE REPITE EN TU TIENDA');
+      L.push('-'.repeat(60));
+      L.push('Dos personas con el mismo concepto no son dos reclamos: es un error');
+      L.push('de proceso. Esto es lo que conviene mirar antes de que vuelva.');
+      L.push('');
+      patron.forEach(c => {
+        L.push(`• ${c.nombre}: ${c.casos} casos` +
+               (c.noProcedieron ? ` · ${c.noProcedieron} no procedían` : ''));
+      });
+      L.push('');
+    }
+
+    const noProc = suyos.filter(r => r.estado === 'sinLugar');
+    if (noProc.length) {
+      L.push('LOS QUE NO PROCEDÍAN');
+      L.push('-'.repeat(60));
+      L.push('La liquidación estaba bien. No quiere decir que el reclamo estuviera mal');
+      L.push('hecho: quiere decir que la persona no pudo leer su recibo. Vale la pena');
+      L.push('sentarse a explicárselo, porque si no vuelve el mes que viene.');
+      L.push('');
+      noProc.forEach(r => L.push(`• ${r.colaborador || 'Sin nombre'} — ` +
+        ((TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo)));
+      L.push('');
+    }
+
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoReclamosDeTienda(sucursalId) {
+    const s = Store.sucursal(sucursalId);
+    const n = (Store.get().reclamos || []).filter(r => r.sucursalId === sucursalId).length;
+    return `Reclamos de haberes — ${s ? (s.nombre || s.codigo) : 'tienda'} (${n})`;
+  }
+
   return {
     calcular, datosMensuales,
+    textoReclamosNomina, asuntoReclamosNomina,
+    textoReclamosDeTienda, asuntoReclamosDeTienda,
     textoVentasDia,
     textoNovedadesLiquidacion, asuntoNovedadesLiquidacion,
     textoVisita, textoMensual, textoChecklist,
@@ -15903,6 +16284,9 @@ const App = (() => {
   let resultadoAusencias = null;
   let resultadoParte = null;
   let resultadoAnexo = null;
+  /* El reporte que se está mirando: `{ titulo, texto }`. Uno a la vez, porque
+     son documentos para copiar y mandar, no dos cosas que se comparan. */
+  let reporteReclamos = null;
   let casoPersona = '';       // a quién se le abre un caso desde el alta
   let casoAbierto = null;     // qué caso está desplegado
   let verCasosCerrados = false;
@@ -16684,7 +17068,89 @@ const App = (() => {
         </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
       </section>
 
+      ${bloqueOrigenReclamos(e, todos)}
+
       ${bloquePegarAnexo()}`;
+  }
+
+  /* ---------------- De dónde vienen los reclamos ----------------
+     Esto es lo que se lleva a Nómina, y la razón por la que el coordinador
+     quiso el anexo: un reclamo suelto es un trámite, el mismo concepto
+     repetido es un proceso roto.
+
+     Va en `#/reclamos` y no en Indicadores del Panel, aunque sea un
+     indicador: ahí se cargan y ahí se los mira, y traerlo al Panel sería el
+     sexto lugar con los mismos números —la regla de `DONDE_VIVEN_LOS_OTROS`—.
+
+     Tabla y no gráfico, como el resto: la barra sola perdería de quién es el
+     problema, que es justamente lo único que hace que el número sirva. */
+  function bloqueOrigenReclamos(e, lista) {
+    const o = origenDeReclamos(e, lista, e.parametros);
+    if (!o.total) return '';
+
+    const chip = de => {
+      const q = DE_QUIEN_ES[de] || {};
+      return `<span class="chip ${q.tono || ''}">${esc(q.nombre || de)}</span>`;
+    };
+
+    return `<section class="tarjeta">
+      <h2>De dónde vienen</h2>
+      <p class="ayuda">Un reclamo suelto es un trámite. <strong>El mismo concepto
+        repetido es un proceso roto</strong>, y de quién es depende de en cuántas tiendas
+        aparece: en varias se liquida mal en general y es de Nómina; en una sola es cómo
+        se carga ahí.</p>
+
+      ${o.cerrados ? `<p class="ind-lectura">De los ${o.cerrados} resueltos,
+        <strong>${o.procedieron}</strong> se ajustaron y <strong>${o.noProcedieron}</strong>
+        no procedían${o.abiertos ? `, y quedan ${o.abiertos} sin resolver` : ''}.
+        ${o.diasPromedio != null
+          ? `Tardan ${fmtNum(o.diasPromedio, 0)} días en resolverse.` : ''}
+        ${o.noProcedieron > o.cerrados / 2
+          ? '<strong>Que la mayoría no proceda no dice que los reclamos estén mal hechos:'
+            + ' dice que la gente no entiende su recibo.</strong>' : ''}</p>`
+        : `<p class="ind-lectura">Todavía no hay ninguno resuelto, así que no se puede
+           decir qué parte procede. Son ${o.abiertos} abiertos.</p>`}
+
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Concepto</th><th class="num">Casos</th><th class="num">Tiendas</th>
+          <th class="num">Monto</th><th>De quién es</th><th>Por qué</th></tr></thead>
+        <tbody>${o.porConcepto.map(c => `<tr class="${c.de === 'sinCorregir' || c.de === 'nomina' ? 'fila-alerta' : ''}">
+          <td><strong>${esc(c.nombre)}</strong>${c.grupo ? `<br><span class="ayuda" style="font-size:11.5px">${esc(c.grupo)}</span>` : ''}</td>
+          <td class="num">${fmtNum(c.casos, 0)}${c.abiertos ? `<br><span class="ayuda" style="font-size:11.5px">${c.abiertos} abiertos</span>` : ''}</td>
+          <td class="num">${fmtNum(c.tiendas, 0)}</td>
+          <td class="num">${c.monto ? dinero(c.monto) : '—'}</td>
+          <td>${chip(c.de)}</td>
+          <td><span class="ayuda">${esc(c.porque)}</span></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+
+      <h4 style="margin-top:22px">Por tienda</h4>
+      <div class="tabla-scroll"><table>
+        <thead><tr><th>Tienda</th><th class="num">Casos</th><th class="num">Sin resolver</th>
+          <th class="num">Monto</th><th class="num">Días</th><th></th></tr></thead>
+        <tbody>${o.porTienda.map(t => `<tr>
+          <td><a href="#/reclamos/${t.sucursalId}">${esc(t.sucursal)}</a>
+            ${t.conceptos.length ? `<br><span class="ayuda" style="font-size:11.5px">${esc(t.conceptos.slice(0, 3).join(' · '))}${t.conceptos.length > 3 ? '…' : ''}</span>` : ''}</td>
+          <td class="num">${fmtNum(t.casos, 0)}</td>
+          <td class="num">${t.abiertos ? `<strong>${fmtNum(t.abiertos, 0)}</strong>` : '0'}</td>
+          <td class="num">${t.monto ? dinero(t.monto) : '—'}</td>
+          <td class="num">${t.diasPromedio != null ? fmtNum(t.diasPromedio, 0) : '—'}</td>
+          <td class="num"><button class="mini" data-accion="reporte-tienda"
+            data-id="${t.sucursalId}" title="Lo que le devolvés al gerente">Reporte</button></td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+
+      <div class="acciones">
+        <button class="b" data-accion="reporte-nomina">Armar el reporte para Nómina</button>
+      </div>
+
+      ${reporteReclamos ? `<h4 style="margin-top:18px">${esc(reporteReclamos.titulo)}</h4>
+        <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
+        <div class="acciones">
+          <button class="b sec" data-accion="copiar-reporte-reclamos">Copiar</button>
+          <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
+        </div>` : ''}
+    </section>`;
   }
 
   /* ------------- Lo que mandan los gerentes por el anexo -------------
@@ -21852,6 +22318,39 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      /* --- los dos reportes de reclamos --- */
+      if (a === 'reporte-nomina') {
+        reporteReclamos = {
+          titulo: 'Para Nómina',
+          texto: Reporte.textoReclamosNomina(),
+          asunto: Reporte.asuntoReclamosNomina()
+        };
+        refrescar();
+        return;
+      }
+
+      if (a === 'reporte-tienda') {
+        const s = Store.sucursal(btn.dataset.id);
+        reporteReclamos = {
+          titulo: `Para el gerente de ${s ? (s.nombre || s.codigo) : 'la tienda'}`,
+          texto: Reporte.textoReclamosDeTienda(btn.dataset.id),
+          asunto: Reporte.asuntoReclamosDeTienda(btn.dataset.id)
+        };
+        refrescar();
+        return;
+      }
+
+      if (a === 'copiar-reporte-reclamos') {
+        if (!reporteReclamos) return;
+        try {
+          await navigator.clipboard.writeText(reporteReclamos.texto);
+          avisar('Copiado, listo para mandar.');
+        } catch (err) { avisar('No pude copiarlo: seleccionalo y copialo a mano.', 'error'); }
+        return;
+      }
+
+      if (a === 'cerrar-reporte-reclamos') { reporteReclamos = null; refrescar(); return; }
 
       if (a === 'importar-anexo') {
         const crudo = (document.getElementById('pegar-anexo') || {}).value || '';
