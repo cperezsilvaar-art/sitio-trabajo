@@ -295,6 +295,20 @@ vez, así que se puede volver a pegar la planilla entera cada mes.
 adentro infla el número con algo que no es un problema. La maternidad y el
 fallecimiento tampoco. Los apercibimientos no son una ausencia y se saltean.
 
+La regla es la misma por los cuatro caminos, y antes no lo era. Lo que decide
+por **motivo** es `motivoSumaAusentismo()` (`ausencias.js`): vacaciones,
+maternidad y paternidad no suman. Lo que decide por **concepto** es la marca
+`cuentaAusentismo` que traen el libro —con `cuentaComoAusentismo()`— y el
+formulario —con `TIPOS_FORMULARIO`—, y es la que saca el fallecimiento, el
+matrimonio y el nacimiento, que entran como «otra» y no se distinguen por el
+motivo. `diasDeAusenciaEntre()` pregunta las dos cosas.
+
+Tenerlo por motivo en un solo lugar arregló un agujero: el parte de las tiendas
+y el alta a mano hacían su propia cuenta —`motivo !== 'vacaciones'`— así que
+**la misma maternidad sumaba o no sumaba al ausentismo según por dónde se
+hubiera cargado**. Es la misma clase de contradicción que las tres cuentas de
+ausentismo que daban 23, 1 y 3 días del mismo mes.
+
 ### De dónde sale el ausentismo
 
 `participacionDeAusencias()` (`indicadores.js`) lo reparte en tres niveles: el
@@ -302,6 +316,24 @@ fallecimiento tampoco. Los apercibimientos no son una ausencia y se saltean.
 cada persona con su participación sobre esa tienda. Los tres van **en días**, y
 los tres traen además su **tasa**: días de ausencia sobre plantel por días de la
 ventana.
+
+### La otra entrada: el parte de las tiendas
+
+El formulario de recepción es el registro de lo que fue pasando y **no dice
+hasta cuándo**. El parte que mandan los gerentes dice *quién no está hoy en mi
+tienda y hasta cuándo*, y como trae la fecha de fin escrita, **lo que entra por
+ahí no lleva ningún supuesto**: `diasSupuestos` queda en falso y esos días están
+medidos. `importarParteDeAusentes()` (`store.js`) lee las columnas de
+`COLUMNAS_PARTE_AUSENTES` y vive al pie de `#/diario`, al lado del otro, diciendo
+cuál sirve para qué.
+
+Desde octubre de 2026 el parte **se llena con un formulario de Google** en vez
+de una planilla armada a mano: `docs/formulario-presentismo.md` tiene las
+preguntas, con el texto exacto de cada encabezado y por qué —`COLUMNAS_PARTE_AUSENTES`
+ubica cada columna por lo que dice su encabezado, y una pregunta «Tu nombre»
+antes que la del colaborador se llevaría el nombre del gerente al lugar
+equivocado—. **No es una entrada nueva**: es la misma, y lo que cambia es que
+deja de depender de que alguien se acuerde de mandarla.
 
 ### La tercera entrada: el libro de novedades
 

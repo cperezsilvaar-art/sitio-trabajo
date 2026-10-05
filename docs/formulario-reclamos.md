@@ -26,6 +26,16 @@ Queda un paso manual —pegar la planilla en el panel— y es el mismo gesto que
 se hace con las ausencias. El Apps Script lo eliminaría, y está escrito y
 documentado en `docs/apps-script.md` para cuando ese pegado moleste.
 
+## Son dos formularios y no uno con dos ramas
+
+El otro es el de **presentismo** —quién no vino hoy—, documentado en
+`docs/formulario-presentismo.md`. Se puede hacer un solo formulario que
+pregunte primero «¿qué venís a avisar?» y derive a dos secciones. No conviene:
+son dos preguntas de dos escalas distintas —el día y lo que llevo—, la planilla
+saldría con la mitad de las celdas vacías y al pegarla las filas de la otra rama
+se cuentan como error, y las secciones con derivación son el paso donde uno se
+pierde. Dos formularios chatos no tienen nada que configurar.
+
 ## Cómo crearlo
 
 **Duplicá el de ausencias** en vez de empezar de cero: así los permisos

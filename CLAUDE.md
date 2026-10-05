@@ -438,6 +438,40 @@ entra: no se la puede ubicar en el tiempo.
 persona ya tiene una licencia abierta del mismo motivo que se solapa con la que
 viene, se le corrige el `hasta`. Cargarla dos veces contaría los días dos veces.
 
+**El parte se llena con un formulario de Google y por eso el texto de cada
+pregunta es código.** Documentado en `docs/formulario-presentismo.md`. Es la
+misma entrada —la planilla de respuestas se pega al pie de `#/diario` y la lee
+`importarParteDeAusentes()`, sin una línea nueva—; lo que cambia es que deja de
+depender de que un gerente se acuerde de armar la planilla. **No es un tercer
+camino para las ausencias**, y no hay que convertirlo en uno.
+
+Como `COLUMNAS_PARTE_AUSENTES` ubica cada columna por lo que dice su encabezado
+y gana la primera que coincide, **tres preguntas no se pueden renombrar a gusto**:
+la del gerente que avisa no puede decir «nombre» —se llevaría el nombre del
+gerente al lugar del colaborador y cada respuesta caería en nadie—, la del
+«hasta» no puede decir «licencia» —sería leída como el motivo— y las
+observaciones tienen que decir «Observaciones». `e2e-formulario-presentismo.js`
+corre los encabezados del doc contra la tabla del panel: si alguien renombra una
+pregunta, esa prueba avisa. Lo mismo con las opciones del desplegable, que son
+las palabras que `motivoDelParte()` reconoce.
+
+**Son dos formularios y no uno con dos ramas.** El de reclamos y el de
+presentismo contestan dos preguntas de dos escalas distintas, la planilla de un
+formulario con ramas saldría con la mitad de las celdas vacías —y al pegarla en
+`#/diario` las filas de reclamos se cuentan como error todos los días—, y las
+secciones con derivación son justamente el paso donde el coordinador se pierde.
+
+**Qué suma al ausentismo se decide en un solo lugar, y antes no.**
+`motivoSumaAusentismo()` (`ausencias.js`) saca vacaciones, maternidad y
+paternidad; la marca `cuentaAusentismo` —que ponen el libro con
+`cuentaComoAusentismo()` y el formulario con `TIPOS_FORMULARIO`— saca el
+fallecimiento, el matrimonio y el nacimiento, que entran como «otra» y no se
+distinguen por el motivo. `diasDeAusenciaEntre()` pregunta las dos cosas. El
+parte y el alta a mano hacían su propia cuenta —`motivo !== 'vacaciones'`— así
+que **la misma maternidad sumaba o no sumaba al ausentismo según por dónde se
+hubiera cargado**: la misma clase de contradicción que las tres cuentas que
+daban 23, 1 y 3 días del mismo mes.
+
 **El emparejamiento con el padrón es uno solo.** `buscadorDePadron()` (`store.js`)
 lo usan los dos importadores: número primero —CUIL o DNI—, después nombre y solo
 sin ambigüedad, nada de nombre para una tienda de otra área, y la fila no entra

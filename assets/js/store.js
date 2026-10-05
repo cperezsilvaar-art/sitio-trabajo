@@ -1802,7 +1802,7 @@ const Store = (() => {
           /* El gerente escribió la fecha de fin: no hay nada supuesto. */
           diasSupuestos: false,
           fechaAproximada: false,
-          cuentaAusentismo: motivo !== 'vacaciones',
+          cuentaAusentismo: motivoSumaAusentismo(motivo),
           registradaEl: new Date().toISOString()
         });
         out.cargadas++;

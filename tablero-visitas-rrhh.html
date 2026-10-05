@@ -4901,6 +4901,21 @@ function diasDeAusencia(a, hoy) {
   return (_dias(x.desde, fin) || 0) + 1;
 }
 
+/* Los motivos que son una ausencia pero no son ausentismo. La maternidad y la
+   paternidad son licencias previstas por ley y las vacaciones son tiempo
+   planificado: ninguna de las tres describe un turno que se cayó, que es lo
+   que la tasa viene a medir.
+
+   Está acá y no en cada importador porque los cuatro caminos por los que entra
+   una licencia —el libro, el formulario, el parte y el alta a mano— tenían cada
+   uno su propia respuesta: el libro las excluía con `cuentaComoAusentismo()`, el
+   formulario con `TIPOS_FORMULARIO`, y el parte y el alta a mano **las
+   contaban**. La misma maternidad sumaba o no sumaba al ausentismo según por
+   dónde se hubiera cargado. */
+const MOTIVOS_SIN_AUSENTISMO = ['vacaciones', 'maternidad', 'paternidad'];
+
+const motivoSumaAusentismo = motivo => !MOTIVOS_SIN_AUSENTISMO.includes(motivo);
+
 /**
  * Los días de una ausencia que caen adentro de una ventana, y nada más.
  *
@@ -4911,14 +4926,17 @@ function diasDeAusencia(a, hoy) {
  * descartar la licencia por haber empezado antes del corte —eso vacía—. Las dos
  * cosas estaban pasando en el panel al mismo tiempo, en pantallas distintas.
  *
- * Lo que no es ausentismo —vacaciones, maternidad, fallecimiento— vale cero
- * acá, y no en cada uno de los que llaman: cuando la misma regla vive en tres
- * lugares, un día uno de los tres se olvida.
+ * Lo que no es ausentismo vale cero acá, y no en cada uno de los que llaman:
+ * cuando la misma regla vive en tres lugares, un día uno de los tres se
+ * olvida. Son dos cosas y por eso se preguntan las dos: el motivo, con
+ * `motivoSumaAusentismo()`, y la marca `cuentaAusentismo` que traen el libro
+ * y el formulario para el fallecimiento, el matrimonio y el nacimiento, que
+ * entran como «otra» y no se distinguen por el motivo.
  */
 function diasDeAusenciaEntre(a, desde, hasta) {
   const x = a || {};
   if (!x.desde || !desde || !hasta) return 0;
-  if (x.cuentaAusentismo === false || x.motivo === 'vacaciones') return 0;
+  if (x.cuentaAusentismo === false || !motivoSumaAusentismo(x.motivo)) return 0;
   const fin = _finComputable(x, hasta);
   if (!fin || fin < desde || x.desde > hasta) return 0;
   const ini = x.desde > desde ? x.desde : desde;
@@ -5314,7 +5332,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = Object.assign(module.exports || {}, {
     COLUMNAS_FORMULARIO_AUSENCIAS, TIPOS_FORMULARIO, DIAS_SIN_DURACION,
     motivoDeFormulario, leerCertificado, cuilDelFormulario, documentoDelFormulario,
-    COLUMNAS_PARTE_AUSENTES, MOTIVOS_DEL_PARTE, motivoDelParte, fechaDelParte
+    COLUMNAS_PARTE_AUSENTES, MOTIVOS_DEL_PARTE, motivoDelParte, fechaDelParte,
+    MOTIVOS_SIN_AUSENTISMO, motivoSumaAusentismo
   });
 }
 
@@ -10928,7 +10947,7 @@ const Store = (() => {
           /* El gerente escribió la fecha de fin: no hay nada supuesto. */
           diasSupuestos: false,
           fechaAproximada: false,
-          cuentaAusentismo: motivo !== 'vacaciones',
+          cuentaAusentismo: motivoSumaAusentismo(motivo),
           registradaEl: new Date().toISOString()
         });
         out.cargadas++;
