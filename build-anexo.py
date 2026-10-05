@@ -17,8 +17,10 @@ Así que la plantilla deja huecos marcados y este script los llena leyendo:
   - los motivos de reclamo, de `assets/js/reclamos.js` (`TIPOS_RECLAMO`, con su
     grupo, salteando «Otro» porque un desplegable que empieza por «Otro» se
     contesta con «Otro»);
-  - los tipos de situación, de `assets/js/casos.js` (`TIPOS_CASO`, sin el legal,
-    que es una rama propia del anexo porque tiene su propia urgencia).
+
+El anexo es **solo para reclamos de sueldo** y para avisar que llegó una carta
+documento. La rama de «una situación que necesita seguimiento» se eliminó a
+pedido del coordinador, así que ya no se leen los `TIPOS_CASO`.
 
 **Nunca inyecta nombres de personas.** Lo verifica `check-anexo.js`.
 
@@ -102,12 +104,6 @@ motivos_reclamo = [{'grupo': g, 'nombre': n} for i, n, g in reclamos if i != 'ot
 if len(motivos_reclamo) < 8:
     raise SystemExit(f'Salieron {len(motivos_reclamo)} motivos: algo cambió en TIPOS_RECLAMO.')
 
-# --- Los tipos de situación. El legal es rama aparte en el anexo. ---
-casos = campos(bloque(fuente('assets/js/casos.js'), 'TIPOS_CASO'), 'id', 'nombre')
-motivos_situacion = [n for i, n in casos if i not in ('legal', 'otro')]
-if len(motivos_situacion) < 3:
-    raise SystemExit(f'Salieron {len(motivos_situacion)} situaciones: algo cambió en TIPOS_CASO.')
-
 tel = re.sub(r'\D', '', argumento('--tel'))
 mail = argumento('--mail').strip()
 
@@ -115,7 +111,6 @@ pagina = fuente('anexo-gerentes.plantilla.html')
 for marca, valor in [
     ('TIENDAS', js(tiendas)),
     ('MOTIVOS_RECLAMO', js(motivos_reclamo)),
-    ('MOTIVOS_SITUACION', js(motivos_situacion)),
     ('TEL_RRHH', js(tel)),
     ('MAIL_RRHH', js(mail)),
 ]:
@@ -141,6 +136,6 @@ destino.write_text(pagina, encoding='utf-8')
 
 print(f'{destino}  ·  {len(pagina) / 1024:.0f} KB')
 print(f'  tiendas: {len(tiendas)}')
-print(f'  motivos de reclamo: {len(motivos_reclamo)}  ·  situaciones: {len(motivos_situacion)}')
+print(f'  motivos de reclamo: {len(motivos_reclamo)}')
 print(f"  WhatsApp: {tel or '— sin número, solo copiar —'}")
 print(f"  mail: {mail or '— sin casilla, solo copiar —'}")

@@ -163,14 +163,22 @@ function patronesDeReclamos(lista, sucursales) {
 
 const MARCA_ANEXO = '#RRHH3';
 
-/* Las tres ramas del anexo y dónde cae cada una. `RECLAMO` es un reclamo;
-   `LEGAL` y `SITUACION` son casos, porque una carta documento y un desempeño
-   que no levanta son seguimientos y no un pedido de plata. El gerente no tiene
-   por qué saber que del lado del panel viven en dos lugares. */
+/* Las ramas del anexo y dónde cae cada una. `RECLAMO` es un reclamo de sueldo;
+   `LEGAL` es un caso, porque una carta documento es un seguimiento y no un
+   pedido de plata. El gerente no tiene por qué saber que del lado del panel
+   viven en dos lugares.
+
+   Hubo una tercera, `SITUACION`, y se eliminó a pedido del coordinador: el
+   anexo es solo para reclamos de sueldo. Un gerente no usa un formulario para
+   contar que un desempeño no levanta, y si lo usara quedaría una impresión
+   escrita sobre una persona en una herramienta de la empresa. Es la misma
+   razón por la que los casos siguen la situación y no etiquetan a nadie.
+   **No reponerla.** Lo ya importado con esa marca sigue leyéndose: la fila
+   cuya rama no se reconoce se devuelve en `invalidos` con su texto, no se
+   pierde. */
 const RAMAS_ANEXO = {
-  RECLAMO:   { destino: 'reclamo', nombre: 'Reclamo de liquidación' },
-  LEGAL:     { destino: 'caso', tipoCaso: 'legal', nombre: 'Carta documento o intimación' },
-  SITUACION: { destino: 'caso', nombre: 'Situación para seguir' }
+  RECLAMO: { destino: 'reclamo', nombre: 'Reclamo de sueldo' },
+  LEGAL:   { destino: 'caso', tipoCaso: 'legal', nombre: 'Carta documento o intimación' }
 };
 
 /** Sin acentos y en mayúsculas, para comparar lo que alguien escribió a mano. */
@@ -249,13 +257,6 @@ function tipoDeReclamoPorNombre(nombre) {
   return parcial ? parcial.id : 'otro';
 }
 
-/** Lo mismo para los tipos de caso. */
-function tipoDeCasoPorNombre(nombre) {
-  const q = _llanoAnexo(nombre);
-  if (!q || typeof TIPOS_CASO === 'undefined') return 'otro';
-  const exacto = TIPOS_CASO.find(t => _llanoAnexo(t.nombre) === q);
-  return exacto ? exacto.id : 'otro';
-}
 
 /* ===================================================================== *
  *  Leer el WhatsApp que llegó

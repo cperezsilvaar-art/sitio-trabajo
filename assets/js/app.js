@@ -3089,6 +3089,14 @@ const App = (() => {
                 <td>${esc((A_CARGO_RECLAMO.find(x => x.id === r.aCargo) || {}).nombre || '—')}</td>
                 <td class="num">${r.monto ? dinero(r.monto) : '—'}</td>
                 <td class="num" style="white-space:nowrap">
+                  ${/* El triage en un clic. Marcar «me excede» abriendo la ficha de
+                       cada uno es el paso que hace que el pedido a Nómina no se
+                       arme nunca: son catorce aperturas para una decisión de un
+                       segundo. Solo aparece en los que todavía no están escalados
+                       ni cerrados. */''}
+                  ${!cerrado(r) && r.estado !== 'nomina' && r.estado !== 'procede'
+                    ? `<button class="mini" data-accion="a-nomina" data-id="${r.id}"
+                        title="Me excede: lo tiene que ver Nómina">→ Nómina</button>` : ''}
                   <button class="mini" data-accion="abrir-reclamo" data-id="${r.id}"
                           style="color:var(--azul);border-color:var(--azul)">${abierto ? 'Cerrar' : 'Ver'}</button>
                   <button class="mini" data-accion="borrar-reclamo" data-id="${r.id}">✕</button>
@@ -3100,9 +3108,56 @@ const App = (() => {
         </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
       </section>
 
+      ${bloqueReporteAbierto()}
+
+      ${bloquePedidoNomina(e, todos)}
+
       ${bloqueOrigenReclamos(e, todos)}
 
       ${bloquePegarAnexo()}`;
+  }
+
+  /* ------------- Lo que hay que mandarle a Nómina -------------
+     El pedido operativo, separado del análisis a propósito: son dos
+     documentos y dos conversaciones. El análisis se discute en una reunión;
+     esto es una orden de trabajo y se contesta liquidando.
+
+     El bloque no aparece cuando no hay nada escalado, como los contadores en
+     cero — pero con reclamos abiertos y ninguno escalado **sí dice qué falta
+     hacer**, porque ahí el vacío no es «no hay trabajo» sino «todavía no
+     decidiste cuáles te exceden». */
+  function bloquePedidoNomina(e, lista) {
+    const todos = lista || e.reclamos || [];
+    const cerrado = r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado;
+    const aRevisar = todos.filter(r => r.estado === 'nomina');
+    const aAjustar = todos.filter(r => r.estado === 'procede');
+    const sinDecidir = todos.filter(r => !cerrado(r) &&
+      r.estado !== 'nomina' && r.estado !== 'procede');
+    if (!aRevisar.length && !aAjustar.length && !sinDecidir.length) return '';
+
+    return `<section class="tarjeta">
+      <h2>Para mandarle a Nómina</h2>
+      <p class="ayuda">Los que <strong>te exceden</strong>. Marcá «→ Nómina» en la lista de
+        abajo y acá se juntan, ordenados <strong>por período de liquidación y por tienda</strong>,
+        que es como Nómina trabaja.</p>
+
+      ${aRevisar.length || aAjustar.length ? `<div class="kpis">
+        ${kpi('Para revisar', fmtNum(aRevisar.length, 0), 'les pedís que verifiquen',
+              aRevisar.length ? 'alerta' : '')}
+        ${kpi('Ya decidido, falta el ajuste', fmtNum(aAjustar.length, 0), 'no se discute, se liquida',
+              aAjustar.length ? 'aviso' : '')}
+        ${kpi('Sin decidir', fmtNum(sinDecidir.length, 0), 'todavía no dijiste si te exceden')}
+      </div>` : `<div class="aviso-caja">
+        <strong>Hay ${sinDecidir.length} reclamo${sinDecidir.length === 1 ? '' : 's'} abierto${
+          sinDecidir.length === 1 ? '' : 's'} y ninguno marcado para Nómina.</strong>
+        El pedido se arma con lo que vos marcás: lo que sigue en análisis o lo que ya
+        explicaste no se manda, y eso es justamente lo que hace que el pedido valga.
+      </div>`}
+
+      ${aRevisar.length || aAjustar.length ? `<div class="acciones">
+        <button class="b" data-accion="pedido-nomina">Armar el pedido</button>
+      </div>` : ''}
+    </section>`;
   }
 
   /* ---------------- De dónde vienen los reclamos ----------------
@@ -3176,12 +3231,23 @@ const App = (() => {
         <button class="b" data-accion="reporte-nomina">Armar el reporte para Nómina</button>
       </div>
 
-      ${reporteReclamos ? `<h4 style="margin-top:18px">${esc(reporteReclamos.titulo)}</h4>
-        <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
-        <div class="acciones">
-          <button class="b sec" data-accion="copiar-reporte-reclamos">Copiar</button>
-          <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
-        </div>` : ''}
+    </section>`;
+  }
+
+  /* El documento que se está mirando. Uno a la vez y en un lugar fijo: son
+     textos para copiar y mandar, y dos abiertos a la vez invitan a copiar el
+     equivocado. */
+  function bloqueReporteAbierto() {
+    if (!reporteReclamos) return '';
+    return `<section class="tarjeta">
+      <h2>${esc(reporteReclamos.titulo)}</h2>
+      <p class="ayuda">Copialo y mandalo. Asunto sugerido:
+        <strong>${esc(reporteReclamos.asunto || '')}</strong></p>
+      <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
+      <div class="acciones">
+        <button class="b" data-accion="copiar-reporte-reclamos">Copiar</button>
+        <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
+      </div>
     </section>`;
   }
 
@@ -8350,6 +8416,27 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'a-nomina') {
+        const r = Store.reclamo(btn.dataset.id);
+        if (!r) return;
+        r.estado = 'nomina';
+        r.aCargo = 'nomina';
+        Store.save();
+        refrescar();
+        avisar(`${r.colaborador || 'El reclamo'} queda para Nómina. Armá el pedido cuando tengas todos.`);
+        return;
+      }
+
+      if (a === 'pedido-nomina') {
+        reporteReclamos = {
+          titulo: 'Pedido a Nómina',
+          texto: Reporte.textoPedidoANomina(),
+          asunto: Reporte.asuntoPedidoANomina()
+        };
+        refrescar();
+        return;
+      }
 
       /* --- los dos reportes de reclamos --- */
       if (a === 'reporte-nomina') {

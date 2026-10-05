@@ -31,6 +31,14 @@
     siempre; lo que cambia es que del otro lado llega algo que el panel puede
     leer. Van las tres salidas —WhatsApp, mail y copiar— porque el texto es
     idéntico y el importador lo toma de donde venga.
+
+  - **Es solo para reclamos de sueldo.** Había una tercera rama —«una
+    situación que necesita seguimiento»— y se eliminó a pedido del
+    coordinador. Un gerente no usa un formulario para eso, y si lo usara, lo
+    que quedaría es una impresión escrita sobre una persona en una herramienta
+    de la empresa, sin una conversación atrás. Es lo mismo que se rechazó
+    cuando se pidió un «panel de empleados complejos»: se sigue la situación,
+    no se etiqueta a la persona. Un reclamo y una carta documento son hechos.
 -->
 <style>
 /* La paleta del panel, sin el archivo: esta página tiene que ser un solo
@@ -150,8 +158,9 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
     <span><strong>Avisar a RRHH</strong><em>Área 3 · Farmatodo</em></span>
   </div>
-  <p>Llenás esto en un minuto y le llega ordenado al coordinador. Sirve para que
-     no se pierda nada: lo que entra por acá queda registrado con su fecha.</p>
+  <p>Para los <strong>reclamos de sueldo</strong> de tu gente. Lo llenás en un minuto
+     y le llega ordenado al coordinador, con su fecha: así no se pierde y te puede
+     contestar.</p>
 </header>
 
 <main>
@@ -234,7 +243,6 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
    -------------------------------------------------------------------------- */
 const TIENDAS = /*{TIENDAS}*/[]/*{/TIENDAS}*/;
 const MOTIVOS_RECLAMO = /*{MOTIVOS_RECLAMO}*/[]/*{/MOTIVOS_RECLAMO}*/;
-const MOTIVOS_SITUACION = /*{MOTIVOS_SITUACION}*/[]/*{/MOTIVOS_SITUACION}*/;
 const TEL_RRHH = /*{TEL_RRHH}*/''/*{/TEL_RRHH}*/;
 const MAIL_RRHH = /*{MAIL_RRHH}*/''/*{/MAIL_RRHH}*/;
 
@@ -254,13 +262,8 @@ const RAMAS = [
     tituloQue: '3. Qué llegó',
     ayudaQue: 'Avisá apenas llega, aunque todavía no lo hayas leído entero: los plazos corren.',
     rotuloMotivo: 'Qué llegó', motivos: 'legal', recibido: true,
-    rotuloDetalle: 'Qué dice, en dos renglones' },
+    rotuloDetalle: 'Qué dice, en dos renglones' }
 
-  { id: 'SITUACION', titulo: 'Una situación que necesita seguimiento',
-    ayuda: 'Un desempeño que no levanta, faltas repetidas, un conflicto en el equipo.',
-    tituloQue: '3. Qué está pasando',
-    ayudaQue: 'Contá hechos y fechas. Esto abre un seguimiento, no una sanción.',
-    rotuloMotivo: 'De qué se trata', motivos: 'situacion' }
 ];
 
 const MOTIVOS_LEGAL = [
@@ -299,7 +302,6 @@ function pintarTiendas() {
 
 function motivosDe(cual) {
   if (cual === 'legal') return MOTIVOS_LEGAL.map(x => ({ grupo: '', nombre: x }));
-  if (cual === 'situacion') return MOTIVOS_SITUACION.map(x => ({ grupo: '', nombre: x }));
   return MOTIVOS_RECLAMO;
 }
 

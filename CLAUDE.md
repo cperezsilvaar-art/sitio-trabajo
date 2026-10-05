@@ -1300,11 +1300,22 @@ contrato es explícito en que quien entra con el link lee pero **no escribe**
 catorce cuentas de Claude con permiso de escritura. **No proponer ninguna de las
 dos de vuelta.**
 
-**Tres ramas, dos destinos, un solo link**: `RECLAMO` cae en `#/reclamos`;
-`LEGAL` y `SITUACION` abren un caso. El gerente no tiene por qué saber que del
+**El anexo es solo para reclamos de sueldo**, más avisar que llegó una carta
+documento. **Dos ramas, dos destinos, un solo link**: `RECLAMO` cae en
+`#/reclamos` y `LEGAL` abre un caso. El gerente no tiene por qué saber que del
 lado del panel viven en lugares distintos. La **carta documento entra
 `esperando` y con riesgo alto**, no `abierto`: desde el minuto uno la pelota está
 en el estudio.
+
+Había una tercera rama —*«una situación que necesita seguimiento»*— y **se
+eliminó a pedido del coordinador, con `tipoDeCasoPorNombre()` y la extracción de
+`TIPOS_CASO` del generador**. Un gerente no usa un formulario para contar que un
+desempeño no levanta, y si lo usara quedaría una impresión escrita sobre una
+persona en una herramienta de la empresa, sin una conversación atrás — lo mismo
+que se rechazó cuando se pidió un «panel de empleados complejos». Un reclamo y
+una carta documento son hechos. **No reponerla.** Lo ya importado con esa marca
+sigue en su ficha, y una rama que el importador no reconoce se devuelve en
+`invalidos` con su texto en vez de perderse.
 
 **El anexo no lleva el padrón** y no hay que agregárselo: el nombre lo escribe el
 gerente. Listar a las 136 personas en una página que abren catorce es lo que la
@@ -1408,6 +1419,55 @@ panel leyéndola al abrir— y el `db` de una página publicada —que **no**, p
 quien entra con el link lee pero no escribe—. **El coordinador eligió quedarse
 con el anexo**, que arma el mensaje y se pega. No reproponer ninguna de las dos
 sin que él lo pida.
+
+**Lo que lo excede se le manda a Nómina, y eso es otro documento.**
+`Reporte.textoPedidoANomina()` no es el análisis con otro formato: son dos
+conversaciones. El análisis se discute en una reunión; el pedido es una orden de
+trabajo —estas personas, este período, este concepto, esta plata— y se contesta
+liquidando. Tres cosas lo hacen servible:
+
+- **Se agrupa por período de liquidación**, porque así trabaja Nómina. Un pedido
+  que mezcla períodos les deja a ellos separarlo, y entonces lo separan mal o lo
+  postergan. Adentro de cada período, por tienda.
+- **Arranca diciendo qué filtró el coordinador** —«de los 7 registrados, 1 no
+  procedía y 1 lo sigo yo»—. Cinco casos pre-filtrados se leen distinto que
+  catorce en crudo: dicen que del otro lado hubo criterio y no una lista
+  reenviada.
+- **Separa «revisá esto» de «ya está decidido, falta el ajuste»**, que son dos
+  pedidos distintos. Lo segundo no se discute, se liquida.
+
+Cada persona va con **su documento** —DNI, o CUIL si no hay—, porque un pedido
+sin identificador le deja a Nómina adivinar; el que no tiene ficha en el padrón
+lo dice en vez de ir sin identificar. Y va **lo que dijo, textual**, que es lo
+que permite verificarlo contra el recibo sin volver a preguntarle a nadie.
+
+**El triage es un clic por fila** (`a-nomina` en la lista de `#/reclamos`).
+Marcar «me excede» abriendo la ficha de cada uno son catorce aperturas para una
+decisión de un segundo, y es el paso que hace que el pedido no se arme nunca.
+Deja el reclamo en `nomina` **y `aCargo: 'nomina'`**: si no, queda escalado y
+colgado de RRHH al mismo tiempo. El bloque **no aparece sin nada que mandar**,
+como los contadores en cero, pero con reclamos abiertos y ninguno marcado **sí
+dice qué falta hacer**: ahí el vacío no es «no hay trabajo» sino «todavía no
+decidiste cuáles te exceden».
+
+**Un apellido puede ser una palabra común, y `check-anexo.js` lo sabe.** En el
+padrón hay una persona de apellido **SUELDO SANCHEZ**, y el anexo dice «reclamos
+de sueldo» como sustantivo: marcarlo sería un falso positivo que, repetido,
+enseña a ignorar el chequeo —que es la peor forma de romperlo—.
+`APELLIDOS_QUE_SON_PALABRAS` es explícita y corta a propósito: solo las que de
+verdad chocan con este padrón, y si entra alguien de apellido Flores hay que
+agregarla a mano mirando que el uso sea el sustantivo. La excepción **no debilita
+el chequeo**: al lado corre la señal fuerte, el **nombre completo** o el apellido
+con sus dos palabras, que ninguna excepción puede tapar.
+
+**Trampa conocida — un bloque nuevo en una pantalla rompe las pruebas que
+cuentan sobre toda ella.** `e2e-reclamos-unico.js` contaba `table tbody tr` de la
+pantalla entera y los bloques de *Para mandarle a Nómina* y *De dónde vienen*
+agregaron tres tablas; `e2e-anexo-circuito.js` leía el primer `.aviso-caja` y el
+primero pasó a ser otro. Las dos fallas eran de las pruebas y no del panel, pero
+cuestan una corrida entera de la suite: **al agregar una tabla, un `.kpis` o un
+`.aviso-caja` a una pantalla que ya tiene pruebas, acotar los selectores a su
+sección antes de correrlas.**
 
 **Los reclamos se dan de alta en `#/reclamos` y en ningún otro lado.** Había un
 segundo formulario al pie del check list: era la misma cosa con distintos campos

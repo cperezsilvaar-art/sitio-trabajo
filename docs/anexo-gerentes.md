@@ -71,12 +71,19 @@ completa.
 
 | Lo que el gerente marca | Marca | Dónde cae |
 |---|---|---|
-| Un reclamo de liquidación | `RECLAMO` | un **reclamo** en `#/reclamos` |
+| Un reclamo de sueldo | `RECLAMO` | un **reclamo** en `#/reclamos` |
 | Llegó una carta documento o una intimación | `LEGAL` | un **caso** tipo *Intercambio legal* |
-| Una situación que necesita seguimiento | `SITUACION` | un **caso** del tipo que marcó |
 
 Son **dos destinos y un solo link**: el gerente no tiene por qué saber que del
 lado del panel los reclamos y los casos viven en lugares distintos.
+
+**Había una tercera rama y se eliminó**: *«una situación que necesita
+seguimiento»*. El anexo es solo para reclamos de sueldo. Un gerente no usa un
+formulario para contar que un desempeño no levanta, y si lo usara lo que
+quedaría es una impresión escrita sobre una persona en una herramienta de la
+empresa, sin una conversación atrás. Es lo mismo que se rechazó cuando se pidió
+un «panel de empleados complejos»: se sigue la situación, no se etiqueta a la
+persona. Un reclamo y una carta documento son hechos. **No reponerla.**
 
 **La carta documento entra como `esperando` y con riesgo alto**, no como
 `abierto`: desde el minuto uno la pelota está del lado del estudio y el próximo

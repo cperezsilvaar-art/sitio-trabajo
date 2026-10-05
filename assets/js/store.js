@@ -1475,7 +1475,10 @@ const Store = (() => {
           return;
         }
 
-        const tipoCaso = rama.tipoCaso || tipoDeCasoPorNombre(f.situacion);
+        /* Hoy la única rama que abre un caso es la legal, así que el tipo lo
+           trae la rama. Lo importado cuando existía la rama de situación
+           sigue en su ficha; el `otro` es el piso para una rama futura. */
+        const tipoCaso = rama.tipoCaso || 'otro';
         const queLlego = f.recibido || f.situacion || '';
         const ya = (c.casos || []).find(k =>
           k.origen === 'anexo' && k.abiertoEl === fecha && k.tipo === tipoCaso);

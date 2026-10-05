@@ -6965,14 +6965,22 @@ function patronesDeReclamos(lista, sucursales) {
 
 const MARCA_ANEXO = '#RRHH3';
 
-/* Las tres ramas del anexo y dónde cae cada una. `RECLAMO` es un reclamo;
-   `LEGAL` y `SITUACION` son casos, porque una carta documento y un desempeño
-   que no levanta son seguimientos y no un pedido de plata. El gerente no tiene
-   por qué saber que del lado del panel viven en dos lugares. */
+/* Las ramas del anexo y dónde cae cada una. `RECLAMO` es un reclamo de sueldo;
+   `LEGAL` es un caso, porque una carta documento es un seguimiento y no un
+   pedido de plata. El gerente no tiene por qué saber que del lado del panel
+   viven en dos lugares.
+
+   Hubo una tercera, `SITUACION`, y se eliminó a pedido del coordinador: el
+   anexo es solo para reclamos de sueldo. Un gerente no usa un formulario para
+   contar que un desempeño no levanta, y si lo usara quedaría una impresión
+   escrita sobre una persona en una herramienta de la empresa. Es la misma
+   razón por la que los casos siguen la situación y no etiquetan a nadie.
+   **No reponerla.** Lo ya importado con esa marca sigue leyéndose: la fila
+   cuya rama no se reconoce se devuelve en `invalidos` con su texto, no se
+   pierde. */
 const RAMAS_ANEXO = {
-  RECLAMO:   { destino: 'reclamo', nombre: 'Reclamo de liquidación' },
-  LEGAL:     { destino: 'caso', tipoCaso: 'legal', nombre: 'Carta documento o intimación' },
-  SITUACION: { destino: 'caso', nombre: 'Situación para seguir' }
+  RECLAMO: { destino: 'reclamo', nombre: 'Reclamo de sueldo' },
+  LEGAL:   { destino: 'caso', tipoCaso: 'legal', nombre: 'Carta documento o intimación' }
 };
 
 /** Sin acentos y en mayúsculas, para comparar lo que alguien escribió a mano. */
@@ -7051,13 +7059,6 @@ function tipoDeReclamoPorNombre(nombre) {
   return parcial ? parcial.id : 'otro';
 }
 
-/** Lo mismo para los tipos de caso. */
-function tipoDeCasoPorNombre(nombre) {
-  const q = _llanoAnexo(nombre);
-  if (!q || typeof TIPOS_CASO === 'undefined') return 'otro';
-  const exacto = TIPOS_CASO.find(t => _llanoAnexo(t.nombre) === q);
-  return exacto ? exacto.id : 'otro';
-}
 
 /* ===================================================================== *
  *  Leer el WhatsApp que llegó
@@ -10600,7 +10601,10 @@ const Store = (() => {
           return;
         }
 
-        const tipoCaso = rama.tipoCaso || tipoDeCasoPorNombre(f.situacion);
+        /* Hoy la única rama que abre un caso es la legal, así que el tipo lo
+           trae la rama. Lo importado cuando existía la rama de situación
+           sigue en su ficha; el `otro` es el piso para una rama futura. */
+        const tipoCaso = rama.tipoCaso || 'otro';
         const queLlego = f.recibido || f.situacion || '';
         const ya = (c.casos || []).find(k =>
           k.origen === 'anexo' && k.abiertoEl === fecha && k.tipo === tipoCaso);
@@ -13854,6 +13858,171 @@ const Reporte = (() => {
     return L.join('\n');
   }
 
+  /**
+   * El pedido a Nómina: **los que lo exceden**, caso por caso y listo para
+   * mandar.
+   *
+   * No es `textoReclamosNomina()` con otro formato: son dos documentos y dos
+   * conversaciones. Ese contesta «qué hay que arreglar en el proceso» y se
+   * discute en una reunión; éste es una orden de trabajo — estas cinco
+   * personas, este período, este concepto, esta plata— y se contesta
+   * ejecutando.
+   *
+   * Tres decisiones que lo hacen servible:
+   *
+   * - **Se agrupa por período de liquidación**, porque así trabaja Nómina. Un
+   *   pedido que mezcla períodos les deja a ellos el trabajo de separarlo, y
+   *   entonces lo separan mal o lo postergan.
+   * - **Arranca diciendo qué filtró el coordinador.** Cinco casos pre-filtrados
+   *   se leen distinto que catorce en crudo: dice que del otro lado hubo
+   *   criterio y no una lista reenviada.
+   * - **Separa «revisá esto» de «ya está decidido, falta el ajuste»**, que son
+   *   dos pedidos distintos y Nómina los lee distinto. Lo segundo no se
+   *   discute, se liquida.
+   */
+  function textoPedidoANomina(config) {
+    const e = Store.get();
+    const cfg = config || e.config;
+    const mon = (e.parametros || {}).moneda;
+    const todos = e.reclamos || [];
+    const aRevisar = todos.filter(r => r.estado === 'nomina');
+    const aAjustar = todos.filter(r => r.estado === 'procede');
+    const paraNomina = aRevisar.concat(aAjustar);
+    const barra = '='.repeat(60);
+
+    const L = [barra, 'PEDIDO A NÓMINA — RECLAMOS DE HABERES'];
+    if (cfg.area) L.push('Área: ' + String(cfg.area).replace(/^\s*[áa]rea\s+/i, ''));
+    if (cfg.coordinador) L.push('Informa: ' + cfg.coordinador);
+    L.push('Al ' + fmtFecha(new Date().toISOString().slice(0, 10)));
+    L.push(barra, '');
+
+    if (!paraNomina.length) {
+      L.push('No hay reclamos escalados a Nómina.');
+      L.push('');
+      L.push('Para que un reclamo entre acá hay que marcarlo «Escalado a Nómina»');
+      L.push('—o «Procede: se ajusta»— en el panel. Lo que sigue en análisis o lo');
+      L.push('que ya se explicó no se manda: el pedido vale justamente porque');
+      L.push('viene filtrado.');
+      L.push('');
+      L.push(...pie());
+      return L.join('\n');
+    }
+
+    /* Lo que el coordinador ya resolvió. Va arriba porque es lo que hace que
+       el pedido se lea como un pedido y no como una lista reenviada. */
+    const cerrados = todos.filter(r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado);
+    const explicados = cerrados.filter(r => r.estado === 'sinLugar');
+    const propios = todos.length - paraNomina.length - cerrados.length;
+
+    L.push(`${paraNomina.length} reclamo${paraNomina.length === 1 ? '' : 's'} ` +
+           `necesita${paraNomina.length === 1 ? '' : 'n'} que lo vea Nómina.`);
+    L.push('');
+    if (todos.length > paraNomina.length) {
+      L.push(`Antes de mandarlos revisé los ${todos.length} que tengo registrados.` +
+        (explicados.length ? ` ${explicados.length} no procedían —la liquidación estaba` +
+          ' bien y se le explicó a la persona—.' : '') +
+        (cerrados.length - explicados.length
+          ? ` ${cerrados.length - explicados.length} ya se ajustaron.` : '') +
+        (propios > 0 ? ` ${propios} los sigo yo.` : ''));
+      L.push('');
+    }
+
+    const identidad = r => {
+      const c = r.colaboradorId ? Store.colaboradorPorId(r.colaboradorId) : null;
+      if (!c) return 'sin ficha en el padrón: buscarlo por nombre';
+      const dni = String(c.dni || '').replace(/\D/g, '');
+      if (dni.length >= 7) return 'DNI ' + Number(dni).toLocaleString('es-AR');
+      const cuil = String(c.cuil || '').replace(/\D/g, '');
+      if (cuil.length === 11) return 'CUIL ' + cuil;
+      return 'sin documento cargado';
+    };
+
+    const bloque = (titulo, lista, nota) => {
+      if (!lista.length) return;
+      L.push(titulo);
+      L.push('-'.repeat(60));
+      if (nota) { L.push(nota); L.push(''); }
+
+      /* Por período y, adentro, por tienda. */
+      const porPeriodo = {};
+      lista.forEach(r => {
+        const k = periodoReclamado(r, e.parametros) || 'sin-periodo';
+        (porPeriodo[k] = porPeriodo[k] || []).push(r);
+      });
+      Object.keys(porPeriodo).sort().forEach(k => {
+        const rango = k !== 'sin-periodo' && typeof rangoDePeriodo === 'function'
+          ? rangoDePeriodo(k, e.parametros) : null;
+        L.push(k === 'sin-periodo'
+          ? 'SIN PERÍODO IDENTIFICADO'
+          : nombreDePeriodo(k).toUpperCase() +
+            (rango ? ` (del ${fmtFecha(rango.desde)} al ${fmtFecha(rango.hasta)})` : ''));
+        L.push('');
+
+        const porSuc = {};
+        porPeriodo[k].forEach(r => {
+          const su = r.sucursalId ? Store.sucursal(r.sucursalId) : null;
+          const n = su ? (su.nombre || su.codigo) : 'Sin tienda';
+          (porSuc[n] = porSuc[n] || []).push(r);
+        });
+        Object.keys(porSuc).sort().forEach(n => {
+          L.push('  ' + n.toUpperCase());
+          porSuc[n].forEach(r => {
+            const tipo = (TIPOS_RECLAMO_POR_ID[r.tipo] || {}).nombre || r.tipo;
+            const plata = _plataReclamo(r);
+            L.push(`    • ${r.colaborador || 'Sin nombre'} — ${identidad(r)}`);
+            L.push(`      ${tipo}${plata ? ' · ' + fmtMoneda(plata, mon) : ''}`);
+            L.push(`      Lo planteó el ${fmtFecha(r.fecha)}` +
+                   (r.informadoPor ? ` · lo informó ${r.informadoPor}` : ''));
+            /* Lo que dijo, textual. Es lo que permite verificarlo contra el
+               recibo sin volver a preguntarle a nadie. */
+            const dicho = String(r.detalle || '').trim();
+            if (dicho) L.push(`      Dice: «${dicho.replace(/\s+/g, ' ')}»`);
+            L.push('');
+          });
+        });
+      });
+    };
+
+    bloque('PARA REVISAR', aRevisar,
+      'Estos me exceden: necesito que verifiquen la liquidación.');
+    bloque('YA ESTÁ DECIDIDO, FALTA EL AJUSTE', aAjustar,
+      'Esto ya se revisó y procede. No hace falta discutirlo: hay que liquidarlo.');
+
+    /* El patrón, en una línea cada uno. El análisis completo es otro documento
+       y otra conversación; acá solo se avisa que algunos de estos casos son el
+       mismo problema, para que no se arreglen de a uno. */
+    const o = origenDeReclamos(e, paraNomina, e.parametros);
+    const repiten = o.porConcepto.filter(c => c.de === 'nomina' || c.de === 'sinCorregir');
+    if (repiten.length) {
+      L.push('OJO CON ESTO');
+      L.push('-'.repeat(60));
+      L.push('Algunos de los casos de arriba son el mismo problema. Arreglarlos de a');
+      L.push('uno los va a traer de vuelta el mes que viene.');
+      L.push('');
+      repiten.forEach(c => L.push(`• ${c.nombre}: ${c.porque}.`));
+      L.push('');
+    }
+
+    const total = paraNomina.reduce((a, r) => a + _plataReclamo(r), 0);
+    if (total) {
+      L.push('-'.repeat(60));
+      L.push(`Monto estimado en juego: ${fmtMoneda(total, mon)}.`);
+      L.push('Es una estimación de lo que reclama cada persona, no una liquidación.');
+      L.push('');
+    }
+
+    L.push(...pie());
+    return L.join('\n');
+  }
+
+  function asuntoPedidoANomina(config) {
+    const cfg = config || Store.get().config;
+    const todos = Store.get().reclamos || [];
+    const n = todos.filter(r => r.estado === 'nomina' || r.estado === 'procede').length;
+    return `Reclamos de haberes para revisar${cfg.area ? ' · ' + cfg.area : ''} — ${n} caso${
+      n === 1 ? '' : 's'}`;
+  }
+
   function asuntoReclamosNomina(config) {
     const cfg = config || Store.get().config;
     const o = origenDeReclamos(Store.get(), null, Store.get().parametros);
@@ -13955,6 +14124,7 @@ const Reporte = (() => {
   return {
     calcular, datosMensuales,
     textoReclamosNomina, asuntoReclamosNomina,
+    textoPedidoANomina, asuntoPedidoANomina,
     textoReclamosDeTienda, asuntoReclamosDeTienda,
     textoVentasDia,
     textoNovedadesLiquidacion, asuntoNovedadesLiquidacion,
@@ -17057,6 +17227,14 @@ const App = (() => {
                 <td>${esc((A_CARGO_RECLAMO.find(x => x.id === r.aCargo) || {}).nombre || '—')}</td>
                 <td class="num">${r.monto ? dinero(r.monto) : '—'}</td>
                 <td class="num" style="white-space:nowrap">
+                  ${/* El triage en un clic. Marcar «me excede» abriendo la ficha de
+                       cada uno es el paso que hace que el pedido a Nómina no se
+                       arme nunca: son catorce aperturas para una decisión de un
+                       segundo. Solo aparece en los que todavía no están escalados
+                       ni cerrados. */''}
+                  ${!cerrado(r) && r.estado !== 'nomina' && r.estado !== 'procede'
+                    ? `<button class="mini" data-accion="a-nomina" data-id="${r.id}"
+                        title="Me excede: lo tiene que ver Nómina">→ Nómina</button>` : ''}
                   <button class="mini" data-accion="abrir-reclamo" data-id="${r.id}"
                           style="color:var(--azul);border-color:var(--azul)">${abierto ? 'Cerrar' : 'Ver'}</button>
                   <button class="mini" data-accion="borrar-reclamo" data-id="${r.id}">✕</button>
@@ -17068,9 +17246,56 @@ const App = (() => {
         </table></div>` : `<p class="vacio">${reclamoFiltro === 'abiertos' ? 'No hay reclamos abiertos.' : 'No hay reclamos para mostrar.'}</p>`}
       </section>
 
+      ${bloqueReporteAbierto()}
+
+      ${bloquePedidoNomina(e, todos)}
+
       ${bloqueOrigenReclamos(e, todos)}
 
       ${bloquePegarAnexo()}`;
+  }
+
+  /* ------------- Lo que hay que mandarle a Nómina -------------
+     El pedido operativo, separado del análisis a propósito: son dos
+     documentos y dos conversaciones. El análisis se discute en una reunión;
+     esto es una orden de trabajo y se contesta liquidando.
+
+     El bloque no aparece cuando no hay nada escalado, como los contadores en
+     cero — pero con reclamos abiertos y ninguno escalado **sí dice qué falta
+     hacer**, porque ahí el vacío no es «no hay trabajo» sino «todavía no
+     decidiste cuáles te exceden». */
+  function bloquePedidoNomina(e, lista) {
+    const todos = lista || e.reclamos || [];
+    const cerrado = r => (ESTADOS_RECLAMO_POR_ID[r.estado] || {}).cerrado;
+    const aRevisar = todos.filter(r => r.estado === 'nomina');
+    const aAjustar = todos.filter(r => r.estado === 'procede');
+    const sinDecidir = todos.filter(r => !cerrado(r) &&
+      r.estado !== 'nomina' && r.estado !== 'procede');
+    if (!aRevisar.length && !aAjustar.length && !sinDecidir.length) return '';
+
+    return `<section class="tarjeta">
+      <h2>Para mandarle a Nómina</h2>
+      <p class="ayuda">Los que <strong>te exceden</strong>. Marcá «→ Nómina» en la lista de
+        abajo y acá se juntan, ordenados <strong>por período de liquidación y por tienda</strong>,
+        que es como Nómina trabaja.</p>
+
+      ${aRevisar.length || aAjustar.length ? `<div class="kpis">
+        ${kpi('Para revisar', fmtNum(aRevisar.length, 0), 'les pedís que verifiquen',
+              aRevisar.length ? 'alerta' : '')}
+        ${kpi('Ya decidido, falta el ajuste', fmtNum(aAjustar.length, 0), 'no se discute, se liquida',
+              aAjustar.length ? 'aviso' : '')}
+        ${kpi('Sin decidir', fmtNum(sinDecidir.length, 0), 'todavía no dijiste si te exceden')}
+      </div>` : `<div class="aviso-caja">
+        <strong>Hay ${sinDecidir.length} reclamo${sinDecidir.length === 1 ? '' : 's'} abierto${
+          sinDecidir.length === 1 ? '' : 's'} y ninguno marcado para Nómina.</strong>
+        El pedido se arma con lo que vos marcás: lo que sigue en análisis o lo que ya
+        explicaste no se manda, y eso es justamente lo que hace que el pedido valga.
+      </div>`}
+
+      ${aRevisar.length || aAjustar.length ? `<div class="acciones">
+        <button class="b" data-accion="pedido-nomina">Armar el pedido</button>
+      </div>` : ''}
+    </section>`;
   }
 
   /* ---------------- De dónde vienen los reclamos ----------------
@@ -17144,12 +17369,23 @@ const App = (() => {
         <button class="b" data-accion="reporte-nomina">Armar el reporte para Nómina</button>
       </div>
 
-      ${reporteReclamos ? `<h4 style="margin-top:18px">${esc(reporteReclamos.titulo)}</h4>
-        <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
-        <div class="acciones">
-          <button class="b sec" data-accion="copiar-reporte-reclamos">Copiar</button>
-          <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
-        </div>` : ''}
+    </section>`;
+  }
+
+  /* El documento que se está mirando. Uno a la vez y en un lugar fijo: son
+     textos para copiar y mandar, y dos abiertos a la vez invitan a copiar el
+     equivocado. */
+  function bloqueReporteAbierto() {
+    if (!reporteReclamos) return '';
+    return `<section class="tarjeta">
+      <h2>${esc(reporteReclamos.titulo)}</h2>
+      <p class="ayuda">Copialo y mandalo. Asunto sugerido:
+        <strong>${esc(reporteReclamos.asunto || '')}</strong></p>
+      <pre class="reporte">${esc(reporteReclamos.texto)}</pre>
+      <div class="acciones">
+        <button class="b" data-accion="copiar-reporte-reclamos">Copiar</button>
+        <button class="b sec" data-accion="cerrar-reporte-reclamos">Cerrar</button>
+      </div>
     </section>`;
   }
 
@@ -22318,6 +22554,27 @@ const App = (() => {
       }
 
       if (a === 'ver-hechas') { verHechas = !verHechas; refrescar(); }
+
+      if (a === 'a-nomina') {
+        const r = Store.reclamo(btn.dataset.id);
+        if (!r) return;
+        r.estado = 'nomina';
+        r.aCargo = 'nomina';
+        Store.save();
+        refrescar();
+        avisar(`${r.colaborador || 'El reclamo'} queda para Nómina. Armá el pedido cuando tengas todos.`);
+        return;
+      }
+
+      if (a === 'pedido-nomina') {
+        reporteReclamos = {
+          titulo: 'Pedido a Nómina',
+          texto: Reporte.textoPedidoANomina(),
+          asunto: Reporte.asuntoPedidoANomina()
+        };
+        refrescar();
+        return;
+      }
 
       /* --- los dos reportes de reclamos --- */
       if (a === 'reporte-nomina') {
