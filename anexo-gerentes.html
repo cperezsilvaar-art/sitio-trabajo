@@ -242,14 +242,14 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
    -------------------------------------------------------------------------- */
 const TIENDAS = ['Botánico', 'Devoto', 'La Nobleza', 'Mark', 'Olivos', 'Olleros', 'Parque Chacabuco', 'Rivadavia', 'San Martín Center', 'Scalabrini', 'Villa Devoto', 'Villa del Parque'];
 const MOTIVOS_RECLAMO = [{ grupo: 'Liquidación', nombre: 'Horas extras no liquidadas' }, { grupo: 'Liquidación', nombre: 'Adicional nocturno' }, { grupo: 'Liquidación', nombre: 'Feriado trabajado' }, { grupo: 'Liquidación', nombre: 'Presentismo descontado' }, { grupo: 'Liquidación', nombre: 'Francos no compensados' }, { grupo: 'Liquidación', nombre: 'Vacaciones o plus vacacional' }, { grupo: 'Liquidación', nombre: 'SAC / aguinaldo' }, { grupo: 'Liquidación', nombre: 'Descuento indebido (faltante de caja u otro)' }, { grupo: 'Encuadre', nombre: 'Categoría de convenio' }, { grupo: 'Encuadre', nombre: 'Antigüedad mal computada' }, { grupo: 'Encuadre', nombre: 'Aumento de convenio no aplicado' }, { grupo: 'Encuadre', nombre: 'Asignaciones familiares' }, { grupo: 'Beneficios', nombre: 'Obra social o ART' }, { grupo: 'Beneficios', nombre: 'Uniforme o elementos de trabajo' }];
-const MAIL_RRHH = '';
+const MAIL_RRHH = 'christianm.perez@farmatodo.com';
 
 /* Las tres ramas. El `id` es lo que viaja en la primera línea del mensaje y lo
    que el importador del panel lee para decidir si esto es un reclamo o un
    caso: son dos cosas distintas de su lado, y el gerente no tiene por qué
    saberlo. */
 const RAMAS = [
-  { id: 'RECLAMO', titulo: 'Un reclamo de liquidación',
+  { id: 'RECLAMO', titulo: 'Un reclamo de sueldo',
     ayuda: 'Le pagaron mal, le descontaron algo, le falta un adicional.',
     tituloQue: '3. Qué le pagaron mal',
     ayudaQue: 'Si no sabés exactamente cuál es, elegí lo más parecido y contalo abajo.',
