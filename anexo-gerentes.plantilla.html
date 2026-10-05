@@ -25,12 +25,13 @@
     contra el padrón es exacto, y sin número el panel nombra las filas que no
     cayeron en nadie en vez de perderlas en silencio.
 
-  - **El canal es el que ya usan.** Lo que molestaba no era el WhatsApp, era
-    la informalidad: «cris fulanito de tal cobró mal». Así que el botón abre
-    el chat con el mensaje ya ordenado. Para el gerente es el gesto de
-    siempre; lo que cambia es que del otro lado llega algo que el panel puede
-    leer. Van las tres salidas —WhatsApp, mail y copiar— porque el texto es
-    idéntico y el importador lo toma de donde venga.
+  - **No va por WhatsApp, y es una decisión del coordinador.** La primera
+    versión abría el chat con el mensaje ya escrito, con el argumento de que
+    el gerente seguía haciendo el gesto de siempre. El coordinador lo
+    descartó: un reclamo de sueldo que entra a su chat personal se mezcla con
+    todo lo demás, y la informalidad que molestaba vuelve por la puerta del
+    canal. Quedan **mail y copiar**, con el texto idéntico — el importador lo
+    toma de donde venga. **No reponer el botón de WhatsApp.**
 
   - **Es solo para reclamos de sueldo.** Había una tercera rama —«una
     situación que necesita seguimiento»— y se eliminó a pedido del
@@ -134,8 +135,6 @@ a.b, button.b {
 a.b:hover, button.b:hover { background: var(--azul-claro); }
 a.b.sec, button.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
 a.b.sec:hover, button.b.sec:hover { background: var(--panel-alt); }
-a.b.wa { background: var(--verde); }
-a.b.wa:hover { background: #15693d; }
 .falta {
   margin: 0 0 14px; font-size: 13.5px; font-weight: 600; color: var(--rojo);
   background: rgba(200,16,46,.08); border-radius: 7px; padding: 10px 12px;
@@ -223,8 +222,7 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
       <p class="falta" id="falta" hidden></p>
       <pre class="previo" id="previo"></pre>
       <div class="botones">
-        <a class="b wa" id="btnWa" href="#" hidden>Enviar por WhatsApp</a>
-        <a class="b sec" id="btnMail" href="#" hidden>Enviar por mail</a>
+        <a class="b" id="btnMail" href="#" hidden>Enviar por mail</a>
         <button class="b sec" type="button" id="btnCopiar">Copiar el texto</button>
       </div>
       <p class="listo" id="listo" hidden></p>
@@ -243,7 +241,6 @@ footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding
    -------------------------------------------------------------------------- */
 const TIENDAS = /*{TIENDAS}*/[]/*{/TIENDAS}*/;
 const MOTIVOS_RECLAMO = /*{MOTIVOS_RECLAMO}*/[]/*{/MOTIVOS_RECLAMO}*/;
-const TEL_RRHH = /*{TEL_RRHH}*/''/*{/TEL_RRHH}*/;
 const MAIL_RRHH = /*{MAIL_RRHH}*/''/*{/MAIL_RRHH}*/;
 
 /* Las tres ramas. El `id` es lo que viaja en la primera línea del mensaje y lo
@@ -389,10 +386,6 @@ function redibujar() {
      a medias obliga a una segunda vuelta de WhatsApp, que es justo lo que esto
      viene a sacar. */
   const asunto = `RRHH Área 3 · ${rama.titulo} · ${($('#colaborador').value || '').trim()}`;
-  if (TEL_RRHH) {
-    $('#btnWa').hidden = !completo;
-    $('#btnWa').href = `https://wa.me/${TEL_RRHH}?text=${encodeURIComponent(texto)}`;
-  }
   if (MAIL_RRHH) {
     $('#btnMail').hidden = !completo;
     $('#btnMail').href = `mailto:${MAIL_RRHH}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`;

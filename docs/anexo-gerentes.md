@@ -62,10 +62,17 @@ Fecha: 2026-10-02
 mitad del punto: si el mensaje fuera un bloque cifrado el gerente no sabría qué
 está mandando. Y se parsea sin ambigüedad del otro lado.
 
-**Van tres salidas —WhatsApp, mail y copiar— y el texto es idéntico.** El
-importador lo toma de donde venga, así que el canal no está amarrado. Si no hay
-número ni casilla configurados, queda «Copiar el texto», que es una salida
-completa.
+**Van dos salidas —mail y copiar— y el texto es idéntico.** El importador lo
+toma de donde venga. Sin casilla configurada queda «Copiar el texto», que es una
+salida completa.
+
+**No va por WhatsApp, y es una decisión del coordinador.** La primera versión
+abría el chat con el mensaje ya escrito, con el argumento de que el gerente
+seguía haciendo el gesto de siempre. Él lo descartó, y tiene razón: un reclamo
+de sueldo que entra a su chat personal se mezcla con todo lo demás, y la
+informalidad que el anexo viene a sacar vuelve por la puerta del canal. Se
+eliminó el botón, la constante y la opción `--tel` del generador — apagado
+volvería por descuido.
 
 ## Las tres ramas
 

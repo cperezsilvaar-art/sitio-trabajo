@@ -25,11 +25,14 @@ pedido del coordinador, así que ya no se leen los `TIPOS_CASO`.
 **Nunca inyecta nombres de personas.** Lo verifica `check-anexo.js`.
 
 Uso:
-    python3 build-anexo.py [destino] [--tel 5491122334455] [--mail rrhh@...]
+    python3 build-anexo.py [destino] [--mail reclamos.area3@...]
 
-`--tel` es el WhatsApp al que se manda y `--mail` la casilla. Sin ellos la
-página sale igual y muestra solo «Copiar el texto», que es una salida completa:
-el gerente pega el mensaje donde quiera.
+`--mail` es la casilla a la que se manda. **No hay opción de WhatsApp y es una
+decisión del coordinador**: un reclamo de sueldo que entra a su chat personal se
+mezcla con todo lo demás, y la informalidad que el anexo viene a sacar vuelve
+por la puerta del canal. Sin `--mail` la página sale igual y muestra solo
+«Copiar el texto», que es una salida completa: el gerente pega el mensaje donde
+quiera.
 """
 
 import pathlib
@@ -104,14 +107,12 @@ motivos_reclamo = [{'grupo': g, 'nombre': n} for i, n, g in reclamos if i != 'ot
 if len(motivos_reclamo) < 8:
     raise SystemExit(f'Salieron {len(motivos_reclamo)} motivos: algo cambió en TIPOS_RECLAMO.')
 
-tel = re.sub(r'\D', '', argumento('--tel'))
 mail = argumento('--mail').strip()
 
 pagina = fuente('anexo-gerentes.plantilla.html')
 for marca, valor in [
     ('TIENDAS', js(tiendas)),
     ('MOTIVOS_RECLAMO', js(motivos_reclamo)),
-    ('TEL_RRHH', js(tel)),
     ('MAIL_RRHH', js(mail)),
 ]:
     nuevo, n = re.subn(r'/\*\{' + marca + r'\}\*/.*?/\*\{/' + marca + r'\}\*/',
@@ -128,7 +129,7 @@ pagina = pagina.replace(
 
 destino = raiz / 'anexo-gerentes.html'
 for a in sys.argv[1:]:
-    if not a.startswith('--') and not a.isdigit() and a != tel and a != mail:
+    if not a.startswith('--') and a != mail:
         if a.endswith('.html'):
             destino = pathlib.Path(a)
         break
@@ -137,5 +138,4 @@ destino.write_text(pagina, encoding='utf-8')
 print(f'{destino}  ·  {len(pagina) / 1024:.0f} KB')
 print(f'  tiendas: {len(tiendas)}')
 print(f'  motivos de reclamo: {len(motivos_reclamo)}')
-print(f"  WhatsApp: {tel or '— sin número, solo copiar —'}")
 print(f"  mail: {mail or '— sin casilla, solo copiar —'}")

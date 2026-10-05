@@ -1286,9 +1286,17 @@ el teléfono, sin login y sin conexión, con la paleta del panel. Documentado en
 Lo que molestaba **no era el WhatsApp: era la informalidad** —«cris fulanito de
 tal cobró mal»—, y esa distinción decide el diseño: el gerente sigue mandando un
 mensaje, pero el anexo se lo arma. Lo que llega es una línea por dato con la
-clave adelante, que **se lee en el chat y se parsea sin ambigüedad**; si fuera un
-bloque cifrado el gerente no sabría qué está mandando. Van las tres salidas
-—WhatsApp, mail y copiar— con el texto idéntico, así el canal no queda amarrado.
+clave adelante, que **se lee de corrido y se parsea sin ambigüedad**; si fuera un
+bloque cifrado el gerente no sabría qué está mandando.
+
+**Pero no va por WhatsApp, y es una decisión del coordinador.** La primera
+versión abría el chat con el mensaje ya escrito, con el argumento de que el
+gerente seguía haciendo el gesto de siempre. Él lo descartó: un reclamo de sueldo
+que entra a su chat personal se mezcla con todo lo demás, y la informalidad que
+el anexo viene a sacar vuelve por la puerta del canal. Quedan **mail y copiar**,
+con el texto idéntico, y el importador lo toma de donde venga. Se eliminó el
+botón, la constante `TEL_RRHH` y la opción `--tel` del generador — apagado
+volvería por descuido. **No reponerlo.**
 
 **No hay otra forma de que el dato llegue, y las dos alternativas se
 descartaron con el motivo escrito.** El panel no tiene servidor, así que el dato
