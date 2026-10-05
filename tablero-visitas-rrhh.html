@@ -4467,6 +4467,161 @@ function topeHorasExtras(colaborador, periodo) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Las horas extras que todavía no se hicieron                          *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Por qué el gerente pide horas extras. La lista es corta a propósito: lo que
+ * cambia la decisión es si la carga es del negocio —y entonces se discute con
+ * Operaciones— o si es un agujero de cobertura —y entonces el problema es la
+ * licencia, no las horas—.
+ */
+const MOTIVOS_HORAS_EXTRAS = [
+  { id: 'afluencia',      nombre: 'Afluencia de público' },
+  { id: 'cubrirLicencia', nombre: 'Cubrir una licencia',           pideQuien: true },
+  { id: 'inventario',     nombre: 'Inventario o tarea puntual' },
+  { id: 'otro',           nombre: 'Otro' }
+];
+
+const MOTIVOS_HORAS_POR_ID = MOTIVOS_HORAS_EXTRAS
+  .reduce((a, m) => (a[m.id] = m, a), {});
+
+/* Lo que el gerente elige en el formulario, mapeado a los motivos del panel:
+   la lista del formulario se puede reescribir mientras la palabra clave quede.
+
+   **Se buscan con borde de palabra**, que es la regla de `PALABRAS_DE_RECLAMO`
+   y existe por esto: con `includes()`, «in-venta-rio» contiene «venta» y un
+   inventario entraba como afluencia de público. Es el mismo falso positivo que
+   hacía que «sacaron» diera SAC. */
+const CLAVES_MOTIVO_HORAS = [
+  { motivo: 'inventario',     claves: ['inventario', 'tarea', 'puntual'] },
+  { motivo: 'afluencia',      claves: ['afluencia', 'publico', 'ventas'] },
+  { motivo: 'cubrirLicencia', claves: ['licencia', 'cubrir', 'ausencia', 'ausente'] }
+];
+
+function motivoDeSolicitud(texto) {
+  const t = String(texto || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!t) return '';
+  const m = CLAVES_MOTIVO_HORAS.find(x =>
+    x.claves.some(k => new RegExp('\\b' + k + '\\b').test(t)));
+  return m ? m.motivo : 'otro';
+}
+
+/**
+ * Qué es cada columna de la planilla de respuestas del formulario, por lo que
+ * dice su encabezado. **El texto de cada pregunta es código**, igual que en el
+ * parte de ausentes: se busca por pedazo de encabezado y gana el primero que
+ * coincide, así que la pregunta del gerente que pide no puede decir «apellido y
+ * nombre» —se llevaría su nombre al lugar de quien hace las horas—.
+ * Documentado en `docs/formulario-horas-extras.md`.
+ */
+const COLUMNAS_SOLICITUD_HORAS = [
+  { campo: 'marca',   claves: ['marca temporal'] },
+  { campo: 'tienda',  claves: ['tienda', 'sucursal'] },
+  { campo: 'pide',    claves: ['gerente', 'solicita'] },
+  { campo: 'nombre',  claves: ['apellido y nombre', 'colaborador'] },
+  { campo: 'dni',     claves: ['dni', 'cuil', 'documento', 'legajo'] },
+  { campo: 'motivo',  claves: ['motivo'] },
+  /* «de quién» a secas no sirve: la pregunta por quien hace las horas puede
+     decir «de quien haría las horas» y se la llevaría, y las dos preguntas
+     caerían en la misma columna. La clave es la frase entera del motivo. */
+  { campo: 'cubreA',  claves: ['cubrir una licencia', 'a quien cubre', 'cubre a'] },
+  { campo: 'horas',   claves: ['cantidad de horas', 'cuantas horas', 'cantidad'] },
+  { campo: 'fecha',   claves: ['que dia', 'dia', 'fecha'] },
+  { campo: 'notas',   claves: ['algo mas', 'observacion', 'comentario', 'nota'] }
+];
+
+/**
+ * Las horas extras de una persona en un período, y **de dónde salen**.
+ *
+ * Son dos fuentes para el mismo número y la regla es cuál manda, porque
+ * sumarlas contaría dos veces lo mismo: una vez autorizada y otra liquidada.
+ * **Si el período ya tiene novedades cargadas, manda la liquidación** —es lo
+ * que efectivamente se pagó, y lo autorizado de ese mes ya está adentro—; si
+ * no, mandan las solicitudes autorizadas, que es lo único que se sabe de un
+ * mes que todavía no cerró.
+ *
+ * La `fuente` viaja con el número porque la pantalla la escribe: «lleva 26 h
+ * autorizadas» y «lleva 26 h liquidadas» se parecen y no son lo mismo —una se
+ * puede todavía cambiar—.
+ */
+function horasDelPeriodo(colaborador, periodo, parametros) {
+  const c = colaborador || {};
+  if (((c.novedades || {})[periodo])) {
+    return Object.assign({ fuente: 'liquidado' }, horasExtrasDe(c, periodo));
+  }
+  const suyas = (c.solicitudesHoras || []).filter(x =>
+    x.estado === 'autorizada' && periodoDeFecha(x.fecha, parametros) === periodo);
+  const total = suyas.reduce((a, x) => a + (+x.horas || 0), 0);
+  return { fuente: total ? 'autorizado' : 'nada', al50: 0, al100: 0, total,
+           solicitudes: suyas.length };
+}
+
+/**
+ * Cómo queda una persona contra los dos topes **si se le autoriza lo que está
+ * pidiendo**.
+ *
+ * Esto es lo que `topeHorasExtras()` no puede contestar: esa mira el mes
+ * cerrado, y cuando el mes cerró ya es tarde. Pasarse del tope mensual se
+ * corrige el mes que viene y pasarse del anual **ya no se corrige**, así que el
+ * único momento en que el número sirve para decidir algo es antes de autorizar.
+ *
+ * El año es el **calendario** y no los últimos doce meses, igual que en el
+ * cierre: enero arranca de cero.
+ */
+function topeConLoPedido(colaborador, horasPedidas, fecha, parametros) {
+  const c = colaborador || {};
+  const periodo = periodoDeFecha(fecha, parametros);
+  const pide = +horasPedidas || 0;
+  const mes = horasDelPeriodo(c, periodo, parametros);
+
+  /* Todos los períodos del año con algo adentro, liquidado o autorizado: un
+     acumulado anual que solo mire los meses liquidados se lee como que nadie
+     se pasó justo en el mes en que se está decidiendo. */
+  const anio = String(periodo).slice(0, 4);
+  const delAnio = {};
+  Object.keys(c.novedades || {}).forEach(x => { delAnio[x] = 1; });
+  (c.solicitudesHoras || []).forEach(x => {
+    if (x.estado !== 'autorizada') return;
+    const p = periodoDeFecha(x.fecha, parametros);
+    if (p) delAnio[p] = 1;
+  });
+  const periodos = Object.keys(delAnio).filter(x => x.slice(0, 4) === anio).sort();
+
+  let acumulado = 0, liquidados = 0, autorizados = 0;
+  periodos.forEach(x => {
+    const h = horasDelPeriodo(c, x, parametros);
+    acumulado += h.total;
+    if (h.fuente === 'liquidado') liquidados++;
+    else if (h.fuente === 'autorizado') autorizados++;
+  });
+
+  const T = TOPES_HORAS_EXTRAS;
+  const conMes = mes.total + pide;
+  const conAnio = acumulado + pide;
+  const estado = (valor, tope) => valor > tope ? 'excedido'
+    : valor >= tope * T.avisoDesde ? 'alBorde' : 'ok';
+
+  return {
+    periodo, pide,
+    mes, acumuladoDelAnio: acumulado, periodosDelAnio: periodos,
+    mesesLiquidados: liquidados, mesesAutorizados: autorizados,
+    conLoPedidoMes: conMes, conLoPedidoAnio: conAnio,
+    topeMensual: T.mensual, topeAnual: T.anual,
+    estadoMes: estado(conMes, T.mensual),
+    estadoAnio: estado(conAnio, T.anual),
+    excedeMes: conMes > T.mensual,
+    excedeAnio: conAnio > T.anual,
+    /* Cuántas entran todavía sin pasarse. Negativo quiere decir que lo pedido
+       ya se pasa, y se devuelve así en vez de recortarlo a cero: cuántas de más
+       es justamente lo que hay que recortarle al pedido. */
+    entranEnElMes: T.mensual - mes.total,
+    entranEnElAnio: T.anual - acumulado
+  };
+}
+
 /**
  * El cierre del mes leído desde las novedades: por tienda y por persona, las
  * horas extras contra los topes y los días de ausencia que la liquidación
@@ -4626,7 +4781,9 @@ if (typeof module !== 'undefined' && module.exports) {
     jornadaDeVinculo,
     ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,
     MESES_AVISO_ART8, relevamientoAdef,
-    TOPES_HORAS_EXTRAS, horasExtrasDe, periodosDelAnio, topeHorasExtras, cierreDelMes
+    TOPES_HORAS_EXTRAS, horasExtrasDe, periodosDelAnio, topeHorasExtras, cierreDelMes,
+    MOTIVOS_HORAS_EXTRAS, MOTIVOS_HORAS_POR_ID, motivoDeSolicitud,
+    horasDelPeriodo, topeConLoPedido, COLUMNAS_SOLICITUD_HORAS
   };
 }
 
@@ -7937,6 +8094,45 @@ function pendientesDelArea(estado, hoyISO) {
     ruta: '#/nomina', items: docs
   });
 
+  /* 2 ter. Horas extras pedidas y sin contestar. Esto **sí tiene fecha de
+        vencimiento propia**, y es la única clase de pendiente del panel que la
+        tiene: el día en que se harían. Contestarla el martes cuando era para el
+        sábado no es contestarla, y el gerente ya decidió sin respuesta. Por eso
+        el tono no sale de los días que lleva abierta sino de los que faltan
+        para ese día. */
+  const hrs = [];
+  (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+    (c.solicitudesHoras || []).forEach(x => {
+      if (x.estado !== 'pedida') return;
+      const faltan = x.fecha ? _diasDesde(hoy, x.fecha) : null;
+      const t = typeof topeConLoPedido === 'function'
+        ? topeConLoPedido(c, x.horas, x.fecha, (e.config || {}).parametros) : null;
+      const motivo = (typeof MOTIVOS_HORAS_POR_ID !== 'undefined'
+        && MOTIVOS_HORAS_POR_ID[x.motivo] || {}).nombre || '';
+      hrs.push({
+        que: `${c.nombre} — ${_n(x.horas, 1)} h`,
+        quien: s.nombre || s.codigo,
+        /* El tope va en el detalle y no en una columna: es lo que decide la
+           respuesta, así que tiene que estar en la línea que se lee. */
+        detalle: [motivo.toLowerCase(),
+                  x.cubreA ? `cubre a ${x.cubreA}` : '',
+                  t && t.excedeAnio ? `pasa el tope anual: ${_n(t.conLoPedidoAnio, 1)} de ${t.topeAnual} h`
+                    : t && t.excedeMes ? `pasa el tope del mes: ${_n(t.conLoPedidoMes, 1)} de ${t.topeMensual} h` : '',
+                  x.fecha ? `para el ${x.fecha.slice(8, 10)}/${x.fecha.slice(5, 7)}` : ''
+                 ].filter(Boolean).join(' · '),
+        desde: x.pedidaEl,
+        dias: _diasDesde(x.pedidaEl, hoy),
+        tono: (t && (t.excedeMes || t.excedeAnio)) || (faltan !== null && faltan <= 1)
+          ? 'rojo' : 'ambar',
+        ruta: '#/nomina/horas'
+      });
+    });
+  }));
+  if (hrs.length) grupos.push({
+    id: 'horas', titulo: 'Horas extras esperando tu autorización',
+    ruta: '#/nomina/horas', items: hrs
+  });
+
   /* 3. Reclamos abiertos: son de plata y el que los hizo está esperando. */
   const rec = (e.reclamos || [])
     .filter(r => !((typeof ESTADOS_RECLAMO_POR_ID !== 'undefined'
@@ -10134,6 +10330,176 @@ const Store = (() => {
       guardar();
     },
 
+    /* ------------------- horas extras pedidas --------------------- */
+
+    /**
+     * Una solicitud de horas extras, colgada de **quien las haría**.
+     *
+     * Cuelga de la persona como `c.baja`, `c.ausencias` y `c.entrenamientos`,
+     * y por un motivo concreto: los dos topes del Decreto 484/2000 son por
+     * persona, así que lo pedido tiene que estar donde está lo liquidado para
+     * poder sumarse. Y si la trasladan de tienda en el medio del mes, su
+     * acumulado del año la acompaña.
+     *
+     * Entra como `pedida` y nada más: autorizarla es una decisión del
+     * coordinador y nunca la consecuencia de haberla cargado.
+     */
+    agregarSolicitudHoras(colaboradorId, datos) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      if (!Array.isArray(c.solicitudesHoras)) c.solicitudesHoras = [];
+      const x = Object.assign({
+        id: uid(),
+        fecha: '',
+        horas: 0,
+        motivo: 'afluencia',
+        cubreA: '',
+        estado: 'pedida',
+        pedidaPor: '',
+        pedidaEl: _diaHoy(),
+        resueltaEl: '',
+        nota: '',
+        origen: 'mano',
+        marca: '',
+        registradaEl: new Date().toISOString()
+      }, datos || {});
+      x.horas = +x.horas || 0;
+      c.solicitudesHoras.push(x);
+      guardar();
+      return x;
+    },
+
+    /**
+     * Autoriza, rechaza o la devuelve a pedida.
+     *
+     * **Volver a tocar el mismo estado la destilda**, como el check list y los
+     * trámites de la baja: autorizar por error se deshace en el mismo lugar.
+     * Y **destildar no borra la nota** —por qué se había autorizado sigue
+     * siendo lo que hay que leer—.
+     */
+    resolverSolicitudHoras(colaboradorId, solicitudId, estado, nota) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      const x = (c.solicitudesHoras || []).find(y => y.id === solicitudId);
+      if (!x) return null;
+      const vuelve = x.estado === estado;
+      x.estado = vuelve ? 'pedida' : estado;
+      x.resueltaEl = vuelve ? '' : _diaHoy();
+      if (nota !== undefined && nota !== null) x.nota = String(nota);
+      guardar();
+      return x;
+    },
+
+    editarSolicitudHoras(colaboradorId, solicitudId, campo, valor) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return null;
+      const x = (c.solicitudesHoras || []).find(y => y.id === solicitudId);
+      if (!x) return null;
+      x[campo] = campo === 'horas' ? (+valor || 0) : valor;
+      guardar();
+      return x;
+    },
+
+    quitarSolicitudHoras(colaboradorId, solicitudId) {
+      const c = this.colaboradorPorId(colaboradorId);
+      if (!c) return;
+      c.solicitudesHoras = (c.solicitudesHoras || []).filter(x => x.id !== solicitudId);
+      guardar();
+    },
+
+    /** Todas las solicitudes del área con su persona y su tienda al lado. */
+    solicitudesDeHoras(estado) {
+      const e = this.get();
+      const out = [];
+      e.sucursales.forEach(s => (s.colaboradores || []).forEach(c => {
+        (c.solicitudesHoras || []).forEach(x => {
+          if (estado && x.estado !== estado) return;
+          out.push({ x, c, s });
+        });
+      }));
+      /* Por el día en que se harían: lo que es para mañana se contesta hoy. */
+      return out.sort((a, b) => String(a.x.fecha).localeCompare(String(b.x.fecha)));
+    },
+
+    /**
+     * Las respuestas del formulario de horas extras.
+     *
+     * **No duplica**: la marca temporal que Google agrega sola identifica cada
+     * respuesta, así que la planilla se puede volver a pegar entera todos los
+     * días. Sin marca —una fila cargada a mano en la planilla— se compara por
+     * persona, día y horas, que es lo que define el pedido.
+     *
+     * **Lo que no cae en nadie no se inventa**: una solicitud cuelga de la
+     * persona, así que sin ficha no hay dónde ponerla. Se devuelve con nombre
+     * en `sinPersona`, como el libro de novedades.
+     */
+    importarSolicitudesDeHoras(filas) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const out = { cargadas: 0, repetidas: 0, sinFecha: 0, sinHoras: 0,
+                    sinPersona: [], otrasAreas: 0, enConflicto: [],
+                    excedenTope: [] };
+      const p = e.config.parametros;
+
+      filas.forEach(f => {
+        const fecha = fechaDelParte(f.fecha);
+        if (!fecha) { out.sinFecha++; return; }
+        const horas = +String(f.horas || '').replace(',', '.').replace(/[^\d.]/g, '');
+        if (!horas) { out.sinHoras++; return; }
+
+        /* El número va por las dos puertas: `documentoDelFormulario()` lee el
+           CUIL y el DNI del mismo campo, y lo que tiene cuatro dígitos cae en
+           el legajo. Es el único emparejamiento del panel y no se escribe otro
+           acá: `buscadorDePadron()`. */
+        const m = buscar({ cuil: f.dni, legajo: f.dni,
+                           nombre: f.nombre, tienda: f.tienda });
+        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
+        if (!m.g) {
+          if (m.propia) out.sinPersona.push(String(f.nombre || '').trim());
+          else out.otrasAreas++;
+          return;
+        }
+        const c = m.g.c;
+        if (!Array.isArray(c.solicitudesHoras)) c.solicitudesHoras = [];
+
+        const marca = String(f.marca || '').trim();
+        const ya = c.solicitudesHoras.find(x => marca
+          ? x.marca === marca
+          : (x.fecha === fecha && (+x.horas || 0) === horas));
+        if (ya) { out.repetidas++; return; }
+
+        const x = {
+          id: uid(), fecha, horas,
+          motivo: motivoDeSolicitud(f.motivo) || 'otro',
+          cubreA: String(f.cubreA || '').trim(),
+          estado: 'pedida',
+          pedidaPor: String(f.pide || '').trim(),
+          pedidaEl: fechaDelParte(marca) || _diaHoy(),
+          resueltaEl: '', nota: String(f.notas || '').trim(),
+          origen: 'formulario', marca,
+          registradaEl: new Date().toISOString()
+        };
+        c.solicitudesHoras.push(x);
+        out.cargadas++;
+
+        /* El dato que hace que esto sirva: con la solicitud ya cargada, decir
+           cuál de las que entraron se pasa de un tope. Antes de autorizar es el
+           único momento en que el número cambia una decisión —pasarse del anual
+           ya no se corrige—, y el aviso del pegado es donde se lo va a leer. */
+        const t = topeConLoPedido(c, horas, fecha, p);
+        if (t.excedeMes || t.excedeAnio) {
+          out.excedenTope.push({
+            nombre: c.nombre, horas, fecha,
+            mes: t.excedeMes ? t.conLoPedidoMes : 0,
+            anio: t.excedeAnio ? t.conLoPedidoAnio : 0
+          });
+        }
+      });
+
+      guardar();
+      return out;
+    },
+
     /* --------------------------- casos ---------------------------- */
 
     abrirCaso(colaboradorId, datos) {
@@ -11496,7 +11862,7 @@ const Store = (() => {
       resguardar('Antes de unir dos fichas');
 
       ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones',
-       'planes', 'documentos'].forEach(k => {
+       'planes', 'documentos', 'solicitudesHoras'].forEach(k => {
         if (!Array.isArray(b[k]) || !b[k].length) return;
         if (!Array.isArray(a[k])) a[k] = [];
         b[k].forEach(x => {
@@ -11513,7 +11879,8 @@ const Store = (() => {
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'planes', 'documentos', 'novedades', 'baja'].indexOf(k) >= 0) return;
+             'sanciones', 'planes', 'documentos', 'solicitudesHoras',
+             'novedades', 'baja'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
         if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;
@@ -14317,16 +14684,24 @@ const App = (() => {
     </nav>`;
   }
 
-  /* `#/nomina` tiene dos solapas y no dos entradas de menú: son la misma lista
-     de personas mirada de dos formas. El padrón contesta «¿quién es esta
-     persona?»; el relevamiento contesta «¿cómo viene el plantel con el curso?».
-     Una lista más de las 141 personas en otra pantalla sería la tercera. */
+  /* `#/nomina` tiene solapas y no entradas de menú: son la misma lista de
+     personas mirada de varias formas. El padrón contesta «¿quién es esta
+     persona?»; el relevamiento, «¿cómo viene el plantel con el curso?»; el
+     cierre, «¿alguien se pasó del tope?»; y las horas pedidas, «¿se lo
+     autorizo?». Una lista más de las 141 personas en otra pantalla sería una
+     de más.
+
+     Las dos de horas extras son dos y no una a propósito: el cierre mira el mes
+     **cerrado** y acá se decide sobre un día que **todavía no pasó**. Cuando el
+     cierre muestra que alguien se pasó del tope anual ya no hay nada que hacer
+     con eso. */
   function solapasDeNomina(cual) {
     const item = (id, ruta, nombre) =>
       `<a href="${ruta}" class="${cual === id ? 'activo' : ''}">${nombre}</a>`;
     return `<nav class="tabs">
       ${item('padron', '#/nomina', 'El padrón')}
       ${item('adef', '#/nomina/adef', 'Curso de ADEF')}
+      ${item('horas', '#/nomina/horas', 'Horas extras pedidas')}
       ${item('cierre', '#/nomina/cierre', 'El cierre del mes')}
     </nav>`;
   }
@@ -15611,6 +15986,300 @@ const App = (() => {
 
   let cierrePeriodo = null;
 
+  /* ---------------- Horas extras pedidas y sin autorizar ----------------
+     La cuarta solapa de `#/nomina`. Contesta una sola pregunta —«¿se lo
+     autorizo?»— y la contesta con el único dato que la decide: cómo queda esa
+     persona contra los dos topes del Decreto 484/2000 **si se le autoriza lo
+     que está pidiendo**.
+
+     Es la otra mitad de *El cierre del mes* y por eso son dos solapas. El
+     cierre mira lo que la liquidación pagó: ahí un tope anual excedido es un
+     dato que ya no se puede cambiar. Acá el día todavía no pasó, que es el
+     único momento en que el número sirve para decidir algo. */
+  function bloqueImportarHoras() {
+    const r = resultadoHoras;
+    return `<section class="tarjeta">
+      <h2>Traer los pedidos del formulario</h2>
+      <p class="ayuda">Abrí la planilla de respuestas del formulario de horas extras, seleccioná
+        desde la fila de encabezados hasta la última respuesta, copiá y pegá acá. Se puede volver
+        a pegar entera todos los días: la marca temporal identifica cada respuesta y no se
+        duplica.</p>
+      <p class="ayuda">Las columnas que busca: <strong>Marca temporal · Tienda · Gerente que
+        solicita · Apellido y nombre · DNI · Motivo · Cubrir una licencia de quién · Cantidad de
+        horas · Qué día · Observaciones</strong>. Sin el nombre, las horas o el día la fila no
+        entra: un pedido sin día no se puede autorizar.</p>
+      <textarea id="pegar-horas" style="min-height:110px"
+        placeholder="Marca temporal&#9;Tu tienda&#9;Gerente que solicita&#9;Apellido y nombre…"></textarea>
+      <div class="acciones">
+        <button class="b" data-accion="importar-horas">Importar los pedidos</button>
+        ${r ? `<button class="b sec" data-accion="limpiar-horas">Limpiar</button>` : ''}
+      </div>
+      <p class="ayuda"><strong>Todo entra como pedido y nada se autoriza solo.</strong>
+        Autorizar es una decisión del coordinador, no la consecuencia de que el gerente haya
+        completado el formulario.</p>
+      ${r ? `<div class="aviso-caja ${r.cargadas ? 'info' : ''}" style="margin-top:14px">
+        <strong>Entraron ${r.cargadas} pedido${r.cargadas === 1 ? '' : 's'}.</strong>
+        ${r.repetidas ? `${r.repetidas} ya estaban cargados y no se duplicaron.` : ''}
+        ${r.excedenTope.length ? `<br><strong>${r.excedenTope.length} se ${
+          r.excedenTope.length === 1 ? 'pasa' : 'pasan'} de un tope</strong>:
+          ${esc(r.excedenTope.slice(0, 8).map(x =>
+            `${x.nombre} (${fmtNum(x.horas, 1)} h el ${_fecha(x.fecha)}${
+              x.anio ? `, quedaría en ${fmtNum(x.anio, 1)} h en el año` :
+              x.mes ? `, quedaría en ${fmtNum(x.mes, 1)} h en el mes` : ''})`).join(' · '))}.
+          Están abajo con el detalle.` : ''}
+        ${r.sinFecha ? `<br>${r.sinFecha === 1 ? 'Uno no traía' : r.sinFecha + ' no traían'}
+          el día en que se harían y se ${r.sinFecha === 1 ? 'salteó' : 'saltearon'}:
+          sin día no hay tope del mes contra el que leerlo.` : ''}
+        ${r.sinHoras ? `<br>${r.sinHoras === 1 ? 'Uno no traía' : r.sinHoras + ' no traían'}
+          la cantidad de horas y se ${r.sinHoras === 1 ? 'salteó' : 'saltearon'}.` : ''}
+        ${r.otrasAreas ? `<br>${r.otrasAreas} son de tiendas de otras áreas y se saltearon.` : ''}
+        ${r.sinPersona.length ? `<br><strong>${r.sinPersona.length} no ${
+          r.sinPersona.length === 1 ? 'cae' : 'caen'} en nadie del padrón</strong>:
+          ${esc([...new Set(r.sinPersona)].slice(0, 10).join(' · '))}${
+          new Set(r.sinPersona).size > 10 ? '…' : ''}. Un pedido cuelga de la persona, así que sin
+          ficha no hay dónde ponerlo: si es un alta nueva, pegá primero la nómina del mes.` : ''}
+        ${r.enConflicto.length ? `<br><strong>${r.enConflicto.length} ${
+          r.enConflicto.length === 1 ? 'trae' : 'traen'} el número de una persona y el nombre de
+          otra</strong>: ${esc(r.enConflicto.slice(0, 6).join(' · '))}. No entraron: hay que verlo
+          con el gerente.` : ''}
+      </div>` : ''}
+    </section>`;
+  }
+
+  /** La fila de un pedido, con el tope adentro: es lo que decide la respuesta. */
+  function filaSolicitudHoras(g, e, resuelta) {
+    const { x, c, s } = g;
+    /* Una ya autorizada **ya está adentro** del acumulado del mes: volver a
+       sumarle sus horas mostraría el doble. Lo que la fila contesta cambia con
+       el estado —«cómo quedaría si la autorizo» antes, «cómo quedó» después— y
+       por eso lo pedido se suma solo mientras está sin contestar. */
+    const t = topeConLoPedido(c, resuelta ? 0 : x.horas, x.fecha, e.config.parametros);
+    const motivo = (MOTIVOS_HORAS_POR_ID[x.motivo] || {}).nombre || x.motivo || '—';
+    const faltan = x.fecha ? _diasEntre(hoyISO(), x.fecha) : null;
+    const chip = (valor, tope, estado) => `<span class="chip ${
+      estado === 'excedido' ? 'rojo' : estado === 'alBorde' ? 'ambar' : 'verde'
+    }">${fmtNum(valor, 1)} / ${tope}</span>`;
+
+    return `<tr>
+      <td>
+        <strong>${esc(_fecha(x.fecha))}</strong>
+        ${!resuelta && faltan !== null ? `<br><span class="ayuda" style="font-size:11.5px">${
+          faltan < 0 ? `ya pasó hace ${-faltan} d` :
+          faltan === 0 ? 'es hoy' : faltan === 1 ? 'es mañana' : `en ${faltan} días`}</span>` : ''}
+      </td>
+      <td>
+        <strong>${esc(c.nombre)}</strong>
+        <br><a href="#/sucursal/${s.id}" class="ayuda" style="font-size:11.5px"
+          >${esc(Store.etiquetaSucursal(s))}</a>
+      </td>
+      <td class="num"><strong>${fmtNum(x.horas, 1)}</strong></td>
+      <td>
+        ${esc(motivo)}
+        ${x.cubreA ? `<br><span class="ayuda" style="font-size:11.5px">cubre a ${esc(x.cubreA)}</span>` : ''}
+        ${x.pedidaPor ? `<br><span class="ayuda" style="font-size:11.5px">lo pide ${esc(x.pedidaPor)}</span>` : ''}
+      </td>
+      <td class="num">
+        ${chip(t.conLoPedidoMes, t.topeMensual, t.estadoMes)}
+        <br><span class="ayuda" style="font-size:11.5px">${
+          t.mes.fuente === 'nada' ? 'sin horas este mes'
+            : `lleva ${fmtNum(t.mes.total, 1)} ${
+                t.mes.fuente === 'liquidado' ? 'liquidadas' : 'autorizadas'}`}</span>
+      </td>
+      <td class="num">
+        ${chip(t.conLoPedidoAnio, t.topeAnual, t.estadoAnio)}
+        <br><span class="ayuda" style="font-size:11.5px">${
+          t.mesesLiquidados + t.mesesAutorizados
+            ? `sobre ${t.mesesLiquidados + t.mesesAutorizados} mes${
+                t.mesesLiquidados + t.mesesAutorizados === 1 ? '' : 'es'} del año`
+            : 'primer mes del año con datos'}</span>
+      </td>
+      <td>
+        ${resuelta
+          ? `<span class="chip ${x.estado === 'autorizada' ? 'verde' : 'rojo'}">${
+              x.estado === 'autorizada' ? 'Autorizada' : 'No autorizada'}</span>
+             ${x.resueltaEl ? `<br><span class="ayuda" style="font-size:11.5px">${esc(_fecha(x.resueltaEl))}</span>` : ''}
+             <br><button class="mini" style="color:var(--azul);border-color:var(--azul)"
+               data-accion="volver-horas" data-colab="${c.id}" data-sol="${x.id}"
+               data-estado="${x.estado}">Deshacer</button>`
+          : `<div class="acciones" style="margin:0;gap:6px">
+               <button class="b" style="font-size:12.5px;padding:5px 10px"
+                 data-accion="autorizar-horas" data-colab="${c.id}" data-sol="${x.id}"
+                 >Autorizar</button>
+               <button class="b sec" style="font-size:12.5px;padding:5px 10px"
+                 data-accion="rechazar-horas" data-colab="${c.id}" data-sol="${x.id}"
+                 >No</button>
+               ${/* Quitar se hace desde la fila donde se lo ve, como las
+                     ausencias. «No autorizar» es la respuesta; quitar es para
+                     el pedido que entró mal. */''}
+               <button class="mini" data-accion="quitar-horas"
+                 data-colab="${c.id}" data-sol="${x.id}" title="Quitar el pedido">✕</button>
+             </div>`}
+        ${x.nota || x.notas ? `<br><span class="ayuda" style="font-size:11.5px">${esc(x.nota || x.notas)}</span>` : ''}
+      </td>
+    </tr>`;
+  }
+
+  function vistaHorasPedidas() {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+
+    const todas = Store.solicitudesDeHoras();
+    const pedidas = todas.filter(g => g.x.estado === 'pedida');
+    const resueltas = todas.filter(g => g.x.estado !== 'pedida');
+    const T = TOPES_HORAS_EXTRAS;
+    const par = e.config.parametros;
+
+    const conTope = pedidas.map(g => ({
+      g, t: topeConLoPedido(g.c, g.x.horas, g.x.fecha, par)
+    }));
+    const pasan = conTope.filter(z => z.t.excedeMes || z.t.excedeAnio);
+    const horasPedidas = pedidas.reduce((a, g) => a + (+g.x.horas || 0), 0);
+    const paraEstaSemana = pedidas.filter(g => {
+      const d = g.x.fecha ? _diasEntre(hoyISO(), g.x.fecha) : null;
+      return d !== null && d >= 0 && d <= 7;
+    });
+
+    const cuerpo = !todas.length
+      ? `<section class="tarjeta"><p class="vacio">
+          Todavía no hay ningún pedido de horas extras cargado. Entran pegando la planilla de
+          respuestas del formulario, acá abajo, o se cargan a mano cuando un gerente llama.
+        </p></section>`
+      : `
+      <div class="kpis">
+        ${kpi('Esperando respuesta', pedidas.length,
+              pedidas.length ? `${fmtNum(horasPedidas, 1)} h en total` : 'no hay nada sin contestar',
+              pedidas.length ? 'aviso' : 'ok')}
+        ${kpi('Se pasan de un tope', pasan.length,
+              pasan.length ? 'autorizarlas excede la norma' : 'ninguna excede las dos',
+              pasan.length ? 'alerta' : 'ok')}
+        ${kpi('Para esta semana', paraEstaSemana.length,
+              paraEstaSemana.length ? 'el día ya está encima' : 'nada en los próximos 7 días',
+              paraEstaSemana.length ? 'aviso' : 'ok')}
+        ${kpi('Resueltas', resueltas.length,
+              `${resueltas.filter(g => g.x.estado === 'autorizada').length} autorizadas · ${
+                resueltas.filter(g => g.x.estado === 'rechazada').length} no`)}
+      </div>
+
+      <section class="tarjeta">
+        <h2>Qué decide la respuesta</h2>
+        <p class="ayuda" style="margin-bottom:0">
+          Los topes son los del <strong>${esc(T.norma)}</strong>: <strong>${T.mensual} horas
+          mensuales y ${T.anual} anuales</strong> sin autorización administrativa previa, por
+          persona. Las dos columnas de la derecha dicen cómo queda esa persona
+          <strong>si le autorizás lo que está pidiendo</strong> —no cómo viene—, porque eso es lo
+          único que cambia la decisión: pasarse en un mes se corrige el mes que viene y
+          <strong>pasarse en el año ya no se corrige</strong>.
+        </p>
+        <p class="ind-lectura" style="margin:12px 0 0">
+          <strong>El número del mes sale de una fuente o de la otra, nunca de las dos.</strong>
+          Si el período ya tiene novedades cargadas manda la liquidación —es lo que se pagó— y si
+          no, manda lo que ya está autorizado, que es lo único que se sabe de un mes abierto.
+          Sumar las dos contaría dos veces las mismas horas, y por eso cada fila dice de dónde
+          sale el suyo. El año es el <strong>calendario</strong>, igual que en el cierre: enero
+          arranca de cero.
+        </p>
+      </section>
+
+      ${pedidas.length ? `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Esperando tu autorización</h2>
+          <span class="chip ${pasan.length ? 'rojo' : ''}">${pedidas.length}</span>
+        </div>
+        <p class="ayuda">Ordenadas por el día en que se harían: lo que es para el sábado se
+          contesta antes del sábado. ${pasan.length ? `<strong>${pasan.length} de ${pedidas.length}
+          se ${pasan.length === 1 ? 'pasa' : 'pasan'} de un tope si ${pasan.length === 1
+          ? 'la autorizás' : 'las autorizás'}.</strong>` : ''}</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Qué día</th><th>Quién las haría</th><th class="num">Horas</th><th>Por qué</th>
+            <th class="num">Mes</th><th class="num">Año</th><th>Respuesta</th>
+          </tr></thead>
+          <tbody>${pedidas.map(g => filaSolicitudHoras(g, e, false)).join('')}</tbody>
+        </table></div>
+      </section>` : `<section class="tarjeta"><p class="vacio">
+          No hay ningún pedido esperando respuesta.
+        </p></section>`}
+
+      ${resueltas.length ? `<section class="tarjeta">
+        <div class="cabecera-suc">
+          <h2>Ya contestadas</h2>
+          <button class="b sec" data-accion="ver-horas-resueltas">${
+            verHorasResueltas ? 'Ocultar' : `Ver las ${resueltas.length}`}</button>
+        </div>
+        ${verHorasResueltas ? `<div class="tabla-scroll"><table>
+          <thead><tr>
+            <th>Qué día</th><th>Quién las hizo</th><th class="num">Horas</th><th>Por qué</th>
+            <th class="num">Mes</th><th class="num">Año</th><th>Respuesta</th>
+          </tr></thead>
+          <tbody>${resueltas.slice().reverse().map(g => filaSolicitudHoras(g, e, true)).join('')}</tbody>
+        </table></div>
+        <p class="ayuda" style="margin-bottom:0">Lo autorizado de un mes que todavía no cerró
+          <strong>suma contra los topes</strong> de los pedidos que vengan después. Cuando el mes
+          cierra, manda lo que liquidó Nómina y se lee en
+          <a href="#/nomina/cierre">El cierre del mes</a>.</p>` : ''}
+      </section>` : ''}`;
+
+    return `
+      <h1 class="titulo">Horas extras pedidas</h1>
+      <p class="subtitulo">
+        Lo que los gerentes piden para un día que todavía no pasó, contra los topes de la norma.
+      </p>
+      ${solapasDeNomina('horas')}
+      ${cuerpo}
+      ${bloqueAltaHoras(e)}
+      ${bloqueImportarHoras()}`;
+  }
+
+  /* El alta a mano: un gerente llama por teléfono y no hay por qué mandarlo al
+     formulario. Es **la única alta** —la misma regla que los reclamos—: el
+     formulario y esto escriben el mismo objeto. */
+  function bloqueAltaHoras(e) {
+    return `<section class="tarjeta">
+      <h2>Cargar un pedido a mano</h2>
+      <p class="ayuda">Cuando el gerente llama en vez de completar el formulario.</p>
+      <div class="grid c2">
+        ${/* Un desplegable y no un campo de texto, al revés que el alta de un
+             reclamo: el reclamo puede existir sin ficha y guarda el nombre
+             escrito, pero un pedido **cuelga de la persona**, así que sin ficha
+             no hay dónde ponerlo. Elegir en vez de escribir es lo que hace que
+             eso no pueda fallar. */''}
+        <label class="campo"><span>Quién haría las horas</span>
+          <select id="hx-persona">
+            <option value="">Elegí a la persona…</option>
+            ${e.sucursales.map(x => {
+              const act = (x.colaboradores || []).filter(c => !c.baja)
+                .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+              return act.length ? `<optgroup label="${esc(Store.etiquetaSucursal(x))}">${
+                act.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')
+              }</optgroup>` : '';
+            }).join('')}
+          </select></label>
+        <label class="campo"><span>Cuántas horas</span>
+          <input id="hx-horas" type="number" step="0.5" min="0" placeholder="12"></label>
+        <label class="campo"><span>Qué día se harían</span>
+          <input id="hx-fecha" type="date" value="${hoyISO()}"></label>
+        <label class="campo"><span>Por qué</span>
+          <select id="hx-motivo">
+            ${MOTIVOS_HORAS_EXTRAS.map(m =>
+              `<option value="${m.id}">${esc(m.nombre)}</option>`).join('')}
+          </select></label>
+        <label class="campo"><span>Si cubre una licencia, de quién</span>
+          <input id="hx-cubre" placeholder="Apellido y nombre" list="plantel-horas"></label>
+        <label class="campo"><span>Quién lo pide</span>
+          <input id="hx-pide" placeholder="El gerente" list="jefes-area"></label>
+      </div>
+      ${datalistDeJefes(e)}
+      <datalist id="plantel-horas">
+        ${e.sucursales.reduce((a, x) => a.concat(x.colaboradores || []), [])
+          .map(c => `<option value="${esc(c.nombre)}"></option>`).join('')}
+      </datalist>
+      <div class="acciones">
+        <button class="b" data-accion="guardar-horas">Cargar el pedido</button>
+      </div>
+    </section>`;
+  }
+
   function vistaCierre() {
     const e = Store.get();
     contexto = e;
@@ -16473,6 +17142,8 @@ const App = (() => {
   let resultadoAusencias = null;
   let resultadoParte = null;
   let resultadoAnexo = null;
+  let resultadoHoras = null;
+  let verHorasResueltas = false;
   /* El reporte que se está mirando: `{ titulo, texto }`. Uno a la vez, porque
      son documentos para copiar y mandar, no dos cosas que se comparan. */
   let reporteReclamos = null;
@@ -21208,6 +21879,7 @@ const App = (() => {
     if (ruta[0] === 'nomina') {
       if (ruta[1] === 'adef')        { vistaActual = vistaAdef;   html = vistaAdef(); }
       else if (ruta[1] === 'cierre') { vistaActual = vistaCierre; html = vistaCierre(); }
+      else if (ruta[1] === 'horas')  { vistaActual = vistaHorasPedidas; html = vistaHorasPedidas(); }
       else                           { vistaActual = vistaNomina; html = vistaNomina(); }
     }
     else if (ruta[0] === 'agenda' || ruta[0] === 'asistente') {
@@ -22646,6 +23318,96 @@ const App = (() => {
       if (a === 'limpiar-anexo') {
         resultadoAnexo = null;
         const caja = document.getElementById('pegar-anexo');
+        if (caja) caja.value = '';
+        refrescar();
+        return;
+      }
+
+      if (a === 'guardar-horas') {
+        const val = x => (document.getElementById(x) || {}).value || '';
+        const colabId = val('hx-persona');
+        const horas = +val('hx-horas') || 0;
+        const fecha = val('hx-fecha');
+        if (!colabId) { avisar('¿Quién haría las horas?', 'error'); return; }
+        if (!horas)   { avisar('¿Cuántas horas?', 'error'); return; }
+        if (!fecha)   { avisar('¿Qué día se harían? Sin el día no hay tope del mes contra el que leerlo.', 'error'); return; }
+        const m = { c: Store.colaboradorPorId(colabId) };
+        if (!m.c) { avisar('No encuentro esa ficha.', 'error'); return; }
+        Store.agregarSolicitudHoras(m.c.id, {
+          fecha, horas, motivo: val('hx-motivo'),
+          cubreA: val('hx-cubre').trim(), pedidaPor: val('hx-pide').trim(),
+          origen: 'mano'
+        });
+        const t = topeConLoPedido(m.c, horas, fecha, Store.get().config.parametros);
+        refrescar();
+        avisar(t.excedeAnio
+          ? `Cargado. Ojo: autorizarlo lo deja en ${fmtNum(t.conLoPedidoAnio, 1)} h en el año, arriba de las ${t.topeAnual}.`
+          : t.excedeMes
+            ? `Cargado. Ojo: autorizarlo lo deja en ${fmtNum(t.conLoPedidoMes, 1)} h en el mes, arriba de las ${t.topeMensual}.`
+            : 'Pedido cargado, esperando tu autorización.',
+          t.excedeMes || t.excedeAnio ? 'error' : '');
+        return;
+      }
+
+      if (a === 'autorizar-horas' || a === 'rechazar-horas' || a === 'volver-horas') {
+        const colab = btn.dataset.colab, sol = btn.dataset.sol;
+        const estado = a === 'volver-horas' ? btn.dataset.estado
+                     : a === 'autorizar-horas' ? 'autorizada' : 'rechazada';
+        const x = Store.resolverSolicitudHoras(colab, sol, estado);
+        refrescar();
+        if (!x) return;
+        /* El aviso dice lo que pasó y no «guardado»: autorizar y destildar se
+           hacen con dos botones parecidos y una de las dos lecturas sería
+           mentira. */
+        avisar(x.estado === 'autorizada' ? 'Autorizada. Avisale al gerente.'
+             : x.estado === 'rechazada' ? 'Queda como no autorizada. Avisale al gerente.'
+             : 'Volvió a quedar esperando respuesta.');
+        return;
+      }
+
+      if (a === 'quitar-horas') {
+        if (!await confirmar('¿Quitar este pedido? No queda registro de que se pidió.')) return;
+        Store.quitarSolicitudHoras(btn.dataset.colab, btn.dataset.sol);
+        refrescar();
+        return;
+      }
+
+      if (a === 'ver-horas-resueltas') { verHorasResueltas = !verHorasResueltas; refrescar(); return; }
+
+      if (a === 'importar-horas') {
+        const crudo = (document.getElementById('pegar-horas') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá la planilla de respuestas primero.', 'error'); return; }
+        const filas = filasPegadas(crudo);
+        if (filas.length < 2) { avisar('No se entendió la planilla. ¿Copiaste los encabezados?', 'error'); return; }
+        const norm = x => String(x || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const cab = filas[0].map(norm);
+        const col = {};
+        COLUMNAS_SOLICITUD_HORAS.forEach(d => {
+          const i = cab.findIndex(h => d.claves.some(k => h.indexOf(k) >= 0));
+          if (i >= 0) col[d.campo] = i;
+        });
+        if (col.nombre === undefined || col.horas === undefined || col.fecha === undefined) {
+          avisar('No encontré las columnas de nombre, cantidad de horas y día. ¿Es la planilla del formulario de horas extras?', 'error');
+          return;
+        }
+        resultadoHoras = Store.importarSolicitudesDeHoras(filas.slice(1).map(f => {
+          const o = {};
+          Object.keys(col).forEach(k => { o[k] = f[col[k]] || ''; });
+          return o;
+        }));
+        refrescar();
+        const r = resultadoHoras;
+        avisar(r.cargadas
+          ? `${r.cargadas} pedido${r.cargadas === 1 ? '' : 's'} ${r.cargadas === 1 ? 'entró' : 'entraron'}.${
+              r.excedenTope.length ? ` ${r.excedenTope.length} se ${r.excedenTope.length === 1 ? 'pasa' : 'pasan'} de un tope.` : ''}`
+          : 'No entró ninguno: mirá el detalle abajo.',
+          r.cargadas && !r.excedenTope.length ? '' : 'error');
+        return;
+      }
+
+      if (a === 'limpiar-horas') {
+        resultadoHoras = null;
+        const caja = document.getElementById('pegar-horas');
         if (caja) caja.value = '';
         refrescar();
         return;

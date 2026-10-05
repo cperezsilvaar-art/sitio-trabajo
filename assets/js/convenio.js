@@ -743,6 +743,161 @@ function topeHorasExtras(colaborador, periodo) {
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Las horas extras que todavía no se hicieron                          *
+ * ------------------------------------------------------------------ */
+
+/**
+ * Por qué el gerente pide horas extras. La lista es corta a propósito: lo que
+ * cambia la decisión es si la carga es del negocio —y entonces se discute con
+ * Operaciones— o si es un agujero de cobertura —y entonces el problema es la
+ * licencia, no las horas—.
+ */
+const MOTIVOS_HORAS_EXTRAS = [
+  { id: 'afluencia',      nombre: 'Afluencia de público' },
+  { id: 'cubrirLicencia', nombre: 'Cubrir una licencia',           pideQuien: true },
+  { id: 'inventario',     nombre: 'Inventario o tarea puntual' },
+  { id: 'otro',           nombre: 'Otro' }
+];
+
+const MOTIVOS_HORAS_POR_ID = MOTIVOS_HORAS_EXTRAS
+  .reduce((a, m) => (a[m.id] = m, a), {});
+
+/* Lo que el gerente elige en el formulario, mapeado a los motivos del panel:
+   la lista del formulario se puede reescribir mientras la palabra clave quede.
+
+   **Se buscan con borde de palabra**, que es la regla de `PALABRAS_DE_RECLAMO`
+   y existe por esto: con `includes()`, «in-venta-rio» contiene «venta» y un
+   inventario entraba como afluencia de público. Es el mismo falso positivo que
+   hacía que «sacaron» diera SAC. */
+const CLAVES_MOTIVO_HORAS = [
+  { motivo: 'inventario',     claves: ['inventario', 'tarea', 'puntual'] },
+  { motivo: 'afluencia',      claves: ['afluencia', 'publico', 'ventas'] },
+  { motivo: 'cubrirLicencia', claves: ['licencia', 'cubrir', 'ausencia', 'ausente'] }
+];
+
+function motivoDeSolicitud(texto) {
+  const t = String(texto || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  if (!t) return '';
+  const m = CLAVES_MOTIVO_HORAS.find(x =>
+    x.claves.some(k => new RegExp('\\b' + k + '\\b').test(t)));
+  return m ? m.motivo : 'otro';
+}
+
+/**
+ * Qué es cada columna de la planilla de respuestas del formulario, por lo que
+ * dice su encabezado. **El texto de cada pregunta es código**, igual que en el
+ * parte de ausentes: se busca por pedazo de encabezado y gana el primero que
+ * coincide, así que la pregunta del gerente que pide no puede decir «apellido y
+ * nombre» —se llevaría su nombre al lugar de quien hace las horas—.
+ * Documentado en `docs/formulario-horas-extras.md`.
+ */
+const COLUMNAS_SOLICITUD_HORAS = [
+  { campo: 'marca',   claves: ['marca temporal'] },
+  { campo: 'tienda',  claves: ['tienda', 'sucursal'] },
+  { campo: 'pide',    claves: ['gerente', 'solicita'] },
+  { campo: 'nombre',  claves: ['apellido y nombre', 'colaborador'] },
+  { campo: 'dni',     claves: ['dni', 'cuil', 'documento', 'legajo'] },
+  { campo: 'motivo',  claves: ['motivo'] },
+  /* «de quién» a secas no sirve: la pregunta por quien hace las horas puede
+     decir «de quien haría las horas» y se la llevaría, y las dos preguntas
+     caerían en la misma columna. La clave es la frase entera del motivo. */
+  { campo: 'cubreA',  claves: ['cubrir una licencia', 'a quien cubre', 'cubre a'] },
+  { campo: 'horas',   claves: ['cantidad de horas', 'cuantas horas', 'cantidad'] },
+  { campo: 'fecha',   claves: ['que dia', 'dia', 'fecha'] },
+  { campo: 'notas',   claves: ['algo mas', 'observacion', 'comentario', 'nota'] }
+];
+
+/**
+ * Las horas extras de una persona en un período, y **de dónde salen**.
+ *
+ * Son dos fuentes para el mismo número y la regla es cuál manda, porque
+ * sumarlas contaría dos veces lo mismo: una vez autorizada y otra liquidada.
+ * **Si el período ya tiene novedades cargadas, manda la liquidación** —es lo
+ * que efectivamente se pagó, y lo autorizado de ese mes ya está adentro—; si
+ * no, mandan las solicitudes autorizadas, que es lo único que se sabe de un
+ * mes que todavía no cerró.
+ *
+ * La `fuente` viaja con el número porque la pantalla la escribe: «lleva 26 h
+ * autorizadas» y «lleva 26 h liquidadas» se parecen y no son lo mismo —una se
+ * puede todavía cambiar—.
+ */
+function horasDelPeriodo(colaborador, periodo, parametros) {
+  const c = colaborador || {};
+  if (((c.novedades || {})[periodo])) {
+    return Object.assign({ fuente: 'liquidado' }, horasExtrasDe(c, periodo));
+  }
+  const suyas = (c.solicitudesHoras || []).filter(x =>
+    x.estado === 'autorizada' && periodoDeFecha(x.fecha, parametros) === periodo);
+  const total = suyas.reduce((a, x) => a + (+x.horas || 0), 0);
+  return { fuente: total ? 'autorizado' : 'nada', al50: 0, al100: 0, total,
+           solicitudes: suyas.length };
+}
+
+/**
+ * Cómo queda una persona contra los dos topes **si se le autoriza lo que está
+ * pidiendo**.
+ *
+ * Esto es lo que `topeHorasExtras()` no puede contestar: esa mira el mes
+ * cerrado, y cuando el mes cerró ya es tarde. Pasarse del tope mensual se
+ * corrige el mes que viene y pasarse del anual **ya no se corrige**, así que el
+ * único momento en que el número sirve para decidir algo es antes de autorizar.
+ *
+ * El año es el **calendario** y no los últimos doce meses, igual que en el
+ * cierre: enero arranca de cero.
+ */
+function topeConLoPedido(colaborador, horasPedidas, fecha, parametros) {
+  const c = colaborador || {};
+  const periodo = periodoDeFecha(fecha, parametros);
+  const pide = +horasPedidas || 0;
+  const mes = horasDelPeriodo(c, periodo, parametros);
+
+  /* Todos los períodos del año con algo adentro, liquidado o autorizado: un
+     acumulado anual que solo mire los meses liquidados se lee como que nadie
+     se pasó justo en el mes en que se está decidiendo. */
+  const anio = String(periodo).slice(0, 4);
+  const delAnio = {};
+  Object.keys(c.novedades || {}).forEach(x => { delAnio[x] = 1; });
+  (c.solicitudesHoras || []).forEach(x => {
+    if (x.estado !== 'autorizada') return;
+    const p = periodoDeFecha(x.fecha, parametros);
+    if (p) delAnio[p] = 1;
+  });
+  const periodos = Object.keys(delAnio).filter(x => x.slice(0, 4) === anio).sort();
+
+  let acumulado = 0, liquidados = 0, autorizados = 0;
+  periodos.forEach(x => {
+    const h = horasDelPeriodo(c, x, parametros);
+    acumulado += h.total;
+    if (h.fuente === 'liquidado') liquidados++;
+    else if (h.fuente === 'autorizado') autorizados++;
+  });
+
+  const T = TOPES_HORAS_EXTRAS;
+  const conMes = mes.total + pide;
+  const conAnio = acumulado + pide;
+  const estado = (valor, tope) => valor > tope ? 'excedido'
+    : valor >= tope * T.avisoDesde ? 'alBorde' : 'ok';
+
+  return {
+    periodo, pide,
+    mes, acumuladoDelAnio: acumulado, periodosDelAnio: periodos,
+    mesesLiquidados: liquidados, mesesAutorizados: autorizados,
+    conLoPedidoMes: conMes, conLoPedidoAnio: conAnio,
+    topeMensual: T.mensual, topeAnual: T.anual,
+    estadoMes: estado(conMes, T.mensual),
+    estadoAnio: estado(conAnio, T.anual),
+    excedeMes: conMes > T.mensual,
+    excedeAnio: conAnio > T.anual,
+    /* Cuántas entran todavía sin pasarse. Negativo quiere decir que lo pedido
+       ya se pasa, y se devuelve así en vez de recortarlo a cero: cuántas de más
+       es justamente lo que hay que recortarle al pedido. */
+    entranEnElMes: T.mensual - mes.total,
+    entranEnElAnio: T.anual - acumulado
+  };
+}
+
 /**
  * El cierre del mes leído desde las novedades: por tienda y por persona, las
  * horas extras contra los topes y los días de ausencia que la liquidación
@@ -902,6 +1057,8 @@ if (typeof module !== 'undefined' && module.exports) {
     jornadaDeVinculo,
     ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,
     MESES_AVISO_ART8, relevamientoAdef,
-    TOPES_HORAS_EXTRAS, horasExtrasDe, periodosDelAnio, topeHorasExtras, cierreDelMes
+    TOPES_HORAS_EXTRAS, horasExtrasDe, periodosDelAnio, topeHorasExtras, cierreDelMes,
+    MOTIVOS_HORAS_EXTRAS, MOTIVOS_HORAS_POR_ID, motivoDeSolicitud,
+    horasDelPeriodo, topeConLoPedido, COLUMNAS_SOLICITUD_HORAS
   };
 }

@@ -455,11 +455,17 @@ corre los encabezados del doc contra la tabla del panel: si alguien renombra una
 pregunta, esa prueba avisa. Lo mismo con las opciones del desplegable, que son
 las palabras que `motivoDelParte()` reconoce.
 
-**Son dos formularios y no uno con dos ramas.** El de reclamos y el de
-presentismo contestan dos preguntas de dos escalas distintas, la planilla de un
-formulario con ramas saldría con la mitad de las celdas vacías —y al pegarla en
-`#/diario` las filas de reclamos se cuentan como error todos los días—, y las
+**Son tres formularios y no uno con tres ramas.** Reclamos de sueldo
+(`docs/formulario-reclamos.md`), ausencias del día
+(`docs/formulario-presentismo.md`) y horas extras
+(`docs/formulario-horas-extras.md`) contestan tres preguntas de tres escalas
+distintas y caen en tres pantallas distintas. La planilla de un formulario con
+ramas saldría con las celdas de las otras dos vacías —y al pegarla en `#/diario`
+las filas que no son ausencias se cuentan como error todos los días—, y las
 secciones con derivación son justamente el paso donde el coordinador se pierde.
+Los tres comparten las mismas tres primeras preguntas y el mismo emparejamiento
+con el padrón; **un cuarto formulario necesita antes una pantalla donde caiga**:
+un buzón sin lugar adonde ir es la planilla que nadie mira.
 
 **Qué suma al ausentismo se decide en un solo lugar, y antes no.**
 `motivoSumaAusentismo()` (`ausencias.js`) saca vacaciones, maternidad y
@@ -901,6 +907,51 @@ descubrir que no decían nada.
 horas mensuales y 200 anuales sin autorización administrativa previa.
 `TOPES_HORAS_EXTRAS` y `topeHorasExtras()` viven en `convenio.js` y se leen en
 `#/nomina/cierre` (*El cierre del mes*), la tercera solapa de `#/nomina`.
+
+**Lo que se pide antes de hacerlo vive en `#/nomina/horas` (*Horas extras
+pedidas*), la cuarta solapa**, y es la otra mitad de esta: el cierre mira lo que
+la liquidación pagó, y ahí un tope anual excedido ya no se puede cambiar. La
+solicitud del gerente —quién las haría, por qué, cuántas y qué día— llega por un
+formulario de Google y se pega al pie de esa pantalla. Documentado en
+`docs/formulario-horas-extras.md`. Cuelga de la **persona**
+(`c.solicitudesHoras[]`), como `c.baja` y `c.ausencias`, porque **los dos topes
+son por persona**: lo pedido tiene que estar donde está lo liquidado para poder
+sumarse, y si la trasladan de tienda en el medio del mes su acumulado la
+acompaña.
+
+**Las dos columnas de tope dicen cómo queda la persona si se le autoriza lo
+pedido, no cómo viene.** `topeConLoPedido()` (`convenio.js`) es eso, y es lo
+único que cambia una decisión: el número de `topeHorasExtras()` se lee cuando ya
+no hay nada que hacer con él.
+
+**El número del mes sale de una fuente o de la otra, nunca de las dos.**
+`horasDelPeriodo()` devuelve las horas **y su `fuente`**: si el período ya tiene
+novedades cargadas manda la liquidación —lo autorizado de ese mes ya está
+adentro— y si no, mandan las solicitudes autorizadas, que es lo único que se
+sabe de un mes abierto. Sumarlas daría 31 horas que nadie trabajó sobre 22
+liquidadas y 9 autorizadas del mismo período. Cada fila escribe de dónde sale su
+número: «lleva 26 h liquidadas» y «lleva 26 h autorizadas» se parecen y no son
+lo mismo, porque una todavía se puede cambiar.
+
+**Todo entra como pedido y nada se autoriza solo**: autorizar es una decisión del
+coordinador y no la consecuencia de que el gerente haya completado el
+formulario. Por eso el formulario **tiene que llevar su mensaje de
+confirmación** diciendo que es un pedido y no una autorización — sin eso el
+gerente lee «respuesta enviada» como «aprobado» y las horas se hacen igual.
+Volver a tocar el mismo botón destilda, como el check list.
+
+**En la agenda es el único pendiente cuyo color no sale de los días que lleva
+abierto sino de los que faltan para el día en que se harían**: contestar el
+martes lo que era para el sábado no es contestar. No lleva contador en el menú,
+porque `#/nomina` es un nivel de zoom y no una tarea.
+
+**El alta a mano es un desplegable y no un campo de texto**, al revés que la de
+un reclamo: el reclamo puede existir sin ficha y guarda el nombre escrito, pero
+un pedido cuelga de la persona, así que sin ficha no hay dónde ponerlo. Elegir en
+vez de escribir es lo que hace que eso no pueda fallar. Y **`buscadorDePadron()`
+no sirve para un campo así**: pide que la fila traiga una tienda del área para
+aceptar un nombre, que es la regla que protege a los importadores de las 734
+filas de toda la empresa y acá solo rechaza lo que el propio padrón ofreció.
 
 **Los dos topes se contestan por separado porque son dos problemas**: pasarse en
 un mes se corrige el mes que viene; pasarse en el año ya no se corrige. Y agarran
