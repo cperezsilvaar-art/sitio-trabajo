@@ -88,7 +88,7 @@ function presentesDelPadron(sucursal, fecha) {
      `const` en el mismo ámbito global la página no arranca. */
   const f = fecha || _diaHoy();
   return ((sucursal || {}).colaboradores || []).filter(c => {
-    if (c.activo === false) return false;
+    if (!sigueEnElPlantel(c)) return false;
     if (typeof esNoPresencial === 'function' && esNoPresencial(c).noPresencial) return false;
     return !(c.ausencias || []).some(a =>
       !a.reincorporado && a.desde && a.desde <= f && (!a.hasta || a.hasta >= f));

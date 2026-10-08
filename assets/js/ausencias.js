@@ -85,6 +85,29 @@ const MOTIVOS_AUSENCIA_LARGA = [
   { id: 'otra',         nombre: 'Otra', conPlazos: false }
 ];
 
+/**
+ * Si la persona sigue en el plantel, que es sobre quienes se cuenta lo que
+ * pasa **hoy**: quién no vino, qué certificado falta, cuánto turno se cubre.
+ *
+ * Una baja no es una ausencia. Quien se fue el martes no «no vino» el
+ * miércoles: no está, y su licencia abierta dejó de ser algo que resolver el
+ * mismo día en que dejó de venir. Mientras esto no se miraba, el que se daba
+ * de baja seguía apareciendo en Presentismo con su licencia y en las alertas
+ * pidiendo un certificado que ya no le iba a traer nadie — perseguirle el papel
+ * a quien ya se fue es ruido, que es la misma razón por la que
+ * `documentosQueVencen()` mira solo el plantel activo.
+ *
+ * **Recorta lo de hoy, no el historial.** Sus licencias siguen enteras en su
+ * ficha, con sus fechas: que alguien tuvo una carpeta en mayo es un dato de su
+ * legajo aunque se haya ido en octubre.
+ *
+ * Mira las dos marcas porque son dos: `registrarBaja()` pone las dos, pero una
+ * nómina importada puede traer a alguien inactivo sin baja cargada.
+ */
+function sigueEnElPlantel(c) {
+  return !!c && c.activo !== false && !c.baja;
+}
+
 const _diaHoy = () => {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -398,6 +421,7 @@ function alertasDeAusencias(estado, hoy, avisarDias) {
 
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado) return;
         const est = estadoDeAusencia(a, h);
@@ -434,6 +458,7 @@ function ausenciasEnCurso(estado, hoy) {
   const out = [];
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado || !a.desde || a.desde > h) return;
         const est = estadoDeAusencia(a, h);
@@ -458,6 +483,7 @@ function ausentesHoy(estado, hoy) {
   const out = [];
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado || !a.desde) return;
         if (a.desde <= h && (!a.hasta || a.hasta >= h)) {
@@ -474,7 +500,7 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     diasDeAusencia, ausenciasPorMes,
-    alertasDeAusencias, ausentesHoy, ausenciasEnCurso
+    alertasDeAusencias, ausentesHoy, ausenciasEnCurso, sigueEnElPlantel
   };
 }
 

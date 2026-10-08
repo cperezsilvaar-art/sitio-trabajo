@@ -4600,9 +4600,15 @@ const App = (() => {
           <td class="num"><strong>${r.total}</strong></td></tr></tfoot>
       </table></div>
 
+      ${/* La vuelta se marca **donde se ve la licencia**, que es la misma regla
+            del «Quitar». El único botón vivía en la tabla de Presentismo, que
+            muestra las abiertas y empezadas: una licencia cargada con fecha de
+            inicio futura —o la de alguien que ya no está en esa lista— no
+            aparecía en ningún lado donde se la pudiera cerrar, y desde la ficha
+            se la veía abierta sin poder hacer nada. */''}
       <div class="tabla-scroll" style="margin-top:12px"><table>
         <thead><tr><th>Licencia</th><th>Desde</th><th>Hasta</th><th class="num">Días</th>
-          <th>Certificado</th><th>Situación</th></tr></thead>
+          <th>Certificado</th><th>Situación</th><th></th></tr></thead>
         <tbody>${todas.map(a => {
           const est = estadoDeAusencia(a, hoy);
           return `<tr${a.reincorporado ? ' class="inactivo"' : ''}>
@@ -4618,6 +4624,17 @@ const App = (() => {
                 ? '<span class="chip verde">presentado</span>'
                 : '<span class="chip rojo">no lo trajo</span>'}</td>
             <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
+            <td class="tipo" style="white-space:nowrap">
+              ${a.reincorporado
+                ? `<button class="mini" style="color:var(--azul);border-color:var(--azul)"
+                     data-accion="reabrir-ausencia" data-id="${c.id}" data-aus="${a.id}"
+                     title="Volver a abrirla: todavía no había vuelto">Reabrir</button>`
+                : `<button class="mini" style="color:var(--azul);border-color:var(--azul)"
+                     data-accion="reincorporar" data-id="${c.id}" data-aus="${a.id}"
+                     >Se reincorporó</button>`}
+              <button class="mini" data-accion="quitar-ausencia"
+                data-id="${c.id}" data-aus="${a.id}" title="Quitar la licencia">✕</button>
+            </td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -8078,9 +8095,25 @@ const App = (() => {
       }
 
       if (a === 'reincorporar') {
-        Store.reincorporar(btn.dataset.id, btn.dataset.aus);
+        /* Decía «Marcada como reincorporada» pasara lo que pasara. Cuando no
+           encontraba la licencia —una ficha duplicada, una ausencia vieja sin
+           `id`— el botón no hacía nada y avisaba que sí: desde el otro lado se
+           ve como que el panel no responde. */
+        const x = Store.reincorporar(btn.dataset.id, btn.dataset.aus);
         refrescar();
-        avisar('Marcada como reincorporada.');
+        if (!x) {
+          avisar('No pude marcarla: no encuentro esa licencia en su ficha. Fijate en Configuración si la persona quedó cargada dos veces.', 'error');
+          return;
+        }
+        avisar(`Volvió el ${fmtFecha(x.fechaReincorporacion)}.`);
+        return;
+      }
+
+      if (a === 'reabrir-ausencia') {
+        const x = Store.reabrirAusencia(btn.dataset.id, btn.dataset.aus);
+        refrescar();
+        avisar(x ? 'Queda abierta otra vez: la marca de la vuelta se sacó.'
+                 : 'No encuentro esa licencia.', x ? '' : 'error');
         return;
       }
       if (a === 'alinear-razon-social') {

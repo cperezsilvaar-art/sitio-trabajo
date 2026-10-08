@@ -3685,7 +3685,7 @@ function documentosQueVencen(estado, hoyISO) {
   const hoy = hoyISO || new Date().toISOString().slice(0, 10);
   const out = [];
   ((estado || {}).sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
-    if (c.activo === false || c.baja) return;
+    if (!sigueEnElPlantel(c)) return;
     (c.documentos || []).forEach(doc => {
       const est = estadoDeDocumento(doc, hoy);
       if (est.clase !== 'vencido' && est.clase !== 'porVencer') return;
@@ -4717,6 +4717,29 @@ const MOTIVOS_AUSENCIA_LARGA = [
   { id: 'otra',         nombre: 'Otra', conPlazos: false }
 ];
 
+/**
+ * Si la persona sigue en el plantel, que es sobre quienes se cuenta lo que
+ * pasa **hoy**: quién no vino, qué certificado falta, cuánto turno se cubre.
+ *
+ * Una baja no es una ausencia. Quien se fue el martes no «no vino» el
+ * miércoles: no está, y su licencia abierta dejó de ser algo que resolver el
+ * mismo día en que dejó de venir. Mientras esto no se miraba, el que se daba
+ * de baja seguía apareciendo en Presentismo con su licencia y en las alertas
+ * pidiendo un certificado que ya no le iba a traer nadie — perseguirle el papel
+ * a quien ya se fue es ruido, que es la misma razón por la que
+ * `documentosQueVencen()` mira solo el plantel activo.
+ *
+ * **Recorta lo de hoy, no el historial.** Sus licencias siguen enteras en su
+ * ficha, con sus fechas: que alguien tuvo una carpeta en mayo es un dato de su
+ * legajo aunque se haya ido en octubre.
+ *
+ * Mira las dos marcas porque son dos: `registrarBaja()` pone las dos, pero una
+ * nómina importada puede traer a alguien inactivo sin baja cargada.
+ */
+function sigueEnElPlantel(c) {
+  return !!c && c.activo !== false && !c.baja;
+}
+
 const _diaHoy = () => {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -5030,6 +5053,7 @@ function alertasDeAusencias(estado, hoy, avisarDias) {
 
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado) return;
         const est = estadoDeAusencia(a, h);
@@ -5066,6 +5090,7 @@ function ausenciasEnCurso(estado, hoy) {
   const out = [];
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado || !a.desde || a.desde > h) return;
         const est = estadoDeAusencia(a, h);
@@ -5090,6 +5115,7 @@ function ausentesHoy(estado, hoy) {
   const out = [];
   (estado.sucursales || []).forEach(s => {
     (s.colaboradores || []).forEach(c => {
+      if (!sigueEnElPlantel(c)) return;
       (c.ausencias || []).forEach(a => {
         if (a.reincorporado || !a.desde) return;
         if (a.desde <= h && (!a.hasta || a.hasta >= h)) {
@@ -5106,7 +5132,7 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     diasDeAusencia, ausenciasPorMes,
-    alertasDeAusencias, ausentesHoy, ausenciasEnCurso
+    alertasDeAusencias, ausentesHoy, ausenciasEnCurso, sigueEnElPlantel
   };
 }
 
@@ -5815,8 +5841,9 @@ const PUESTOS_CLAVE = [
     es: c => /APV SENIOR|VENTA SENIOR/i.test(c.nivelCargo || c.cargo || '') }
 ];
 
-/** Los activos de una lista, que es sobre quienes se cuenta todo acá. */
-const _activos = lista => (lista || []).filter(c => c && c.activo !== false);
+/* Los activos de una lista, que es sobre quienes se cuenta todo acá. La regla
+   es una sola y vive en `ausencias.js`: `sigueEnElPlantel()`. */
+const _activos = lista => (lista || []).filter(sigueEnElPlantel);
 
 /**
  * Cómo se reparte el plantel por antigüedad. Devuelve una banda por fila, con
@@ -5964,8 +5991,15 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     ? (e.sucursales || []).filter(x => x.id === sucursalId)
     : (e.sucursales || []);
   if (sucursalId && !suc.length) return null;
-  const gente = suc.flatMap(s => s.colaboradores || []);
-  const plantel = gente.filter(c => c.activo !== false).length;
+  /* **El numerador y el denominador reparten con la misma regla**, que es la
+     del período de liquidación escrita para otra cosa y vale igual acá: el
+     plantel contaba solo a los activos y los días los ponía todo el mundo, de
+     baja incluida, así que una baja le dejaba los días arriba de la fracción y
+     le sacaba la persona de abajo. La tasa subía sola el día que alguien se
+     iba. Sus licencias siguen enteras en su ficha: esto recorta el indicador,
+     no el historial. */
+  const gente = _activos(suc.flatMap(s => s.colaboradores || []));
+  const plantel = gente.length;
   if (!plantel) return null;
 
   /* Un casillero por mes entre el corte y hoy, aunque el mes no tenga ninguna:
@@ -6182,7 +6216,7 @@ function rotacionDelArea(estado, hoyISO) {
 
   const porGrupo = {};
   delPeriodo.forEach(b => { porGrupo[b.grupo] = (porGrupo[b.grupo] || 0) + 1; });
-  const activos = gente.filter(c => c.activo !== false).length;
+  const activos = _activos(gente).length;
   const media = activos + delPeriodo.length / 2;
 
   return {
@@ -6209,7 +6243,8 @@ function ausentismoDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
   const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
   const desde = v.desde;
-  const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
+  const gente = _activos(((estado || {}).sucursales || [])
+    .flatMap(s => s.colaboradores || []));
   if (!gente.some(c => (c.ausencias || []).length)) return null;
 
   let dias = 0;
@@ -6229,7 +6264,7 @@ function ausentismoDelArea(estado, hoyISO) {
   }));
   if (!dias) return null;
 
-  const activos = gente.filter(c => c.activo !== false).length;
+  const activos = gente.length;
   /* Los días-persona son los de la ventana real, no un año entero: con el
      corte puesto este mes, dividir por 365 daría una tasa diez veces menor de
      la que el período muestra. */
@@ -6299,10 +6334,10 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
 
   (e.sucursales || []).forEach(s => {
     const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
-    const activos = (s.colaboradores || []).filter(c => c.activo !== false).length;
-    t.plantel = activos;
-    plantel += activos;
-    (s.colaboradores || []).forEach(c => {
+    const gente = _activos(s.colaboradores);
+    t.plantel = gente.length;
+    plantel += gente.length;
+    gente.forEach(c => {
       /* Toda licencia que pise la ventana, y de cada una solo los días que
          caen adentro: la que empezó antes del corte y sigue hoy aporta sus días
          de este período. Antes se pedía que la licencia *empezara* adentro de la
@@ -8384,7 +8419,7 @@ function presentesDelPadron(sucursal, fecha) {
      `const` en el mismo ámbito global la página no arranca. */
   const f = fecha || _diaHoy();
   return ((sucursal || {}).colaboradores || []).filter(c => {
-    if (c.activo === false) return false;
+    if (!sigueEnElPlantel(c)) return false;
     if (typeof esNoPresencial === 'function' && esNoPresencial(c).noPresencial) return false;
     return !(c.ausencias || []).some(a =>
       !a.reincorporado && a.desde && a.desde <= f && (!a.hasta || a.hasta >= f));
@@ -11645,6 +11680,22 @@ const Store = (() => {
       if (!a) return null;
       a.reincorporado = true;
       a.fechaReincorporacion = fecha || a.hasta || new Date().toISOString().slice(0, 10);
+      guardar();
+      return a;
+    },
+
+    /**
+     * Deshace la marca de la vuelta. **Destildar no borra nada más**: las
+     * fechas de la licencia quedan como estaban, igual que en el check list y
+     * en los trámites de la baja. Marcar la vuelta por error en la fila
+     * equivocada no tenía arreglo desde la pantalla.
+     */
+    reabrirAusencia(colabId, ausenciaId) {
+      const a = this.ausencia(colabId, ausenciaId);
+      if (!a) return null;
+      a.reincorporacionAnterior = a.fechaReincorporacion || '';
+      a.reincorporado = false;
+      a.fechaReincorporacion = '';
       guardar();
       return a;
     },
@@ -18757,9 +18808,15 @@ const App = (() => {
           <td class="num"><strong>${r.total}</strong></td></tr></tfoot>
       </table></div>
 
+      ${/* La vuelta se marca **donde se ve la licencia**, que es la misma regla
+            del «Quitar». El único botón vivía en la tabla de Presentismo, que
+            muestra las abiertas y empezadas: una licencia cargada con fecha de
+            inicio futura —o la de alguien que ya no está en esa lista— no
+            aparecía en ningún lado donde se la pudiera cerrar, y desde la ficha
+            se la veía abierta sin poder hacer nada. */''}
       <div class="tabla-scroll" style="margin-top:12px"><table>
         <thead><tr><th>Licencia</th><th>Desde</th><th>Hasta</th><th class="num">Días</th>
-          <th>Certificado</th><th>Situación</th></tr></thead>
+          <th>Certificado</th><th>Situación</th><th></th></tr></thead>
         <tbody>${todas.map(a => {
           const est = estadoDeAusencia(a, hoy);
           return `<tr${a.reincorporado ? ' class="inactivo"' : ''}>
@@ -18775,6 +18832,17 @@ const App = (() => {
                 ? '<span class="chip verde">presentado</span>'
                 : '<span class="chip rojo">no lo trajo</span>'}</td>
             <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
+            <td class="tipo" style="white-space:nowrap">
+              ${a.reincorporado
+                ? `<button class="mini" style="color:var(--azul);border-color:var(--azul)"
+                     data-accion="reabrir-ausencia" data-id="${c.id}" data-aus="${a.id}"
+                     title="Volver a abrirla: todavía no había vuelto">Reabrir</button>`
+                : `<button class="mini" style="color:var(--azul);border-color:var(--azul)"
+                     data-accion="reincorporar" data-id="${c.id}" data-aus="${a.id}"
+                     >Se reincorporó</button>`}
+              <button class="mini" data-accion="quitar-ausencia"
+                data-id="${c.id}" data-aus="${a.id}" title="Quitar la licencia">✕</button>
+            </td>
           </tr>`;
         }).join('')}</tbody>
       </table></div>
@@ -22235,9 +22303,25 @@ const App = (() => {
       }
 
       if (a === 'reincorporar') {
-        Store.reincorporar(btn.dataset.id, btn.dataset.aus);
+        /* Decía «Marcada como reincorporada» pasara lo que pasara. Cuando no
+           encontraba la licencia —una ficha duplicada, una ausencia vieja sin
+           `id`— el botón no hacía nada y avisaba que sí: desde el otro lado se
+           ve como que el panel no responde. */
+        const x = Store.reincorporar(btn.dataset.id, btn.dataset.aus);
         refrescar();
-        avisar('Marcada como reincorporada.');
+        if (!x) {
+          avisar('No pude marcarla: no encuentro esa licencia en su ficha. Fijate en Configuración si la persona quedó cargada dos veces.', 'error');
+          return;
+        }
+        avisar(`Volvió el ${fmtFecha(x.fechaReincorporacion)}.`);
+        return;
+      }
+
+      if (a === 'reabrir-ausencia') {
+        const x = Store.reabrirAusencia(btn.dataset.id, btn.dataset.aus);
+        refrescar();
+        avisar(x ? 'Queda abierta otra vez: la marca de la vuelta se sacó.'
+                 : 'No encuentro esa licencia.', x ? '' : 'error');
         return;
       }
       if (a === 'alinear-razon-social') {

@@ -2504,6 +2504,22 @@ const Store = (() => {
       return a;
     },
 
+    /**
+     * Deshace la marca de la vuelta. **Destildar no borra nada más**: las
+     * fechas de la licencia quedan como estaban, igual que en el check list y
+     * en los trámites de la baja. Marcar la vuelta por error en la fila
+     * equivocada no tenía arreglo desde la pantalla.
+     */
+    reabrirAusencia(colabId, ausenciaId) {
+      const a = this.ausencia(colabId, ausenciaId);
+      if (!a) return null;
+      a.reincorporacionAnterior = a.fechaReincorporacion || '';
+      a.reincorporado = false;
+      a.fechaReincorporacion = '';
+      guardar();
+      return a;
+    },
+
     /** Extiende el certificado. La ausencia sigue siendo la misma: el vínculo
         con el art. 208 se cuenta desde el primer día, no desde el último parte. */
     extenderAusencia(colabId, ausenciaId, hasta) {

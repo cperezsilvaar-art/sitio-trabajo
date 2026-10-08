@@ -51,8 +51,9 @@ const PUESTOS_CLAVE = [
     es: c => /APV SENIOR|VENTA SENIOR/i.test(c.nivelCargo || c.cargo || '') }
 ];
 
-/** Los activos de una lista, que es sobre quienes se cuenta todo acá. */
-const _activos = lista => (lista || []).filter(c => c && c.activo !== false);
+/* Los activos de una lista, que es sobre quienes se cuenta todo acá. La regla
+   es una sola y vive en `ausencias.js`: `sigueEnElPlantel()`. */
+const _activos = lista => (lista || []).filter(sigueEnElPlantel);
 
 /**
  * Cómo se reparte el plantel por antigüedad. Devuelve una banda por fila, con
@@ -200,8 +201,15 @@ function serieMensualDeAusentismo(estado, hastaISO, sucursalId) {
     ? (e.sucursales || []).filter(x => x.id === sucursalId)
     : (e.sucursales || []);
   if (sucursalId && !suc.length) return null;
-  const gente = suc.flatMap(s => s.colaboradores || []);
-  const plantel = gente.filter(c => c.activo !== false).length;
+  /* **El numerador y el denominador reparten con la misma regla**, que es la
+     del período de liquidación escrita para otra cosa y vale igual acá: el
+     plantel contaba solo a los activos y los días los ponía todo el mundo, de
+     baja incluida, así que una baja le dejaba los días arriba de la fracción y
+     le sacaba la persona de abajo. La tasa subía sola el día que alguien se
+     iba. Sus licencias siguen enteras en su ficha: esto recorta el indicador,
+     no el historial. */
+  const gente = _activos(suc.flatMap(s => s.colaboradores || []));
+  const plantel = gente.length;
   if (!plantel) return null;
 
   /* Un casillero por mes entre el corte y hoy, aunque el mes no tenga ninguna:
@@ -418,7 +426,7 @@ function rotacionDelArea(estado, hoyISO) {
 
   const porGrupo = {};
   delPeriodo.forEach(b => { porGrupo[b.grupo] = (porGrupo[b.grupo] || 0) + 1; });
-  const activos = gente.filter(c => c.activo !== false).length;
+  const activos = _activos(gente).length;
   const media = activos + delPeriodo.length / 2;
 
   return {
@@ -445,7 +453,8 @@ function ausentismoDelArea(estado, hoyISO) {
   const hoy = hoyISO || _diaHoy();
   const v = ventanaDeMedicion(estado, _mesesAtras(hoy, 12), hoy);
   const desde = v.desde;
-  const gente = ((estado || {}).sucursales || []).flatMap(s => s.colaboradores || []);
+  const gente = _activos(((estado || {}).sucursales || [])
+    .flatMap(s => s.colaboradores || []));
   if (!gente.some(c => (c.ausencias || []).length)) return null;
 
   let dias = 0;
@@ -465,7 +474,7 @@ function ausentismoDelArea(estado, hoyISO) {
   }));
   if (!dias) return null;
 
-  const activos = gente.filter(c => c.activo !== false).length;
+  const activos = gente.length;
   /* Los días-persona son los de la ventana real, no un año entero: con el
      corte puesto este mes, dividir por 365 daría una tasa diez veces menor de
      la que el período muestra. */
@@ -535,10 +544,10 @@ function participacionDeAusencias(estado, desdeISO, hastaISO) {
 
   (e.sucursales || []).forEach(s => {
     const t = Object.assign({ id: s.id, sucursal: s.nombre || s.codigo, gente: [] }, cuenta());
-    const activos = (s.colaboradores || []).filter(c => c.activo !== false).length;
-    t.plantel = activos;
-    plantel += activos;
-    (s.colaboradores || []).forEach(c => {
+    const gente = _activos(s.colaboradores);
+    t.plantel = gente.length;
+    plantel += gente.length;
+    gente.forEach(c => {
       /* Toda licencia que pise la ventana, y de cada una solo los días que
          caen adentro: la que empezó antes del corte y sigue hoy aporta sus días
          de este período. Antes se pedía que la licencia *empezara* adentro de la

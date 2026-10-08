@@ -590,6 +590,49 @@ además sumaba las vacaciones y la maternidad. Tres tarjetas del mismo tablero
 diciendo 0,58%, 0,03% y 0,08%. **Una cuenta nueva de días de ausencia no se
 escribe: se llama a `diasDeAusenciaEntre()`.**
 
+**Una baja no es una ausencia, y `sigueEnElPlantel()` (`ausencias.js`) es
+quien lo decide.** Dar de baja a alguien no lo sacaba de ningún lado: seguía en
+*Quién no está hoy* con su licencia abierta, en las alertas pidiendo un
+certificado que ya no le iba a traer nadie, y descontando turno del piso. Quien
+se fue el martes no «no vino» el miércoles. La regla vale para **todo lo que
+describe hoy** —`ausenciasEnCurso()`, `ausentesHoy()`, `alertasDeAusencias()`,
+`presentesDelPadron()`, `documentosQueVencen()` y `_activos()` de
+`indicadores.js`— y mira **las dos marcas**, `activo` y `baja`: `registrarBaja()`
+pone las dos, pero una nómina importada puede traer a alguien inactivo sin baja
+cargada.
+
+**Recorta lo de hoy, no el historial**, que es la misma regla que el corte del
+año fiscal: sus licencias siguen enteras en su ficha, con sus fechas.
+
+**Y de paso cerró una grieta entre el numerador y el denominador.** Las tres
+cuentas de ausentismo dividían por el plantel activo y sumaban los días de
+**todo el mundo**, de baja incluida: una baja le dejaba los días arriba de la
+fracción y le sacaba la persona de abajo, así que **la tasa subía sola el día
+que alguien se iba**. Es la misma clase de contradicción que el rango declarado
+contra la ventana que cae, y se arregla igual: las dos puntas reparten con la
+misma regla. Por eso los cinco filtros sueltos de `indicadores.js` ahora pasan
+todos por `_activos()`, que llama a `sigueEnElPlantel()`.
+
+**Lo que sí se queda cuando la persona se va son los reclamos y los casos**, y
+es a propósito: un reclamo de sueldo de alguien que se fue es plata que se le
+debe igual, y un caso con el estudio jurídico de alguien que se fue es
+exactamente el que no se puede perder de vista. Esconderlos sería tirar trabajo
+abierto; lo que corresponde es que la pantalla diga que la persona ya no está,
+no que la fila desaparezca.
+
+**La vuelta de una licencia se marca donde se la ve.** Es la misma regla del
+«Quitar», y faltaba la mitad: el único botón vivía en la tabla de Presentismo,
+que muestra las **abiertas y ya empezadas**. Una licencia cargada con fecha de
+inicio futura —o la de alguien que esa lista dejó de mostrar— se veía abierta en
+la ficha de la persona y no había forma de cerrarla desde ningún lado. Ahora la
+fila de la ficha trae *Se reincorporó*, *Reabrir* —`Store.reabrirAusencia()`,
+que deshace la marca sin tocar las fechas y anota cuál decía— y el ✕.
+
+**Y la acción dejó de mentir**: decía «Marcada como reincorporada» pasara lo que
+pasara, también cuando `Store.reincorporar()` devolvía `null` porque no
+encontraba la licencia. Desde el otro lado eso se lee como que el panel no
+responde. Ahora dice el día en que volvió, o que no la encontró y dónde mirar.
+
 **El ausentismo se ve en los tres lugares donde se lo busca**, y los tres salen
 del **mismo** cálculo: `ausentismoDe()` (`indicadores.js`) es un buscador sobre
 `participacionDeAusencias()`, no una cuenta nueva. Dos funciones que cuentan lo

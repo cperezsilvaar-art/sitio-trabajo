@@ -399,7 +399,7 @@ function documentosQueVencen(estado, hoyISO) {
   const hoy = hoyISO || new Date().toISOString().slice(0, 10);
   const out = [];
   ((estado || {}).sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
-    if (c.activo === false || c.baja) return;
+    if (!sigueEnElPlantel(c)) return;
     (c.documentos || []).forEach(doc => {
       const est = estadoDeDocumento(doc, hoy);
       if (est.clase !== 'vencido' && est.clase !== 'porVencer') return;
