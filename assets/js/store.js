@@ -446,7 +446,7 @@ const Store = (() => {
       }
       try {
         localStorage.setItem(CLAVE_ALMACEN, aGuardar);
-        falloAlGuardar = '';
+        if (falloAlGuardar) { falloAlGuardar = ''; avisarDelGuardado(); }
         return;
       } catch (err) {
         /* Lo más probable es que no entre porque las copias llenaron el
@@ -457,14 +457,27 @@ const Store = (() => {
       try { localStorage.removeItem(CLAVE_RESGUARDOS); } catch (e) { /* nada que hacer */ }
       try {
         localStorage.setItem(CLAVE_ALMACEN, aGuardar);
-        falloAlGuardar = '';
+        if (falloAlGuardar) { falloAlGuardar = ''; avisarDelGuardado(); }
       } catch (err) {
         falloAlGuardar = 'El navegador no está guardando los cambios: no hay lugar o el sitio ' +
                          'tiene bloqueado el almacenamiento. Exportá un respaldo antes de cerrar.';
         console.error(falloAlGuardar, err);
+        /* **El guardado es asincrónico**, así que cuando falla la pantalla ya
+           se pintó diciendo que todo salió bien. Sin este aviso el panel se
+           sigue usando una hora y el vacío aparece recién al recargar: hay que
+           interrumpir en el momento, no esperar al próximo repintado. */
+        avisarDelGuardado();
       }
     });
     suscriptores.forEach(fn => fn(estado));
+  }
+
+  /* Quien quiera enterarse de que el almacenamiento dejó de aceptar lo que se
+     guarda. Es aparte de `suscriptores`, que se notifican con cada cambio del
+     estado y no saben si el guardado terminó bien. */
+  const oyentesDeGuardado = [];
+  function avisarDelGuardado() {
+    oyentesDeGuardado.forEach(fn => { try { fn(falloAlGuardar); } catch (e) { /* nada */ } });
   }
 
   /* ---------------------- resguardos automáticos ---------------------- */
@@ -770,6 +783,7 @@ const Store = (() => {
     cifrado: () => !!cifrador,
     /** Texto del último guardado que falló, o '' si todo se está guardando. */
     falloAlGuardar: () => falloAlGuardar,
+    alFallarElGuardado(fn) { if (typeof fn === 'function') oyentesDeGuardado.push(fn); },
     get: () => estado,
     save: guardar,
 

@@ -657,11 +657,6 @@ const App = (() => {
 
       ${bloqueQuienNoEsta(e)}
 
-      ${Store.falloAlGuardar() ? `<div class="aviso-caja">
-        <strong>Ojo: lo que cargues no se está guardando.</strong>
-        ${esc(Store.falloAlGuardar())}
-      </div>` : ''}
-
       ${(() => {
         /* El tablero sin plantel y con copias guardadas es, casi siempre, algo
            que se borró. Ofrecer la copia acá evita que se rehaga a mano un
@@ -7147,6 +7142,7 @@ const App = (() => {
     });
     contadoresDelMenu(e);
     ordenarKpis();
+    avisoDeGuardado();
 
     const lat = $('#lat-area');
     if (lat) lat.textContent = e.config.area || 'Farmatodo';
@@ -7212,16 +7208,58 @@ const App = (() => {
     }
   }
 
+  /**
+   * El aviso de que el navegador dejó de guardar, **en el armazón**.
+   *
+   * Vivía adentro de `vistaRed()`, o sea que solo aparecía en el Panel: se
+   * podía trabajar una hora entera en Presentismo, en Nómina o en Reclamos sin
+   * enterarse de que nada se estaba escribiendo, y el vacío aparecía recién al
+   * recargar. Es la peor forma de perder trabajo y ya había pasado.
+   *
+   * Va arriba del contenido y no en un `avisar()` al pasar, porque **no es un
+   * aviso de un momento sino un estado**: mientras no haya lugar, todo lo que
+   * se cargue se pierde al cerrar, y eso tiene que estar a la vista todo el
+   * tiempo con la salida al lado.
+   */
+  function avisoDeGuardado() {
+    const caja = document.getElementById('falla-guardado');
+    if (!caja) return;
+    const falla = Store.falloAlGuardar();
+    caja.hidden = !falla;
+    if (!falla) { caja.innerHTML = ''; return; }
+    caja.innerHTML = `<div class="aviso-caja" style="margin:0 0 14px;border-left-color:var(--rojo-alerta)">
+      <strong>El navegador dejó de guardar lo que cargás.</strong>
+      ${esc(falla)}
+      <div class="acciones" style="margin-top:10px">
+        <button class="b" data-accion="exportar">Exportar el respaldo ahora</button>
+      </div>
+      <p class="ayuda" style="margin:8px 0 0">Lo que hiciste en esta pantalla
+        <strong>todavía está</strong> mientras no cierres ni recargues. Bajá el
+        respaldo y volvé a importarlo después de hacer lugar.</p>
+    </div>`;
+  }
+
   function refrescar() {
     if (!vistaActual) return;
     const y = window.scrollY;
     $('#contenido').innerHTML = vistaActual();
+    avisoDeGuardado();
     /* También acá: si no, deshacer una baja o cerrar un reclamo repinta la
        pantalla y los indicadores vacíos vuelven a aparecer hasta el próximo
        cambio de pantalla. */
     ordenarKpis();
     window.scrollTo(0, y);
     completarCensoResguardos();
+  }
+
+  /* El guardado es asincrónico: cuando falla, la pantalla ya se pintó diciendo
+     que todo salió bien. Por eso el almacén avisa y acá se repinta el cartel en
+     el momento, sin esperar a que el coordinador cambie de pantalla. */
+  if (typeof Store.alFallarElGuardado === 'function') {
+    Store.alFallarElGuardado(falla => {
+      avisoDeGuardado();
+      if (falla) avisar('No se está guardando. Exportá el respaldo antes de cerrar.', 'error');
+    });
   }
 
   /* Abrir cada copia es descifrarla: se hace después de pintar la pantalla para

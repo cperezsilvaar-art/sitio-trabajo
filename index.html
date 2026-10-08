@@ -99,6 +99,12 @@
       <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
     </header>
 
+    <!-- El aviso de que el navegador dejó de guardar va en el armazón y no
+         adentro de una pantalla: vivía solo en el Panel, así que se podía
+         trabajar una hora en Presentismo o en Nómina sin enterarse, y el vacío
+         aparecía recién al recargar. Lo llena `avisoDeGuardado()`. -->
+    <div id="falla-guardado" hidden></div>
+
     <main id="contenido"></main>
 
     <footer class="app">

@@ -1671,6 +1671,26 @@ entrar— y ahora también está en la portada, y el error de clave equivocada
 nombra las dos cosas: que cada panel tiene la suya y que la única salida es
 empezar de cero e importar un `.json`.
 
+**Un guardado que falla en silencio es la peor forma de perder trabajo, y el
+aviso vivía en una sola pantalla.** `guardar()` es asincrónico: cuando
+`localStorage` no acepta lo que se escribe —no hay lugar, el navegador tiene
+bloqueado el almacenamiento— la pantalla **ya se pintó diciendo que salió
+bien**. El cartel que lo decía estaba adentro de `vistaRed()`, así que se podía
+trabajar una hora entera en Presentismo, en Nómina o en Reclamos sin enterarse,
+y el vacío aparecía recién al recargar. Le pasó dos veces al coordinador.
+
+Ahora el aviso vive en el **armazón** (`#falla-guardado` en `index.html`, lo
+llena `avisoDeGuardado()`): se ve en las diecisiete pantallas, **no se va al
+cambiar de pantalla** —es un estado, no un cartelito de un momento— y trae
+adentro el botón de exportar el respaldo, que es la única salida. Dice además
+que lo cargado **sigue estando mientras no se cierre ni se recargue**, que es
+el dato que decide qué hacer en ese minuto.
+
+Y **no espera al próximo repintado**: `Store.alFallarElGuardado(fn)` avisa en
+el momento en que el guardado falla, porque para cuando el coordinador cambie
+de pantalla ya puede haber cargado veinte cosas. Cuando el almacenamiento
+vuelve a aceptar, el cartel se va solo.
+
 El panel se guarda **copias automáticas** en el mismo navegador, en una clave
 aparte del almacén: una por día al abrir y una antes de cada acción que
 reemplaza todo el contenido. Están para el borrado por error, no para perder el
