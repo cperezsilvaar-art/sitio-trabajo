@@ -1232,3 +1232,37 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   border: 1px solid var(--borde); border-radius: 999px; padding: 3px 10px;
 }
 .sello.viejo { color: var(--ambar); border-color: var(--ambar); font-weight: 600; }
+
+/* ===================== Vacantes y vacaciones ===================== *
+   La vacante se dibuja con la misma tarjeta que una persona —es un lugar del
+   organigrama— pero punteada y en ámbar: lo que la define es que ahí no hay
+   nadie, y el color tiene que decirlo antes de leer la palabra. */
+a.org-persona { text-decoration: none; }
+.org-persona.vacante {
+  border-style: dashed; border-color: var(--ambar);
+  background: transparent;
+}
+.org-persona.vacante strong { color: var(--ambar); }
+
+/* El cuadro de vacaciones es ancho a propósito: diez meses en columnas. Las
+   nueve primeras columnas se leen de corrido y los meses se recorren con el
+   scroll horizontal de `.tabla-scroll`, igual que la matriz de FTE. */
+.vac-cuadro th, .vac-cuadro td { white-space: nowrap; }
+.vac-cuadro .vac-celda { padding: 4px 6px; }
+.vac-tramo {
+  display: inline-block; font-size: 11.5px; line-height: 1.5;
+  padding: 1px 6px; border-radius: 10px; white-space: nowrap;
+  background: var(--panel-alt); color: var(--azul-claro);
+  border: 1px solid var(--borde-fuerte);
+}
+.vac-tramo + .vac-tramo { margin-top: 2px; }
+/* Las fechas que inventó el libro de novedades no se muestran como si alguien
+   hubiera acordado esa salida: van en gris, como los días supuestos. */
+.vac-tramo.supuesto {
+  color: var(--texto-suave); border-style: dashed;
+}
+.vac-pend {
+  width: 56px; text-align: right; padding: 2px 6px; font: inherit; font-size: 12.5px;
+  border: 1px solid var(--borde); border-radius: 6px; background: var(--panel);
+  color: var(--texto);
+}

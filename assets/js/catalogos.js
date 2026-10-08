@@ -511,6 +511,22 @@ const PARAMETROS_DEFECTO = {
      año fiscal, y las licencias que el libro ubica al arranque del período no
      entraban en ninguna tasa. */
   mideDesde: '2026-08-21',
+  /* El ciclo de vacaciones que se está planificando.
+   *
+   * `vacacionesAnio` es el año cuyo **31 de diciembre** fija la antigüedad, que
+   * es como la cuenta el último párrafo del art. 150 de la LCT y no el día en
+   * que se abre el panel: quien entró el 12/12/2022 tiene 4 años para el ciclo
+   * 2026, y medirlo contra hoy le daría 17 días donde le tocan 26.
+   *
+   * Los dos meses son la ventana en la que se gozan. La LCT (art. 154) las
+   * ubica entre el 1 de octubre y el 30 de abril; el área viene planificando
+   * desde julio, así que son un parámetro y no una constante. Con el mes de
+   * arranque mayor que el de cierre la ventana cruza el año —julio de 2026 a
+   * abril de 2027—, que es el caso normal, igual que el período de
+   * liquidación. */
+  vacacionesAnio: 2026,
+  vacacionesMesDesde: 7,
+  vacacionesMesHasta: 4,
   moneda: '$'
 };
 

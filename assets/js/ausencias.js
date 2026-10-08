@@ -204,7 +204,7 @@ function estadoDeAusencia(a, hoy) {
      persona invoque. Va antes que cualquier otra lectura porque es la única
      que cambia lo que hay que hacer: reclamar el certificado. Mientras tanto
      la ausencia se cuenta, pero como pendiente. */
-  if (!tieneCertificado(x)) {
+  if (motivoPideCertificado(x.motivo) && !tieneCertificado(x)) {
     return { clase: 'pendienteJustificar',
              texto: llevados > 0 ? `Pendiente de justificar · ${llevados} día${llevados === 1 ? '' : 's'}`
                                  : 'Pendiente de justificar',
@@ -212,7 +212,9 @@ function estadoDeAusencia(a, hoy) {
   }
 
   if (!x.hasta) {
-    return { clase: 'sinAlta', texto: 'Sin fecha de alta en el certificado',
+    return { clase: 'sinAlta',
+             texto: motivoPideCertificado(x.motivo)
+               ? 'Sin fecha de alta en el certificado' : 'Sin fecha de retorno',
              diasParaVencer: null, diasLlevados: llevados, tono: 'ambar' };
   }
   const faltan = _dias(h, x.hasta);
@@ -306,6 +308,15 @@ function diasDeAusencia(a, hoy) {
 const MOTIVOS_SIN_AUSENTISMO = ['vacaciones', 'maternidad', 'paternidad'];
 
 const motivoSumaAusentismo = motivo => !MOTIVOS_SIN_AUSENTISMO.includes(motivo);
+
+/* **Las vacaciones no se justifican: se otorgan.** No hay papel que reclamar,
+   así que pedirles uno las dejaba en `pendienteJustificar` —en rojo, y
+   encabezando las alertas— para siempre. Ya le pasaba a las que trae el libro
+   de novedades, y se iba a multiplicar en cuanto hubiera una pantalla que las
+   planifica. Las demás licencias sí piden comprobante y no cambian. */
+const MOTIVOS_SIN_CERTIFICADO = ['vacaciones'];
+
+const motivoPideCertificado = motivo => !MOTIVOS_SIN_CERTIFICADO.includes(motivo);
 
 /**
  * Los días de una ausencia que caen adentro de una ventana, y nada más.
@@ -500,7 +511,9 @@ if (typeof module !== 'undefined' && module.exports) {
     LICENCIA_ENFERMEDAD, RESERVA_PUESTO_MESES, plazosEnfermedad, tieneCargasFamilia,
     MOTIVOS_AUSENCIA_LARGA, estadoDeAusencia, cobertura, tieneCertificado,
     diasDeAusencia, ausenciasPorMes,
-    alertasDeAusencias, ausentesHoy, ausenciasEnCurso, sigueEnElPlantel
+    alertasDeAusencias, ausentesHoy, ausenciasEnCurso, sigueEnElPlantel,
+    MOTIVOS_SIN_AUSENTISMO, motivoSumaAusentismo,
+    MOTIVOS_SIN_CERTIFICADO, motivoPideCertificado
   };
 }
 

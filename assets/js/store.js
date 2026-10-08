@@ -84,6 +84,10 @@ const Store = (() => {
       directorTecnico: '',
       contactoAdmin: '', emailContactoAdmin: '', referenteRRHH: '',
       colaboradores: [],                  // plantel con su evaluación e historial
+      /* El puesto abierto. Cuelga de la **tienda** y no de la persona, por lo
+         contrario de todo lo demás: una vacante es justamente el lugar donde
+         no hay nadie. Es lo único del panel que se guarda acá por esa razón. */
+      vacantes: [],
       dotacionNominal: null,
       minimoTurno: null,                  // con cuánta gente abre en condiciones
       notas: ''
@@ -2387,12 +2391,19 @@ const Store = (() => {
       });
 
       a.novedades = Object.assign({}, b.novedades || {}, a.novedades || {});
+      /* Indexado por año, como las novedades por mes: se juntan los dos mapas
+         y en el choque gana la ficha que se conserva. El bucle de campos
+         sueltos de más abajo lo habría copiado solo si la que queda no tenía
+         ninguno, y se habrían perdido los años que solo traía la otra. */
+      const pend = Object.assign({}, b.vacacionesPendientes || {}, a.vacacionesPendientes || {});
+      if (Object.keys(pend).length) a.vacacionesPendientes = pend;
       if (!a.baja && b.baja) a.baja = b.baja;
       /* Los campos sueltos: se completan donde la ficha que queda está vacía,
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'planes', 'documentos', 'novedades', 'baja'].indexOf(k) >= 0) return;
+             'sanciones', 'planes', 'documentos', 'novedades', 'baja',
+             'vacacionesPendientes'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
         if (a[k] === '' || a[k] === null || a[k] === undefined) a[k] = v;
@@ -2452,6 +2463,108 @@ const Store = (() => {
      * adentro de la ausencia**: es lo que pasó en esta llamada, no un campo de
      * la licencia, y guardarlo la ensuciaría para siempre.
      */
+    /* ==================== Vacantes ====================
+     *
+     * Lo único que se pidió guardar es **qué puesto falta y en qué tienda**.
+     * La posición sale de `CARGOS_NOMINA`, como el alta a mano: una segunda
+     * lista de cargos se desincroniza de la primera sin que nada falle.
+     *
+     * `abiertaEl` no estaba pedido y va igual: es lo único que convierte una
+     * vacante en algo que apura. Una lista de puestos sin fecha se lee igual
+     * el primer día que a los cuatro meses. */
+    vacantes(sucursalId) {
+      const s = this.sucursal(sucursalId);
+      return s ? (s.vacantes || []) : [];
+    },
+
+    /** Las del área, cada una con su tienda al lado. */
+    vacantesDelArea(incluirCubiertas) {
+      const out = [];
+      this.get().sucursales.forEach(s => {
+        (s.vacantes || []).forEach(v => {
+          if (!incluirCubiertas && v.estado === 'cubierta') return;
+          out.push(Object.assign({}, v, {
+            sucursalId: s.id, sucursal: s.nombre || s.codigo, codigo: s.codigo || ''
+          }));
+        });
+      });
+      return out.sort((a, b) => String(a.abiertaEl).localeCompare(String(b.abiertaEl)));
+    },
+
+    agregarVacante(sucursalId, datos) {
+      const s = this.sucursal(sucursalId);
+      if (!s) return null;
+      if (!Array.isArray(s.vacantes)) s.vacantes = [];
+      const v = Object.assign({
+        id: uid(),
+        posicion: '',
+        abiertaEl: new Date().toISOString().slice(0, 10),
+        estado: 'abierta',
+        cubiertaEl: '', cubiertaPor: '',
+        notas: ''
+      }, datos || {});
+      s.vacantes.push(v);
+      guardar();
+      return v;
+    },
+
+    actualizarVacante(sucursalId, vacanteId, campos) {
+      const v = (this.vacantes(sucursalId) || []).find(x => x.id === vacanteId);
+      if (!v) return null;
+      Object.assign(v, campos || {});
+      guardar();
+      return v;
+    },
+
+    /** Cubrirla la cierra; no la borra, porque con qué se cubrió es historia. */
+    cubrirVacante(sucursalId, vacanteId, datos) {
+      const d = datos || {};
+      return this.actualizarVacante(sucursalId, vacanteId, {
+        estado: 'cubierta',
+        cubiertaEl: d.cubiertaEl || new Date().toISOString().slice(0, 10),
+        cubiertaPor: d.cubiertaPor || ''
+      });
+    },
+
+    reabrirVacante(sucursalId, vacanteId) {
+      return this.actualizarVacante(sucursalId, vacanteId,
+        { estado: 'abierta', cubiertaEl: '', cubiertaPor: '' });
+    },
+
+    quitarVacante(sucursalId, vacanteId) {
+      const s = this.sucursal(sucursalId);
+      if (!s || !Array.isArray(s.vacantes)) return false;
+      const i = s.vacantes.findIndex(v => v.id === vacanteId);
+      if (i < 0) return false;
+      s.vacantes.splice(i, 1);
+      guardar();
+      return true;
+    },
+
+    /**
+     * Los días de vacaciones que quedaron del ciclo anterior.
+     *
+     * El panel no los puede deducir —no guarda la foto de cada cierre— así que
+     * los carga el coordinador. Van **indexados por el año del ciclo** y no
+     * sueltos: el número del año que viene no tiene por qué pisar el de este,
+     * y sin el año al lado nadie sabe de cuándo arrastra.
+     *
+     * En cero **se borra la clave** en vez de guardar un 0, como
+     * `marcarAdef()` con el estado vacío: «no arrastra nada» y «todavía no lo
+     * miré» son dos cosas y el cuadro las distingue.
+     */
+    marcarPendienteVacaciones(colabId, anio, dias) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !anio) return null;
+      const n = Number(dias);
+      if (!c.vacacionesPendientes) c.vacacionesPendientes = {};
+      if (!isFinite(n) || n <= 0) delete c.vacacionesPendientes[String(anio)];
+      else c.vacacionesPendientes[String(anio)] = n;
+      if (!Object.keys(c.vacacionesPendientes).length) delete c.vacacionesPendientes;
+      guardar();
+      return c;
+    },
+
     agregarAusencia(colabId, datos) {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;

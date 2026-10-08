@@ -57,13 +57,14 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `ausencias`, `desarrollo`, `indicadores`, `casos`, `checklist`, `reclamos`,
+  `ausencias`, `vacaciones`, `desarrollo`, `indicadores`, `casos`, `checklist`, `reclamos`,
   `agenda`, `asistente`, `diario`, `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
   `#/sucursales` (y `#/visitas`, que es la misma), `#/desarrollo[/<id>]`,
-  `#/reclamos`, `#/movimientos[/cesiones|/bajas]`, `#/sucursal/<id>`,
+  `#/reclamos`, `#/movimientos[/cesiones|/bajas]`, `#/vacantes`,
+  `#/vacaciones[/<sucursalId>]`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
 - **Trampa conocida:** todo lo que entra al panel se pega desde Excel, y Excel
@@ -1177,6 +1178,76 @@ y nada más: no suma al contador del menú ni a `pendientesDelArea()`. El panel 
 avisa por el entrenamiento vencido y por el mes sin evaluación; un tercer aviso
 por cada acción de cada plan convierte el contador de *Desarrollo* en un número
 que deja de leerse, que es la regla de los contadores en cero vista al revés.
+
+**Las vacantes y las vacaciones contestan la misma pregunta desde dos lados** —
+con cuánta gente cuento— y por eso son dos pantallas y no una: la vacante es el
+lugar que falta cubrir y no se cubre solo; las vacaciones son el lugar que se
+vacía en una fecha acordada y vuelve. Una se resuelve contratando y la otra
+moviendo una fecha. Documentadas en `docs/vacantes-y-vacaciones.md`.
+
+**La vacante cuelga de la tienda (`s.vacantes[]`) y no de la persona**, al revés
+que todo lo demás —`c.baja`, `c.ausencias`, `c.casos`, `c.entrenamientos`,
+`c.planes`—: es lo único que se guarda así, porque una vacante es exactamente el
+lugar donde no hay nadie de quien colgarla. Guarda **qué puesto y en qué
+tienda**, que es lo que se pidió, más **desde cuándo está abierta**, que es lo
+único que la convierte en algo que apura: sin esa fecha la lista se lee igual el
+primer día que a los cuatro meses. El puesto sale de `CARGOS_NOMINA` y la
+posición **se deriva** del cargo — no agregar un segundo desplegable de puestos.
+**Dentro de `#/sucursal/<id>` se dibuja como una tarjeta más del organigrama**,
+punteada y en ámbar, al lado de la gente de su puesto: era la forma pedida, que
+«me falta un farmacéutico en Devoto» se vea mirando la tienda. **No cuenta en la
+dotación** —la dotación es con cuánta gente cubro el turno— y cubrirla no la
+borra: pasa abajo con cuánto tardó, que es lo que se lleva a Operaciones.
+
+**Un tramo de vacaciones es una ausencia con motivo `vacaciones`, y no una lista
+nueva.** Ya vivían en `c.ausencias` —las cargan el libro de novedades y el
+formulario de recepción— así que `#/vacaciones` llama a `Store.agregarAusencia()`
+y hereda el antiduplicado de `ausenciaQueSeSolapa()`: volver a cargar la misma
+salida corrige la que estaba. No rompe la regla de una sola alta, por lo mismo
+que `bloquePlanDesarrollo()`: es el mismo código sobre el mismo dato. **No abrir
+una segunda lista de tramos.** Y **«último día» es el último de vacaciones, no el
+de la vuelta** —del 5 al 21 son 17 días y vuelve el 22—, que es la convención de
+cualquier otra licencia del panel.
+
+**La antigüedad de las vacaciones se mide al 31 de diciembre del año del ciclo**,
+no al día de hoy: último párrafo del **art. 150 de la LCT**. Los días salen de
+`vacacionesDe()` (art. 24 del CCT, que mejora la ley: 17 hasta los 5 años y 26
+hasta los 10). `cicloDeVacaciones()` (`vacaciones.js`) es **el único lugar que
+traduce entre el ciclo y sus fechas**, como `rangoDePeriodo()` con el período de
+liquidación, y sale de `parametros.vacacionesAnio`, `vacacionesMesDesde` y
+`vacacionesMesHasta`, editables en `#/config`. Con el mes de arranque mayor que
+el de cierre la ventana cruza el año —julio de 2026 a abril de 2027—, que es el
+caso normal. **Los días que arrastra del ciclo anterior el panel no los puede
+deducir** y se cargan a mano en `c.vacacionesPendientes`, **indexados por el año**
+y con un binding propio (`data-vacpend`); en cero se borra la clave en vez de
+guardar un 0, como `marcarAdef()`.
+
+**Planificado, tomado y saldo son tres números y no uno.** El saldo es el total
+menos lo planificado: **lo que falta ubicar en el calendario**, no lo que falta
+gozar. La planilla los confunde porque arranca con todo en cero.
+
+**Lo que la planilla no puede contestar es la cobertura, y es la razón de la
+pantalla.** `coberturaDeVacaciones()` recorre **día por día** e informa **el peor
+día de cada mes**: dos personas afuera la misma semana y dos en semanas
+distintas dan el mismo total mensual y son dos situaciones opuestas. El piso se
+compara contra `minimoTurno` de la ficha de la tienda, y **sin ese número no se
+pinta nada en rojo**: la pantalla dice que falta el dato en vez de inventar un
+mínimo. **El contador del menú son las tiendas que quedan cortas**, no la gente
+sin planificar — al empezar el ciclo nadie tiene fecha y ese contador diría 136,
+que es un número que deja de leerse el mismo día.
+
+**Las vacaciones no se justifican: se otorgan.** `estadoDeAusencia()` mandaba a
+`pendienteJustificar` —en rojo, encabezando las alertas— a toda ausencia sin
+certificado, y las vacaciones no tienen papel que reclamar: quedaban ahí para
+siempre. Ya le pasaba a las del libro de novedades. `motivoPideCertificado()`
+(`ausencias.js`) lo decide en un solo lugar, al lado de `motivoSumaAusentismo()`;
+las demás licencias siguen pidiendo comprobante. En Presentismo esa casilla dice
+«no lleva» en vez de ofrecer un tilde: una casilla que no hay que tildar nunca
+enseña a tildar sin mirar.
+
+**Los tramos que trajo el libro van en gris y punteados**: dice cuántos días se
+pagaron y no cuáles, así que quedan ubicados al principio del mes. Mismo trato
+que `diasSupuestos` con el certificado sin duración.
 
 El instrumento de la visita es el **check list de RRHH Operaciones**
 (`assets/js/checklist.js`, documentado en `docs/checklist-rrhh.md`): 30 puntos

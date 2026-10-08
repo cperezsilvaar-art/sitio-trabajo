@@ -2194,11 +2194,14 @@ const App = (() => {
               <td class="tipo">${esc((MOTIVOS_AUSENCIA_LARGA.find(m => m.id === x.ausencia.motivo) || {}).nombre || '—')}</td>
               <td class="tipo">${fmtFecha(x.ausencia.desde)}</td>
               <td class="tipo">${x.ausencia.hasta ? fmtFecha(x.ausencia.hasta) : '<span class="chip ambar">sin alta</span>'}</td>
-              <td class="tipo">
-                <label class="marca-check" style="margin:0;font-size:12.5px">
+              <td class="tipo">${motivoPideCertificado(x.ausencia.motivo)
+                ? `<label class="marca-check" style="margin:0;font-size:12.5px">
                   <input type="checkbox" data-aus-certificado="${c.id}|${x.ausencia.id}"${tieneCertificado(x.ausencia) ? ' checked' : ''}>
                   ${tieneCertificado(x.ausencia) ? 'presentado' : 'no lo trajo'}
-                </label>
+                </label>`
+                /* Las vacaciones no se justifican: se otorgan. Una casilla que
+                   no hay que tildar nunca enseña a tildar sin mirar. */
+                : '<span class="ayuda">no lleva</span>'}
               </td>
               <td><span class="chip ${est.tono}">${esc(est.texto)}</span></td>
               <td class="tipo">${cob.aplica
@@ -3405,6 +3408,7 @@ const App = (() => {
     const nov = Store.dotacionDelPadron(s.id, periodo);
     const dp = Store.dotacionPlantel(s.id);
     const t9 = distribucion9Box(s.colaboradores);
+    const vacantesAbiertas = (s.vacantes || []).filter(v => v.estado !== 'cubierta');
 
     const porPosicion = {};
     plantel.forEach(c => {
@@ -3522,6 +3526,23 @@ const App = (() => {
                    dev.length ? 'azul' : '')}
             ${item(`#/movimientos`, '🔁', 'Movimientos y bajas',
                    `${dp.bajas.length} baja${dp.bajas.length === 1 ? '' : 's'} registrada${dp.bajas.length === 1 ? '' : 's'}`, '')}
+            ${item(`#/vacantes`, '🪑', 'Vacantes',
+                   vacantesAbiertas.length
+                     ? `${vacantesAbiertas.length} puesto${vacantesAbiertas.length === 1 ? '' : 's'} sin cubrir`
+                     : 'ningún puesto abierto',
+                   vacantesAbiertas.length ? 'ambar' : '')}
+            ${(() => {
+              const ci = cicloVigente(e);
+              const cb = coberturaDeVacaciones(s, ci);
+              const pl = planDeVacaciones(s, ci, hoyISO());
+              return item(`#/vacaciones/${s.id}`, '🏖️', 'Vacaciones',
+                cb.mesesBajoMinimo
+                  ? `${cb.mesesBajoMinimo} mes${cb.mesesBajoMinimo === 1 ? '' : 'es'} bajo el mínimo`
+                  : pl.sinPlanificar
+                    ? `${pl.sinPlanificar} sin planificar`
+                    : pl.personas ? 'todo el plantel tiene fecha' : 'sin plantel',
+                cb.mesesBajoMinimo ? 'rojo' : pl.sinPlanificar ? 'ambar' : '');
+            })()}
           </div>
         </section>`;
       })()}
@@ -3632,7 +3653,9 @@ const App = (() => {
             La dotación de piso de la tienda es la de farmacia; el resto opera aparte.
           </div>`;
         })()}
-        ${plantel.length ? organigrama(s, porPosicion) : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
+        ${plantel.length || vacantesAbiertas.length
+          ? organigrama(s, porPosicion, vacantesAbiertas)
+          : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
 
         ${noPresenciales.length ? `<h3 style="margin-top:22px">Fuera de la dotación de piso</h3>
           <p class="ayuda">
@@ -4655,10 +4678,23 @@ const App = (() => {
     <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
 
   /** Organigrama simple: el gerente arriba, y debajo cada posición en su nivel. */
-  function organigrama(s, porPosicion) {
+  function organigrama(s, porPosicion, vacantes) {
     const niveles = [1, 2, 3];
-    const posicionesDe = n => POSICIONES.filter(p => p.nivel === n && porPosicion[p.nombre]);
-    const sueltos = Object.keys(porPosicion).filter(k => !POSICIONES.some(p => p.nombre === k));
+    /* **La vacante se dibuja como una tarjeta más**, al lado de la gente del
+       puesto que falta: es la forma de que «me falta un farmacéutico en
+       Devoto» se vea mirando la tienda y no entrando a otra pantalla. Va
+       punteada y sin nombre, porque lo que la define es que ahí no hay nadie.
+       Se agrupa por la posición del cargo, así cae junto a sus pares. */
+    const vac = {};
+    (vacantes || []).forEach(v => {
+      const cn = CARGOS_NOMINA.find(x => x.cargo === v.cargo);
+      const k = v.posicion || (cn && cn.posicion) || 'Sin posición';
+      (vac[k] || (vac[k] = [])).push(v);
+    });
+    const conGente = k => porPosicion[k] || vac[k];
+    const posicionesDe = n => POSICIONES.filter(p => p.nivel === n && conGente(p.nombre));
+    const sueltos = Object.keys(Object.assign({}, porPosicion, vac))
+      .filter(k => !POSICIONES.some(p => p.nombre === k));
 
     const especial = c => c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
     const tarjeta = c => `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}"
@@ -4673,23 +4709,38 @@ const App = (() => {
 
     /* El título del grupo cuenta cabezas y FTE: con tiempo parcial no son lo
        mismo, y la que decide la cobertura es la segunda. */
-    const grupo = (nombre, gente) => `<div class="org-grupo">
-      <h4>${esc(nombre)} <span class="chip">${gente.length}</span>${(() => {
-        const f = gente.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
-        return f === gente.length ? '' : ` <span class="chip azul">${fmtNum(f, 1)} FTE</span>`;
-      })()}</h4>
-      <div class="org-fila">${gente.map(tarjeta).join('')}</div>
-    </div>`;
+    const tarjetaVacante = v => {
+      const d = _dias(v.abiertaEl, hoyISO());
+      return `<a class="org-persona vacante" href="#/vacantes"
+          title="Vacante abierta${v.abiertaEl ? ' el ' + fmtFecha(v.abiertaEl) : ''}">
+        <strong>Vacante</strong>
+        <span>${esc(v.cargo || v.posicion || 'sin puesto definido')}</span>
+        ${d === null ? '' : `<span class="chip ${d >= 45 ? 'rojo' : d >= 21 ? 'ambar' : ''}"
+          style="margin-top:4px">abierta hace ${d} día${d === 1 ? '' : 's'}</span>`}
+      </a>`;
+    };
+
+    const grupo = (nombre, gente, huecos) => {
+      const g = gente || [], h = huecos || [];
+      return `<div class="org-grupo">
+        <h4>${esc(nombre)} <span class="chip">${g.length}</span>${(() => {
+          const f = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+          return f === g.length ? '' : ` <span class="chip azul">${fmtNum(f, 1)} FTE</span>`;
+        })()}${h.length ? ` <span class="chip ambar">${h.length} vacante${
+          h.length === 1 ? '' : 's'}</span>` : ''}</h4>
+        <div class="org-fila">${g.map(tarjeta).join('')}${h.map(tarjetaVacante).join('')}</div>
+      </div>`;
+    };
 
     return `<div class="organigrama">
       ${niveles.map(n => {
         const pos = posicionesDe(n);
         if (!pos.length) return '';
         return `<div class="org-nivel${n === 1 ? ' cima' : ''}">
-          ${pos.map(p => grupo(p.nombre, porPosicion[p.nombre])).join('')}
+          ${pos.map(p => grupo(p.nombre, porPosicion[p.nombre], vac[p.nombre])).join('')}
         </div>`;
       }).join('')}
-      ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k])}</div>`).join('')}
+      ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k], vac[k])}</div>`).join('')}
     </div>`;
   }
 
@@ -5094,8 +5145,25 @@ const App = (() => {
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Los indicadores miden desde', 'parametros.mideDesde',
                   { tipo: 'date', calc: true })}
+          ${campo('Ciclo de vacaciones (año)', 'parametros.vacacionesAnio',
+                  { tipo: 'number', step: '1', calc: true })}
+          ${campo('Se gozan desde el mes', 'parametros.vacacionesMesDesde',
+                  { tipo: 'number', step: '1', calc: true })}
+          ${campo('…hasta el mes', 'parametros.vacacionesMesHasta',
+                  { tipo: 'number', step: '1', calc: true })}
           ${campo('Símbolo de moneda', 'parametros.moneda', { calc: true })}
         </div>
+        ${(() => {
+          const ci = cicloVigente(Store.get());
+          return `<p class="ayuda">
+            <strong>El ciclo de vacaciones</strong> va de ${esc(nombreDeCiclo(ci))}, y los días
+            que le tocan a cada uno salen de su antigüedad <strong>al
+            ${fmtFecha(ci.cierreAntiguedad)}</strong> —último párrafo del art. 150 de la LCT—,
+            no al día de hoy. La ley las ubica entre octubre y abril (art. 154); el área
+            planifica desde julio, así que los dos meses son un parámetro. Con el mes de
+            arranque mayor que el de cierre la ventana cruza el año, igual que el período de
+            liquidación. Se mira en <a href="#/vacaciones">Vacaciones</a>.</p>`;
+        })()}
         <p class="ayuda"><strong>«Los indicadores miden desde»</strong> es el corte del año
           fiscal. El ausentismo y la rotación del área no cuentan nada anterior a esa fecha:
           atrás la serie está incompleta —las ausencias entraron por una planilla que arranca
@@ -6988,7 +7056,19 @@ const App = (() => {
           .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
           + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
       desarrollo: alertasDeDesarrollo(e, hoyISO()).length,
-      casos: casosDelArea(e, hoyISO()).filter(x => x.estado.pide).length
+      casos: casosDelArea(e, hoyISO()).filter(x => x.estado.pide).length,
+      vacantes: (e.sucursales || []).reduce((n, s) =>
+        n + (s.vacantes || []).filter(v => v.estado !== 'cubierta').length, 0),
+      /* **Las tiendas que quedan cortas, no la gente sin planificar.** Al
+         empezar el ciclo nadie tiene fecha y el contador diría 136: un número
+         así deja de leerse el mismo día. Lo que pide una decisión es la tienda
+         que algún día del ciclo baja del turno mínimo, que son pocas y
+         casi siempre cero. */
+      vacaciones: (() => {
+        const ci = cicloVigente(e);
+        return (e.sucursales || [])
+          .filter(s => coberturaDeVacaciones(s, ci).mesesBajoMinimo > 0).length;
+      })()
     };
     document.querySelectorAll('[data-badge]').forEach(b => {
       const n = cuentas[b.dataset.badge] || 0;
@@ -7055,6 +7135,384 @@ const App = (() => {
   }
 
   /* ============================= RUTEO ============================= */
+  /* ===================== VISTAS: VACANTES Y VACACIONES ===================== *
+   *
+   * Dos pantallas que contestan la misma pregunta desde dos lados: **con
+   * cuánta gente cuento**. La vacante es el lugar que falta cubrir y no se
+   * cubre solo; las vacaciones son el lugar que se vacía en una fecha
+   * acordada y vuelve. Van separadas porque una se resuelve contratando y la
+   * otra moviendo una fecha.
+   */
+
+  const MESES_CORTOS_VAC = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN',
+                            'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+  const mesCortoVac = iso => {
+    const p = String(iso).split('-');
+    return (MESES_CORTOS_VAC[Number(p[1]) - 1] || '') + ' ' + String(p[0]).slice(2);
+  };
+  /* dd/mm: adentro de una columna que ya dice el mes, el año es ruido. */
+  const diaMesVac = iso => {
+    const p = String(iso).split('-');
+    return p.length === 3 ? `${p[2]}/${p[1]}` : String(iso);
+  };
+
+  function cicloVigente(e) {
+    const p = (e.config && e.config.parametros) || {};
+    return cicloDeVacaciones({ anio: p.vacacionesAnio, mesDesde: p.vacacionesMesDesde,
+                               mesHasta: p.vacacionesMesHasta });
+  }
+
+  /* ========================= VISTA: VACANTES ========================= *
+   *
+   * Lo que se pidió guardar es **qué puesto falta y en qué tienda**, y eso es
+   * todo lo que pide el alta. Lo único que se agregó es desde cuándo está
+   * abierta: sin esa fecha la lista se lee igual el primer día que a los
+   * cuatro meses, que es cuando hay que hacer ruido.
+   */
+  function vistaVacantes() {
+    const e = Store.get();
+    const hoy = hoyISO();
+    const abiertas = Store.vacantesDelArea();
+    const cubiertas = Store.vacantesDelArea(true).filter(v => v.estado === 'cubierta');
+    const tiendas = e.sucursales.slice()
+      .sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+    const conVacante = new Set(abiertas.map(v => v.sucursalId));
+    const vieja = abiertas.reduce((a, v) =>
+      (!a || String(v.abiertaEl) < String(a.abiertaEl)) ? v : a, null);
+    const diasDe = v => { const d = _dias(v.abiertaEl, hoy); return d === null ? null : d; };
+
+    const fila = v => {
+      const d = diasDe(v);
+      const tono = d !== null && d >= 45 ? 'rojo' : d !== null && d >= 21 ? 'ambar' : '';
+      return `<tr>
+        <td><a href="#/sucursal/${v.sucursalId}">${esc(v.sucursal)}</a></td>
+        <td><strong>${esc(v.cargo || v.posicion || 'Sin puesto')}</strong>${
+          v.posicion && v.posicion !== v.cargo ? `<br><span class="ayuda">${esc(v.posicion)}</span>` : ''}</td>
+        <td>${v.abiertaEl ? fmtFecha(v.abiertaEl) : '—'}</td>
+        <td>${d === null ? '—' : `<span class="chip ${tono}">${d} día${d === 1 ? '' : 's'}</span>`}</td>
+        <td>${esc(v.notas || '')}</td>
+        <td>
+          <button class="b sec mini" data-accion="cubrir-vacante"
+            data-suc="${v.sucursalId}" data-id="${v.id}">Se cubrió</button>
+          <button class="b sec mini" data-accion="quitar-vacante"
+            data-suc="${v.sucursalId}" data-id="${v.id}" title="Quitar la vacante">✕</button>
+        </td>
+      </tr>`;
+    };
+
+    return `
+      <h1 class="titulo">Vacantes</h1>
+      <p class="subtitulo">Los puestos abiertos del área, y en qué tienda.</p>
+
+      <div class="kpis">
+        ${kpi('Vacantes abiertas', abiertas.length || '—',
+              abiertas.length ? 'puestos sin cubrir' : 'ninguna abierta',
+              abiertas.length ? 'aviso' : 'ok')}
+        ${kpi('Tiendas con vacante', conVacante.size || '—',
+              conVacante.size ? `de ${tiendas.length}` : 'todas completas',
+              conVacante.size ? 'aviso' : 'ok')}
+        ${(() => {
+          const d = vieja ? diasDe(vieja) : null;
+          return kpi('La que más espera', d === null ? '—' : `${d} día${d === 1 ? '' : 's'}`,
+            vieja ? `${esc(vieja.cargo || vieja.posicion || 'sin puesto')} · ${esc(vieja.sucursal)}` : 'sin vacantes',
+            d !== null && d >= 45 ? 'alerta' : d !== null && d >= 21 ? 'aviso' : 'ok');
+        })()}
+        ${kpi('Cubiertas', cubiertas.length || '—',
+              cubiertas.length ? 'ya resueltas' : 'todavía ninguna')}
+      </div>
+
+      <section class="tarjeta">
+        <h2>Abrir una vacante</h2>
+        <div class="grid c3">
+          <label class="campo"><span>En qué tienda</span>
+            <select id="vac-sucursal">
+              <option value="">— elegí la tienda —</option>
+              ${tiendas.map(s => `<option value="${s.id}">${esc(Store.etiquetaSucursal(s))}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Qué puesto</span>
+            <select id="vac-cargo">
+              <option value="">— elegí el puesto —</option>
+              ${CARGOS_NOMINA.map(c => `<option value="${esc(c.cargo)}">${esc(c.cargo)}${
+                c.jornada === 0.5 ? ' · media jornada' : ''}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Abierta desde</span>
+            <input type="date" id="vac-desde" value="${hoy}"></label>
+        </div>
+        <label class="campo"><span>Nota (opcional)</span>
+          <input id="vac-nota" placeholder="Reemplazo de la baja de setiembre; ya hay dos candidatos"></label>
+        <div class="acciones">
+          <button class="b" data-accion="agregar-vacante">Abrir la vacante</button>
+        </div>
+      </section>
+
+      <section class="tarjeta">
+        <h2>Abiertas <span class="chip">${abiertas.length}</span></h2>
+        ${abiertas.length ? `<div class="tabla-scroll"><table>
+          <thead><tr><th>Tienda</th><th>Puesto</th><th>Abierta desde</th><th>Hace</th>
+            <th>Nota</th><th></th></tr></thead>
+          <tbody>${abiertas.map(fila).join('')}</tbody>
+        </table></div>` : '<p class="vacio">No hay ninguna vacante abierta.</p>'}
+      </section>
+
+      ${cubiertas.length ? `<section class="tarjeta">
+        <h2>Cubiertas <span class="chip">${cubiertas.length}</span></h2>
+        <p class="ayuda">Quedan anotadas: con qué se cubrió un puesto y cuánto tardó es
+          lo que se lleva a la conversación de dotación con Operaciones.</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Tienda</th><th>Puesto</th><th>Abierta</th><th>Cubierta</th>
+            <th>Tardó</th><th></th></tr></thead>
+          <tbody>${cubiertas.map(v => {
+            const t = _dias(v.abiertaEl, v.cubiertaEl);
+            return `<tr>
+              <td>${esc(v.sucursal)}</td>
+              <td>${esc(v.cargo || v.posicion || '—')}</td>
+              <td>${v.abiertaEl ? fmtFecha(v.abiertaEl) : '—'}</td>
+              <td>${v.cubiertaEl ? fmtFecha(v.cubiertaEl) : '—'}</td>
+              <td>${t === null ? '—' : `${t} día${t === 1 ? '' : 's'}`}</td>
+              <td>
+                <button class="b sec mini" data-accion="reabrir-vacante"
+                  data-suc="${v.sucursalId}" data-id="${v.id}">Reabrir</button>
+                <button class="b sec mini" data-accion="quitar-vacante"
+                  data-suc="${v.sucursalId}" data-id="${v.id}">✕</button>
+              </td></tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </section>` : ''}`;
+  }
+
+  /* ======================== VISTA: VACACIONES ======================== *
+   *
+   * El cuadro de planificación, con lo que la planilla de Excel no puede
+   * contestar: **con cuánta gente queda la tienda el día que alguien sale**.
+   *
+   * Los tramos no son una lista nueva: son las ausencias con motivo
+   * `vacaciones` que ya vivían en `c.ausencias`, las mismas que cargan el
+   * libro de novedades y el formulario de recepción. El alta de acá llama a
+   * `Store.agregarAusencia()`, así que hereda el antiduplicado
+   * (`ausenciaQueSeSolapa`) y no es un segundo formulario: es el mismo código
+   * sobre el mismo dato, como el plan de desarrollo.
+   */
+  function vistaVacaciones(sucursalId) {
+    const e = Store.get();
+    const hoy = hoyISO();
+    const ciclo = cicloVigente(e);
+    const r = vacacionesDelArea(e, ciclo, hoy);
+    const s = sucursalId ? Store.sucursal(sucursalId) : null;
+
+    const cabecera = `
+      <h1 class="titulo">Vacaciones</h1>
+      <p class="subtitulo">
+        Ciclo ${esc(nombreDeCiclo(ciclo))} ·
+        antigüedad al ${fmtFecha(ciclo.cierreAntiguedad)} ·
+        <a href="#/config">cambiar el ciclo</a>
+      </p>`;
+
+    const selector = `
+      <nav class="tabs">
+        <a href="#/vacaciones" class="${s ? '' : 'activo'}">Todas las tiendas</a>
+        ${r.tiendas.map(t => `<a href="#/vacaciones/${t.sucursalId}"
+          class="${s && s.id === t.sucursalId ? 'activo' : ''}">${esc(t.nombre)}${
+          t.cobertura.mesesBajoMinimo ? ' ⚠' : ''}</a>`).join('')}
+      </nav>`;
+
+    if (!s) {
+      return `${cabecera}${selector}
+        <div class="kpis">
+          ${kpi('Días del ciclo', r.total ? fmtNum(r.total, 0) : '—',
+                `${r.personas} persona${r.personas === 1 ? '' : 's'} con derecho`)}
+          ${kpi('Planificados', r.planificados ? fmtNum(r.planificados, 0) : '—',
+                r.total ? `${fmtPct(r.total ? r.planificados / r.total : 0, 0)} del total` : 'nada cargado todavía',
+                r.planificados ? 'ok' : 'aviso')}
+          ${kpi('Sin planificar', r.sinPlanificar || '—',
+                r.sinPlanificar ? 'personas sin una sola salida cargada' : 'todo el plantel tiene fecha',
+                r.sinPlanificar ? 'aviso' : 'ok')}
+          ${kpi('Ya tomados', r.tomados ? fmtNum(r.tomados, 0) : '—', 'días que ya transcurrieron')}
+          ${kpi('Meses bajo el mínimo', r.mesesBajoMinimo || '—',
+                r.mesesBajoMinimo ? 'la tienda queda por debajo del turno mínimo'
+                                  : 'ninguna tienda queda corta',
+                r.mesesBajoMinimo ? 'alerta' : 'ok')}
+        </div>
+
+        <section class="tarjeta">
+          <h2>Cómo viene cada tienda</h2>
+          ${r.tiendas.length ? `<div class="tabla-scroll"><table>
+            <thead><tr><th>Tienda</th><th class="num">Personas</th><th class="num">Días</th>
+              <th class="num">Planificados</th><th class="num">Saldo</th>
+              <th class="num">Sin planificar</th><th>Cobertura</th></tr></thead>
+            <tbody>${r.tiendas.map(t => `<tr>
+              <td><a href="#/vacaciones/${t.sucursalId}">${esc(t.nombre)}</a></td>
+              <td class="num">${t.personas}</td>
+              <td class="num">${fmtNum(t.total, 0)}</td>
+              <td class="num">${fmtNum(t.planificados, 0)}</td>
+              <td class="num">${fmtNum(t.saldo, 0)}</td>
+              <td class="num">${t.sinPlanificar
+                ? `<span class="chip ambar">${t.sinPlanificar}</span>` : '—'}</td>
+              <td>${!t.cobertura.minimo
+                ? '<span class="ayuda">falta el turno mínimo de la tienda</span>'
+                : t.cobertura.mesesBajoMinimo
+                  ? `<span class="chip rojo">${t.cobertura.mesesBajoMinimo} mes${
+                      t.cobertura.mesesBajoMinimo === 1 ? '' : 'es'} corta</span>`
+                  : '<span class="chip verde">siempre cubierta</span>'}</td>
+            </tr>`).join('')}</tbody>
+          </table></div>` : '<p class="vacio">Todavía no hay plantel cargado.</p>'}
+          <p class="ayuda"><strong>El saldo es lo que falta ubicar en el calendario</strong>,
+            no lo que falta gozar: son los días del ciclo menos los que ya tienen fecha.
+            Lo que ya transcurrió se lee aparte, porque contesta otra cosa.</p>
+        </section>
+
+        <section class="tarjeta">
+          <h2>De dónde salen los días</h2>
+          <p class="ayuda">
+            Los días legales salen del <strong>art. 24 del CCT 414/05</strong>, que mejora la
+            LCT en los dos primeros tramos: 17 días hasta los 5 años y 26 hasta los 10, contra
+            14 y 21 de la ley. La antigüedad se mide <strong>al 31 de diciembre del año del
+            ciclo</strong> —último párrafo del art. 150 de la LCT— y no al día de hoy: medirla
+            contra hoy le daría 17 días a alguien que ya tiene derecho a 26.
+            Los días que arrastra del ciclo anterior el panel no los puede deducir, así que se
+            cargan a mano en el cuadro de cada tienda.
+          </p>
+        </section>`;
+    }
+
+    const plan = r.tiendas.find(t => t.sucursalId === s.id)
+      || Object.assign(planDeVacaciones(s, ciclo, hoy), { cobertura: coberturaDeVacaciones(s, ciclo) });
+    const cob = plan.cobertura;
+
+    const celdaMes = (f, mes) => {
+      const ts = f.tramos.filter(t => t.desde.slice(0, 7) === mes);
+      if (!ts.length) return '<td></td>';
+      return `<td class="vac-celda">${ts.map(t => `<span class="vac-tramo${
+        t.fechasSupuestas ? ' supuesto' : ''}" title="${t.fechasSupuestas
+          ? 'Las fechas las puso el libro de novedades: los días están medidos, el día de salida no'
+          : esc(t.dias + ' días')}">${diaMesVac(t.desde)}${
+        t.hasta ? '→' + diaMesVac(t.hasta) : '→ ?'}</span>`).join('')}</td>`;
+    };
+
+    return `${cabecera}${selector}
+
+      <div class="kpis">
+        ${kpi('Dotación de piso', fmtNum(cob.dotacion, 1) + ' FTE',
+              `${plan.personas} persona${plan.personas === 1 ? '' : 's'} con derecho a vacaciones`)}
+        ${kpi('Turno mínimo', cob.minimo ? fmtNum(cob.minimo, 1) : '—',
+              cob.minimo ? 'con cuánta gente abre en condiciones'
+                         : 'cargalo en la ficha de la tienda',
+              cob.minimo ? '' : 'aviso')}
+        ${kpi('Días del ciclo', fmtNum(plan.total, 0),
+              plan.pendienteAnterior ? `${fmtNum(plan.pendienteAnterior, 0)} vienen del ciclo anterior`
+                                     : 'ninguno arrastrado')}
+        ${kpi('Planificados', fmtNum(plan.planificados, 0),
+              `quedan ${fmtNum(plan.saldo, 0)} por ubicar`,
+              plan.saldo > 0 ? 'aviso' : 'ok')}
+        ${kpi('Sin planificar', plan.sinPlanificar || '—',
+              plan.sinPlanificar ? 'personas sin ninguna salida cargada' : 'todos tienen fecha',
+              plan.sinPlanificar ? 'aviso' : 'ok')}
+        ${kpi('Meses bajo el mínimo', cob.mesesBajoMinimo || '—',
+              !cob.minimo ? 'sin turno mínimo no se puede decir'
+                          : cob.mesesBajoMinimo ? 'mirá el detalle de abajo' : 'la tienda queda cubierta',
+              cob.mesesBajoMinimo ? 'alerta' : 'ok')}
+      </div>
+
+      <section class="tarjeta">
+        <h2>Cómo queda el piso, mes a mes</h2>
+        <p class="ayuda">
+          <strong>Se mira el peor día de cada mes, no el total del mes.</strong> Dos personas
+          afuera la misma semana y dos en semanas distintas dan el mismo total mensual y son
+          dos situaciones opuestas: esa es justamente la pregunta que la planilla no contesta.
+        </p>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Mes</th><th class="num">Salen</th><th class="num">FTE afuera</th>
+            <th class="num">Queda en el piso</th><th>Peor día</th><th>Quiénes</th></tr></thead>
+          <tbody>${cob.meses.map(m => `<tr class="${m.bajoMinimo ? 'fila-alerta' : ''}">
+            <td><strong>${esc(mesCortoVac(m.mes))}</strong></td>
+            <td class="num">${m.salidas.length || '—'}</td>
+            <td class="num">${m.fteFuera ? fmtNum(m.fteFuera, 1) : '—'}</td>
+            <td class="num">${fmtNum(m.piso, 1)}${cob.minimo
+              ? ` <span class="chip ${m.bajoMinimo ? 'rojo' : 'verde'}">mín. ${fmtNum(cob.minimo, 1)}</span>` : ''}</td>
+            <td>${m.peorDia ? fmtFecha(m.peorDia) : '—'}</td>
+            <td>${m.salen.length ? m.salen.map(x => esc(x.nombre)).join(', ') : '—'}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+        ${!cob.minimo ? `<div class="aviso-caja info">
+          <strong>Falta el turno mínimo de esta tienda.</strong> Sin ese número el panel puede
+          decir cuánta gente queda, pero no si alcanza. Se carga en la ficha de la tienda,
+          en <a href="#/sucursal/${s.id}">${esc(s.nombre || s.codigo)}</a>.
+        </div>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <h2>El cuadro</h2>
+        <div class="tabla-scroll"><table class="vac-cuadro">
+          <thead><tr>
+            <th>Colaborador</th><th>Ingreso</th><th class="num">Antig.</th>
+            <th class="num">Legales</th><th class="num">Pend. ant.</th><th class="num">Total</th>
+            <th class="num">Planif.</th><th class="num">Tomados</th><th class="num">Saldo</th>
+            ${ciclo.meses.map(m => `<th>${esc(mesCortoVac(m))}</th>`).join('')}
+          </tr></thead>
+          <tbody>${plan.filas.map(f => `<tr>
+            <td><button class="b sec mini" data-accion="ir-a-ficha" data-id="${f.id}"
+              >${esc(f.nombre)}</button>${f.sinPlanificar
+                ? ' <span class="chip ambar">sin planificar</span>' : ''}${
+              f.sinRetorno ? ' <span class="chip rojo">sin retorno</span>' : ''}
+              <br><span class="ayuda">${esc(f.cargo || f.posicion || '')}</span></td>
+            <td>${f.fechaIngreso ? fmtFecha(f.fechaIngreso) : '—'}</td>
+            <td class="num">${f.anios}</td>
+            <td class="num">${f.legales}</td>
+            <td class="num"><input class="vac-pend" type="number" min="0" step="1"
+              data-vacpend="${f.id}|${ciclo.anio}"
+              value="${f.pendienteAnterior || ''}" placeholder="—"></td>
+            <td class="num"><strong>${f.total}</strong></td>
+            <td class="num">${f.planificados || '—'}</td>
+            <td class="num">${f.tomados || '—'}</td>
+            <td class="num">${f.saldo === 0
+              ? '<span class="chip verde">0</span>'
+              : f.saldo < 0 ? `<span class="chip rojo">${f.saldo}</span>` : f.saldo}</td>
+            ${ciclo.meses.map(m => celdaMes(f, m)).join('')}
+          </tr>`).join('')}</tbody>
+          <tfoot><tr>
+            <td><strong>Total — ${esc(s.nombre || s.codigo)}</strong></td>
+            <td></td><td></td>
+            <td class="num">${fmtNum(plan.legales, 0)}</td>
+            <td class="num">${fmtNum(plan.pendienteAnterior, 0)}</td>
+            <td class="num"><strong>${fmtNum(plan.total, 0)}</strong></td>
+            <td class="num">${fmtNum(plan.planificados, 0)}</td>
+            <td class="num">${fmtNum(plan.tomados, 0)}</td>
+            <td class="num">${fmtNum(plan.saldo, 0)}</td>
+            ${ciclo.meses.map(() => '<td></td>').join('')}
+          </tr></tfoot>
+        </table></div>
+        ${plan.filas.some(f => f.supuestos) ? `<p class="ayuda">
+          Los tramos en gris tienen <strong>las fechas supuestas</strong>: los trajo el libro de
+          novedades, que dice cuántos días se pagaron y no cuáles, y quedan ubicados al
+          principio del mes. Los días están medidos; el día de salida, no.</p>` : ''}
+      </section>
+
+      <section class="tarjeta">
+        <h2>Planificar una salida</h2>
+        <div class="grid c3">
+          <label class="campo"><span>Quién</span>
+            <select id="vacplan-persona">
+              <option value="">— elegí a la persona —</option>
+              ${plan.filas.map(f => `<option value="${f.id}">${esc(f.nombre)} · saldo ${f.saldo}</option>`).join('')}
+            </select></label>
+          <label class="campo"><span>Sale el</span>
+            <input type="date" id="vacplan-desde" min="${ciclo.desde}" max="${ciclo.hasta}"></label>
+          <label class="campo"><span>Último día</span>
+            <input type="date" id="vacplan-hasta" min="${ciclo.desde}"></label>
+        </div>
+        <div class="acciones">
+          <button class="b" data-accion="planificar-vacaciones" data-suc="${s.id}">Anotar la salida</button>
+        </div>
+        <p class="ayuda">
+          <strong>«Último día» es el último de vacaciones, no el de la vuelta</strong>: del 5 al
+          21 son 17 días y se reincorpora el 22. Es la misma convención que cualquier otra
+          licencia del panel —el tramo vive en <a href="#/diario">Presentismo</a> como una
+          ausencia más— y por eso volver a cargar la misma salida corrige la que estaba en
+          vez de agregar otra.
+        </p>
+      </section>`;
+  }
+
+
   function render() {
     const ruta = (location.hash || '#/red').replace(/^#\/?/, '').split('/');
     const e = Store.get();
@@ -7103,6 +7561,17 @@ const App = (() => {
          ficha de la tienda: la pantalla es la misma, filtrada. */
       if (ruta[1] !== undefined) reclamoSuc = ruta[1] || '';
       vistaActual = vistaReclamos;  html = vistaReclamos();
+    }
+    else if (ruta[0] === 'vacantes') {
+      vistaActual = vistaVacantes; html = vistaVacantes();
+    }
+    /* `#/vacaciones/<sucursal>` abre el cuadro de esa tienda: es como se llega
+       desde la lista del área y desde la ficha de la tienda, y es la misma
+       pantalla con un filtro, no otra. */
+    else if (ruta[0] === 'vacaciones') {
+      const id = ruta[1] || '';
+      vistaActual = () => vistaVacaciones(id);
+      html = vistaVacaciones(id);
     }
     else if (ruta[0] === 'movimientos') {
       const tab = ruta[1] || 'cesiones';
@@ -7440,6 +7909,16 @@ const App = (() => {
         Store.save();
         refrescar();
       }
+    });
+
+    /* Binding propio por lo mismo que `data-adef`: la clave lleva el año del
+       ciclo adentro y `data-colab-campo` escribe campos planos. */
+    cont.addEventListener('change', ev => {
+      const vp = ev.target.closest('[data-vacpend]');
+      if (!vp) return;
+      const [id, anio] = vp.dataset.vacpend.split('|');
+      Store.marcarPendienteVacaciones(id, anio, vp.value);
+      refrescar();
     });
 
     cont.addEventListener('change', ev => {
@@ -7918,6 +8397,74 @@ const App = (() => {
           const el = document.getElementById('perfil-colaborador');
           if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 120);
+      }
+
+      /* --- vacantes --- */
+      if (a === 'agregar-vacante') {
+        const suc = valorDe('#vac-sucursal');
+        if (!suc) { avisar('Elegí la tienda.', 'error'); return; }
+        const cargo = valorDe('#vac-cargo');
+        if (!cargo) { avisar('Elegí qué puesto falta.', 'error'); return; }
+        /* La posición se deriva del cargo y no se pide aparte: `CARGOS_NOMINA`
+           ya las junta, y un segundo desplegable sería una segunda lista que
+           un día dice otra cosa. */
+        const cn = CARGOS_NOMINA.find(x => x.cargo === cargo);
+        Store.agregarVacante(suc, {
+          cargo, posicion: (cn && cn.posicion) || '',
+          abiertaEl: valorDe('#vac-desde') || hoyISO(),
+          notas: valorDe('#vac-nota')
+        });
+        refrescar();
+        avisar('Vacante abierta.');
+        return;
+      }
+
+      if (a === 'cubrir-vacante') {
+        Store.cubrirVacante(btn.dataset.suc, btn.dataset.id, {});
+        refrescar();
+        avisar('Marcada como cubierta. Queda en la lista de abajo con cuánto tardó.');
+        return;
+      }
+
+      if (a === 'reabrir-vacante') {
+        Store.reabrirVacante(btn.dataset.suc, btn.dataset.id);
+        refrescar();
+        return;
+      }
+
+      if (a === 'quitar-vacante') {
+        const ok = await confirmar('Quitar la vacante',
+          'Se borra del tablero con su fecha y su nota. No se puede deshacer.', 'Quitar');
+        if (!ok) return;
+        Store.quitarVacante(btn.dataset.suc, btn.dataset.id);
+        refrescar();
+        return;
+      }
+
+      /* --- vacaciones --- */
+      if (a === 'planificar-vacaciones') {
+        const quien = valorDe('#vacplan-persona');
+        if (!quien) { avisar('Elegí a la persona.', 'error'); return; }
+        const desde = valorDe('#vacplan-desde');
+        if (!desde) { avisar('Poné el día en que sale.', 'error'); return; }
+        const hasta = valorDe('#vacplan-hasta');
+        if (hasta && hasta < desde) {
+          avisar('El último día no puede ser anterior a la salida.', 'error'); return;
+        }
+        /* Es `agregarAusencia()` y no una lista propia de tramos: así hereda el
+           antiduplicado, y la salida aparece sola en Presentismo y en la ficha
+           de la persona sin que nadie la copie. */
+        const r = Store.agregarAusencia(quien, { motivo: 'vacaciones', desde, hasta });
+        refrescar();
+        if (!r) { avisar('No encontré a esa persona.', 'error'); return; }
+        const dias = hasta ? diasDeTramo(desde, hasta) : 0;
+        avisar(r.accion === 'nueva'
+          ? `Salida anotada${dias ? `: ${dias} día${dias === 1 ? '' : 's'}` : ''}.`
+          : r.accion === 'corregida'
+            ? `Ya tenía una salida que se pisaba con esta y se corrigió${
+                r.hastaAnterior ? ` — antes terminaba el ${fmtFecha(r.hastaAnterior)}` : ''}.`
+            : 'Esa salida ya estaba cargada igual.');
+        return;
       }
 
       /* --- sucursales --- */
