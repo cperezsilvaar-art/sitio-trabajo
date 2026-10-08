@@ -7143,6 +7143,7 @@ const App = (() => {
     contadoresDelMenu(e);
     ordenarKpis();
     avisoDeGuardado();
+    selloDeGuardado();
 
     const lat = $('#lat-area');
     if (lat) lat.textContent = e.config.area || 'Farmatodo';
@@ -7239,11 +7240,48 @@ const App = (() => {
     </div>`;
   }
 
+  /**
+   * «Guardado hoy 11:42», en el encabezado y en las diecisiete pantallas.
+   *
+   * El panel guarda en el almacenamiento del navegador, y **ese
+   * almacenamiento cambia con la dirección desde la que se abre**: el archivo
+   * de siempre, el mismo archivo bajado otra vez a Descargas y la página
+   * publicada son tres cajas distintas que se ven idénticas por dentro. Abrir
+   * la que no era se lee como «se me borró lo de esta mañana», y pasó tres
+   * veces antes de que esto existiera.
+   *
+   * Por eso **en ámbar cuando no es de hoy**: no es decoración, es la única
+   * señal de que lo que estás mirando no es donde venías trabajando. Un sello
+   * que dice «03/10» arriba de una pantalla en la que cargaste algo hoy a las
+   * once contesta la pregunta antes de que la hagas.
+   */
+  function selloDeGuardado() {
+    const sello = document.getElementById('sello-guardado');
+    if (!sello) return;
+    const iso = Store.guardadoEl && Store.guardadoEl();
+    if (!iso) { sello.hidden = true; return; }
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) { sello.hidden = true; return; }
+    const hoy = hoyISO();
+    const dia = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const hora = d.toLocaleTimeString('es-AR',
+      { hour: '2-digit', minute: '2-digit', hour12: false });
+    const esDeHoy = dia === hoy;
+    sello.hidden = false;
+    sello.className = 'sello' + (esDeHoy ? '' : ' viejo');
+    sello.textContent = esDeHoy ? `Guardado ${hora}` : `Guardado el ${fmtFecha(dia)}`;
+    sello.title = esDeHoy
+      ? 'La última vez que esta copia guardó algo.'
+      : 'Esta copia no guarda nada desde el ' + fmtFecha(dia) + '. Si cargaste cosas después, ' +
+        'fue en otra: el archivo guarda según desde dónde se lo abre.';
+  }
+
   function refrescar() {
     if (!vistaActual) return;
     const y = window.scrollY;
     $('#contenido').innerHTML = vistaActual();
     avisoDeGuardado();
+    selloDeGuardado();
     /* También acá: si no, deshacer una baja o cerrar un reclamo repinta la
        pantalla y los indicadores vacíos vuelven a aparecer hasta el próximo
        cambio de pantalla. */
@@ -7255,9 +7293,15 @@ const App = (() => {
   /* El guardado es asincrónico: cuando falla, la pantalla ya se pintó diciendo
      que todo salió bien. Por eso el almacén avisa y acá se repinta el cartel en
      el momento, sin esperar a que el coordinador cambie de pantalla. */
+  /* El sello se mueve con cada guardado, haya repintado o no: si solo se
+     actualizara al cambiar de pantalla, diría la hora de hace veinte minutos
+     justo cuando se lo mira para saber si lo de recién quedó guardado. */
+  if (typeof Store.onChange === 'function') Store.onChange(() => selloDeGuardado());
+
   if (typeof Store.alFallarElGuardado === 'function') {
     Store.alFallarElGuardado(falla => {
       avisoDeGuardado();
+      selloDeGuardado();
       if (falla) avisar('No se está guardando. Exportá el respaldo antes de cerrar.', 'error');
     });
   }

@@ -1225,6 +1225,16 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   .tabla-pdi td.num { text-align: right; padding-top: 2px; }
 }
 
+/* El sello del encabezado: cuándo guardó por última vez esta copia. En ámbar
+   cuando no es de hoy, que es la señal de estar parado en otra caja —el
+   archivo bajado de nuevo, la página publicada— y no en la que se venía
+   usando. */
+.sello {
+  font-size: 12px; color: var(--texto-suave); white-space: nowrap;
+  border: 1px solid var(--borde); border-radius: 999px; padding: 3px 10px;
+}
+.sello.viejo { color: var(--ambar); border-color: var(--ambar); font-weight: 600; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -1313,6 +1323,11 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
       <!-- Registrar una visita se hace en un solo lugar, la solapa Visitas:
            acá aparecía en todas las pantallas, incluso en las que no tienen
            nada que ver con una visita. -->
+      <!-- Cuándo guardó por última vez esta copia. Lo llena `selloDeGuardado()`
+           y es lo que distingue una caja de otra: el archivo, el archivo bajado
+           de nuevo y la página publicada se ven iguales y guardan en lugares
+           distintos. -->
+      <span id="sello-guardado" class="sello" hidden></span>
       <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
     </header>
 
@@ -9620,6 +9635,15 @@ const Store = (() => {
    * encadenan: siempre gana la última y nunca se cruzan entre sí.
    */
   function guardar() {
+    /* **Cuándo se guardó por última vez, adentro de lo guardado.**
+       El panel vive en el almacenamiento del navegador, y ese almacenamiento
+       cambia con la dirección desde la que se abre: el archivo bajado a
+       Descargas, el mismo archivo en otra carpeta y la página publicada son
+       tres cajas distintas que se ven idénticas. Sin este sello, abrir la caja
+       equivocada se lee como «se me borró lo de esta mañana» — pasó tres
+       veces. Con él, el encabezado dice «guardado el 03/10» y la pregunta se
+       contesta sola. */
+    estado.guardadoEl = new Date().toISOString();
     const instantanea = JSON.stringify(estado);
     colaDeGuardado = colaDeGuardado.then(async () => {
       let aGuardar;
@@ -9976,6 +10000,7 @@ const Store = (() => {
     /** ¿Este navegador nunca guardó nada? Es el arranque en frío. */
     arrancoEnFrio: () => arrancoSinNada,
     onChange: fn => suscriptores.push(fn),
+    guardadoEl: () => (estado && estado.guardadoEl) || '',
 
     /* ------------------------- sucursales ------------------------- */
     sucursal(id) { return this.get().sucursales.find(s => s.id === id) || null; },
@@ -21371,6 +21396,7 @@ const App = (() => {
     contadoresDelMenu(e);
     ordenarKpis();
     avisoDeGuardado();
+    selloDeGuardado();
 
     const lat = $('#lat-area');
     if (lat) lat.textContent = e.config.area || 'Farmatodo';
@@ -21467,11 +21493,48 @@ const App = (() => {
     </div>`;
   }
 
+  /**
+   * «Guardado hoy 11:42», en el encabezado y en las diecisiete pantallas.
+   *
+   * El panel guarda en el almacenamiento del navegador, y **ese
+   * almacenamiento cambia con la dirección desde la que se abre**: el archivo
+   * de siempre, el mismo archivo bajado otra vez a Descargas y la página
+   * publicada son tres cajas distintas que se ven idénticas por dentro. Abrir
+   * la que no era se lee como «se me borró lo de esta mañana», y pasó tres
+   * veces antes de que esto existiera.
+   *
+   * Por eso **en ámbar cuando no es de hoy**: no es decoración, es la única
+   * señal de que lo que estás mirando no es donde venías trabajando. Un sello
+   * que dice «03/10» arriba de una pantalla en la que cargaste algo hoy a las
+   * once contesta la pregunta antes de que la hagas.
+   */
+  function selloDeGuardado() {
+    const sello = document.getElementById('sello-guardado');
+    if (!sello) return;
+    const iso = Store.guardadoEl && Store.guardadoEl();
+    if (!iso) { sello.hidden = true; return; }
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) { sello.hidden = true; return; }
+    const hoy = hoyISO();
+    const dia = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const hora = d.toLocaleTimeString('es-AR',
+      { hour: '2-digit', minute: '2-digit', hour12: false });
+    const esDeHoy = dia === hoy;
+    sello.hidden = false;
+    sello.className = 'sello' + (esDeHoy ? '' : ' viejo');
+    sello.textContent = esDeHoy ? `Guardado ${hora}` : `Guardado el ${fmtFecha(dia)}`;
+    sello.title = esDeHoy
+      ? 'La última vez que esta copia guardó algo.'
+      : 'Esta copia no guarda nada desde el ' + fmtFecha(dia) + '. Si cargaste cosas después, ' +
+        'fue en otra: el archivo guarda según desde dónde se lo abre.';
+  }
+
   function refrescar() {
     if (!vistaActual) return;
     const y = window.scrollY;
     $('#contenido').innerHTML = vistaActual();
     avisoDeGuardado();
+    selloDeGuardado();
     /* También acá: si no, deshacer una baja o cerrar un reclamo repinta la
        pantalla y los indicadores vacíos vuelven a aparecer hasta el próximo
        cambio de pantalla. */
@@ -21483,9 +21546,15 @@ const App = (() => {
   /* El guardado es asincrónico: cuando falla, la pantalla ya se pintó diciendo
      que todo salió bien. Por eso el almacén avisa y acá se repinta el cartel en
      el momento, sin esperar a que el coordinador cambie de pantalla. */
+  /* El sello se mueve con cada guardado, haya repintado o no: si solo se
+     actualizara al cambiar de pantalla, diría la hora de hace veinte minutos
+     justo cuando se lo mira para saber si lo de recién quedó guardado. */
+  if (typeof Store.onChange === 'function') Store.onChange(() => selloDeGuardado());
+
   if (typeof Store.alFallarElGuardado === 'function') {
     Store.alFallarElGuardado(falla => {
       avisoDeGuardado();
+      selloDeGuardado();
       if (falla) avisar('No se está guardando. Exportá el respaldo antes de cerrar.', 'error');
     });
   }

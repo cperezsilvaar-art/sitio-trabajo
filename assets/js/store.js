@@ -434,6 +434,15 @@ const Store = (() => {
    * encadenan: siempre gana la última y nunca se cruzan entre sí.
    */
   function guardar() {
+    /* **Cuándo se guardó por última vez, adentro de lo guardado.**
+       El panel vive en el almacenamiento del navegador, y ese almacenamiento
+       cambia con la dirección desde la que se abre: el archivo bajado a
+       Descargas, el mismo archivo en otra carpeta y la página publicada son
+       tres cajas distintas que se ven idénticas. Sin este sello, abrir la caja
+       equivocada se lee como «se me borró lo de esta mañana» — pasó tres
+       veces. Con él, el encabezado dice «guardado el 03/10» y la pregunta se
+       contesta sola. */
+    estado.guardadoEl = new Date().toISOString();
     const instantanea = JSON.stringify(estado);
     colaDeGuardado = colaDeGuardado.then(async () => {
       let aGuardar;
@@ -790,6 +799,7 @@ const Store = (() => {
     /** ¿Este navegador nunca guardó nada? Es el arranque en frío. */
     arrancoEnFrio: () => arrancoSinNada,
     onChange: fn => suscriptores.push(fn),
+    guardadoEl: () => (estado && estado.guardadoEl) || '',
 
     /* ------------------------- sucursales ------------------------- */
     sucursal(id) { return this.get().sucursales.find(s => s.id === id) || null; },

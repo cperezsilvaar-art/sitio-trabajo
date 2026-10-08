@@ -1691,6 +1691,26 @@ el momento en que el guardado falla, porque para cuando el coordinador cambie
 de pantalla ya puede haber cargado veinte cosas. Cuando el almacenamiento
 vuelve a aceptar, el cartel se va solo.
 
+**El encabezado dice cuándo guardó esta copia, y en ámbar cuando no es de
+hoy.** Es la otra mitad del problema de arriba, y la que explica las tres
+veces que al coordinador «se le borró» lo de la mañana: **el almacenamiento
+cambia con la dirección desde la que se abre el panel**. El archivo de
+siempre, el mismo archivo bajado otra vez a Descargas y la página publicada
+son tres cajas distintas que por dentro se ven idénticas —la misma pantalla,
+el mismo padrón de la semilla—, así que abrir la que no era se lee como un
+borrado y no como lo que es.
+
+`guardar()` sella `estado.guardadoEl` y `selloDeGuardado()` (`app.js`) lo
+escribe en `#sello-guardado`: «Guardado 11:42» si es de hoy, «Guardado el
+03/10» y **en ámbar** si no. El ámbar no es decoración: es la única señal de
+que lo que se está mirando no es donde se venía trabajando. Se mueve con cada
+guardado vía `Store.onChange`, porque un sello que solo se actualiza al cambiar
+de pantalla diría la hora de hace veinte minutos justo cuando se lo mira para
+saber si lo de recién quedó.
+
+La hora va en **24 horas**: `toLocaleTimeString('es-AR')` sin `hour12: false`
+devuelve «06:09 p. m.».
+
 El panel se guarda **copias automáticas** en el mismo navegador, en una clave
 aparte del almacén: una por día al abrir y una antes de cada acción que
 reemplaza todo el contenido. Están para el borrado por error, no para perder el

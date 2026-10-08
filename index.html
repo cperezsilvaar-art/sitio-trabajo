@@ -96,6 +96,11 @@
       <!-- Registrar una visita se hace en un solo lugar, la solapa Visitas:
            acá aparecía en todas las pantallas, incluso en las que no tienen
            nada que ver con una visita. -->
+      <!-- Cuándo guardó por última vez esta copia. Lo llena `selloDeGuardado()`
+           y es lo que distingue una caja de otra: el archivo, el archivo bajado
+           de nuevo y la página publicada se ven iguales y guardan en lugares
+           distintos. -->
+      <span id="sello-guardado" class="sello" hidden></span>
       <button data-accion="bloquear" id="btn-bloquear" hidden title="Cerrar el panel y volver a pedir la clave">Bloquear</button>
     </header>
 
