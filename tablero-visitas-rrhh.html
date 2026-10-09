@@ -10464,11 +10464,15 @@ const Store = (() => {
       const propia = misTiendas.has(clave(f.tienda));
 
       /* El número manda sobre el nombre: el nombre viene escrito a mano y
-         «diaz cyntia» no tiene por qué encontrar a «DIAZ, CYNTHIA». Lo único
+         «peres marta» no tiene por qué encontrar a «PEREZ, MARTA». Lo único
          que no se resuelve solo es cuando los dos apuntan, cada uno sin ninguna
-         duda, a personas distintas —«Luis Toro» con el número de Juan Gabriel
-         Luna—: ahí es un error de carga, y adivinar cuál de los dos vale le
-         cuelga la licencia a alguien que no faltó. Un nombre ambiguo, en
+         duda, a personas distintas —un nombre con el número de otra persona—:
+         ahí es un error de carga, y adivinar cuál de los dos vale le cuelga la
+         licencia a alguien que no faltó.
+         Los ejemplos van con nombres inventados a propósito: **un comentario
+         viaja al HTML publicado igual que el código**, y acá había cinco
+         personas del padrón escritas con nombre y apellido. `check-publicacion.js`
+         lo chequea ahora antes de publicar. Un nombre ambiguo, en
          cambio, no contradice nada: pierde contra el número y la fila entra. */
       if (g && cand.length === 1 && cand[0].c.id !== g.c.id) {
         return { g: null, via: '', propia,
@@ -11369,14 +11373,14 @@ const Store = (() => {
      *
      * Empareja por **número** —CUIL o DNI, lo que la respuesta traiga—, que es
      * lo único unívoco. El nombre es el respaldo y solo vale si no hay
-     * ambigüedad: el formulario lo escribe a mano y aparece «luciana
-     * ortellano» y «luiciana ortellano» para la misma persona.
+     * ambigüedad: el formulario lo escribe a mano y la misma persona aparece
+     * escrita de dos formas, con una letra de más o de menos.
      *
      * La planilla trae las respuestas de **todas las áreas**, y ahí el nombre
-     * deja de alcanzar: «Martinez Maria Eugenia» de Walker no es «PEREZ, MARIA
-     * EUGENIA» de Scalabrini, pero comparten dos palabras. Por eso una fila
+     * deja de alcanzar: dos personas de dos áreas distintas pueden compartir
+     * dos de las tres palabras de su nombre y no ser la misma. Por eso una fila
      * cuya tienda no es del área **solo entra si el número coincide**. Eso
-     * conserva a quien se mudó al área —Airoldi, Briceño, Díaz, Miglio traen su
+     * conserva a quien se mudó al área —los cuatro que traen su
      * CUIL— y descarta al homónimo.
      */
     importarAusenciasFormulario(filas) {

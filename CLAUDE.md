@@ -1684,6 +1684,12 @@ chequeo falla en una línea que no tiene nada malo.
 Más las pruebas e2e con Playwright (`/opt/node22/lib/node_modules/playwright`)
 y Chromium headless, que viven en el directorio de trabajo temporal de la sesión.
 
+**Antes de publicar la página**, además:
+
+```
+node check-publicacion.js
+```
+
 **Si se tocó el anexo de los gerentes**, además:
 
 ```
@@ -1750,9 +1756,18 @@ referentes viajaron a la página publicada durante meses, porque el archivo se
 llama «sucursales» y uno lo lee como datos de las tiendas. Las tiendas sí
 quedan —código, `rvd`, dirección, CUIT, razón social, horario—: eso es dato de
 la empresa y es lo que hace que la página publicada sirva para mostrarla.
-**Antes de publicar, verificar que no quedó ningún nombre** buscándolos en el
-HTML armado; que un campo esté vacío no alcanza si el nombre sigue tres líneas
-más arriba, en un comentario.
+**Antes de publicar corre `node check-publicacion.js`**, y no es opcional. El
+barrido de `--demo` y `--sin-plantel` vacía los **datos** y no toca los
+**comentarios**, y un comentario viaja al HTML armado igual que el código: en
+`store.js` había **cinco personas del padrón escritas con nombre y apellido**
+dentro de ejemplos —«el número de fulano con el nombre de mengano»— y viajaron
+a la página publicada durante meses. El chequeo busca los nombres de la semilla,
+los apellidos con borde de palabra, el patrón «APELLIDO, NOMBRE» en mayúsculas
+y cualquier cosa con forma de CUIL. **Los ejemplos de los comentarios y de los
+placeholders van con nombres inventados**, y las siglas que el patrón agarra de
+más —«CUIL, DNI», «ART, ANSES»— están nombradas una por una en el script, como
+`APELLIDOS_QUE_SON_PALABRAS`: lo que aparezca nuevo lo tiene que mirar una
+persona.
 
 El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
 datos adentro; la pantalla de Configuración lo advierte cuando hay alguno
