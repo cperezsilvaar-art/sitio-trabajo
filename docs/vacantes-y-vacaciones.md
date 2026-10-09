@@ -164,6 +164,14 @@ y no se guarda.
 **Sigue contando en la dotación de la tienda**, que es plantel y cuesta;
 `dotacionPlantel()` lo devuelve aparte en `laboratorio` para poder leerlo solo.
 
+**Y tiene su propio organigrama.** La página de la tienda arma dos cuadros:
+*Organigrama · Farmacia* y *Organigrama · Laboratorio*, en tarjetas separadas.
+El del laboratorio se agrupa **por especialidad** —alopatía y homeopatía son
+dos mesadas distintas— y no por posición, con el Senior y el farmacéutico
+primero dentro de cada una. El encabezado de farmacia dice «· Farmacia» solo
+cuando hay laboratorio: en las otras once tiendas no hay nada de qué
+distinguirlo.
+
 ### El calendario, que es la excepción a «tabla y no gráfico»
 
 Lo que hay que ver es el **solapamiento**. Dos salidas de enero se leen igual en

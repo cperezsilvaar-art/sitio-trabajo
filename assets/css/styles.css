@@ -1344,9 +1344,22 @@ a.org-persona { text-decoration: none; }
 
 .nom-cargo-real { display: block; font-style: normal; font-size: 11px; color: var(--texto-suave); }
 
-/* El grupo del laboratorio se separa del piso con una línea, no con otro
-   fondo: el fondo lo usa el organigrama para el nivel del gerente. */
-.org-nivel.org-laboratorio {
-  border-top: 1px dashed var(--borde-fuerte); padding-top: 14px; margin-top: 6px;
-}
-.org-nivel.org-laboratorio .org-persona { border-style: dashed; }
+/* El laboratorio es **otra tarjeta**, no un grupo abajo del organigrama de la
+   farmacia: son dos unidades de negocio y leerlas como una sola es lo que
+   hacía ver veintiséis personas donde el mostrador tiene ocho. La tarjeta
+   entera lleva el acento del laboratorio en el borde izquierdo para que se
+   distinga de un vistazo de las demás de la página. */
+.seccion-lab { border-left: 3px solid var(--lab-alo); }
+
+/* Cada mesada con su color: el borde del grupo y el de cada tarjeta. El
+   nombre de la especialidad está siempre escrito arriba — el color dice cuál
+   es sin leer, y el texto dice cuál es. */
+.organigrama.lab .org-grupo { border-left: 2px solid currentColor; padding-left: 12px; }
+.organigrama.lab .lab-grupo.lab-alo   { color: var(--lab-alo); }
+.organigrama.lab .lab-grupo.lab-homeo { color: var(--lab-homeo); }
+.organigrama.lab .lab-grupo.lab-adm   { color: var(--lab-adm); }
+.organigrama.lab .org-grupo h4 { color: inherit; }
+.organigrama.lab .org-fila { color: var(--texto); }
+.org-persona.lab.lab-alo   { border-color: var(--lab-alo); }
+.org-persona.lab.lab-homeo { border-color: var(--lab-homeo); }
+.org-persona.lab.lab-adm   { border-color: var(--lab-adm); }

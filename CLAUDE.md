@@ -1239,6 +1239,19 @@ dónde se la *cuenta*, así que se deriva y no se guarda. **Sigue contando en la
 dotación**, que es plantel y cuesta, y `dotacionPlantel().laboratorio` lo
 devuelve aparte.
 
+**El laboratorio tiene su propio organigrama y no un grupo abajo del de
+farmacia.** `#/sucursal/<id>` arma dos cuadros: *Organigrama · Farmacia*, que
+es el piso, y *Organigrama · Laboratorio*, en su propia tarjeta. No es un
+escalón de la farmacia —prepara recetas y responde a otra cadena— y leerlos
+juntos hacía ver veintiséis personas donde el mostrador tiene ocho. El del
+laboratorio **se agrupa por especialidad y no por posición**, que es como se
+organiza el trabajo adentro: alopatía y homeopatía son dos mesadas distintas y
+lo que decide si mañana se puede producir es cuánta gente queda en cada una;
+adentro de cada grupo van primero el Senior y el farmacéutico. El encabezado de
+la farmacia dice «· Farmacia» **solo cuando hay laboratorio**: en once de las
+doce tiendas sigue diciendo «Organigrama» a secas, porque ahí no hay nada de
+qué distinguirlo.
+
 **`esDeLaboratorio()` devuelve un objeto, no un booleano**, igual que
 `esNoPresencial()` y por la misma trampa: hay que leer `.laboratorio`. La forma
 repetida es a propósito — dos formas distintas para la misma clase de pregunta

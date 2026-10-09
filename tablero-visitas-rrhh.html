@@ -1346,12 +1346,25 @@ a.org-persona { text-decoration: none; }
 
 .nom-cargo-real { display: block; font-style: normal; font-size: 11px; color: var(--texto-suave); }
 
-/* El grupo del laboratorio se separa del piso con una línea, no con otro
-   fondo: el fondo lo usa el organigrama para el nivel del gerente. */
-.org-nivel.org-laboratorio {
-  border-top: 1px dashed var(--borde-fuerte); padding-top: 14px; margin-top: 6px;
-}
-.org-nivel.org-laboratorio .org-persona { border-style: dashed; }
+/* El laboratorio es **otra tarjeta**, no un grupo abajo del organigrama de la
+   farmacia: son dos unidades de negocio y leerlas como una sola es lo que
+   hacía ver veintiséis personas donde el mostrador tiene ocho. La tarjeta
+   entera lleva el acento del laboratorio en el borde izquierdo para que se
+   distinga de un vistazo de las demás de la página. */
+.seccion-lab { border-left: 3px solid var(--lab-alo); }
+
+/* Cada mesada con su color: el borde del grupo y el de cada tarjeta. El
+   nombre de la especialidad está siempre escrito arriba — el color dice cuál
+   es sin leer, y el texto dice cuál es. */
+.organigrama.lab .org-grupo { border-left: 2px solid currentColor; padding-left: 12px; }
+.organigrama.lab .lab-grupo.lab-alo   { color: var(--lab-alo); }
+.organigrama.lab .lab-grupo.lab-homeo { color: var(--lab-homeo); }
+.organigrama.lab .lab-grupo.lab-adm   { color: var(--lab-adm); }
+.organigrama.lab .org-grupo h4 { color: inherit; }
+.organigrama.lab .org-fila { color: var(--texto); }
+.org-persona.lab.lab-alo   { border-color: var(--lab-alo); }
+.org-persona.lab.lab-homeo { border-color: var(--lab-homeo); }
+.org-persona.lab.lab-adm   { border-color: var(--lab-adm); }
 
 </style>
 
@@ -18571,8 +18584,16 @@ const App = (() => {
     const t9 = distribucion9Box(s.colaboradores);
     const vacantesAbiertas = (s.vacantes || []).filter(v => v.estado !== 'cubierta');
 
+    /* **Dos unidades de negocio, dos organigramas.** El laboratorio no es un
+       escalón del piso: prepara recetas y responde a otra cadena. Se separa
+       acá, antes de armar los cuadros, para que el de farmacia sea de verdad
+       el de farmacia. */
+    const laboratorio = plantel.filter(c => esDeLaboratorio(c).laboratorio);
+    const farmacia = plantel.filter(c => !esDeLaboratorio(c).laboratorio);
+    const fteLab = laboratorio.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+
     const porPosicion = {};
-    plantel.forEach(c => {
+    farmacia.forEach(c => {
       const k = c.posicion || 'Sin posición';
       (porPosicion[k] || (porPosicion[k] = [])).push(c);
     });
@@ -18783,10 +18804,14 @@ const App = (() => {
       })()}
 
       <section class="tarjeta">
-        <h2>Organigrama</h2>
+        <h2>Organigrama${laboratorio.length ? ' · Farmacia' : ''}</h2>
         <p class="ayuda">
-          El plantel que está en el piso, ordenado por posición. Las tarjetas se abren para ver
-          el perfil completo.
+          ${laboratorio.length
+            ? `El plantel <strong>del piso de la farmacia</strong>, ordenado por posición. El
+               laboratorio tiene su propio cuadro, abajo: es otra unidad de negocio y no un
+               escalón de ésta.`
+            : 'El plantel que está en el piso, ordenado por posición.'}
+          Las tarjetas se abren para ver el perfil completo.
         </p>
 
         ${(() => {
@@ -18814,7 +18839,7 @@ const App = (() => {
             La dotación de piso de la tienda es la de farmacia; el resto opera aparte.
           </div>`;
         })()}
-        ${plantel.length || vacantesAbiertas.length
+        ${farmacia.length || vacantesAbiertas.length
           ? organigrama(s, porPosicion, vacantesAbiertas)
           : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
 
@@ -18854,6 +18879,33 @@ const App = (() => {
             quién contar en el piso.</p>
           <ul>${dp.sinActividad.map(x => `<li><strong>${esc(x.nombre)}</strong> · ${esc(x.motivo)}</li>`).join('')}</ul>` : ''}
       </section>
+
+      ${laboratorio.length ? `<section class="tarjeta seccion-lab">
+        <h2>Organigrama · Laboratorio</h2>
+        <p class="ayuda">
+          <strong>Otra unidad de negocio adentro de la misma tienda.</strong> Prepara recetas,
+          no atiende el mostrador y no cubre su turno: la nómina la carga como
+          «Asistente de piso de ventas» y por eso la tienda parecía tener
+          ${laboratorio.filter(c => c.posicion === 'APV').length} APV de más.
+          Acá se agrupa <strong>por especialidad</strong>, que es como se organiza el trabajo
+          adentro: alopatía y homeopatía son dos mesadas distintas, y lo que decide si mañana
+          se puede producir es cuánta gente queda en cada una.
+        </p>
+        <div class="kpis">
+          ${kpi('Gente del laboratorio', laboratorio.length,
+                `${fmtNum(fteLab, 1)} FTE · no entran en la cobertura del piso`)}
+          ${ESPECIALIDADES_LABORATORIO.map(x => {
+            const g = laboratorio.filter(c => c.laboratorio === x.id);
+            if (!g.length) return '';
+            return kpi(x.nombre, g.length,
+              `${fmtNum(g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0), 1)} FTE`);
+          }).join('')}
+        </div>
+        ${organigramaLaboratorio(laboratorio)}
+        <p class="ayuda">Siguen contando en la dotación de la tienda —son plantel y cuestan—,
+          pero en la cuenta de puestos cada uno va en su casillero y no en el de su cargo.
+          Para sacar a alguien de acá, abrí su ficha y poné <em>Piso de la tienda</em>.</p>
+      </section>` : ''}
 
       ${perfilAbierto ? perfilColaborador(s, activos.find(c => c.id === perfilAbierto)) : ''}
 
@@ -19860,19 +19912,6 @@ const App = (() => {
        Devoto» se vea mirando la tienda y no entrando a otra pantalla. Va
        punteada y sin nombre, porque lo que la define es que ahí no hay nadie.
        Se agrupa por la posición del cargo, así cae junto a sus pares. */
-    /* El laboratorio sale del nivel del piso y va en su propio grupo, abajo:
-       está adentro de la tienda pero no cubre su turno, que es la misma razón
-       por la que los de bloqueo de título van aparte. */
-    const laboratorio = [];
-    Object.keys(porPosicion).forEach(k => {
-      porPosicion[k] = porPosicion[k].filter(c => {
-        if (!esDeLaboratorio(c).laboratorio) return true;
-        laboratorio.push(c);
-        return false;
-      });
-      if (!porPosicion[k].length) delete porPosicion[k];
-    });
-
     const vac = {};
     (vacantes || []).forEach(v => {
       const cn = CARGOS_NOMINA.find(x => x.cargo === v.cargo);
@@ -19931,18 +19970,59 @@ const App = (() => {
         </div>`;
       }).join('')}
       ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k], vac[k])}</div>`).join('')}
-      ${laboratorio.length ? `<div class="org-nivel org-laboratorio">
-        <div class="org-grupo">
-          <h4>Laboratorio <span class="chip">${laboratorio.length}</span>${
-            ESPECIALIDADES_LABORATORIO.map(x => {
-              const n = laboratorio.filter(c => c.laboratorio === x.id).length;
-              return n ? ` <span class="chip-lab ${x.token}">${n} ${esc(x.nombre.toLowerCase())}</span>` : '';
-            }).join('')}</h4>
-          <p class="ayuda">Otra operación adentro de la tienda: no cubre el turno del piso
-            y no cuenta como APV en la cobertura, aunque la nómina la cargue así.</p>
-          <div class="org-fila">${laboratorio.map(tarjeta).join('')}</div>
-        </div>
-      </div>` : ''}
+    </div>`;
+  }
+
+  /**
+   * El organigrama del laboratorio: **otra unidad de negocio adentro de la
+   * misma tienda**, con su propio cuadro.
+   *
+   * Es un organigrama aparte y no un grupo más abajo del de farmacia, porque
+   * no es un escalón del piso: el laboratorio prepara recetas y responde a
+   * otra cadena. Mezclarlos hacía leer veintiséis personas donde el mostrador
+   * tiene ocho, que es exactamente lo que esta separación viene a arreglar.
+   *
+   * **Se agrupa por especialidad y no por posición**, que es como se organiza
+   * el trabajo adentro: alopatía y homeopatía son dos mesadas distintas, y lo
+   * que decide si el laboratorio puede producir mañana es cuánta gente queda
+   * en cada una. Adentro de cada grupo mandan primero el Senior y el
+   * farmacéutico, que son quienes responden por la preparación.
+   */
+  const ORDEN_LAB = ['Senior', 'Farmacéutico', 'DT', 'APV'];
+
+  function organigramaLaboratorio(gente) {
+    const porEsp = {};
+    gente.forEach(c => {
+      const k = String(c.laboratorio || '');
+      (porEsp[k] || (porEsp[k] = [])).push(c);
+    });
+    const peso = c => {
+      const i = ORDEN_LAB.indexOf(c.posicion || '');
+      return i < 0 ? ORDEN_LAB.length : i;
+    };
+
+    const tarjeta = c => `<button class="org-persona lab ${esDeLaboratorio(c).token}${
+        perfilAbierto === c.id ? ' abierta' : ''}"
+        data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
+      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
+      <span>${esc(c.cargo || c.posicion || '')}</span>
+      ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
+    </button>`;
+
+    return `<div class="organigrama lab">
+      ${ESPECIALIDADES_LABORATORIO.map(e => {
+        const g = (porEsp[e.id] || []).slice().sort((a, b) =>
+          (peso(a) - peso(b)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+        if (!g.length) return '';
+        const fte = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+        return `<div class="org-nivel">
+          <div class="org-grupo lab-grupo ${e.token}">
+            <h4>${esc(e.nombre)} <span class="chip">${g.length}</span>${
+              fte === g.length ? '' : ` <span class="chip azul">${fmtNum(fte, 1)} FTE</span>`}</h4>
+            <div class="org-fila">${g.map(tarjeta).join('')}</div>
+          </div>
+        </div>`;
+      }).join('')}
     </div>`;
   }
 
