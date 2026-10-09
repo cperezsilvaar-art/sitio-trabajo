@@ -1215,9 +1215,9 @@ no al día de hoy: último párrafo del **art. 150 de la LCT**. Los días salen 
 hasta los 10). `cicloDeVacaciones()` (`vacaciones.js`) es **el único lugar que
 traduce entre el ciclo y sus fechas**, como `rangoDePeriodo()` con el período de
 liquidación, y sale de `parametros.vacacionesAnio`, `vacacionesMesDesde` y
-`vacacionesMesHasta`, editables en `#/config`. Con el mes de arranque mayor que
-el de cierre la ventana cruza el año —julio de 2026 a abril de 2027—, que es el
-caso normal. **Los días que arrastra del ciclo anterior el panel no los puede
+`vacacionesMesHasta`, editables en `#/config`. La ventana es **del 1 de octubre al 30 de abril**,
+que es la del art. 154 de la LCT. Con el mes de arranque mayor que el de cierre
+cruza el año, que es el caso normal. **Los días que arrastra del ciclo anterior el panel no los puede
 deducir** y se cargan a mano en `c.vacacionesPendientes`, **indexados por el año**
 y con un binding propio (`data-vacpend`); en cero se borra la clave en vez de
 guardar un 0, como `marcarAdef()`.
@@ -1225,6 +1225,35 @@ guardar un 0, como `marcarAdef()`.
 **Planificado, tomado y saldo son tres números y no uno.** El saldo es el total
 menos lo planificado: **lo que falta ubicar en el calendario**, no lo que falta
 gozar. La planilla los confunde porque arranca con todo en cero.
+
+**La cobertura se cuenta también por posición, en personas y no en FTE**, y eso
+es lo que contesta «te quedás sin dos APV»: un piso de 6 FTE con los dos APV
+afuera no es un piso de 6, y una farmacia sin su DT no abre. Dos umbrales:
+**queda en cero** es categórico y no depende de ningún mínimo configurado;
+**se va la mitad o más** es un aviso. **El aviso sale al anotar la salida**, no
+al mirar la pantalla —se decide al elegir la fecha— y **se nombra sin impedir**:
+mover una salida es una conversación, no una validación.
+
+**El calendario es la excepción a «tabla y no gráfico»**, porque lo que hay que
+ver es el **solapamiento**: dos salidas de enero se leen igual en una lista y en
+una tira de días se ve de una que hay nueve con las dos personas afuera. Por
+dentro sigue siendo una tabla, con una fila por persona y una columna por día, y
+abajo **una fila por posición con cuántos quedan cada día** — el número escrito
+en la celda y el color solo acompañando, como la barra de composición.
+
+**La planilla se pega plana, una fila por tramo** (`importarPlanDeVacaciones()`,
+`COLUMNAS_PLAN_VACACIONES`). El Excel del área tiene una hoja por tienda y diez
+pares SALIDA/RETORNO; pegar hoja por hoja es lo que ya salió mal con el libro de
+novedades. **«Retorno» es el día que vuelve** —sale el 26/10, retorna el 12/11,
+17 días— y la resta al último día de licencia se hace en un solo lugar, adentro
+del importador. **No crea a nadie** y **completa el CUIL donde falta**, así la
+pegada del año que viene empareja por número y no por nombre.
+
+**Lo que arranca antes de la ventana no se tira: se nombra**
+(`tramosFueraDeVentana()`). La planilla traía nueve salidas entre julio y
+septiembre y la ventana arranca el 01/10. **No se descuentan del saldo**: cuál
+ciclo pagó una salida de julio no se puede deducir, y adivinarlo le descontaría
+días a alguien que todavía los tiene.
 
 **Lo que la planilla no puede contestar es la cobertura, y es la razón de la
 pantalla.** `coberturaDeVacaciones()` recorre **día por día** e informa **el peor

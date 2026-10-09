@@ -200,6 +200,17 @@ const Store = (() => {
     if (!String(e.config.area || '').trim()) e.config.area = base.config.area;
     e.config.gerenteOperaciones = Object.assign({}, base.config.gerenteOperaciones, e.config.gerenteOperaciones || {});
     e.config.parametros = Object.assign({}, PARAMETROS_DEFECTO, e.config.parametros || {});
+    /* La ventana de vacaciones salió con julio como mes de arranque, copiado de
+       la planilla, y el coordinador pidió octubre —que además es lo que fija el
+       art. 154 de la LCT—. El 7 nunca lo eligió nadie: lo guardó el panel solo
+       al abrir, así que corregirlo no pisa una decisión suya. Se hace una sola
+       vez y queda anotado; si después pone julio a propósito, se respeta. */
+    if (!e.config.ventanaVacacionesCorregida) {
+      if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
+        e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
+      }
+      e.config.ventanaVacacionesCorregida = true;
+    }
     e.sucursales = Array.isArray(e.sucursales) ? e.sucursales : base.sucursales;
     if (!Array.isArray(e.config.gerentesOperaciones) || !e.config.gerentesOperaciones.length) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
@@ -2463,6 +2474,84 @@ const Store = (() => {
      * adentro de la ausencia**: es lo que pasó en esta llamada, no un campo de
      * la licencia, y guardarlo la ensuciaría para siempre.
      */
+    /**
+     * La planilla de planificación de vacaciones, pegada entera.
+     *
+     * Una fila por tramo: la persona con dos salidas aparece dos veces, y la
+     * que no tiene ninguna aparece una con las fechas vacías —su fila sirve
+     * para cargar los días que arrastra del ciclo anterior—.
+     *
+     * **No crea a nadie**, como el libro de novedades: la fila que no cae en
+     * el padrón se devuelve con nombre y tienda. Usa `buscadorDePadron()`,
+     * que es el único emparejamiento del panel.
+     *
+     * **Y completa el CUIL donde falta.** La planilla lo trae y el padrón del
+     * repositorio no —la privacidad lo deja afuera—, así que la primera pegada
+     * empareja por nombre y deja el número escrito: la del año que viene ya
+     * empareja por número, que no se equivoca.
+     */
+    importarPlanDeVacaciones(filas, ciclo) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const ci = ciclo || cicloDeVacaciones((e.config || {}).parametros);
+      const out = { personas: 0, tramos: 0, corregidos: 0, repetidos: 0,
+                    pendientes: 0, cuilesCargados: 0, sinFecha: 0, fueraDeVentana: 0,
+                    sinPersona: [], otrasAreas: 0, enConflicto: [] };
+      const vistas = new Set();
+
+      filas.forEach(f => {
+        const m = buscar(f);
+        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
+        if (!m.g) {
+          if (m.propia) {
+            const n = String(f.nombre || '').trim();
+            if (n && out.sinPersona.indexOf(n) < 0) out.sinPersona.push(n);
+          } else out.otrasAreas++;
+          return;
+        }
+        const c = m.g.c;
+        if (!vistas.has(c.id)) { vistas.add(c.id); out.personas++; }
+
+        /* El CUIL de la planilla se escribe solo donde el padrón no tiene
+           ninguno. Nunca pisa uno cargado: si difieren, el que vale es el de
+           la nómina y esto es una planilla escrita a mano. */
+        const cu = String(f.cuil || '').replace(/\D/g, '');
+        if (cu.length === 11 && !String(c.cuil || '').replace(/\D/g, '')) {
+          c.cuil = cu;
+          out.cuilesCargados++;
+        }
+
+        const pend = Number(String(f.pendiente == null ? '' : f.pendiente).replace(',', '.'));
+        if (isFinite(pend) && pend > 0) {
+          if (!c.vacacionesPendientes) c.vacacionesPendientes = {};
+          c.vacacionesPendientes[String(ci.anio)] = pend;
+          out.pendientes++;
+        }
+
+        const desde = fechaDelParte(f.desde);
+        if (!desde) { if (f.desde) out.sinFecha++; return; }
+        /* Del retorno al último día de licencia: vuelve el 12 quiere decir que
+           el último día afuera fue el 11. La resta vive acá y en ningún otro
+           lado, por lo mismo que `rangoDePeriodo()`. */
+        const retorno = fechaDelParte(f.retorno);
+        const hasta = retorno ? _diaMas(retorno, -1) : '';
+        if (hasta && hasta < desde) { out.sinFecha++; return; }
+        if (desde < ci.desde || desde > ci.hasta) out.fueraDeVentana++;
+
+        const r = this.agregarAusencia(c.id, {
+          motivo: 'vacaciones', desde, hasta,
+          origen: 'planVacaciones', ciclo: String(ci.anio)
+        });
+        if (!r) return;
+        if (r.accion === 'nueva') out.tramos++;
+        else if (r.accion === 'corregida') out.corregidos++;
+        else out.repetidos++;
+      });
+
+      guardar();
+      return out;
+    },
+
     /* ==================== Vacantes ====================
      *
      * Lo único que se pidió guardar es **qué puesto falta y en qué tienda**.

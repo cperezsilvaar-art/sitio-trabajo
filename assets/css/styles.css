@@ -1266,3 +1266,53 @@ a.org-persona { text-decoration: none; }
   border: 1px solid var(--borde); border-radius: 6px; background: var(--panel);
   color: var(--texto);
 }
+
+/* ============ El calendario de vacaciones ============
+   Es la excepción a «tabla y no gráfico» del resto del panel: lo que hay que
+   ver es el solapamiento entre salidas, y eso una lista de fechas no lo
+   muestra. Sigue siendo una tabla por dentro — se puede leer con lector de
+   pantalla y copiar a Excel — con las celdas pintadas. */
+.cal-vac-tabla { border-collapse: collapse; font-size: 11.5px; }
+.cal-vac-tabla th, .cal-vac-tabla td { border: 1px solid var(--borde); padding: 0; }
+.cal-vac-tabla .cal-quien {
+  position: sticky; left: 0; z-index: 2; background: var(--panel);
+  text-align: left; padding: 4px 10px 4px 6px; min-width: 170px; font-weight: 600;
+}
+.cal-vac-tabla .cal-quien span { display: block; color: var(--texto); }
+.cal-vac-tabla .cal-quien em {
+  display: block; font-style: normal; font-weight: 400; font-size: 10.5px;
+  color: var(--texto-suave);
+}
+.cal-vac-tabla thead th.cal-dia {
+  width: 20px; min-width: 20px; text-align: center; font-weight: 600;
+  color: var(--texto-suave); background: var(--panel-alt); padding: 2px 0;
+}
+.cal-vac-tabla td.cal-dia { height: 22px; }
+.cal-vac-tabla .cal-dia.finde { background: var(--panel-alt); }
+.cal-vac-tabla .cal-dia.hoy { outline: 2px solid var(--azul-claro); outline-offset: -2px; }
+/* Una sola serie —la salida— así que un solo tono y sin leyenda: el título
+   de la tarjeta ya dice qué es cada barra. */
+.cal-vac-tabla td.cal-vac { background: var(--azul-claro); }
+.cal-vac-tabla td.cal-vac.arranca { border-radius: 4px 0 0 4px; }
+.cal-vac-tabla td.cal-vac.termina { border-radius: 0 4px 4px 0; }
+/* Lo que trajo el libro con fechas supuestas no se dibuja como una salida
+   acordada: va en gris y rayado, igual que en el cuadro. */
+.cal-vac-tabla td.cal-vac.supuesto {
+  background: repeating-linear-gradient(45deg,
+    var(--borde-fuerte) 0 3px, var(--panel-alt) 3px 6px);
+}
+/* La tira de cobertura: el número siempre escrito, el color lo acompaña. */
+.cal-vac-tabla tfoot th.cal-quien { background: var(--panel-alt); }
+.cal-vac-tabla td.cal-cob {
+  text-align: center; font-variant-numeric: tabular-nums; color: var(--texto-suave);
+  background: var(--panel);
+}
+.cal-vac-tabla td.cal-cob.justo { background: var(--cob-justo); color: var(--ambar); font-weight: 700; }
+.cal-vac-tabla td.cal-cob.sin   { background: var(--cob-sin);   color: var(--rojo-alerta); font-weight: 700; }
+/* Los dos fondos se eligieron contra cada fondo, no derivados del claro: es la
+   misma regla que los tonos de la barra de composición. */
+:root { --cob-justo: #fdf3e2; --cob-sin: #fbe9e7; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
+}
+:root[data-theme="dark"] { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }

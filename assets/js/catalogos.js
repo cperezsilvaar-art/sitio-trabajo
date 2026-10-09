@@ -525,7 +525,7 @@ const PARAMETROS_DEFECTO = {
    * abril de 2027—, que es el caso normal, igual que el período de
    * liquidación. */
   vacacionesAnio: 2026,
-  vacacionesMesDesde: 7,
+  vacacionesMesDesde: 10,
   vacacionesMesHasta: 4,
   moneda: '$'
 };

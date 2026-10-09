@@ -122,6 +122,45 @@ número así deja de leerse el mismo día. Lo que pide una decisión es la tiend
 que algún día del ciclo baja del turno mínimo, que son pocas y casi siempre
 ninguna.
 
+### La cobertura por posición: «te quedás sin dos APV»
+
+La cobertura total en FTE contesta cuánto turno queda; **no contesta de qué
+posición no queda nadie**. Un piso de 6 FTE con los dos APV afuera no es un
+piso de 6, y una farmacia sin su director técnico no abre.
+
+`coberturaDeVacaciones()` cuenta además **por posición y en personas, no en
+FTE**: dos farmacéuticos de media jornada son un FTE y son dos personas, y el
+que se va deja un turno sin cubrir, no medio. Guarda el peor día **de cada
+posición**, que no tiene por qué ser el mismo que el peor del total.
+
+**Dos umbrales y no uno.** Que una posición quede en **cero** es categórico y no
+depende de ningún mínimo configurado: ese día no hay ningún APV en el piso. Que
+se vaya **la mitad o más** es un aviso: queda alguien, pero la tienda opera
+distinto. Lo primero va en rojo, lo segundo en ámbar.
+
+**El aviso sale al anotar la salida, no al mirar la pantalla.** Que la tienda se
+quede sin cobertura se decide al elegir la fecha, y descubrirlo tres pantallas
+después es descubrirlo cuando el gerente ya se fue. **Se nombra y no se
+impide**: mover una salida es una conversación, no una validación.
+
+### El calendario, que es la excepción a «tabla y no gráfico»
+
+Lo que hay que ver es el **solapamiento**. Dos salidas de enero se leen igual en
+una lista —«05/01→21/01» y «12/01→28/01»— y en una tira de días se ve de una que
+hay nueve días con las dos personas afuera. Una lista de fechas obliga a hacer
+esa cuenta en la cabeza catorce veces, y esa es justamente la cuenta que nadie
+hace.
+
+Sigue siendo **una tabla por dentro** —se lee con lector de pantalla y se copia a
+Excel—, con las celdas pintadas: una fila por persona, una columna por día del
+mes, un mes a la vez.
+
+Abajo va **una fila por posición con cuántos quedan cada día**. El número está
+escrito en la celda y el color solo lo acompaña, que es la misma regla que la
+barra de composición del Panel: el color nunca es lo único que dice qué pasa.
+Una sola serie —la salida— así que un solo tono y sin leyenda; el título de la
+tarjeta ya dice qué es cada barra.
+
 ### Las vacaciones no se justifican: se otorgan
 
 `estadoDeAusencia()` mandaba a `pendienteJustificar` —en rojo, y encabezando
@@ -135,6 +174,31 @@ certificado médico, el acta de matrimonio y la partida de nacimiento se siguen
 pidiendo. En Presentismo la casilla de certificado de una fila de vacaciones
 dice «no lleva» en vez de ofrecer un tilde: una casilla que no hay que tildar
 nunca enseña a tildar sin mirar.
+
+### Pegar la planilla
+
+El área la lleva en Excel con **una hoja por tienda** y diez pares de columnas
+SALIDA/RETORNO. Pegar hoja por hoja es lo que ya salió mal con el libro de
+novedades —catorce pegadas y una en la tienda equivocada que no se nota hasta
+el cierre—, así que `importarPlanDeVacaciones()` (`store.js`) lee **una tabla
+plana con una fila por tramo**: TIENDA, COLABORADOR, CUIL, INGRESO, PEND AÑO
+ANT, SALIDA, RETORNO. Las columnas se ubican por el encabezado
+(`COLUMNAS_PLAN_VACACIONES`), así que el orden no importa.
+
+**Quien no tiene ninguna salida entra igual**, con las dos fechas vacías: su
+fila sirve para cargar los días que arrastra del ciclo anterior.
+
+**«Retorno» es el día que vuelve, no el último de licencia.** Así lo escribe la
+planilla —sale el 26/10 y retorna el 12/11, que son 17 días— y así lo entiende
+el gerente. El panel guarda el último día, como cualquier otra licencia, y la
+resta se hace **en un solo lugar**, dentro del importador.
+
+**No crea a nadie**, como el libro: la fila que no cae en el padrón se devuelve
+con nombre y tienda. Usa `buscadorDePadron()`. **Y completa el CUIL donde
+falta**: la planilla lo trae y el padrón del repositorio no —la privacidad lo
+deja afuera—, así que la primera pegada empareja por nombre y deja el número
+escrito, y la del año que viene ya empareja por número. Nunca pisa un CUIL
+cargado.
 
 ### El ciclo
 
@@ -151,6 +215,13 @@ liquidación: es el caso general escrito una vez.
 **Un tramo pertenece al ciclo en el que empieza**, aunque termine afuera: la
 salida es lo que se acuerda con el gerente y lo que ocupa el lugar en el
 calendario de la tienda.
+
+**Lo que arranca antes de la ventana no se tira: se nombra.** La planilla traía
+nueve salidas entre julio y septiembre. `tramosFueraDeVentana()` las junta y la
+fila de esa persona dice «+17 antes del ciclo». **No se descuentan del saldo**:
+cuál ciclo pagó una salida de julio no se puede deducir —puede ser el arrastre
+del anterior o un adelanto de éste— y adivinarlo le descontaría días a alguien
+que todavía los tiene. Las licencias quedan enteras en su ficha, con sus fechas.
 
 ### Lo supuesto se marca
 

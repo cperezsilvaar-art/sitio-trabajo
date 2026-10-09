@@ -1269,6 +1269,56 @@ a.org-persona { text-decoration: none; }
   color: var(--texto);
 }
 
+/* ============ El calendario de vacaciones ============
+   Es la excepción a «tabla y no gráfico» del resto del panel: lo que hay que
+   ver es el solapamiento entre salidas, y eso una lista de fechas no lo
+   muestra. Sigue siendo una tabla por dentro — se puede leer con lector de
+   pantalla y copiar a Excel — con las celdas pintadas. */
+.cal-vac-tabla { border-collapse: collapse; font-size: 11.5px; }
+.cal-vac-tabla th, .cal-vac-tabla td { border: 1px solid var(--borde); padding: 0; }
+.cal-vac-tabla .cal-quien {
+  position: sticky; left: 0; z-index: 2; background: var(--panel);
+  text-align: left; padding: 4px 10px 4px 6px; min-width: 170px; font-weight: 600;
+}
+.cal-vac-tabla .cal-quien span { display: block; color: var(--texto); }
+.cal-vac-tabla .cal-quien em {
+  display: block; font-style: normal; font-weight: 400; font-size: 10.5px;
+  color: var(--texto-suave);
+}
+.cal-vac-tabla thead th.cal-dia {
+  width: 20px; min-width: 20px; text-align: center; font-weight: 600;
+  color: var(--texto-suave); background: var(--panel-alt); padding: 2px 0;
+}
+.cal-vac-tabla td.cal-dia { height: 22px; }
+.cal-vac-tabla .cal-dia.finde { background: var(--panel-alt); }
+.cal-vac-tabla .cal-dia.hoy { outline: 2px solid var(--azul-claro); outline-offset: -2px; }
+/* Una sola serie —la salida— así que un solo tono y sin leyenda: el título
+   de la tarjeta ya dice qué es cada barra. */
+.cal-vac-tabla td.cal-vac { background: var(--azul-claro); }
+.cal-vac-tabla td.cal-vac.arranca { border-radius: 4px 0 0 4px; }
+.cal-vac-tabla td.cal-vac.termina { border-radius: 0 4px 4px 0; }
+/* Lo que trajo el libro con fechas supuestas no se dibuja como una salida
+   acordada: va en gris y rayado, igual que en el cuadro. */
+.cal-vac-tabla td.cal-vac.supuesto {
+  background: repeating-linear-gradient(45deg,
+    var(--borde-fuerte) 0 3px, var(--panel-alt) 3px 6px);
+}
+/* La tira de cobertura: el número siempre escrito, el color lo acompaña. */
+.cal-vac-tabla tfoot th.cal-quien { background: var(--panel-alt); }
+.cal-vac-tabla td.cal-cob {
+  text-align: center; font-variant-numeric: tabular-nums; color: var(--texto-suave);
+  background: var(--panel);
+}
+.cal-vac-tabla td.cal-cob.justo { background: var(--cob-justo); color: var(--ambar); font-weight: 700; }
+.cal-vac-tabla td.cal-cob.sin   { background: var(--cob-sin);   color: var(--rojo-alerta); font-weight: 700; }
+/* Los dos fondos se eligieron contra cada fondo, no derivados del claro: es la
+   misma regla que los tonos de la barra de composición. */
+:root { --cob-justo: #fdf3e2; --cob-sin: #fbe9e7; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
+}
+:root[data-theme="dark"] { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -1912,7 +1962,7 @@ const PARAMETROS_DEFECTO = {
    * abril de 2027—, que es el caso normal, igual que el período de
    * liquidación. */
   vacacionesAnio: 2026,
-  vacacionesMesDesde: 7,
+  vacacionesMesDesde: 10,
   vacacionesMesHasta: 4,
   moneda: '$'
 };
@@ -5477,10 +5527,11 @@ if (typeof module !== 'undefined' && module.exports) {
  */
 
 /* El ciclo: el año cuya antigüedad manda, y la ventana en la que se gozan.
-   La LCT (art. 154) las ubica entre el 1 de octubre y el 30 de abril; el área
-   viene planificando desde julio, así que los meses son un parámetro y no una
-   constante. */
-const VACACIONES_DEFECTO = { anio: 0, mesDesde: 7, mesHasta: 4 };
+   La LCT (art. 154) las ubica entre el 1 de octubre y el 30 de abril, que es
+   la ventana que usa el área, pero la planilla del coordinador venía
+   planificando desde julio: los meses son un parámetro y no una constante, y
+   lo que cae antes de la ventana no se pierde —ver `tramosFueraDeVentana()`—. */
+const VACACIONES_DEFECTO = { anio: 0, mesDesde: 10, mesHasta: 4 };
 
 const _vacPad = n => String(n).padStart(2, '0');
 const _vacFinDeMes = (anio, mes) => new Date(Date.UTC(anio, mes, 0)).getUTCDate();
@@ -5589,6 +5640,26 @@ function tramosDeVacaciones(c, ciclo) {
 }
 
 /**
+ * Las vacaciones de la misma persona que arrancaron **antes de la ventana**.
+ *
+ * La planilla del área planificaba desde julio y la ventana del panel arranca
+ * en octubre, así que hay salidas reales que caen afuera. **No se tiran y no
+ * se suman al saldo**: cuál ciclo pagó una salida de julio no se puede deducir
+ * —podría ser el arrastre del ciclo anterior o un adelanto de éste— y
+ * adivinarlo le descontaría días a alguien que todavía los tiene. Se nombran
+ * en la fila, que es lo que el panel hace siempre con lo que no sabe.
+ */
+function tramosFueraDeVentana(c, ciclo) {
+  const desdeAnio = `${ciclo.anio}-01-01`;
+  return ((c && c.ausencias) || [])
+    .filter(a => a.motivo === 'vacaciones' && a.desde &&
+                 a.desde >= desdeAnio && a.desde < ciclo.desde)
+    .map(a => ({ id: a.id, desde: a.desde, hasta: a.hasta || '',
+                 dias: a.hasta ? diasDeTramo(a.desde, a.hasta) : 0 }))
+    .sort((x, y) => x.desde.localeCompare(y.desde));
+}
+
+/**
  * La fila de una persona en el cuadro: derecho, lo planificado, lo ya tomado
  * y el saldo.
  *
@@ -5607,13 +5678,15 @@ function filaDeVacaciones(c, ciclo, hoy) {
     if (!t.hasta || t.desde > h) return a;
     return a + diasDeTramo(t.desde, t.hasta < h ? t.hasta : h);
   }, 0);
+  const antes = tramosFueraDeVentana(c, ciclo);
   return Object.assign({
     id: c.id, nombre: c.nombre || '', cargo: c.cargo || '', posicion: c.posicion || '',
+    antes, diasAntes: antes.reduce((a, t) => a + t.dias, 0),
     fechaIngreso: c.fechaIngreso || c.fechaIngresoFTD || '',
     fte: jornadaDeVinculo(c).fte,
     tramos, planificados, tomados,
     saldo: d.total - planificados,
-    sinPlanificar: planificados === 0,
+    sinPlanificar: planificados === 0 && !antes.length,
     supuestos: tramos.some(t => t.fechasSupuestas),
     sinRetorno: tramos.some(t => t.sinRetorno)
   }, d);
@@ -5645,6 +5718,8 @@ function planDeVacaciones(sucursal, ciclo, hoy) {
     planificados: sum('planificados'),
     tomados: sum('tomados'),
     saldo: sum('saldo'),
+    diasAntes: sum('diasAntes'),
+    conTramosAntes: filas.filter(f => f.antes.length).length,
     sinPlanificar: filas.filter(f => f.sinPlanificar).length
   };
 }
@@ -5673,24 +5748,73 @@ function coberturaDeVacaciones(sucursal, ciclo) {
     tramosDeVacaciones(c, ciclo).forEach(t => {
       if (!t.hasta) return;
       fuera.push({ desde: t.desde, hasta: t.hasta, fte: jornadaDeVinculo(c).fte,
+                   posicion: c.posicion || 'Sin posición',
                    nombre: c.nombre || '', id: c.id });
     });
+  });
+
+  /* **La dotación también se cuenta por posición, en personas y no en FTE.**
+     «Te quedás sin dos APV» es una pregunta sobre cabezas que cubren un turno:
+     dos farmacéuticos de media jornada son un FTE y son dos personas, y el que
+     se va de vacaciones deja un turno sin cubrir, no medio. El FTE sigue
+     contestando la otra pregunta —cuánto turno queda en total— y por eso van
+     los dos. */
+  const posiciones = {};
+  gente.forEach(c => {
+    const k = c.posicion || 'Sin posición';
+    posiciones[k] = (posiciones[k] || 0) + 1;
   });
 
   const meses = ciclo.meses.map(mes => {
     const [a, m] = mes.split('-').map(Number);
     const ultimo = _vacFinDeMes(a, m);
     let peorFte = 0, peorDia = '', salen = [];
+    /* Por posición se guarda el peor día de cada una, que no tiene por qué ser
+       el mismo que el peor del total: el día que se van tres personas puede ser
+       uno y el día que se van los dos APV, otro. */
+    const porPos = {};
+    Object.keys(posiciones).forEach(k => {
+      porPos[k] = { posicion: k, dotacion: posiciones[k], fuera: 0, quedan: posiciones[k],
+                    peorDia: '', nombres: [] };
+    });
+
     for (let d = 1; d <= ultimo; d++) {
       const iso = `${a}-${_vacPad(m)}-${_vacPad(d)}`;
       const hoyFuera = fuera.filter(f => f.desde <= iso && f.hasta >= iso);
       const fte = hoyFuera.reduce((x, f) => x + f.fte, 0);
       if (fte > peorFte) { peorFte = fte; peorDia = iso; salen = hoyFuera.slice(); }
+
+      const cuenta = {};
+      hoyFuera.forEach(f => {
+        (cuenta[f.posicion] || (cuenta[f.posicion] = [])).push(f.nombre);
+      });
+      Object.keys(cuenta).forEach(k => {
+        const p = porPos[k];
+        if (!p || cuenta[k].length <= p.fuera) return;
+        p.fuera = cuenta[k].length;
+        p.quedan = p.dotacion - p.fuera;
+        p.peorDia = iso;
+        p.nombres = cuenta[k].slice();
+      });
     }
+
     const piso = dotacion - peorFte;
+    const posicionesEnRiesgo = Object.values(porPos)
+      /* Dos umbrales y no uno. **Que una posición quede en cero es categórico**
+         —ese día no hay ningún APV en el piso— y no depende de ningún mínimo
+         configurado. Que se vaya la mitad o más es un aviso: todavía queda
+         alguien, pero la tienda opera distinto y conviene verlo antes de
+         firmar el calendario. */
+      .filter(p => p.fuera > 0 && (p.quedan === 0 || p.fuera * 2 >= p.dotacion))
+      .map(p => Object.assign({}, p, { nivel: p.quedan === 0 ? 'rojo' : 'ambar' }))
+      .sort((x, y) => (x.quedan - y.quedan) || (y.fuera - x.fuera));
+
     return {
       mes, fteFuera: peorFte, peorDia, salen,
       piso,
+      porPosicion: Object.values(porPos).sort((x, y) => x.quedan - y.quedan),
+      posicionesEnRiesgo,
+      sinNadie: posicionesEnRiesgo.filter(p => p.quedan === 0),
       /* Sin mínimo cargado no hay veredicto: `bajoMinimo` queda en falso y la
          pantalla dice que falta el dato en vez de pintar un rojo inventado. */
       bajoMinimo: minimo > 0 && piso < minimo,
@@ -5700,8 +5824,14 @@ function coberturaDeVacaciones(sucursal, ciclo) {
     };
   });
 
-  return { dotacion, minimo, meses,
-           mesesBajoMinimo: meses.filter(x => x.bajoMinimo).length };
+  return { dotacion, minimo, meses, posiciones,
+           mesesBajoMinimo: meses.filter(x => x.bajoMinimo).length,
+           mesesSinPosicion: meses.filter(x => x.sinNadie.length).length,
+           /* La lista plana que lee la pantalla y el aviso del alta: un renglón
+              por mes y posición, lo más grave primero. */
+           avisos: meses.flatMap(x => x.posicionesEnRiesgo.map(p =>
+             Object.assign({ mes: x.mes }, p)))
+             .sort((x, y) => (x.quedan - y.quedan) || x.mes.localeCompare(y.mes)) };
 }
 
 /** El cuadro de toda el área, una fila por tienda. */
@@ -5721,15 +5851,43 @@ function vacacionesDelArea(estado, ciclo, hoy) {
     tomados: sum('tomados'),
     saldo: sum('saldo'),
     sinPlanificar: sum('sinPlanificar'),
-    mesesBajoMinimo: tiendas.reduce((a, t) => a + t.cobertura.mesesBajoMinimo, 0)
+    mesesBajoMinimo: tiendas.reduce((a, t) => a + t.cobertura.mesesBajoMinimo, 0),
+    sinPosicion: tiendas.reduce((a, t) => a + t.cobertura.mesesSinPosicion, 0)
   };
 }
+
+/* ================= La planilla de planificación ===================== *
+ *
+ * El área la lleva en Excel, con **una hoja por tienda** y diez pares de
+ * columnas SALIDA/RETORNO. Pegar hoja por hoja es lo que ya salió mal con el
+ * libro de novedades —catorce pegadas y una en la tienda equivocada que no se
+ * nota hasta el cierre—, así que acá se pega **una tabla plana con una fila
+ * por tramo**: la misma forma que el libro, el parte y el formulario.
+ *
+ * Quien no tiene ninguna salida planificada entra igual, con las dos fechas
+ * vacías: su fila sirve para cargar los días que arrastra del ciclo anterior,
+ * que es un dato que el panel no puede deducir.
+ */
+const COLUMNAS_PLAN_VACACIONES = [
+  { campo: 'tienda',   claves: ['tienda', 'sucursal'] },
+  { campo: 'nombre',   claves: ['apellido y nombre', 'colaborador', 'nombre'] },
+  { campo: 'cuil',     claves: ['cuil', 'dni', 'documento'] },
+  { campo: 'ingreso',  claves: ['ingreso'] },
+  { campo: 'pendiente', claves: ['pend'] },
+  { campo: 'desde',    claves: ['salida', 'desde'] },
+  /* **El retorno es el día que vuelve, no el último de licencia.** Así lo
+     escribe la planilla —sale el 26/10 y retorna el 12/11, que son 17 días— y
+     así lo entiende el gerente. El panel guarda el último día, como cualquier
+     otra licencia, y la conversión se hace acá, en un solo lugar. */
+  { campo: 'retorno',  claves: ['retorno', 'regreso', 'vuelve'] }
+];
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     VACACIONES_DEFECTO, cicloDeVacaciones, nombreDeCiclo, diasDeTramo,
     antiguedadParaVacaciones, derechoDeVacaciones, tramosDeVacaciones,
-    filaDeVacaciones, planDeVacaciones, coberturaDeVacaciones, vacacionesDelArea
+    filaDeVacaciones, planDeVacaciones, coberturaDeVacaciones, vacacionesDelArea,
+    tramosFueraDeVentana, COLUMNAS_PLAN_VACACIONES
   };
 }
 
@@ -9750,6 +9908,17 @@ const Store = (() => {
     if (!String(e.config.area || '').trim()) e.config.area = base.config.area;
     e.config.gerenteOperaciones = Object.assign({}, base.config.gerenteOperaciones, e.config.gerenteOperaciones || {});
     e.config.parametros = Object.assign({}, PARAMETROS_DEFECTO, e.config.parametros || {});
+    /* La ventana de vacaciones salió con julio como mes de arranque, copiado de
+       la planilla, y el coordinador pidió octubre —que además es lo que fija el
+       art. 154 de la LCT—. El 7 nunca lo eligió nadie: lo guardó el panel solo
+       al abrir, así que corregirlo no pisa una decisión suya. Se hace una sola
+       vez y queda anotado; si después pone julio a propósito, se respeta. */
+    if (!e.config.ventanaVacacionesCorregida) {
+      if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
+        e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
+      }
+      e.config.ventanaVacacionesCorregida = true;
+    }
     e.sucursales = Array.isArray(e.sucursales) ? e.sucursales : base.sucursales;
     if (!Array.isArray(e.config.gerentesOperaciones) || !e.config.gerentesOperaciones.length) {
       e.config.gerentesOperaciones = GERENTES_OPERACIONES_AREA3.map(g => Object.assign({}, g));
@@ -12013,6 +12182,84 @@ const Store = (() => {
      * adentro de la ausencia**: es lo que pasó en esta llamada, no un campo de
      * la licencia, y guardarlo la ensuciaría para siempre.
      */
+    /**
+     * La planilla de planificación de vacaciones, pegada entera.
+     *
+     * Una fila por tramo: la persona con dos salidas aparece dos veces, y la
+     * que no tiene ninguna aparece una con las fechas vacías —su fila sirve
+     * para cargar los días que arrastra del ciclo anterior—.
+     *
+     * **No crea a nadie**, como el libro de novedades: la fila que no cae en
+     * el padrón se devuelve con nombre y tienda. Usa `buscadorDePadron()`,
+     * que es el único emparejamiento del panel.
+     *
+     * **Y completa el CUIL donde falta.** La planilla lo trae y el padrón del
+     * repositorio no —la privacidad lo deja afuera—, así que la primera pegada
+     * empareja por nombre y deja el número escrito: la del año que viene ya
+     * empareja por número, que no se equivoca.
+     */
+    importarPlanDeVacaciones(filas, ciclo) {
+      const e = this.get();
+      const buscar = buscadorDePadron(e);
+      const ci = ciclo || cicloDeVacaciones((e.config || {}).parametros);
+      const out = { personas: 0, tramos: 0, corregidos: 0, repetidos: 0,
+                    pendientes: 0, cuilesCargados: 0, sinFecha: 0, fueraDeVentana: 0,
+                    sinPersona: [], otrasAreas: 0, enConflicto: [] };
+      const vistas = new Set();
+
+      filas.forEach(f => {
+        const m = buscar(f);
+        if (m.conflicto) { out.enConflicto.push(m.conflicto); return; }
+        if (!m.g) {
+          if (m.propia) {
+            const n = String(f.nombre || '').trim();
+            if (n && out.sinPersona.indexOf(n) < 0) out.sinPersona.push(n);
+          } else out.otrasAreas++;
+          return;
+        }
+        const c = m.g.c;
+        if (!vistas.has(c.id)) { vistas.add(c.id); out.personas++; }
+
+        /* El CUIL de la planilla se escribe solo donde el padrón no tiene
+           ninguno. Nunca pisa uno cargado: si difieren, el que vale es el de
+           la nómina y esto es una planilla escrita a mano. */
+        const cu = String(f.cuil || '').replace(/\D/g, '');
+        if (cu.length === 11 && !String(c.cuil || '').replace(/\D/g, '')) {
+          c.cuil = cu;
+          out.cuilesCargados++;
+        }
+
+        const pend = Number(String(f.pendiente == null ? '' : f.pendiente).replace(',', '.'));
+        if (isFinite(pend) && pend > 0) {
+          if (!c.vacacionesPendientes) c.vacacionesPendientes = {};
+          c.vacacionesPendientes[String(ci.anio)] = pend;
+          out.pendientes++;
+        }
+
+        const desde = fechaDelParte(f.desde);
+        if (!desde) { if (f.desde) out.sinFecha++; return; }
+        /* Del retorno al último día de licencia: vuelve el 12 quiere decir que
+           el último día afuera fue el 11. La resta vive acá y en ningún otro
+           lado, por lo mismo que `rangoDePeriodo()`. */
+        const retorno = fechaDelParte(f.retorno);
+        const hasta = retorno ? _diaMas(retorno, -1) : '';
+        if (hasta && hasta < desde) { out.sinFecha++; return; }
+        if (desde < ci.desde || desde > ci.hasta) out.fueraDeVentana++;
+
+        const r = this.agregarAusencia(c.id, {
+          motivo: 'vacaciones', desde, hasta,
+          origen: 'planVacaciones', ciclo: String(ci.anio)
+        });
+        if (!r) return;
+        if (r.accion === 'nueva') out.tramos++;
+        else if (r.accion === 'corregida') out.corregidos++;
+        else out.repetidos++;
+      });
+
+      guardar();
+      return out;
+    },
+
     /* ==================== Vacantes ====================
      *
      * Lo único que se pidió guardar es **qué puesto falta y en qué tienda**.
@@ -21877,6 +22124,118 @@ const App = (() => {
                                mesHasta: p.vacacionesMesHasta });
   }
 
+  /* ============== El calendario de la tienda, día por día ==============
+   *
+   * **Acá sí va un dibujo y no una tabla de fechas**, que es la excepción a la
+   * regla del panel. Lo que hay que ver es el **solapamiento**: dos salidas de
+   * enero se leen igual en una lista —«05/01→21/01» y «12/01→28/01»— y en una
+   * tira de días se ve de una que hay nueve días con los dos afuera. Una lista
+   * de fechas obliga a hacer esa cuenta en la cabeza catorce veces.
+   *
+   * Abajo va **una fila por posición con cuántos quedan cada día**, que es la
+   * pregunta que trajo todo esto: «te quedás sin dos APV». El número está
+   * escrito en la celda y el color lo acompaña — el color nunca es lo único
+   * que dice qué pasa, igual que en la barra de composición del Panel.
+   */
+  let vacMes = '';           // el mes abierto en el calendario
+  let resultadoPlanVac = null;   // lo que devolvió la última pegada de la planilla
+
+  const DIAS_SEMANA_VAC = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+
+  function bloqueCalendarioVacaciones(s, ciclo, plan, cob) {
+    if (!ciclo.meses.length) return '';
+    const mes = ciclo.meses.indexOf(vacMes) >= 0 ? vacMes
+      : (ciclo.meses.find(m => m >= hoyISO().slice(0, 7)) || ciclo.meses[0]);
+    const [anio, m] = mes.split('-').map(Number);
+    const ultimo = new Date(Date.UTC(anio, m, 0)).getUTCDate();
+    const dias = [];
+    for (let d = 1; d <= ultimo; d++) {
+      const iso = `${anio}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      dias.push({ d, iso, semana: new Date(iso + 'T00:00:00').getDay() });
+    }
+    const hoy = hoyISO();
+    const delMes = cob.meses.find(x => x.mes === mes) || { porPosicion: [], posicionesEnRiesgo: [] };
+
+    /* Primero los que salen este mes: el que no sale no es lo que se viene a
+       mirar, pero va igual —ver quién está disponible es la otra mitad de
+       mover una fecha—. */
+    const filas = plan.filas.slice().sort((a, b) => {
+      const ta = a.tramos.find(t => t.desde.slice(0, 7) <= mes && (t.hasta || t.desde).slice(0, 7) >= mes);
+      const tb = b.tramos.find(t => t.desde.slice(0, 7) <= mes && (t.hasta || t.desde).slice(0, 7) >= mes);
+      if (!!ta !== !!tb) return ta ? -1 : 1;
+      if (ta && tb && ta.desde !== tb.desde) return ta.desde.localeCompare(tb.desde);
+      return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+    });
+
+    const celdasDe = f => dias.map(x => {
+      const t = f.tramos.find(t => t.hasta && t.desde <= x.iso && t.hasta >= x.iso);
+      if (!t) return `<td class="cal-dia${x.semana === 0 ? ' finde' : ''}${
+        x.iso === hoy ? ' hoy' : ''}"></td>`;
+      const arranca = t.desde === x.iso;
+      const termina = t.hasta === x.iso;
+      return `<td class="cal-dia cal-vac${arranca ? ' arranca' : ''}${termina ? ' termina' : ''}${
+        t.fechasSupuestas ? ' supuesto' : ''}${x.iso === hoy ? ' hoy' : ''}"
+        title="${esc(f.nombre)} · ${_fecha(t.desde)} → ${_fecha(t.hasta)} · ${t.dias} días${
+          t.fechasSupuestas ? ' · fechas supuestas por el libro' : ''}"></td>`;
+    }).join('');
+
+    return `<section class="tarjeta">
+      <div class="cabecera-suc">
+        <h2>Calendario de ${esc(mesLargoVac(mes))}</h2>
+        <label class="campo" style="margin:0;min-width:180px">
+          <select data-vacmes>
+            ${ciclo.meses.map(x => `<option value="${x}"${x === mes ? ' selected' : ''}
+              >${esc(mesLargoVac(x))}</option>`).join('')}
+          </select></label>
+      </div>
+      <p class="ayuda">Cada barra es una salida. Abajo, cuánta gente de cada posición
+        queda en el piso ese día: <strong>el número está escrito</strong> y el color solo
+        lo acompaña.</p>
+      <div class="tabla-scroll"><table class="cal-vac-tabla">
+        <thead>
+          <tr><th class="cal-quien"></th>${dias.map(x =>
+            `<th class="cal-dia${x.semana === 0 ? ' finde' : ''}">${DIAS_SEMANA_VAC[x.semana]}</th>`).join('')}</tr>
+          <tr><th class="cal-quien">Quién</th>${dias.map(x =>
+            `<th class="cal-dia${x.semana === 0 ? ' finde' : ''}${x.iso === hoy ? ' hoy' : ''}">${x.d}</th>`).join('')}</tr>
+        </thead>
+        <tbody>${filas.map(f => `<tr>
+          <th class="cal-quien"><span>${esc(f.nombre)}</span>
+            <em>${esc(f.posicion || f.cargo || '')}</em></th>
+          ${celdasDe(f)}
+        </tr>`).join('')}</tbody>
+        <tfoot>${delMes.porPosicion.map(p => {
+          const fila = dias.map(x => {
+            const fuera = plan.filas.filter(f => (f.posicion || 'Sin posición') === p.posicion
+              && f.tramos.some(t => t.hasta && t.desde <= x.iso && t.hasta >= x.iso)).length;
+            const quedan = p.dotacion - fuera;
+            const tono = quedan === 0 ? 'sin' : (fuera > 0 && fuera * 2 >= p.dotacion) ? 'justo' : '';
+            return `<td class="cal-dia cal-cob ${tono}${x.semana === 0 ? ' finde' : ''}"
+              title="${esc(p.posicion)}: quedan ${quedan} de ${p.dotacion} el ${_fecha(x.iso)}">${quedan}</td>`;
+          }).join('');
+          return `<tr><th class="cal-quien"><span>${esc(p.posicion)}</span>
+            <em>${p.dotacion} en total</em></th>${fila}</tr>`;
+        }).join('')}</tfoot>
+      </table></div>
+      ${delMes.posicionesEnRiesgo.length ? `<div class="aviso-caja${
+        delMes.sinNadie.length ? ' alerta' : ''}">
+        ${delMes.posicionesEnRiesgo.map(p => `<div>${p.quedan === 0
+          ? `<strong>El ${_fecha(p.peorDia)} te quedás sin ${esc(p.posicion)}</strong>:
+             salen ${p.fuera === p.dotacion ? 'los' : ''} ${p.fuera} de ${p.dotacion}
+             (${p.nombres.map(esc).join(', ')}).`
+          : `<strong>El ${_fecha(p.peorDia)} salen ${p.fuera} de ${p.dotacion} ${esc(p.posicion)}</strong>:
+             queda${p.quedan === 1 ? '' : 'n'} ${p.quedan} (${p.nombres.map(esc).join(', ')}).`}</div>`).join('')}
+      </div>` : ''}
+    </section>`;
+  }
+
+  const MESES_LARGOS_VAC = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                            'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  function mesLargoVac(iso) {
+    const [a, m] = String(iso).split('-');
+    const n = MESES_LARGOS_VAC[Number(m) - 1] || '';
+    return n ? n.charAt(0).toUpperCase() + n.slice(1) + ' de ' + a : iso;
+  }
+
   /* ========================= VISTA: VACANTES ========================= *
    *
    * Lo que se pidió guardar es **qué puesto falta y en qué tienda**, y eso es
@@ -22076,6 +22435,59 @@ const App = (() => {
         </section>
 
         <section class="tarjeta">
+          <h2>Pegar la planilla de planificación</h2>
+          <p class="ayuda">
+            Una <strong>fila por tramo</strong> y una tabla sola para las doce tiendas, no una
+            hoja por tienda: pegar catorce veces es lo que ya salió mal con el libro de
+            novedades. Las columnas son <strong>TIENDA · COLABORADOR · CUIL · INGRESO ·
+            PEND AÑO ANT · SALIDA · RETORNO</strong>, y el orden no importa porque se ubican
+            por el encabezado. Quien no tiene ninguna salida va igual, con las dos fechas
+            vacías: su fila carga los días que arrastra del ciclo anterior.
+          </p>
+          <p class="ayuda"><strong>«Retorno» es el día que vuelve</strong>, como lo escribe la
+            planilla: sale el 26/10 y retorna el 12/11 son 17 días. El panel guarda el último
+            día de licencia y hace la cuenta solo. Se puede volver a pegar todos los meses:
+            la salida que ya estaba se corrige, no se duplica.</p>
+          <label class="campo"><span>Pegá acá la planilla, con sus encabezados</span>
+            <textarea id="pegar-plan-vac" rows="6"
+              placeholder="TIENDA	COLABORADOR	CUIL	INGRESO	PEND AÑO ANT	SALIDA	RETORNO"></textarea></label>
+          <div class="acciones">
+            <button class="b" data-accion="importar-plan-vacaciones">Cargar la planificación</button>
+            ${resultadoPlanVac ? '<button class="b sec" data-accion="limpiar-plan-vacaciones">Limpiar</button>' : ''}
+          </div>
+          ${resultadoPlanVac ? (() => {
+            const r = resultadoPlanVac;
+            return `<div class="aviso-caja info">
+              <strong>${r.personas} persona${r.personas === 1 ? '' : 's'} del área</strong>,
+              ${r.tramos} salida${r.tramos === 1 ? '' : 's'} nueva${r.tramos === 1 ? '' : 's'}${
+                r.corregidos ? `, ${r.corregidos} corregida${r.corregidos === 1 ? '' : 's'}` : ''}${
+                r.repetidos ? `, ${r.repetidos} que ya estaba${r.repetidos === 1 ? '' : 'n'} igual` : ''}.
+              ${r.pendientes ? `${r.pendientes} con días del ciclo anterior. ` : ''}
+              ${r.cuilesCargados ? `<br>Se completó el <strong>CUIL</strong> de ${r.cuilesCargados}
+                persona${r.cuilesCargados === 1 ? '' : 's'} que no lo tenía: la próxima pegada
+                empareja por número y no por nombre.` : ''}
+              ${r.fueraDeVentana ? `<br>${r.fueraDeVentana} salida${r.fueraDeVentana === 1 ? '' : 's'}
+                arranca${r.fueraDeVentana === 1 ? '' : 'n'} <strong>antes del ${fmtFecha(ciclo.desde)}</strong>:
+                entraron igual y se leen en la ficha de cada persona, pero no cuentan contra el
+                saldo de este ciclo porque no se sabe cuál lo pagó.` : ''}
+              ${r.otrasAreas ? `<br>${r.otrasAreas} fila${r.otrasAreas === 1 ? '' : 's'} de otras áreas,
+                que no entraron.` : ''}
+            </div>
+            ${r.sinPersona.length ? `<div class="aviso-caja">
+              <strong>${r.sinPersona.length} de tus tiendas no cayeron en nadie del padrón.</strong>
+              Casi siempre es gente que ya se fue, o que todavía no está cargada:
+              ${r.sinPersona.slice(0, 25).map(esc).join(' · ')}${
+                r.sinPersona.length > 25 ? ` … y ${r.sinPersona.length - 25} más` : ''}.
+            </div>` : ''}
+            ${r.enConflicto.length ? `<div class="aviso-caja alerta">
+              <strong>${r.enConflicto.length} fila${r.enConflicto.length === 1 ? '' : 's'} con el
+              número y el nombre apuntando a personas distintas</strong>, así que no entraron:
+              ${r.enConflicto.slice(0, 10).map(esc).join(' · ')}.
+            </div>` : ''}`;
+          })() : ''}
+        </section>
+
+        <section class="tarjeta">
           <h2>De dónde salen los días</h2>
           <p class="ayuda">
             Los días legales salen del <strong>art. 24 del CCT 414/05</strong>, que mejora la
@@ -22125,6 +22537,18 @@ const App = (() => {
               !cob.minimo ? 'sin turno mínimo no se puede decir'
                           : cob.mesesBajoMinimo ? 'mirá el detalle de abajo' : 'la tienda queda cubierta',
               cob.mesesBajoMinimo ? 'alerta' : 'ok')}
+        ${(() => {
+          /* El que pidió el coordinador: no cuánta gente queda en total sino
+             **de qué posición no queda nadie**. Un piso de 6 FTE con los dos
+             APV afuera no es un piso de 6. */
+          const sin = cob.avisos.filter(x => x.quedan === 0);
+          const justo = cob.avisos.filter(x => x.quedan > 0);
+          return kpi('Posiciones sin nadie', sin.length || (justo.length ? '0' : '—'),
+            sin.length ? `${sin.map(x => esc(x.posicion)).filter((v, i, a) => a.indexOf(v) === i).join(', ')}`
+              : justo.length ? `${justo.length} mes${justo.length === 1 ? '' : 'es'} con la mitad afuera`
+              : 'ninguna queda vacía en todo el ciclo',
+            sin.length ? 'alerta' : justo.length ? 'aviso' : 'ok');
+        })()}
       </div>
 
       <section class="tarjeta">
@@ -22154,6 +22578,8 @@ const App = (() => {
         </div>` : ''}
       </section>
 
+      ${bloqueCalendarioVacaciones(s, ciclo, plan, cob)}
+
       <section class="tarjeta">
         <h2>El cuadro</h2>
         <div class="tabla-scroll"><table class="vac-cuadro">
@@ -22180,7 +22606,10 @@ const App = (() => {
             <td class="num">${f.tomados || '—'}</td>
             <td class="num">${f.saldo === 0
               ? '<span class="chip verde">0</span>'
-              : f.saldo < 0 ? `<span class="chip rojo">${f.saldo}</span>` : f.saldo}</td>
+              : f.saldo < 0 ? `<span class="chip rojo">${f.saldo}</span>` : f.saldo}${
+              f.antes.length ? `<br><span class="chip" title="${esc(f.antes
+                .map(x => _fecha(x.desde) + ' → ' + _fecha(x.hasta)).join(' · '))}"
+                >+${f.diasAntes} antes del ciclo</span>` : ''}</td>
             ${ciclo.meses.map(m => celdaMes(f, m)).join('')}
           </tr>`).join('')}</tbody>
           <tfoot><tr>
@@ -22628,6 +23057,13 @@ const App = (() => {
 
     /* Binding propio por lo mismo que `data-adef`: la clave lleva el año del
        ciclo adentro y `data-colab-campo` escribe campos planos. */
+    cont.addEventListener('change', ev => {
+      const vm = ev.target.closest('[data-vacmes]');
+      if (!vm) return;
+      vacMes = vm.value;
+      refrescar();
+    });
+
     cont.addEventListener('change', ev => {
       const vp = ev.target.closest('[data-vacpend]');
       if (!vp) return;
@@ -23156,6 +23592,40 @@ const App = (() => {
         return;
       }
 
+      if (a === 'importar-plan-vacaciones') {
+        const crudo = (document.getElementById('pegar-plan-vac') || {}).value || '';
+        if (!crudo.trim()) { avisar('Pegá la planilla primero.', 'error'); return; }
+        const filas = filasPegadas(crudo);
+        if (filas.length < 2) { avisar('No se entendió la planilla. ¿Copiaste los encabezados?', 'error'); return; }
+        const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const cab = filas[0].map(norm);
+        const col = {};
+        COLUMNAS_PLAN_VACACIONES.forEach(d => {
+          const i = cab.findIndex(h => d.claves.some(k => h.indexOf(k) >= 0));
+          if (i >= 0) col[d.campo] = i;
+        });
+        if (col.nombre === undefined) {
+          avisar('No encontré la columna del colaborador. ¿Es la planilla de vacaciones?', 'error');
+          return;
+        }
+        Store.resguardarAhora('Antes de cargar la planificación de vacaciones');
+        resultadoPlanVac = Store.importarPlanDeVacaciones(filas.slice(1).map(f => {
+          const o = {};
+          Object.keys(col).forEach(k => { o[k] = f[col[k]] || ''; });
+          return o;
+        }), cicloVigente(Store.get()));
+        refrescar();
+        return;
+      }
+
+      if (a === 'limpiar-plan-vacaciones') {
+        resultadoPlanVac = null;
+        const caja = document.getElementById('pegar-plan-vac');
+        if (caja) caja.value = '';
+        refrescar();
+        return;
+      }
+
       /* --- vacaciones --- */
       if (a === 'planificar-vacaciones') {
         const quien = valorDe('#vacplan-persona');
@@ -23173,12 +23643,29 @@ const App = (() => {
         refrescar();
         if (!r) { avisar('No encontré a esa persona.', 'error'); return; }
         const dias = hasta ? diasDeTramo(desde, hasta) : 0;
-        avisar(r.accion === 'nueva'
+        const base = r.accion === 'nueva'
           ? `Salida anotada${dias ? `: ${dias} día${dias === 1 ? '' : 's'}` : ''}.`
           : r.accion === 'corregida'
             ? `Ya tenía una salida que se pisaba con esta y se corrigió${
                 r.hastaAnterior ? ` — antes terminaba el ${fmtFecha(r.hastaAnterior)}` : ''}.`
-            : 'Esa salida ya estaba cargada igual.');
+            : 'Esa salida ya estaba cargada igual.';
+
+        /* **El aviso sale en el momento de anotar y no cuando se mira la
+           pantalla.** Que la tienda se quede sin APV es algo que se decide al
+           elegir la fecha, y descubrirlo tres pantallas después es descubrirlo
+           cuando el gerente ya se fue. Se nombra y no se impide: mover una
+           salida es una conversación, no una validación. */
+        const cobertura = coberturaDeVacaciones(Store.sucursal(btn.dataset.suc),
+                                                cicloVigente(Store.get()));
+        const choca = cobertura.avisos.filter(x =>
+          x.peorDia >= desde && (!hasta || x.peorDia <= hasta));
+        const grave = choca.find(x => x.quedan === 0) || choca[0];
+        avisar(grave
+          ? `${base} Ojo: el ${fmtFecha(grave.peorDia)} ${grave.quedan === 0
+              ? `la tienda queda sin ${grave.posicion}`
+              : `quedan ${grave.quedan} de ${grave.dotacion} ${grave.posicion}`} (${
+              grave.nombres.join(', ')}).`
+          : base, grave && grave.quedan === 0 ? 'error' : '');
         return;
       }
 
