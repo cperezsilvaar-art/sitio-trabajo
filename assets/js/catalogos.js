@@ -25,6 +25,27 @@ const POSICIONES = [
   { id: 'otros',        nombre: 'Otros',              orden: 8, nivel: 3 }
 ];
 
+/* ================= El laboratorio ==================
+ *
+ * El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y es otra
+ * operación: su gente no cubre el turno del piso aunque la nómina la cargue
+ * como APV. Separarla no es una cuestión de color — es lo que hace que
+ * «te quedás sin dos APV» diga la verdad.
+ *
+ * La **administrativa** no es una especialidad y por eso va en gris: el color
+ * distingue lo que se prepara, y el rótulo al lado dice siempre qué es. Es la
+ * misma regla que la barra de composición — el color nunca es lo único.
+ */
+const ESPECIALIDADES_LABORATORIO = [
+  { id: 'alopatia',      nombre: 'Alopatía',      corto: 'Alo',   token: 'lab-alo' },
+  { id: 'homeopatia',    nombre: 'Homeopatía',    corto: 'Homeo', token: 'lab-homeo' },
+  { id: 'administrativa', nombre: 'Administrativa del laboratorio',
+    corto: 'Adm.', token: 'lab-adm' }
+];
+
+const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
+  .reduce((a, x) => (a[x.id] = x, a), {});
+
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
 

@@ -83,6 +83,11 @@ if demo:
           + (raiz / 'assets/js/plantel-demo.js').read_text(encoding='utf-8') + '\n' + js)
 elif sin_plantel:
     js = 'const PLANTEL_AREA3 = [];\n' + js
+if sin_plantel:
+    # `LABORATORIO_AREA3` también vive en ese archivo y también son nombres de
+    # personas. Sin esta línea la página publicada rompe con un ReferenceError
+    # en vez de abrir vacía, que es peor que la fuga que vinimos a evitar.
+    js = 'const LABORATORIO_AREA3 = [];\n' + js
 
 cuerpo = html.split('<body>', 1)[1].split('</body>', 1)[0]
 cuerpo = re.sub(r'\s*<script src="[^"]+"></script>', '', cuerpo).strip()

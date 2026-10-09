@@ -431,7 +431,49 @@ function enlaceSeguro(url) {
   return u;
 }
 
+/* ================= Quién es del laboratorio ==================
+ *
+ * **Devuelve un objeto y no un booleano**, igual que `esNoPresencial()`, y por
+ * la misma trampa: `filter(c => esDeLaboratorio(c))` se queda con todo el
+ * plantel. Hay que leer `.laboratorio`. Se eligió la misma forma a propósito —
+ * dos formas distintas para la misma clase de pregunta es peor que una forma
+ * con una trampa conocida y documentada.
+ */
+function esDeLaboratorio(colaborador) {
+  const c = colaborador || {};
+  const id = String(c.laboratorio || '').trim();
+  const esp = typeof ESPECIALIDAD_LAB_POR_ID !== 'undefined'
+    ? ESPECIALIDAD_LAB_POR_ID[id] : null;
+  return {
+    laboratorio: !!esp,
+    especialidad: esp ? esp.id : '',
+    nombre: esp ? esp.nombre : '',
+    corto: esp ? esp.corto : '',
+    token: esp ? esp.token : ''
+  };
+}
+
+/**
+ * En qué casillero cuenta esta persona cuando se mide **la cobertura del
+ * piso**: con cuánta gente de cada puesto se queda la tienda.
+ *
+ * La del laboratorio cuenta en el suyo y **no en APV**, que es lo que pidió el
+ * coordinador y lo único que hace que el número sirva: ocho personas cargadas
+ * como APV que están preparando recetas no cubren el mostrador.
+ *
+ * **No pisa `c.posicion`**, que sigue siendo la del cargo: la posición dice
+ * qué es la persona —y de ahí salen el 9-box, el organigrama y el desarrollo—,
+ * y esto dice dónde se la cuenta. Dos preguntas distintas sobre el mismo dato,
+ * y por eso se deriva en vez de guardarse.
+ */
+function posicionDeCobertura(colaborador) {
+  const lab = esDeLaboratorio(colaborador);
+  if (lab.laboratorio) return 'Laboratorio · ' + lab.nombre;
+  return (colaborador || {}).posicion || 'Sin posición';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { edadAnios, composicionDe, composicionPorSucursal,
+  module.exports = {
+    esDeLaboratorio, posicionDeCobertura, edadAnios, composicionDe, composicionPorSucursal,
                      estadoDeDocumento, documentosQueVencen, enlaceSeguro };
 }

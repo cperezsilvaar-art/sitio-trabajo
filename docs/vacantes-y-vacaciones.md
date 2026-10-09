@@ -143,6 +143,27 @@ quede sin cobertura se decide al elegir la fecha, y descubrirlo tres pantallas
 después es descubrirlo cuando el gerente ya se fue. **Se nombra y no se
 impide**: mover una salida es una conversación, no una validación.
 
+### El laboratorio no cuenta como APV
+
+El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y su gente está
+cargada en la nómina como «ASISTENTE DE PISO DE VENTAS»: **ocho personas que la
+tienda contaba en el piso y no están en el piso**. Con eso, «te quedás sin dos
+APV» era un número que nunca se iba a disparar — Olivos parecía tener dieciocho
+APV y tiene ocho.
+
+`posicionDeCobertura()` (`nomina.js`) es el único lugar que decide en qué
+casillero cuenta cada persona: la del laboratorio va en «Laboratorio ·
+Alopatía» o «Laboratorio · Homeopatía», y de paso la cobertura también avisa
+cuando se queda sin homeopatía, que es un turno igual de imposible de cubrir.
+
+**No pisa `c.posicion`.** La posición dice qué *es* la persona —de ahí salen el
+9-box, el organigrama y el desarrollo— y el casillero dice dónde se la *cuenta*.
+Son dos preguntas distintas sobre el mismo dato, así que el casillero se deriva
+y no se guarda.
+
+**Sigue contando en la dotación de la tienda**, que es plantel y cuesta;
+`dotacionPlantel()` lo devuelve aparte en `laboratorio` para poder leerlo solo.
+
 ### El calendario, que es la excepción a «tabla y no gráfico»
 
 Lo que hay que ver es el **solapamiento**. Dos salidas de enero se leen igual en

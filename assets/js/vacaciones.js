@@ -176,6 +176,11 @@ function filaDeVacaciones(c, ciclo, hoy) {
   const antes = tramosFueraDeVentana(c, ciclo);
   return Object.assign({
     id: c.id, nombre: c.nombre || '', cargo: c.cargo || '', posicion: c.posicion || '',
+    /* El casillero con el que se cuenta la cobertura, que para el laboratorio
+       no es su posición. La fila lo lleva para que la tira del calendario
+       sume por el mismo criterio que la tabla de arriba. */
+    posicionCobertura: posicionDeCobertura(c),
+    laboratorio: esDeLaboratorio(c),
     antes, diasAntes: antes.reduce((a, t) => a + t.dias, 0),
     fechaIngreso: c.fechaIngreso || c.fechaIngresoFTD || '',
     fte: jornadaDeVinculo(c).fte,
@@ -243,7 +248,7 @@ function coberturaDeVacaciones(sucursal, ciclo) {
     tramosDeVacaciones(c, ciclo).forEach(t => {
       if (!t.hasta) return;
       fuera.push({ desde: t.desde, hasta: t.hasta, fte: jornadaDeVinculo(c).fte,
-                   posicion: c.posicion || 'Sin posición',
+                   posicion: posicionDeCobertura(c),
                    nombre: c.nombre || '', id: c.id });
     });
   });
@@ -256,7 +261,10 @@ function coberturaDeVacaciones(sucursal, ciclo) {
      los dos. */
   const posiciones = {};
   gente.forEach(c => {
-    const k = c.posicion || 'Sin posición';
+    /* `posicionDeCobertura()` y no `c.posicion`: el laboratorio cuenta en su
+       propio casillero y no en APV. Si no, los ocho del laboratorio de Olivos
+       hacen que la tienda parezca tener diez APV y que nunca quede corta. */
+    const k = posicionDeCobertura(c);
     posiciones[k] = (posiciones[k] || 0) + 1;
   });
 

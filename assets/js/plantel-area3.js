@@ -155,4 +155,37 @@ const PLANTEL_AREA3 = [
   {"ap": "HERRERO", "no": "CARLA ANDREA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2004-11-27", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"}
 ];
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3 };
+/* ============ Quién trabaja en el laboratorio y en qué ============
+ *
+ * El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y su gente
+ * está cargada en la nómina como «ASISTENTE DE PISO DE VENTAS», o sea como
+ * APV: **ocho personas que la tienda cuenta en el piso y no están en el
+ * piso**. Con eso, la cobertura por posición de Olivos miente —y es
+ * justamente el número que decide si una tienda puede dar vacaciones—.
+ *
+ * La especialidad **no viene en ninguna planilla**: la sabe el coordinador. Por
+ * eso vive acá, al lado del plantel, y no se deriva del cargo ni de la unidad
+ * de negocio, que dicen otra cosa. Se empareja por nombre y la ficha de cada
+ * persona la deja cambiar.
+ *
+ * Va en este archivo y no en `catalogos.js` **porque son nombres de personas**:
+ * la build de la página publicada vacía este archivo entero, y `catalogos.js`
+ * viaja tal cual. Lo verifica `check-publicacion.js`.
+ */
+const LABORATORIO_AREA3 = [
+  { n: 'DURAND MENACHO, JHONNY J.',       esp: 'alopatia' },
+  { n: 'ANTUÑEZ, AYELEN',                 esp: 'alopatia' },
+  { n: 'PALACIOS, JUAN PABLO',            esp: 'alopatia' },
+  { n: 'HERRERO, CARLA ANDREA',           esp: 'homeopatia' },
+  { n: 'SEQUEIRA, FIAMA',                 esp: 'homeopatia' },
+  { n: 'BENITEZ, GRACIELA',               esp: 'homeopatia' },
+  { n: 'ALTAMIRANO, JULIETA LUCÍA',       esp: 'homeopatia' },
+  { n: 'ECHEVARRIA, MYRIAM LUCIANA',      esp: 'homeopatia' },
+  { n: 'BARDALES ROSALES, YUDY',          esp: 'homeopatia' },
+  { n: 'CLAVEL, NATALIA CAROLINA',        esp: 'administrativa' }
+  /* Falta **MEDIN, VANESA** —farmacéutica auxiliar de alopatía—: todavía no
+     está en el padrón del área porque le falta la cesión. Cuando entre, se
+     marca desde su ficha; agregarla acá no la haría aparecer. */
+];
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3 };

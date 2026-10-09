@@ -1226,6 +1226,40 @@ guardar un 0, como `marcarAdef()`.
 menos lo planificado: **lo que falta ubicar en el calendario**, no lo que falta
 gozar. La planilla los confunde porque arranca con todo en cero.
 
+**El laboratorio no cuenta como APV, y por eso existe `posicionDeCobertura()`
+(`nomina.js`).** El laboratorio de Olivos prepara alopatía y homeopatía y su
+gente está cargada en la nómina como «ASISTENTE DE PISO DE VENTAS»: **ocho
+personas que la tienda contaba en el piso y no están en el piso**, así que
+«te quedás sin dos APV» era un número que no se podía disparar nunca. El
+casillero de cobertura de esa gente es «Laboratorio · Alopatía» u
+«Homeopatía», y de paso la cobertura avisa también cuando la tienda se queda
+sin homeopatía. **No pisa `c.posicion`**: la posición dice qué *es* la persona
+—de ahí salen el 9-box, el organigrama y el desarrollo— y el casillero dice
+dónde se la *cuenta*, así que se deriva y no se guarda. **Sigue contando en la
+dotación**, que es plantel y cuesta, y `dotacionPlantel().laboratorio` lo
+devuelve aparte.
+
+**`esDeLaboratorio()` devuelve un objeto, no un booleano**, igual que
+`esNoPresencial()` y por la misma trampa: hay que leer `.laboratorio`. La forma
+repetida es a propósito — dos formas distintas para la misma clase de pregunta
+es peor que una con una trampa conocida.
+
+**La especialidad no viene en ninguna planilla**: la sabe el coordinador. Vive
+en `c.laboratorio`, se cambia desde la ficha de la persona (`data-lab`) y en
+vacío **se borra la marca**, como `marcarAdef()`. La lista inicial está en
+`LABORATORIO_AREA3` (`plantel-area3.js`) y una migración de una sola vez la
+escribe sobre el padrón ya cargado sin tocar nada más. **Va en ese archivo y no
+en `catalogos.js` porque son nombres de personas**: la build de la página
+publicada vacía `plantel-area3.js` entero y `catalogos.js` viaja tal cual — por
+eso `build-pagina-unica.py` también inyecta `LABORATORIO_AREA3 = []`, que si no
+la página rompe con un ReferenceError.
+
+**Dos colores y el rótulo siempre escrito al lado.** `--lab-alo` y
+`--lab-homeo` pasaron el validador de daltonismo y contraste contra los dos
+fondos, y los pasos del modo oscuro se eligieron contra el fondo oscuro. La
+administrativa va en gris porque **no es una especialidad**: pintarla de un
+tercer color diría que sí lo es.
+
 **La cobertura se cuenta también por posición, en personas y no en FTE**, y eso
 es lo que contesta «te quedás sin dos APV»: un piso de 6 FTE con los dos APV
 afuera no es un piso de 6, y una farmacia sin su DT no abre. Dos umbrales:

@@ -1307,7 +1307,17 @@ const App = (() => {
           ${np.noPresencial ? `<span class="chip ambar">${esc(np.motivo)}</span>` : ''}
           ${jor.parcial ? '<span class="chip azul">½ jornada</span>' : ''}
         </span>
-        <span class="nom-puesto">${esc(c.cargo || c.posicion || 'sin puesto cargado')}</span>
+        <span class="nom-puesto">${(() => {
+          /* El laboratorio se lee en su propia columna y con su color, no
+             mezclado con el cargo: la nómina los carga a todos como APV y por
+             eso la lista no los distinguía de la gente del piso. El rótulo va
+             siempre escrito — el color lo acompaña. */
+          const lb = esDeLaboratorio(c);
+          return lb.laboratorio
+            ? `<span class="chip-lab ${lb.token}">Laboratorio · ${esc(lb.nombre)}</span>
+               <em class="nom-cargo-real">${esc(c.cargo || '')}</em>`
+            : esc(c.cargo || c.posicion || 'sin puesto cargado');
+        })()}</span>
         <span class="nom-suc">${esc(s.nombre || s.codigo)}</span>
         <span class="nom-ingreso">${c.fechaIngreso ? fmtFecha(c.fechaIngreso) : '—'}</span>
         <span class="nom-ant">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</span>
@@ -3748,7 +3758,21 @@ const App = (() => {
 
     const tono = !a.aplica ? '' : a.cumple ? 'rojo' : a.faltanMeses <= MESES_AVISO_ART8 ? 'ambar' : '';
 
-    return `<h4>Curso de ADEF ${eo
+    return `<h4>Dónde trabaja</h4>
+      <div class="grid c2">
+        <label class="campo"><span>Laboratorio</span>
+          <select data-lab="${c.id}">
+            <option value="">Piso de la tienda</option>
+            ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
+              String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda" style="align-self:end">
+          <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
+          tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
+          la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+      </div>
+
+      <h4>Curso de ADEF ${eo
       ? `<span class="chip ${eo.chip}">${esc(eo.nombre)}</span>`
       : '<span class="chip">Sin relevar</span>'}${
       a.aplica && tono ? ` <span class="chip ${tono}">art. 8</span>` : ''}</h4>
@@ -4685,6 +4709,19 @@ const App = (() => {
        Devoto» se vea mirando la tienda y no entrando a otra pantalla. Va
        punteada y sin nombre, porque lo que la define es que ahí no hay nadie.
        Se agrupa por la posición del cargo, así cae junto a sus pares. */
+    /* El laboratorio sale del nivel del piso y va en su propio grupo, abajo:
+       está adentro de la tienda pero no cubre su turno, que es la misma razón
+       por la que los de bloqueo de título van aparte. */
+    const laboratorio = [];
+    Object.keys(porPosicion).forEach(k => {
+      porPosicion[k] = porPosicion[k].filter(c => {
+        if (!esDeLaboratorio(c).laboratorio) return true;
+        laboratorio.push(c);
+        return false;
+      });
+      if (!porPosicion[k].length) delete porPosicion[k];
+    });
+
     const vac = {};
     (vacantes || []).forEach(v => {
       const cn = CARGOS_NOMINA.find(x => x.cargo === v.cargo);
@@ -4702,6 +4739,8 @@ const App = (() => {
       <strong>${esc(c.nombre || 'Sin nombre')}</strong>
       <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
       ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
+      ${(() => { const lb = esDeLaboratorio(c); return lb.laboratorio
+        ? `<span class="chip-lab ${lb.token}" style="margin-top:4px">${esc(lb.nombre)}</span>` : ''; })()}
       ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
       ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
                     : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
@@ -4741,6 +4780,18 @@ const App = (() => {
         </div>`;
       }).join('')}
       ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k], vac[k])}</div>`).join('')}
+      ${laboratorio.length ? `<div class="org-nivel org-laboratorio">
+        <div class="org-grupo">
+          <h4>Laboratorio <span class="chip">${laboratorio.length}</span>${
+            ESPECIALIDADES_LABORATORIO.map(x => {
+              const n = laboratorio.filter(c => c.laboratorio === x.id).length;
+              return n ? ` <span class="chip-lab ${x.token}">${n} ${esc(x.nombre.toLowerCase())}</span>` : '';
+            }).join('')}</h4>
+          <p class="ayuda">Otra operación adentro de la tienda: no cubre el turno del piso
+            y no cuenta como APV en la cobertura, aunque la nómina la cargue así.</p>
+          <div class="org-fila">${laboratorio.map(tarjeta).join('')}</div>
+        </div>
+      </div>` : ''}
     </div>`;
   }
 
@@ -7238,12 +7289,14 @@ const App = (() => {
         </thead>
         <tbody>${filas.map(f => `<tr>
           <th class="cal-quien"><span>${esc(f.nombre)}</span>
-            <em>${esc(f.posicion || f.cargo || '')}</em></th>
+            <em>${f.laboratorio.laboratorio
+              ? `<span class="chip-lab ${f.laboratorio.token}">${esc(f.laboratorio.corto)}</span> Laboratorio`
+              : esc(f.posicion || f.cargo || '')}</em></th>
           ${celdasDe(f)}
         </tr>`).join('')}</tbody>
         <tfoot>${delMes.porPosicion.map(p => {
           const fila = dias.map(x => {
-            const fuera = plan.filas.filter(f => (f.posicion || 'Sin posición') === p.posicion
+            const fuera = plan.filas.filter(f => f.posicionCobertura === p.posicion
               && f.tramos.some(t => t.hasta && t.desde <= x.iso && t.hasta >= x.iso)).length;
             const quedan = p.dotacion - fuera;
             const tono = quedan === 0 ? 'sin' : (fuera > 0 && fuera * 2 >= p.dotacion) ? 'justo' : '';
@@ -8095,6 +8148,13 @@ const App = (() => {
 
     /* Binding propio por lo mismo que `data-adef`: la clave lleva el año del
        ciclo adentro y `data-colab-campo` escribe campos planos. */
+    cont.addEventListener('change', ev => {
+      const lb = ev.target.closest('[data-lab]');
+      if (!lb) return;
+      Store.marcarLaboratorio(lb.dataset.lab, lb.value);
+      refrescar();
+    });
+
     cont.addEventListener('change', ev => {
       const vm = ev.target.closest('[data-vacmes]');
       if (!vm) return;

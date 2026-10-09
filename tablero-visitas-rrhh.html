@@ -1319,6 +1319,40 @@ a.org-persona { text-decoration: none; }
 }
 :root[data-theme="dark"] { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
 
+/* ===================== El laboratorio =====================
+   Dos especialidades, dos colores, y el rótulo **siempre escrito al lado**:
+   el color distingue de un vistazo y el texto es el que dice qué es, igual
+   que en la barra de composición. La administrativa va en gris porque no es
+   una especialidad — no se prepara nada— y pintarla de un tercer color diría
+   que sí lo es.
+
+   Los dos tonos pasaron el validador de daltonismo y contraste contra los dos
+   fondos (ΔE deutan 16,5 en claro y 12,6 en oscuro), y los pasos del modo
+   oscuro se eligieron contra el fondo oscuro, no derivados del claro. */
+:root { --lab-alo: #0e8f7e; --lab-homeo: #9b2fc9; --lab-adm: #55657c; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --lab-alo: #25a893; --lab-homeo: #b05fd4; --lab-adm: #93a2b8; }
+}
+:root[data-theme="dark"] { --lab-alo: #25a893; --lab-homeo: #b05fd4; --lab-adm: #93a2b8; }
+
+.chip-lab {
+  display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.5;
+  padding: 0 7px; border-radius: 10px; white-space: nowrap;
+  border: 1px solid currentColor; background: transparent;
+}
+.chip-lab.lab-alo   { color: var(--lab-alo); }
+.chip-lab.lab-homeo { color: var(--lab-homeo); }
+.chip-lab.lab-adm   { color: var(--lab-adm); }
+
+.nom-cargo-real { display: block; font-style: normal; font-size: 11px; color: var(--texto-suave); }
+
+/* El grupo del laboratorio se separa del piso con una línea, no con otro
+   fondo: el fondo lo usa el organigrama para el nivel del gerente. */
+.org-nivel.org-laboratorio {
+  border-top: 1px dashed var(--borde-fuerte); padding-top: 14px; margin-top: 6px;
+}
+.org-nivel.org-laboratorio .org-persona { border-style: dashed; }
+
 </style>
 
 <!-- La navegación pasó de una fila de nueve solapas a una columna: en
@@ -1461,6 +1495,27 @@ const POSICIONES = [
   { id: 'belleza',      nombre: 'Asesora de Belleza', orden: 7, nivel: 3 },
   { id: 'otros',        nombre: 'Otros',              orden: 8, nivel: 3 }
 ];
+
+/* ================= El laboratorio ==================
+ *
+ * El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y es otra
+ * operación: su gente no cubre el turno del piso aunque la nómina la cargue
+ * como APV. Separarla no es una cuestión de color — es lo que hace que
+ * «te quedás sin dos APV» diga la verdad.
+ *
+ * La **administrativa** no es una especialidad y por eso va en gris: el color
+ * distingue lo que se prepara, y el rótulo al lado dice siempre qué es. Es la
+ * misma regla que la barra de composición — el color nunca es lo único.
+ */
+const ESPECIALIDADES_LABORATORIO = [
+  { id: 'alopatia',      nombre: 'Alopatía',      corto: 'Alo',   token: 'lab-alo' },
+  { id: 'homeopatia',    nombre: 'Homeopatía',    corto: 'Homeo', token: 'lab-homeo' },
+  { id: 'administrativa', nombre: 'Administrativa del laboratorio',
+    corto: 'Adm.', token: 'lab-adm' }
+];
+
+const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
+  .reduce((a, x) => (a[x.id] = x, a), {});
 
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
@@ -2361,7 +2416,40 @@ const PLANTEL_AREA3 = [
   {"ap": "HERRERO", "no": "CARLA ANDREA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2004-11-27", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"}
 ];
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3 };
+/* ============ Quién trabaja en el laboratorio y en qué ============
+ *
+ * El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y su gente
+ * está cargada en la nómina como «ASISTENTE DE PISO DE VENTAS», o sea como
+ * APV: **ocho personas que la tienda cuenta en el piso y no están en el
+ * piso**. Con eso, la cobertura por posición de Olivos miente —y es
+ * justamente el número que decide si una tienda puede dar vacaciones—.
+ *
+ * La especialidad **no viene en ninguna planilla**: la sabe el coordinador. Por
+ * eso vive acá, al lado del plantel, y no se deriva del cargo ni de la unidad
+ * de negocio, que dicen otra cosa. Se empareja por nombre y la ficha de cada
+ * persona la deja cambiar.
+ *
+ * Va en este archivo y no en `catalogos.js` **porque son nombres de personas**:
+ * la build de la página publicada vacía este archivo entero, y `catalogos.js`
+ * viaja tal cual. Lo verifica `check-publicacion.js`.
+ */
+const LABORATORIO_AREA3 = [
+  { n: 'DURAND MENACHO, JHONNY J.',       esp: 'alopatia' },
+  { n: 'ANTUÑEZ, AYELEN',                 esp: 'alopatia' },
+  { n: 'PALACIOS, JUAN PABLO',            esp: 'alopatia' },
+  { n: 'HERRERO, CARLA ANDREA',           esp: 'homeopatia' },
+  { n: 'SEQUEIRA, FIAMA',                 esp: 'homeopatia' },
+  { n: 'BENITEZ, GRACIELA',               esp: 'homeopatia' },
+  { n: 'ALTAMIRANO, JULIETA LUCÍA',       esp: 'homeopatia' },
+  { n: 'ECHEVARRIA, MYRIAM LUCIANA',      esp: 'homeopatia' },
+  { n: 'BARDALES ROSALES, YUDY',          esp: 'homeopatia' },
+  { n: 'CLAVEL, NATALIA CAROLINA',        esp: 'administrativa' }
+  /* Falta **MEDIN, VANESA** —farmacéutica auxiliar de alopatía—: todavía no
+     está en el padrón del área porque le falta la cesión. Cuando entre, se
+     marca desde su ficha; agregarla acá no la haría aparecer. */
+];
+
+if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3 };
 
 /*
  * modelo.js — Motor de cálculo.
@@ -3844,8 +3932,50 @@ function enlaceSeguro(url) {
   return u;
 }
 
+/* ================= Quién es del laboratorio ==================
+ *
+ * **Devuelve un objeto y no un booleano**, igual que `esNoPresencial()`, y por
+ * la misma trampa: `filter(c => esDeLaboratorio(c))` se queda con todo el
+ * plantel. Hay que leer `.laboratorio`. Se eligió la misma forma a propósito —
+ * dos formas distintas para la misma clase de pregunta es peor que una forma
+ * con una trampa conocida y documentada.
+ */
+function esDeLaboratorio(colaborador) {
+  const c = colaborador || {};
+  const id = String(c.laboratorio || '').trim();
+  const esp = typeof ESPECIALIDAD_LAB_POR_ID !== 'undefined'
+    ? ESPECIALIDAD_LAB_POR_ID[id] : null;
+  return {
+    laboratorio: !!esp,
+    especialidad: esp ? esp.id : '',
+    nombre: esp ? esp.nombre : '',
+    corto: esp ? esp.corto : '',
+    token: esp ? esp.token : ''
+  };
+}
+
+/**
+ * En qué casillero cuenta esta persona cuando se mide **la cobertura del
+ * piso**: con cuánta gente de cada puesto se queda la tienda.
+ *
+ * La del laboratorio cuenta en el suyo y **no en APV**, que es lo que pidió el
+ * coordinador y lo único que hace que el número sirva: ocho personas cargadas
+ * como APV que están preparando recetas no cubren el mostrador.
+ *
+ * **No pisa `c.posicion`**, que sigue siendo la del cargo: la posición dice
+ * qué es la persona —y de ahí salen el 9-box, el organigrama y el desarrollo—,
+ * y esto dice dónde se la cuenta. Dos preguntas distintas sobre el mismo dato,
+ * y por eso se deriva en vez de guardarse.
+ */
+function posicionDeCobertura(colaborador) {
+  const lab = esDeLaboratorio(colaborador);
+  if (lab.laboratorio) return 'Laboratorio · ' + lab.nombre;
+  return (colaborador || {}).posicion || 'Sin posición';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { edadAnios, composicionDe, composicionPorSucursal,
+  module.exports = {
+    esDeLaboratorio, posicionDeCobertura, edadAnios, composicionDe, composicionPorSucursal,
                      estadoDeDocumento, documentosQueVencen, enlaceSeguro };
 }
 
@@ -5681,6 +5811,11 @@ function filaDeVacaciones(c, ciclo, hoy) {
   const antes = tramosFueraDeVentana(c, ciclo);
   return Object.assign({
     id: c.id, nombre: c.nombre || '', cargo: c.cargo || '', posicion: c.posicion || '',
+    /* El casillero con el que se cuenta la cobertura, que para el laboratorio
+       no es su posición. La fila lo lleva para que la tira del calendario
+       sume por el mismo criterio que la tabla de arriba. */
+    posicionCobertura: posicionDeCobertura(c),
+    laboratorio: esDeLaboratorio(c),
     antes, diasAntes: antes.reduce((a, t) => a + t.dias, 0),
     fechaIngreso: c.fechaIngreso || c.fechaIngresoFTD || '',
     fte: jornadaDeVinculo(c).fte,
@@ -5748,7 +5883,7 @@ function coberturaDeVacaciones(sucursal, ciclo) {
     tramosDeVacaciones(c, ciclo).forEach(t => {
       if (!t.hasta) return;
       fuera.push({ desde: t.desde, hasta: t.hasta, fte: jornadaDeVinculo(c).fte,
-                   posicion: c.posicion || 'Sin posición',
+                   posicion: posicionDeCobertura(c),
                    nombre: c.nombre || '', id: c.id });
     });
   });
@@ -5761,7 +5896,10 @@ function coberturaDeVacaciones(sucursal, ciclo) {
      los dos. */
   const posiciones = {};
   gente.forEach(c => {
-    const k = c.posicion || 'Sin posición';
+    /* `posicionDeCobertura()` y no `c.posicion`: el laboratorio cuenta en su
+       propio casillero y no en APV. Si no, los ocho del laboratorio de Olivos
+       hacen que la tienda parezca tener diez APV y que nunca quede corta. */
+    const k = posicionDeCobertura(c);
     posiciones[k] = (posiciones[k] || 0) + 1;
   });
 
@@ -9913,6 +10051,24 @@ const Store = (() => {
        art. 154 de la LCT—. El 7 nunca lo eligió nadie: lo guardó el panel solo
        al abrir, así que corregirlo no pisa una decisión suya. Se hace una sola
        vez y queda anotado; si después pone julio a propósito, se respeta. */
+    /* El laboratorio de Olivos está cargado en la nómina como APV —ocho
+       personas que la tienda cuenta en el piso y no están en el piso— y la
+       especialidad no viene en ninguna planilla. Se escribe una sola vez sobre
+       el padrón ya cargado, sin tocar nada más de la ficha; después la cambia
+       quien quiera desde la ficha de la persona y esto no vuelve a correr. */
+    if (!e.config.laboratorioMarcado && typeof LABORATORIO_AREA3 !== 'undefined') {
+      const llave = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z]/g, '');
+      const porNombre = {};
+      (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+        if (c.nombre) porNombre[llave(c.nombre)] = c;
+      }));
+      LABORATORIO_AREA3.forEach(x => {
+        const c = porNombre[llave(x.n)];
+        if (c && !c.laboratorio) c.laboratorio = x.esp;
+      });
+      e.config.laboratorioMarcado = true;
+    }
     if (!e.config.ventanaVacacionesCorregida) {
       if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
         e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
@@ -11883,6 +12039,11 @@ const Store = (() => {
         noPresenciales: [], fteNoPresencial: 0,
         sinActividad: [],                  // licencia sin goce: vuelve, pero hoy no está
         bajas: [],                         // se fue: ya no es de la tienda
+        /* El laboratorio es otra operación adentro de la misma tienda. Sigue
+           contando en la dotación —es plantel y cuesta— pero se puede leer
+           aparte, y **en `porPosicion` cuenta en su propio casillero y no en
+           APV**, que es lo que hace que la cobertura del piso sea cierta. */
+        laboratorio: { personas: 0, fte: 0, porEspecialidad: {} },
         porUnidad: {}, porPosicion: {}
       };
       (s.colaboradores || []).forEach(c => {
@@ -11911,7 +12072,14 @@ const Store = (() => {
         if (j.parcial) r.parciales++;
         const u = c.unidadNegocio || 'Sin unidad';
         r.porUnidad[u] = (r.porUnidad[u] || 0) + j.fte;
-        const pos = c.posicion || 'sinPosicion';
+        const lab = esDeLaboratorio(c);
+        if (lab.laboratorio) {
+          r.laboratorio.personas++;
+          r.laboratorio.fte += j.fte;
+          r.laboratorio.porEspecialidad[lab.nombre] =
+            (r.laboratorio.porEspecialidad[lab.nombre] || 0) + j.fte;
+        }
+        const pos = posicionDeCobertura(c);
         r.porPosicion[pos] = (r.porPosicion[pos] || 0) + j.fte;
       });
       return r;
@@ -12136,6 +12304,23 @@ const Store = (() => {
       if (s) s.colaboradores = s.colaboradores.filter(x => x.id !== idSeVa);
       guardar();
       return a;
+    },
+
+    /**
+     * En qué especialidad del laboratorio trabaja.
+     *
+     * Vacío **borra la marca** en vez de guardar una cadena en blanco, como
+     * `marcarAdef()`: volver a ser del piso es una respuesta válida, y un
+     * campo vacío lo contaría como laboratorio sin especialidad.
+     */
+    marcarLaboratorio(colabId, especialidad) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const id = String(especialidad || '').trim();
+      if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
+      else c.laboratorio = id;
+      guardar();
+      return c;
     },
 
     /* ------------------- curso de ADEF (art. 8) -------------------- */
@@ -16273,7 +16458,17 @@ const App = (() => {
           ${np.noPresencial ? `<span class="chip ambar">${esc(np.motivo)}</span>` : ''}
           ${jor.parcial ? '<span class="chip azul">½ jornada</span>' : ''}
         </span>
-        <span class="nom-puesto">${esc(c.cargo || c.posicion || 'sin puesto cargado')}</span>
+        <span class="nom-puesto">${(() => {
+          /* El laboratorio se lee en su propia columna y con su color, no
+             mezclado con el cargo: la nómina los carga a todos como APV y por
+             eso la lista no los distinguía de la gente del piso. El rótulo va
+             siempre escrito — el color lo acompaña. */
+          const lb = esDeLaboratorio(c);
+          return lb.laboratorio
+            ? `<span class="chip-lab ${lb.token}">Laboratorio · ${esc(lb.nombre)}</span>
+               <em class="nom-cargo-real">${esc(c.cargo || '')}</em>`
+            : esc(c.cargo || c.posicion || 'sin puesto cargado');
+        })()}</span>
         <span class="nom-suc">${esc(s.nombre || s.codigo)}</span>
         <span class="nom-ingreso">${c.fechaIngreso ? fmtFecha(c.fechaIngreso) : '—'}</span>
         <span class="nom-ant">${anios === null ? '—' : fmtNum(anios, 1) + ' años'}</span>
@@ -18714,7 +18909,21 @@ const App = (() => {
 
     const tono = !a.aplica ? '' : a.cumple ? 'rojo' : a.faltanMeses <= MESES_AVISO_ART8 ? 'ambar' : '';
 
-    return `<h4>Curso de ADEF ${eo
+    return `<h4>Dónde trabaja</h4>
+      <div class="grid c2">
+        <label class="campo"><span>Laboratorio</span>
+          <select data-lab="${c.id}">
+            <option value="">Piso de la tienda</option>
+            ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
+              String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
+          </select></label>
+        ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda" style="align-self:end">
+          <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
+          tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
+          la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+      </div>
+
+      <h4>Curso de ADEF ${eo
       ? `<span class="chip ${eo.chip}">${esc(eo.nombre)}</span>`
       : '<span class="chip">Sin relevar</span>'}${
       a.aplica && tono ? ` <span class="chip ${tono}">art. 8</span>` : ''}</h4>
@@ -19651,6 +19860,19 @@ const App = (() => {
        Devoto» se vea mirando la tienda y no entrando a otra pantalla. Va
        punteada y sin nombre, porque lo que la define es que ahí no hay nadie.
        Se agrupa por la posición del cargo, así cae junto a sus pares. */
+    /* El laboratorio sale del nivel del piso y va en su propio grupo, abajo:
+       está adentro de la tienda pero no cubre su turno, que es la misma razón
+       por la que los de bloqueo de título van aparte. */
+    const laboratorio = [];
+    Object.keys(porPosicion).forEach(k => {
+      porPosicion[k] = porPosicion[k].filter(c => {
+        if (!esDeLaboratorio(c).laboratorio) return true;
+        laboratorio.push(c);
+        return false;
+      });
+      if (!porPosicion[k].length) delete porPosicion[k];
+    });
+
     const vac = {};
     (vacantes || []).forEach(v => {
       const cn = CARGOS_NOMINA.find(x => x.cargo === v.cargo);
@@ -19668,6 +19890,8 @@ const App = (() => {
       <strong>${esc(c.nombre || 'Sin nombre')}</strong>
       <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
       ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
+      ${(() => { const lb = esDeLaboratorio(c); return lb.laboratorio
+        ? `<span class="chip-lab ${lb.token}" style="margin-top:4px">${esc(lb.nombre)}</span>` : ''; })()}
       ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
       ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
                     : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
@@ -19707,6 +19931,18 @@ const App = (() => {
         </div>`;
       }).join('')}
       ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k], vac[k])}</div>`).join('')}
+      ${laboratorio.length ? `<div class="org-nivel org-laboratorio">
+        <div class="org-grupo">
+          <h4>Laboratorio <span class="chip">${laboratorio.length}</span>${
+            ESPECIALIDADES_LABORATORIO.map(x => {
+              const n = laboratorio.filter(c => c.laboratorio === x.id).length;
+              return n ? ` <span class="chip-lab ${x.token}">${n} ${esc(x.nombre.toLowerCase())}</span>` : '';
+            }).join('')}</h4>
+          <p class="ayuda">Otra operación adentro de la tienda: no cubre el turno del piso
+            y no cuenta como APV en la cobertura, aunque la nómina la cargue así.</p>
+          <div class="org-fila">${laboratorio.map(tarjeta).join('')}</div>
+        </div>
+      </div>` : ''}
     </div>`;
   }
 
@@ -22204,12 +22440,14 @@ const App = (() => {
         </thead>
         <tbody>${filas.map(f => `<tr>
           <th class="cal-quien"><span>${esc(f.nombre)}</span>
-            <em>${esc(f.posicion || f.cargo || '')}</em></th>
+            <em>${f.laboratorio.laboratorio
+              ? `<span class="chip-lab ${f.laboratorio.token}">${esc(f.laboratorio.corto)}</span> Laboratorio`
+              : esc(f.posicion || f.cargo || '')}</em></th>
           ${celdasDe(f)}
         </tr>`).join('')}</tbody>
         <tfoot>${delMes.porPosicion.map(p => {
           const fila = dias.map(x => {
-            const fuera = plan.filas.filter(f => (f.posicion || 'Sin posición') === p.posicion
+            const fuera = plan.filas.filter(f => f.posicionCobertura === p.posicion
               && f.tramos.some(t => t.hasta && t.desde <= x.iso && t.hasta >= x.iso)).length;
             const quedan = p.dotacion - fuera;
             const tono = quedan === 0 ? 'sin' : (fuera > 0 && fuera * 2 >= p.dotacion) ? 'justo' : '';
@@ -23061,6 +23299,13 @@ const App = (() => {
 
     /* Binding propio por lo mismo que `data-adef`: la clave lleva el año del
        ciclo adentro y `data-colab-campo` escribe campos planos. */
+    cont.addEventListener('change', ev => {
+      const lb = ev.target.closest('[data-lab]');
+      if (!lb) return;
+      Store.marcarLaboratorio(lb.dataset.lab, lb.value);
+      refrescar();
+    });
+
     cont.addEventListener('change', ev => {
       const vm = ev.target.closest('[data-vacmes]');
       if (!vm) return;

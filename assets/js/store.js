@@ -205,6 +205,24 @@ const Store = (() => {
        art. 154 de la LCT—. El 7 nunca lo eligió nadie: lo guardó el panel solo
        al abrir, así que corregirlo no pisa una decisión suya. Se hace una sola
        vez y queda anotado; si después pone julio a propósito, se respeta. */
+    /* El laboratorio de Olivos está cargado en la nómina como APV —ocho
+       personas que la tienda cuenta en el piso y no están en el piso— y la
+       especialidad no viene en ninguna planilla. Se escribe una sola vez sobre
+       el padrón ya cargado, sin tocar nada más de la ficha; después la cambia
+       quien quiera desde la ficha de la persona y esto no vuelve a correr. */
+    if (!e.config.laboratorioMarcado && typeof LABORATORIO_AREA3 !== 'undefined') {
+      const llave = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z]/g, '');
+      const porNombre = {};
+      (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+        if (c.nombre) porNombre[llave(c.nombre)] = c;
+      }));
+      LABORATORIO_AREA3.forEach(x => {
+        const c = porNombre[llave(x.n)];
+        if (c && !c.laboratorio) c.laboratorio = x.esp;
+      });
+      e.config.laboratorioMarcado = true;
+    }
     if (!e.config.ventanaVacacionesCorregida) {
       if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
         e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
@@ -2175,6 +2193,11 @@ const Store = (() => {
         noPresenciales: [], fteNoPresencial: 0,
         sinActividad: [],                  // licencia sin goce: vuelve, pero hoy no está
         bajas: [],                         // se fue: ya no es de la tienda
+        /* El laboratorio es otra operación adentro de la misma tienda. Sigue
+           contando en la dotación —es plantel y cuesta— pero se puede leer
+           aparte, y **en `porPosicion` cuenta en su propio casillero y no en
+           APV**, que es lo que hace que la cobertura del piso sea cierta. */
+        laboratorio: { personas: 0, fte: 0, porEspecialidad: {} },
         porUnidad: {}, porPosicion: {}
       };
       (s.colaboradores || []).forEach(c => {
@@ -2203,7 +2226,14 @@ const Store = (() => {
         if (j.parcial) r.parciales++;
         const u = c.unidadNegocio || 'Sin unidad';
         r.porUnidad[u] = (r.porUnidad[u] || 0) + j.fte;
-        const pos = c.posicion || 'sinPosicion';
+        const lab = esDeLaboratorio(c);
+        if (lab.laboratorio) {
+          r.laboratorio.personas++;
+          r.laboratorio.fte += j.fte;
+          r.laboratorio.porEspecialidad[lab.nombre] =
+            (r.laboratorio.porEspecialidad[lab.nombre] || 0) + j.fte;
+        }
+        const pos = posicionDeCobertura(c);
         r.porPosicion[pos] = (r.porPosicion[pos] || 0) + j.fte;
       });
       return r;
@@ -2428,6 +2458,23 @@ const Store = (() => {
       if (s) s.colaboradores = s.colaboradores.filter(x => x.id !== idSeVa);
       guardar();
       return a;
+    },
+
+    /**
+     * En qué especialidad del laboratorio trabaja.
+     *
+     * Vacío **borra la marca** en vez de guardar una cadena en blanco, como
+     * `marcarAdef()`: volver a ser del piso es una respuesta válida, y un
+     * campo vacío lo contaría como laboratorio sin especialidad.
+     */
+    marcarLaboratorio(colabId, especialidad) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const id = String(especialidad || '').trim();
+      if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
+      else c.laboratorio = id;
+      guardar();
+      return c;
     },
 
     /* ------------------- curso de ADEF (art. 8) -------------------- */

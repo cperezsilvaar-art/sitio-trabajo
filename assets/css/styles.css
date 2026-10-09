@@ -1316,3 +1316,37 @@ a.org-persona { text-decoration: none; }
   :root:not([data-theme="light"]) { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
 }
 :root[data-theme="dark"] { --cob-justo: #3a2f17; --cob-sin: #3d1f1c; }
+
+/* ===================== El laboratorio =====================
+   Dos especialidades, dos colores, y el rótulo **siempre escrito al lado**:
+   el color distingue de un vistazo y el texto es el que dice qué es, igual
+   que en la barra de composición. La administrativa va en gris porque no es
+   una especialidad — no se prepara nada— y pintarla de un tercer color diría
+   que sí lo es.
+
+   Los dos tonos pasaron el validador de daltonismo y contraste contra los dos
+   fondos (ΔE deutan 16,5 en claro y 12,6 en oscuro), y los pasos del modo
+   oscuro se eligieron contra el fondo oscuro, no derivados del claro. */
+:root { --lab-alo: #0e8f7e; --lab-homeo: #9b2fc9; --lab-adm: #55657c; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --lab-alo: #25a893; --lab-homeo: #b05fd4; --lab-adm: #93a2b8; }
+}
+:root[data-theme="dark"] { --lab-alo: #25a893; --lab-homeo: #b05fd4; --lab-adm: #93a2b8; }
+
+.chip-lab {
+  display: inline-block; font-size: 11px; font-weight: 700; line-height: 1.5;
+  padding: 0 7px; border-radius: 10px; white-space: nowrap;
+  border: 1px solid currentColor; background: transparent;
+}
+.chip-lab.lab-alo   { color: var(--lab-alo); }
+.chip-lab.lab-homeo { color: var(--lab-homeo); }
+.chip-lab.lab-adm   { color: var(--lab-adm); }
+
+.nom-cargo-real { display: block; font-style: normal; font-size: 11px; color: var(--texto-suave); }
+
+/* El grupo del laboratorio se separa del piso con una línea, no con otro
+   fondo: el fondo lo usa el organigrama para el nivel del gerente. */
+.org-nivel.org-laboratorio {
+  border-top: 1px dashed var(--borde-fuerte); padding-top: 14px; margin-top: 6px;
+}
+.org-nivel.org-laboratorio .org-persona { border-style: dashed; }
