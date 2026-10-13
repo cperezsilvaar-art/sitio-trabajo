@@ -319,6 +319,30 @@ function estadoDeEntrenamiento(entrenamiento, hoy) {
 }
 
 /**
+ * El entrenamiento abierto de una persona, o `null`.
+ *
+ * «Abierto» es propuesto **o** en curso: las dos son conversaciones vivas y en
+ * las dos hay algo que seguir. Un cerrado no se marca — el proceso terminó y
+ * la tarjeta volvería a gritar para siempre.
+ *
+ * Vive acá y no en la pantalla porque lo preguntan dos organigramas y el
+ * aviso del menú: tres lugares con la misma cuenta escrita a mano es la
+ * garantía de que un día difieran.
+ */
+function entrenamientoAbiertoDe(colaborador, hoy) {
+  const h = hoy || _diaHoy();
+  let mejor = null;
+  ((colaborador || {}).entrenamientos || []).forEach(ent => {
+    const est = estadoDeEntrenamiento(ent, h);
+    if (!est.abierto) return;
+    /* Si tuviera dos, manda el que apura: un vencido no se puede tapar con
+       uno recién propuesto. */
+    if (!mejor || (est.vencido && !mejor.estado.vencido)) mejor = { entrenamiento: ent, estado: est };
+  });
+  return mejor;
+}
+
+/**
  * Cuándo tocó la última evaluación y si el mes en curso ya tiene la suya.
  * El compromiso del proceso es una conversación por mes con el gerente: sin
  * esa cuenta, el seguimiento se convierte en dos evaluaciones y un silencio.

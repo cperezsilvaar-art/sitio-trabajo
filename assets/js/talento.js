@@ -156,20 +156,37 @@ function distribucion9Box(colaboradores) {
  * El cuarto grupo no es uno de los tres y va igual: quien hoy no alcanza lo
  * esperado tiene que estar en algún lado, y dejarlo afuera daría un mapa que
  * no suma el plantel. */
+/* `corto` es la lectura en tres palabras, para la tarjeta del organigrama:
+   «CC» solo no le dice nada a quien no se sepa el 9-box de memoria, y la
+   oración entera no entra al lado de un nombre. La oración completa sigue
+   estando —en el `title` de la tarjeta y entera en la ficha—.
+
+   **`tono` dice si pide algo, no cuál de los cuatro es.** Se intentó darle un
+   color propio a cada grupo y no sobrevive: con los dos del laboratorio ya en
+   la página, cualquier cuarto tono contra el verde se cae a ΔE 4,4 en
+   deuteranopía —el validador lo marca como falla dura—. Así que el color
+   contesta «¿tengo que hacer algo con esta persona?» —rojo pide acción, verde
+   es a quien hay que retener, gris está bien donde está— y **cuál de los
+   cuatro es lo dice el texto**, que está siempre escrito. Es la misma regla
+   que la barra de composición. */
 const GRUPOS_TALENTO = [
   { id: 'talento', nombre: 'Talento', tono: 'verde',
+    corto: 'puede asumir más',
     cuadrantes: ['33', '32', '23', '22'],
     lectura: 'Entrega lo que la posición pide y puede asumir una de mayor alcance.',
     accion: 'Es de acá que sale la sucesión: plan de carrera, proyectos que estiren y retención.' },
-  { id: 'especialista', nombre: 'Especialista', tono: 'azul',
+  { id: 'especialista', nombre: 'Especialista', tono: '',
+    corto: 'muy bueno en lo suyo',
     cuadrantes: ['13'],
     lectura: 'Muy bueno en lo suyo, sin proyección de cambio de nivel.',
     accion: 'Referente técnico del equipo y quien forma a los que entran. Perderlo se nota en el piso.' },
-  { id: 'cc', nombre: 'Contribuidor consistente (CC)', tono: 'azul',
+  { id: 'cc', nombre: 'Contribuidor consistente (CC)', corto_nombre: 'CC', tono: '',
+    corto: 'cumple, no busca crecer',
     cuadrantes: ['12'],
     lectura: 'Hace lo que la posición pide, y no busca crecer.',
     accion: 'Es el sostén de la operación: cuidar la motivación y no forzarle un crecimiento que no pidió.' },
   { id: 'enPlan', nombre: 'En plan de mejora', tono: 'rojo',
+    corto: 'hoy no alcanza',
     cuadrantes: ['31', '21', '11'],
     lectura: 'Hoy no alcanza lo esperado, con o sin potencial visible.',
     accion: 'Feedback concreto y un plazo para ver movimiento. No es un grupo donde quedarse.' }

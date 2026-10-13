@@ -3974,7 +3974,10 @@ const App = (() => {
           const q = cuadranteDe(c.potencial, c.desempeno);
           const g = grupoDeTalento(c);
           if (!q) return '';
-          const tono = x => ({ verde: 'verde', amarillo: 'ambar', rojo: 'rojo', azul: 'azul' })[x];
+          /* Especialista y CC quedaron **sin tono**: el color dice si el grupo
+             pide algo y ellos no piden nada. El chip va neutro y el nombre
+             escrito, que es lo que distingue uno de otro. */
+          const tono = x => ({ verde: 'verde', amarillo: 'ambar', rojo: 'rojo', azul: 'azul' })[x] || '';
           /* «Especialista, que se lee como Especialista» es el mismo nombre dos
              veces, igual que el código de la tienda entre paréntesis. */
           const repite = g && g.nombre === q.nombre;
@@ -4740,6 +4743,56 @@ const App = (() => {
   const dato = (etiqueta, valor) => `<div class="campo-lectura">
     <span>${esc(etiqueta)}</span><strong>${valor ? esc(valor) : '—'}</strong></div>`;
 
+  /**
+   * La tarjeta de una persona en un organigrama.
+   *
+   * Dos marcas nuevas, y son de dos clases distintas:
+   *
+   * **Quién está en desarrollo se pinta la tarjeta entera.** Es un *estado en
+   * curso* —hay una conversación abierta con esa persona este mes— y lo que se
+   * pide es verlo sin leer: entrar a la tienda y que salte. Lleva además el
+   * chip con en qué anda, porque el color solo no dice si está propuesto, en
+   * entrenamiento o vencido.
+   *
+   * **La calibración del 9-box va en una etiqueta, con su lectura en chico.**
+   * «CC» solo no le dice nada a quien no se sepa la matriz de memoria, y es
+   * justamente la gente que mira este cuadro con el gerente de la tienda
+   * enfrente. La oración entera está en el `title` y en la ficha.
+   *
+   * **Sin evaluar no lleva etiqueta**, por lo mismo que «sin relevar» en el
+   * curso de ADEF: que a alguien todavía no lo miraste no es una lectura sobre
+   * esa persona, y una etiqueta gris que diga «sin evaluar» en media tienda
+   * tapa a las cuatro que sí dicen algo.
+   */
+  function tarjetaDePersona(c, extra) {
+    const especial = c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
+    const g = grupoDeTalento(c);
+    const ent = entrenamientoAbiertoDe(c, hoyISO());
+    const lb = esDeLaboratorio(c);
+    const titulo = [`Ver el perfil de ${c.nombre || ''}`.trim(),
+                    g ? g.nombre + ': ' + g.lectura : '',
+                    ent ? 'En desarrollo · ' + ent.estado.nombre +
+                          (ent.estado.texto ? ' · ' + ent.estado.texto : '') : '']
+      .filter(Boolean).join(' — ');
+
+    return `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}${
+        ent ? ' en-desarrollo' : ''}${extra ? ' ' + extra : ''}"
+        data-accion="ver-perfil" data-id="${c.id}" title="${esc(titulo)}">
+      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
+      <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
+      ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
+      ${ent ? `<span class="chip ${ent.estado.tono || 'azul'}" style="margin-top:4px"
+        >🎓 ${esc(ent.estado.nombre)}</span>` : ''}
+      ${g ? `<span class="chip-9box ${g.tono ? 'tono-' + g.tono : ''}"
+        >${esc(g.corto_nombre || g.nombre)}</span>
+        <span class="box-lectura">${esc(g.corto)}</span>` : ''}
+      ${lb.laboratorio ? `<span class="chip-lab ${lb.token}" style="margin-top:4px">${esc(lb.nombre)}</span>` : ''}
+      ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
+      ${especial ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
+                 : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
+    </button>`;
+  }
+
   /** Organigrama simple: el gerente arriba, y debajo cada posición en su nivel. */
   function organigrama(s, porPosicion, vacantes) {
     const niveles = [1, 2, 3];
@@ -4760,17 +4813,7 @@ const App = (() => {
       .filter(k => !POSICIONES.some(p => p.nombre === k));
 
     const especial = c => c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
-    const tarjeta = c => `<button class="org-persona${perfilAbierto === c.id ? ' abierta' : ''}"
-        data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
-      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
-      <span>${c.cargo ? esc(c.cargo) : (c.posicion ? esc(c.posicion) : '<em>sin puesto cargado</em>')}</span>
-      ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
-      ${(() => { const lb = esDeLaboratorio(c); return lb.laboratorio
-        ? `<span class="chip-lab ${lb.token}" style="margin-top:4px">${esc(lb.nombre)}</span>` : ''; })()}
-      ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
-      ${especial(c) ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
-                    : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
-    </button>`;
+    const tarjeta = c => tarjetaDePersona(c);
 
     /* El título del grupo cuenta cabezas y FTE: con tiempo parcial no son lo
        mismo, y la que decide la cobertura es la segunda. */
@@ -4837,13 +4880,9 @@ const App = (() => {
       return i < 0 ? ORDEN_LAB.length : i;
     };
 
-    const tarjeta = c => `<button class="org-persona lab ${esDeLaboratorio(c).token}${
-        perfilAbierto === c.id ? ' abierta' : ''}"
-        data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
-      <strong>${esc(c.nombre || 'Sin nombre')}</strong>
-      <span>${esc(c.cargo || c.posicion || '')}</span>
-      ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
-    </button>`;
+    /* La misma tarjeta que la farmacia, con el color de la mesada: la
+       calibración y el entrenamiento valen igual para el laboratorio. */
+    const tarjeta = c => tarjetaDePersona(c, 'lab ' + esDeLaboratorio(c).token);
 
     return `<div class="organigrama lab">
       ${ESPECIALIDADES_LABORATORIO.map(e => {
@@ -6798,7 +6837,7 @@ const App = (() => {
             <th>Quiénes</th></tr></thead>
           <tbody>${m.grupos.filter(g => g.gente.length).map(g => `<tr>
             <td>
-              <span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[g.tono]}">${esc(g.nombre)}</span>
+              <span class="chip ${{verde:'verde',amarillo:'ambar',rojo:'rojo',azul:'azul'}[g.tono] || ''}">${esc(g.nombre)}</span>
               <div class="ayuda">${esc(g.lectura)}</div>
               <div class="ayuda">${esc(g.accion)}</div>
             </td>

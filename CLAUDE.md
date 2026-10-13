@@ -1042,6 +1042,36 @@ esa persona, y mezclarlo borra la única diferencia que importa al empezar. Los
 porcentajes son **sobre los evaluados** y la pantalla dice cuántos faltan, como
 los días supuestos del ausentismo.
 
+**La tarjeta del organigrama dice dos cosas más, y son de dos clases
+distintas.** `tarjetaDePersona()` (`app.js`) es la única tarjeta y la usan los
+dos organigramas, el de farmacia y el del laboratorio.
+
+**Quien está en desarrollo lleva la tarjeta pintada entera**, porque es un
+*estado en curso* —hay una conversación abierta con esa persona este mes— y lo
+que se pide es entrar a la tienda y que salte sin leer. Es el único relleno de
+color del organigrama, así que no compite con nada. Lleva además el chip con en
+qué anda: el color no dice si está propuesto, entrenando o vencido.
+`entrenamientoAbiertoDe()` (`desarrollo.js`) lo decide en un solo lugar y
+**abierto es propuesto o en curso**; un cerrado no se marca, que si no la
+tarjeta gritaría para siempre.
+
+**La calibración del 9-box va en una etiqueta con su lectura en chico.** «CC»
+solo no le dice nada a quien no se sepa la matriz de memoria, y es justamente
+quien mira este cuadro con el gerente enfrente: `corto` en `GRUPOS_TALENTO` es
+esa lectura en tres palabras, y la oración entera sigue en el `title` y en la
+ficha. **Sin evaluar no lleva etiqueta**, por lo mismo que «sin relevar» en el
+curso de ADEF: media tienda con un chip gris que diga «sin evaluar» tapa a las
+cuatro que sí dicen algo.
+
+**El color del 9-box dice si pide algo, no cuál de los cuatro es.** Se intentó
+darle un tono propio a cada grupo y **no sobrevive el chequeo**: con los dos del
+laboratorio ya en la página, cualquier cuarto hue contra el verde se cae a
+ΔE 4,4 en deuteranopía, que el validador marca como falla dura. Así que rojo
+pide acción, verde es a quien hay que retener y **Especialista y CC van
+neutros** —`tono: ''`—, diferenciados por el texto, que está siempre escrito.
+Es la misma regla que la barra de composición. Los dos lugares que pintaban el
+grupo con `g.tono` caen a chip neutro cuando está vacío.
+
 **Arrastrar en la matriz funciona sin visita abierta.** El `drop` pedía
 `visitaEnCurso` y buscaba a la persona adentro de esa visita, así que en la
 pantalla nueva la matriz quedaba de adorno: se arrastraba y no pasaba nada.
