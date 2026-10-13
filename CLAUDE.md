@@ -1159,6 +1159,40 @@ que sentarse a hablar de esa persona. Se lo sacó por redundante con la solapa
 *Al rol de Senior* y no lo era: esa solapa está en `#/desarrollo`, adonde se
 entra cuando ya te acordaste.
 
+**El período de prueba son tres conversaciones con el gerente, y las fechas no
+se crean: se deducen.** `#/desarrollo/prueba`, la tercera solapa, documentado
+en `docs/periodo-de-prueba.md`. El pedido fue que el alta a mano le armara las
+tres evaluaciones, y crearlas ahí tenía un agujero: **quien entra por la nómina
+del mes no pasa por el alta**. Deduciéndolas de `c.fechaIngreso` y de dos
+parámetros, **toda persona nueva aparece con sus tres evaluaciones sin que
+nadie las cree** — y corregir la fecha de ingreso mueve las tres. Lo único que
+se guarda es lo que no se puede deducir: qué contestó el gerente (`c.pruebas`).
+
+**Seis meses por el art. 92 bis de la LCT**, que la Ley 27.742 llevó de 3 a 6
+desde julio de 2024; el convenio puede estirarlo a 8 meses hasta 100
+trabajadores, así que es `parametros.mesesPeriodoPrueba` y no una constante.
+Con `mesesEntreEvaluacionesPrueba` (2) salen los hitos: **no hay ningún «3»
+escrito a mano**, con 8 y 2 son cuatro. **La última es la que decide** y se
+nombra así.
+
+**El plazo corre desde `fechaIngreso` y nunca desde `fechaIngresoFTD`**: las
+farmacias se compraron y medir desde la fecha de Farmatodo pondría a más de
+cien personas en período de prueba. La transferencia de establecimiento
+continúa el vínculo (art. 225 LCT), no lo empieza.
+
+**El preaviso quedó sin calcular, a propósito.** La Ley 27.742 sacó del art. 92
+bis la remisión a los arts. 231 y 232 y las fuentes no coinciden sobre si los
+15 días siguen vigentes. Una fecha límite inventada se usaría para decidir una
+baja, así que la pantalla dice que lo confirme con el estudio — el mismo trato
+que los arts. 208 y 211 en las ausencias.
+
+**A la agenda entra solo lo vencido o por vencer.** Una evaluación que toca
+dentro de dos meses es el calendario, no un pendiente. Es la única clase de
+pendiente con **fecha de caducidad dura** —a los seis meses la persona queda
+confirmada sola— y por eso va arriba. Suma al contador de *Desarrollo*: las dos
+cosas se resuelven en la misma pantalla y separarlas pediría una séptima
+entrada en *Seguimiento*.
+
 **El plan de desarrollo individual es la otra mitad del 9-box** (`c.planes[]`,
 `talento.js`, documentado en `docs/plan-desarrollo.md`): qué se acordó hacer de
 una conversación a la siguiente, y si se hizo. Cada cuadrante ya traía escrita

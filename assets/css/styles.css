@@ -1404,3 +1404,15 @@ a.org-persona { text-decoration: none; }
   color: var(--texto-suave); white-space: normal;
 }
 .org-persona { max-width: 220px; }
+
+/* El cuadro del período de prueba: una columna por evaluación, y la que
+   decide marcada — después de ella no queda tiempo para conversar nada. */
+.tabla-prueba td.prueba-hito { min-width: 190px; vertical-align: top; padding: 6px 8px; }
+.tabla-prueba td.prueba-hito.decide { border-left: 2px solid var(--ambar); }
+.tabla-prueba td.prueba-hito select,
+.tabla-prueba td.prueba-hito input {
+  width: 100%; font: inherit; font-size: 12px; padding: 3px 6px; margin-top: 3px;
+  border: 1px solid var(--borde); border-radius: 6px;
+  background: var(--panel); color: var(--texto);
+}
+.rojo-txt { color: var(--rojo-alerta); font-weight: 600; }

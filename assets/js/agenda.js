@@ -506,6 +506,30 @@ function pendientesDelArea(estado, hoyISO) {
     });
   }
 
+  /* 0 bis. Las evaluaciones del período de prueba que ya vencieron. Es la
+        única clase de pendiente del panel con **fecha de caducidad dura**: a
+        los seis meses la persona queda confirmada sola, haya habido
+        conversación o no. Por eso va arriba y por eso solo entra lo vencido o
+        lo que está por vencer — una evaluación que toca en dos meses es el
+        calendario, no un pendiente. */
+  if (typeof alertasDePrueba === 'function') {
+    const pruebas = alertasDePrueba(e, hoy).map(x => {
+      const dias = x.hito && x.hito.fecha ? _diasDesde(x.hito.fecha, hoy) : null;
+      return {
+        que: `${x.fila.nombre} — ${x.texto}`,
+        quien: x.fila.sucursal,
+        detalle: `el período de prueba termina el ${_fecha(x.fila.prueba.vence)}`,
+        desde: (x.hito && x.hito.fecha) || x.fila.prueba.desde,
+        dias, tono: x.tono,
+        ruta: '#/desarrollo/prueba'
+      };
+    });
+    if (pruebas.length) grupos.push({
+      id: 'prueba', titulo: 'Evaluaciones del período de prueba',
+      ruta: '#/desarrollo/prueba', items: pruebas
+    });
+  }
+
   /* 1. Los trámites de una baja. El que se olvida aparece solo semanas
         después: alguien que conserva accesos, un recibo liquidado de más. */
   const bajas = [];

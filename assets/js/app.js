@@ -3797,7 +3797,30 @@ const App = (() => {
 
     const tono = !a.aplica ? '' : a.cumple ? 'rojo' : a.faltanMeses <= MESES_AVISO_ART8 ? 'ambar' : '';
 
-    return `<h4>Dónde trabaja</h4>
+    /* En período de prueba, en lectura y con enlace: el alta de la evaluación
+       vive en la solapa y en ningún otro lado, como el entrenamiento a Senior.
+       Acá lo que hace falta es acordarse de que está a prueba mientras se
+       mira su ficha. */
+    const pr = periodoDePrueba(c, hoyISO(), (Store.get().config || {}).parametros);
+    const bloquePrueba = !pr.enPrueba ? '' : `
+      <h4>Período de prueba
+        <span class="chip ${pr.vencidas ? 'rojo' : pr.porVencer ? 'ambar' : 'azul'}"
+          >termina el ${fmtFecha(pr.vence)}</span></h4>
+      <p class="ayuda">Entró el ${fmtFecha(pr.desde)}.
+        ${pr.hechas} de ${pr.hitos.length} evaluaciones hechas${
+        pr.vencidas ? ` · <strong>${pr.vencidas} vencida${pr.vencidas === 1 ? '' : 's'}</strong>` : ''}.
+        Se cargan en <a href="#/desarrollo/prueba">Desarrollo → Período de prueba</a>.</p>
+      <ul>${pr.hitos.map(x => {
+        const r = x.evaluacion ? RESULTADO_PRUEBA_POR_ID[x.evaluacion.resultado] : null;
+        return `<li>${x.n}ª · ${fmtFecha(x.fecha)}${x.decide ? ' <em>(la que decide)</em>' : ''} — ${
+          r ? `<span class="chip ${r.tono}">${esc(r.nombre)}</span>${
+            x.evaluacion.notas ? ' ' + esc(x.evaluacion.notas) : ''}`
+            : (x.vencida ? '<span class="chip rojo">sin hacer</span>' : 'todavía no toca')}</li>`;
+      }).join('')}</ul>
+
+      <h4>Dónde trabaja</h4>`;
+
+    return `${bloquePrueba || '<h4>Dónde trabaja</h4>'}
       <div class="grid c2">
         <label class="campo"><span>Laboratorio</span>
           <select data-lab="${c.id}">
@@ -5302,6 +5325,10 @@ const App = (() => {
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Los indicadores miden desde', 'parametros.mideDesde',
                   { tipo: 'date', calc: true })}
+          ${campo('Período de prueba (meses)', 'parametros.mesesPeriodoPrueba',
+                  { tipo: 'number', step: '1', calc: true })}
+          ${campo('Evaluarlo cada (meses)', 'parametros.mesesEntreEvaluacionesPrueba',
+                  { tipo: 'number', step: '1', calc: true })}
           ${campo('Ciclo de vacaciones (año)', 'parametros.vacacionesAnio',
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Se gozan desde el mes', 'parametros.vacacionesMesDesde',
@@ -5310,6 +5337,17 @@ const App = (() => {
                   { tipo: 'number', step: '1', calc: true })}
           ${campo('Símbolo de moneda', 'parametros.moneda', { calc: true })}
         </div>
+        ${(() => {
+          const pr = Store.get().config.parametros || {};
+          const m = Number(pr.mesesPeriodoPrueba) || 6, c = Number(pr.mesesEntreEvaluacionesPrueba) || 2;
+          return `<p class="ayuda">
+            <strong>El período de prueba son ${m} meses</strong> —art. 92 bis de la LCT, que la
+            Ley 27.742 llevó de 3 a 6 desde julio de 2024— y de esos dos números salen las
+            <strong>${Math.floor(m / c)} evaluaciones</strong> que el panel le pide al gerente,
+            una cada ${c} meses. El convenio puede estirarlo a 8 meses en empresas de hasta 100
+            trabajadores: no es el caso del área, pero por eso es un parámetro.
+            Se mira en <a href="#/desarrollo/prueba">Desarrollo → Período de prueba</a>.</p>`;
+        })()}
         ${(() => {
           const ci = cicloVigente(Store.get());
           return `<p class="ayuda">
@@ -6760,7 +6798,136 @@ const App = (() => {
     return `<nav class="tabs">
       ${item('talento', '#/desarrollo/talento', 'Talento y 9-box')}
       ${item('senior', '#/desarrollo', 'Al rol de Senior')}
+      ${item('prueba', '#/desarrollo/prueba', 'Período de prueba')}
     </nav>`;
+  }
+
+  /* ================= VISTA: PERÍODO DE PRUEBA ================= *
+   *
+   * Es la tercera solapa de Desarrollo y no una entrada nueva del menú: en
+   * *Seguimiento* ya hay seis, y esto es lo mismo que las otras dos —una
+   * conversación con el gerente sobre una persona, con fechas y un veredicto—
+   * solo que la decide el calendario y no el coordinador.
+   *
+   * **Las tres evaluaciones no se crean: aparecen.** Salen de la fecha de
+   * ingreso, así que toda persona nueva está acá desde el día que se la carga,
+   * haya entrado por el alta a mano o por la nómina del mes.
+   */
+  function vistaPrueba() {
+    const e = Store.get();
+    contexto = e;
+    const hoy = hoyISO();
+    const filas = personasEnPrueba(e, hoy);
+    const par = e.config.parametros || {};
+    const meses = Number(par.mesesPeriodoPrueba) || 6;
+    const cada = Number(par.mesesEntreEvaluacionesPrueba) || 2;
+    const alertas = alertasDePrueba(e, hoy);
+    const cerrados = personasEnPrueba(e, hoy, true).filter(f => f.prueba.terminado);
+
+    const celdaHito = (f, x) => {
+      const ev = x.evaluacion;
+      const r = ev ? RESULTADO_PRUEBA_POR_ID[ev.resultado] : null;
+      return `<td class="prueba-hito${x.decide ? ' decide' : ''}">
+        <div class="ayuda">${x.n}ª · ${fmtFecha(x.fecha)}${x.decide ? ' · decide' : ''}</div>
+        <select data-prueba="${f.colaboradorId}|${x.n}|resultado">
+          <option value="">— sin hacer —</option>
+          ${RESULTADOS_PRUEBA.map(o => `<option value="${o.id}"${
+            ev && ev.resultado === o.id ? ' selected' : ''}>${esc(o.nombre)}</option>`).join('')}
+        </select>
+        ${ev ? `<input data-prueba="${f.colaboradorId}|${x.n}|notas"
+            value="${esc(ev.notas || '')}" placeholder="Qué dijo el gerente">
+          <div class="ayuda">${r ? esc(r.lectura) : ''}</div>` : (x.vencida
+            ? '<div class="ayuda rojo-txt">vencida</div>' : '')}
+      </td>`;
+    };
+
+    return `
+      <h1 class="titulo">Desarrollo</h1>
+      ${solapasDeDesarrollo('prueba')}
+
+      <p class="subtitulo">
+        ${meses} meses de prueba (art. 92 bis de la LCT) y una evaluación cada ${cada}:
+        ${Math.floor(meses / cada)} conversaciones con el gerente antes de que el plazo venza.
+      </p>
+
+      <div class="kpis">
+        ${kpi('Hoy a prueba', filas.length || '—',
+              filas.length ? 'gente dentro de sus primeros meses' : 'nadie entró hace poco')}
+        ${kpi('Evaluaciones sin hacer', alertas.length || '—',
+              alertas.length ? 'ya vencieron o el plazo está por terminar' : 'al día',
+              alertas.length ? 'alerta' : 'ok')}
+        ${(() => {
+          const pv = filas.filter(f => f.prueba.porVencer);
+          return kpi('Terminan este mes', pv.length || '—',
+            pv.length ? 'hay que decidir si siguen' : 'ninguno por ahora',
+            pv.length ? 'aviso' : 'ok');
+        })()}
+        ${(() => {
+          const no = filas.filter(f => (f.prueba.hitos || [])
+            .some(x => x.evaluacion && x.evaluacion.resultado === 'noConfirma'));
+          return kpi('El gerente no confirma', no.length || '—',
+            no.length ? no.map(f => esc(f.nombre.split(',')[0])).join(', ') : 'ninguno',
+            no.length ? 'alerta' : 'ok');
+        })()}
+      </div>
+
+      ${alertas.length ? `<div class="aviso-caja alerta">
+        <strong>Esto es lo que hay que pedirle a un gerente esta semana.</strong>
+        <ul style="margin:6px 0 0">${alertas.map(a => `<li>${esc(a.fila.nombre)}
+          · ${esc(a.fila.sucursal)} — ${esc(a.texto)}</li>`).join('')}</ul>
+      </div>` : ''}
+
+      <section class="tarjeta">
+        <h2>Quién está a prueba <span class="chip">${filas.length}</span></h2>
+        ${filas.length ? `<div class="tabla-scroll"><table class="tabla-prueba">
+          <thead><tr><th>Quién</th><th>Entró</th><th>Termina</th>
+            ${Array.from({ length: Math.floor(meses / cada) }, (_, i) =>
+              `<th>${i + 1}ª · mes ${(i + 1) * cada}</th>`).join('')}
+          </tr></thead>
+          <tbody>${filas.map(f => {
+            const p = f.prueba;
+            const tono = p.vencidas ? 'rojo' : p.porVencer ? 'ambar' : '';
+            return `<tr>
+              <td><button class="b sec mini" data-accion="ir-a-ficha"
+                data-id="${f.colaboradorId}">${esc(f.nombre)}</button>
+                <br><span class="ayuda">${esc(f.cargo)} · ${esc(f.sucursal)}</span></td>
+              <td>${fmtFecha(p.desde)}</td>
+              <td><span class="chip ${tono}">${fmtFecha(p.vence)}</span>
+                <br><span class="ayuda">${p.diasParaVencer === null ? ''
+                  : p.diasParaVencer >= 0 ? `faltan ${p.diasParaVencer} días` : 'ya terminó'}</span></td>
+              ${p.hitos.map(x => celdaHito(f, x)).join('')}
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>` : `<p class="vacio">Nadie del área está hoy dentro de sus primeros
+          ${meses} meses. Cuando des de alta a alguien, sus ${Math.floor(meses / cada)}
+          evaluaciones aparecen acá solas.</p>`}
+        <p class="ayuda">
+          <strong>Las tres fechas no se cargan: salen de la fecha de ingreso.</strong> Por eso
+          toda persona nueva aparece acá sola, haya entrado por el alta a mano o por la nómina
+          del mes, y por eso mover la fecha de ingreso en su ficha mueve las tres.
+          <strong>La última es la que decide</strong>: después de ella no queda tiempo para
+          conversar nada. El plazo del preaviso cambió con la reforma y las fuentes no
+          coinciden — confirmalo con el estudio antes de apurar una decisión sobre la fecha.
+        </p>
+      </section>
+
+      ${cerrados.length ? `<section class="tarjeta">
+        <h2>Ya cumplieron el período <span class="chip">${cerrados.length}</span></h2>
+        <p class="ayuda">Quedan con lo que se les evaluó: qué dijo el gerente en cada corte es
+          lo que explica una confirmación o una baja meses después.</p>
+        <div class="tabla-scroll"><table>
+          <thead><tr><th>Quién</th><th>Terminó</th><th>Evaluaciones</th></tr></thead>
+          <tbody>${cerrados.map(f => `<tr>
+            <td><button class="b sec mini" data-accion="ir-a-ficha"
+              data-id="${f.colaboradorId}">${esc(f.nombre)}</button></td>
+            <td>${fmtFecha(f.prueba.vence)}</td>
+            <td>${f.prueba.hitos.filter(x => x.hecha).map(x => {
+              const r = RESULTADO_PRUEBA_POR_ID[(x.evaluacion || {}).resultado];
+              return r ? `<span class="chip ${r.tono}">${x.n}ª ${esc(r.nombre)}</span>` : '';
+            }).join(' ') || '<span class="ayuda">ninguna cargada</span>'}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </section>` : ''}`;
   }
 
   let talentoTienda = '';
@@ -7212,7 +7379,10 @@ const App = (() => {
         .reduce((m, c) => m + (c.movimientos || [])
           .filter(x => x.estado === 'pendiente' || x.estado === 'autorizada').length
           + (c.baja && estadoTramitesBaja(c.baja).pendiente ? 1 : 0), 0), 0),
-      desarrollo: alertasDeDesarrollo(e, hoyISO()).length,
+      /* Las dos cosas que se resuelven en la misma pantalla van al mismo
+         contador: separarlas pediría una entrada más en un grupo que ya tiene
+         seis. */
+      desarrollo: alertasDeDesarrollo(e, hoyISO()).length + alertasDePrueba(e, hoyISO()).length,
       casos: casosDelArea(e, hoyISO()).filter(x => x.estado.pide).length,
       vacantes: (e.sucursales || []).reduce((n, s) =>
         n + (s.vacantes || []).filter(v => v.estado !== 'cubierta').length, 0),
@@ -7884,6 +8054,7 @@ const App = (() => {
     }
     else if (ruta[0] === 'desarrollo') {
       if (ruta[1] === 'talento') { vistaActual = vistaTalento; html = vistaTalento(); }
+      else if (ruta[1] === 'prueba') { vistaActual = vistaPrueba; html = vistaPrueba(); }
       else {
         /* `#/desarrollo/<entrenamiento>` abre esa ficha: es como se llega desde
            el aviso del menú y desde la ficha de la persona. */
@@ -8254,6 +8425,16 @@ const App = (() => {
 
     /* Binding propio por lo mismo que `data-adef`: la clave lleva el año del
        ciclo adentro y `data-colab-campo` escribe campos planos. */
+    /* Binding propio: la clave lleva el número de hito adentro y
+       `data-colab-campo` escribe campos planos, como con `data-adef`. */
+    cont.addEventListener('change', ev => {
+      const pr = ev.target.closest('[data-prueba]');
+      if (!pr) return;
+      const [id, hito, campo] = pr.dataset.prueba.split('|');
+      Store.registrarEvaluacionPrueba(id, hito, { [campo]: pr.value });
+      if (campo === 'resultado') refrescar();
+    });
+
     cont.addEventListener('change', ev => {
       const lb = ev.target.closest('[data-lab]');
       if (!lb) return;

@@ -545,6 +545,16 @@ const PARAMETROS_DEFECTO = {
    * arranque mayor que el de cierre la ventana cruza el año —julio de 2026 a
    * abril de 2027—, que es el caso normal, igual que el período de
    * liquidación. */
+  /* El período de prueba del **art. 92 bis de la LCT**, que la Ley 27.742
+     (Ley Bases, vigente desde el 09/07/2024) llevó de 3 a 6 meses. El convenio
+     puede estirarlo hasta 8 meses en empresas de 6 a 100 trabajadores y hasta
+     un año en las de hasta 5: no es el caso del área, pero por eso es un
+     parámetro y no una constante.
+     Con 6 meses y una evaluación cada 2, salen las tres que pidió el
+     coordinador — la cuenta cierra sola y por eso ninguno de los dos números
+     está escrito a mano en ningún lado. */
+  mesesPeriodoPrueba: 6,
+  mesesEntreEvaluacionesPrueba: 2,
   vacacionesAnio: 2026,
   vacacionesMesDesde: 10,
   vacacionesMesHasta: 4,

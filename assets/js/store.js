@@ -2424,13 +2424,17 @@ const Store = (() => {
       resguardar('Antes de unir dos fichas');
 
       ['ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos', 'sanciones',
-       'planes', 'documentos'].forEach(k => {
+       'planes', 'documentos', 'pruebas'].forEach(k => {
         if (!Array.isArray(b[k]) || !b[k].length) return;
         if (!Array.isArray(a[k])) a[k] = [];
         b[k].forEach(x => {
           const igual = k === 'ausencias'
             ? a[k].some(y => y.motivo === x.motivo && y.desde === x.desde && y.hasta === x.hasta)
-            : a[k].some(y => y.id && y.id === x.id);
+            /* Las del período de prueba no llevan id: la identifica su hito,
+               que es uno de tres y no se repite. */
+            : k === 'pruebas'
+              ? a[k].some(y => Number(y.hito) === Number(x.hito))
+              : a[k].some(y => y.id && y.id === x.id);
           if (!igual) a[k].push(x);
         });
       });
@@ -2447,7 +2451,7 @@ const Store = (() => {
          nunca se pisan. */
       Object.keys(b).forEach(k => {
         if (['id', 'ausencias', 'movimientos', 'licencias', 'casos', 'entrenamientos',
-             'sanciones', 'planes', 'documentos', 'novedades', 'baja',
+             'sanciones', 'planes', 'documentos', 'pruebas', 'novedades', 'baja',
              'vacacionesPendientes'].indexOf(k) >= 0) return;
         const v = b[k];
         if (v === '' || v === null || v === undefined) return;
@@ -2475,6 +2479,54 @@ const Store = (() => {
       else c.laboratorio = id;
       guardar();
       return c;
+    },
+
+    /**
+     * Lo que el gerente contestó en una de las evaluaciones del período de
+     * prueba.
+     *
+     * **Las fechas de los tres hitos no se guardan**: salen de la fecha de
+     * ingreso. Acá entra solo lo que no se puede deducir —qué dijo el gerente,
+     * cuándo se habló y quién lo dijo—, que es la misma división de siempre.
+     *
+     * Sin resultado **se borra la evaluación**, como `marcarAdef()`: volver a
+     * «todavía no la hice» es una respuesta válida y un registro vacío la
+     * contaría como hecha.
+     */
+    registrarEvaluacionPrueba(colabId, hito, datos) {
+      const c = this.colaboradorPorId(colabId);
+      const n = Number(hito);
+      if (!c || !n) return null;
+      if (!Array.isArray(c.pruebas)) c.pruebas = [];
+      const d = datos || {};
+      const i = c.pruebas.findIndex(x => Number(x.hito) === n);
+
+      if (!String(d.resultado || '').trim() && i >= 0 && !String(d.notas || '').trim()) {
+        c.pruebas.splice(i, 1);
+        if (!c.pruebas.length) delete c.pruebas;
+        guardar();
+        return null;
+      }
+      const ev = Object.assign({
+        hito: n, fecha: new Date().toISOString().slice(0, 10),
+        gerente: '', resultado: '', notas: '',
+        registradaEl: new Date().toISOString()
+      }, i >= 0 ? c.pruebas[i] : {}, d, { hito: n });
+      if (i >= 0) c.pruebas[i] = ev; else c.pruebas.push(ev);
+      c.pruebas.sort((a, b) => Number(a.hito) - Number(b.hito));
+      guardar();
+      return ev;
+    },
+
+    quitarEvaluacionPrueba(colabId, hito) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c || !Array.isArray(c.pruebas)) return false;
+      const i = c.pruebas.findIndex(x => Number(x.hito) === Number(hito));
+      if (i < 0) return false;
+      c.pruebas.splice(i, 1);
+      if (!c.pruebas.length) delete c.pruebas;
+      guardar();
+      return true;
     },
 
     /* ------------------- curso de ADEF (art. 8) -------------------- */

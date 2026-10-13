@@ -446,3 +446,158 @@ function _diasEntre(desde, hasta) {
   if (isNaN(a) || isNaN(b)) return null;
   return Math.round((b - a) / 86400000);
 }
+
+/* ================= El período de prueba (art. 92 bis LCT) ================= *
+ *
+ * Una persona que entra tiene seis meses de prueba, y en esos seis meses el
+ * coordinador no la ve: la ve el gerente de su tienda. Lo que se pidió es que
+ * **el panel le pregunte al gerente cómo le va, cada dos meses**, y que las
+ * tres conversaciones estén antes de que el plazo se venza — porque cuando se
+ * vence, la decisión ya está tomada sola.
+ *
+ * **Las tres fechas no se guardan: se deducen de la fecha de ingreso.** Es la
+ * misma regla de *lee, no copia* de la agenda, y acá resuelve además el
+ * problema que tenía el pedido: si las creara el alta a mano, quien entra por
+ * la nómina del mes no tendría ninguna. Deduciéndolas, **toda persona nueva
+ * aparece con sus tres evaluaciones sin que nadie las cree**, haya entrado por
+ * donde haya entrado. Lo único que se guarda es lo que el gerente contestó.
+ *
+ * La duración sale de `parametros.mesesPeriodoPrueba` (6, art. 92 bis según la
+ * Ley 27.742) y la cadencia de `mesesEntreEvaluacionesPrueba` (2). Con esos dos
+ * números salen tres hitos: ningún «3» escrito a mano.
+ *
+ * **El plazo corre desde `fechaIngreso` y no desde `fechaIngresoFTD`.** Las
+ * farmacias del área se compraron, así que casi todo el plantel tiene una
+ * fecha de Farmatodo reciente y una antigüedad vieja: medir desde la de
+ * Farmatodo pondría a cien personas en período de prueba. La transferencia de
+ * establecimiento continúa el vínculo (art. 225 LCT), no lo empieza.
+ */
+const PRUEBA_DEFECTO = { meses: 6, cada: 2 };
+
+/* Lo que el gerente puede contestar. **Tres y ninguna más**, por lo mismo que
+   los tres estados de un caso: «bien» y «muy bien» serían el mismo con dos
+   nombres, y lo que cambia la decisión es si hay algo que corregir y si llega
+   a tiempo. La tercera no dice «despedirlo»: dice que el gerente no lo
+   confirma, y qué se hace con eso lo decide el coordinador. */
+const RESULTADOS_PRUEBA = [
+  { id: 'bien',          nombre: 'Va bien',                   tono: 'verde',
+    lectura: 'Cumple lo que el puesto pide. El gerente lo confirmaría hoy.' },
+  { id: 'observaciones', nombre: 'Con observaciones',         tono: 'ambar',
+    lectura: 'Hay algo concreto que corregir, y tiempo para hacerlo.' },
+  { id: 'noConfirma',    nombre: 'El gerente no lo confirma', tono: 'rojo',
+    lectura: 'Tal como viene, no sigue. Hay que decidirlo antes de que venza.' }
+];
+
+const RESULTADO_PRUEBA_POR_ID = RESULTADOS_PRUEBA.reduce((a, x) => (a[x.id] = x, a), {});
+
+/* Cuántos días antes del vencimiento la última evaluación pasa a urgente. Un
+   mes es lo que tarda una conversación con el gerente, la decisión y el
+   trámite; menos que eso ya es llegar tarde. */
+const DIAS_AVISO_PRUEBA = 30;
+
+function _paramsPrueba(parametros) {
+  const p = parametros || {};
+  const meses = Number(p.mesesPeriodoPrueba) || PRUEBA_DEFECTO.meses;
+  const cada = Number(p.mesesEntreEvaluacionesPrueba) || PRUEBA_DEFECTO.cada;
+  return { meses, cada: Math.max(1, Math.min(cada, meses)) };
+}
+
+/**
+ * En qué anda el período de prueba de una persona.
+ *
+ * Devuelve siempre un objeto —no un booleano— y hay que leer `.enPrueba`, por
+ * la misma trampa que `esNoPresencial()` y `esDeLaboratorio()`.
+ */
+function periodoDePrueba(colaborador, hoy, parametros) {
+  const c = colaborador || {};
+  const h = hoy || _diaHoy();
+  const { meses, cada } = _paramsPrueba(parametros);
+  const desde = c.fechaIngreso || '';
+  const vacio = { aplica: false, enPrueba: false, desde: '', vence: '', hitos: [],
+                  hechas: 0, pendientes: 0, vencidas: 0, proxima: null, diasParaVencer: null };
+  if (!desde) return vacio;
+
+  const vence = _sumarMeses(desde, meses);
+  if (!vence) return vacio;
+  /* Quien se fue no está a prueba: la misma regla que saca a las bajas de
+     Presentismo. Su historial queda en la ficha igual. */
+  const sigue = typeof sigueEnElPlantel === 'function' ? sigueEnElPlantel(c) : c.activo !== false;
+
+  const hitos = [];
+  for (let m = cada, n = 1; m <= meses; m += cada, n++) {
+    const fecha = _sumarMeses(desde, m);
+    const ev = (c.pruebas || []).find(x => Number(x.hito) === n) || null;
+    hitos.push({
+      n, meses: m, fecha,
+      /* La última es la que decide: después de ella no queda tiempo para
+         conversar nada. Se nombra para que no se lea como una más. */
+      decide: m + cada > meses,
+      hecha: !!ev, evaluacion: ev,
+      vencida: !ev && !!fecha && fecha < h,
+      diasPara: fecha ? _diasEntre(h, fecha) : null
+    });
+  }
+
+  const pendientes = hitos.filter(x => !x.hecha);
+  const diasParaVencer = _diasEntre(h, vence);
+  return {
+    aplica: sigue && h <= vence,
+    enPrueba: sigue && h <= vence,
+    terminado: h > vence,
+    desde, vence, diasParaVencer,
+    porVencer: sigue && h <= vence && diasParaVencer !== null && diasParaVencer <= DIAS_AVISO_PRUEBA,
+    hitos,
+    hechas: hitos.filter(x => x.hecha).length,
+    pendientes: pendientes.length,
+    vencidas: hitos.filter(x => x.vencida).length,
+    proxima: pendientes.find(x => x.fecha && x.fecha >= h) || pendientes[0] || null
+  };
+}
+
+/** Todo el que hoy está a prueba, lo que vence antes primero. */
+function personasEnPrueba(estado, hoy, incluirTerminados) {
+  const e = estado || {};
+  const h = hoy || _diaHoy();
+  const par = (e.config || {}).parametros;
+  const filas = [];
+  (e.sucursales || []).forEach(s => {
+    (s.colaboradores || []).forEach(c => {
+      const p = periodoDePrueba(c, h, par);
+      if (!p.desde) return;
+      if (!p.enPrueba && !(incluirTerminados && p.terminado && (c.pruebas || []).length)) return;
+      filas.push({ colaboradorId: c.id, nombre: c.nombre || '', cargo: c.cargo || c.posicion || '',
+                   sucursalId: s.id, sucursal: s.nombre || s.codigo || '', prueba: p });
+    });
+  });
+  return filas.sort((a, b) => String(a.prueba.vence).localeCompare(String(b.prueba.vence)));
+}
+
+/**
+ * Lo que hay que reclamarle a un gerente esta semana.
+ *
+ * **Solo lo que ya pasó o está por pasar**: una evaluación que toca dentro de
+ * dos meses no es un pendiente, es el calendario. Meterla acá convertiría el
+ * contador en un número fijo, que es la regla de los contadores en cero vista
+ * al revés.
+ */
+function alertasDePrueba(estado, hoy) {
+  const h = hoy || _diaHoy();
+  const out = [];
+  personasEnPrueba(estado, h).forEach(f => {
+    const p = f.prueba;
+    const sinHacer = p.hitos.filter(x => x.vencida);
+    if (sinHacer.length) {
+      const u = sinHacer[sinHacer.length - 1];
+      out.push({ fila: f, hito: u, tono: u.decide || p.porVencer ? 'rojo' : 'ambar',
+        texto: sinHacer.length === 1
+          ? `la ${u.n}ª evaluación vencía el ${_fecha(u.fecha)}`
+          : `${sinHacer.length} evaluaciones sin hacer, la última vencía el ${_fecha(u.fecha)}` });
+      return;
+    }
+    if (p.porVencer && p.pendientes) {
+      out.push({ fila: f, hito: p.proxima, tono: 'ambar',
+        texto: `el período de prueba termina el ${_fecha(p.vence)}` });
+    }
+  });
+  return out;
+}
