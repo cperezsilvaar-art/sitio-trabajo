@@ -35,6 +35,25 @@ visible aparte. Nunca contarlo en la dotación de piso. Lo mismo con los
 **flotantes del área** (tienda `FLOTANTES ÁREA 3`, que se importa como `staff`):
 suman al área, nunca a una sucursal.
 
+**Y se puede marcar a mano, porque la nómina no siempre lo dice.** El bloqueo
+viaja escrito en el cargo —«DIRECTOR TECNICO CON BLOQUEO»— en cinco fichas del
+área, y hay Directores Técnicos cargados a secas que prestan la matrícula y no
+pisan el local: el panel los contaba como un FTE del piso de su tienda.
+Escribirle «CON BLOQUEO» al cargo lo arreglaría **hasta la nómina siguiente**,
+que reescribe `cargo`, `nivelCargo` y `categoriaConvenio` porque son campos de
+`CAMPOS_NOMINA`; por eso es una clave propia (`c.noPresencialManual`, con los
+dos motivos de `MOTIVOS_NO_PRESENCIAL`), que la importación no toca. Lo decide
+`esNoPresencial()` y nadie más, **el cargo primero y la marca después** —lo que
+dice la nómina se respeta y esto completa lo que no dice—, y lo devuelve en
+`aMano` para que la ficha diga que la puso una persona. Se cambia desde la ficha
+con un binding propio (`data-nopres`) y en vacío **se borra la clave**, como
+`marcarAdef()`. Cuando el cargo ya lo trae, la ficha no ofrece el selector: dice
+que sale de la nómina, porque un desplegable que no cambia nada enseña a
+desconfiar del que sí. Los nombres viven en `NO_PRESENCIALES_AREA3`
+(`plantel-area3.js`, **porque son nombres de personas**) con una migración de una
+sola vez, igual que `LABORATORIO_AREA3` — y `build-pagina-unica.py` también la
+tiene que inyectar vacía, o la página publicada rompe con un ReferenceError.
+
 **La dotación se cuenta en FTE, no en cabezas.** `jornadaDeVinculo()`, en
 `convenio.js`, devuelve 1 para la jornada completa y 0,5 para el tiempo parcial,
 que la nómina escribe dentro del cargo (`TP`, `JORNADA PARCIAL`). Dos personas de

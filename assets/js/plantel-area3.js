@@ -188,4 +188,22 @@ const LABORATORIO_AREA3 = [
      marca desde su ficha; agregarla acá no la haría aparecer. */
 ];
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3 };
+/* Quién no cubre turno aunque la nómina no lo diga.
+ *
+ * El bloqueo de matrícula viaja en el cargo en cinco fichas del área —«DIRECTOR
+ * TECNICO CON BLOQUEO»—, pero no en todas: hay Directores Técnicos cargados a
+ * secas que prestan la habilitación y no están en el local. El panel los
+ * contaba como un FTE del piso de su tienda.
+ *
+ * Va acá por lo mismo que `LABORATORIO_AREA3`: **son nombres de personas** y la
+ * build de la página publicada vacía este archivo entero. Y se marca en una
+ * clave propia (`c.noPresencialManual`) y no en el cargo, porque el cargo lo
+ * reescribe la nómina del mes.
+ */
+const NO_PRESENCIALES_AREA3 = [
+  { n: 'TRINIDAD IBARRA, ANDREA VERÓNICA', motivo: 'noPresencial' }
+];
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3, NO_PRESENCIALES_AREA3 };
+}

@@ -223,6 +223,24 @@ const Store = (() => {
       });
       e.config.laboratorioMarcado = true;
     }
+    /* Quien presta la matrícula y no pisa el local, cuando la nómina lo trae
+       como Director Técnico a secas: para el panel era un FTE del piso de su
+       tienda. Se escribe una sola vez sobre el padrón ya cargado y después se
+       cambia desde la ficha de la persona, como la especialidad del
+       laboratorio. */
+    if (!e.config.noPresencialesMarcados && typeof NO_PRESENCIALES_AREA3 !== 'undefined') {
+      const llave = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z]/g, '');
+      const porNombre = {};
+      (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+        if (c.nombre) porNombre[llave(c.nombre)] = c;
+      }));
+      NO_PRESENCIALES_AREA3.forEach(x => {
+        const c = porNombre[llave(x.n)];
+        if (c && !c.noPresencialManual) c.noPresencialManual = x.motivo;
+      });
+      e.config.noPresencialesMarcados = true;
+    }
     if (!e.config.ventanaVacacionesCorregida) {
       if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
         e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
@@ -2471,6 +2489,24 @@ const Store = (() => {
      * `marcarAdef()`: volver a ser del piso es una respuesta válida, y un
      * campo vacío lo contaría como laboratorio sin especialidad.
      */
+    /**
+     * Que esta persona no cubre turno aunque su cargo no lo diga.
+     *
+     * Vacío **borra la marca**, como `marcarLaboratorio()` y `marcarAdef()`:
+     * volver a ser del piso es una respuesta válida. No toca el cargo: la
+     * nómina lo vuelve a escribir todos los meses y la marca tiene que
+     * sobrevivir a eso.
+     */
+    marcarNoPresencial(colabId, motivo) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const id = String(motivo || '').trim();
+      if (!id || !MOTIVO_NO_PRESENCIAL_POR_ID[id]) delete c.noPresencialManual;
+      else c.noPresencialManual = id;
+      guardar();
+      return c;
+    },
+
     marcarLaboratorio(colabId, especialidad) {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;

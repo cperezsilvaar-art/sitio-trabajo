@@ -2525,7 +2525,25 @@ const LABORATORIO_AREA3 = [
      marca desde su ficha; agregarla acá no la haría aparecer. */
 ];
 
-if (typeof module !== 'undefined' && module.exports) module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3 };
+/* Quién no cubre turno aunque la nómina no lo diga.
+ *
+ * El bloqueo de matrícula viaja en el cargo en cinco fichas del área —«DIRECTOR
+ * TECNICO CON BLOQUEO»—, pero no en todas: hay Directores Técnicos cargados a
+ * secas que prestan la habilitación y no están en el local. El panel los
+ * contaba como un FTE del piso de su tienda.
+ *
+ * Va acá por lo mismo que `LABORATORIO_AREA3`: **son nombres de personas** y la
+ * build de la página publicada vacía este archivo entero. Y se marca en una
+ * clave propia (`c.noPresencialManual`) y no en el cargo, porque el cargo lo
+ * reescribe la nómina del mes.
+ */
+const NO_PRESENCIALES_AREA3 = [
+  { n: 'TRINIDAD IBARRA, ANDREA VERÓNICA', motivo: 'noPresencial' }
+];
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3, NO_PRESENCIALES_AREA3 };
+}
 
 /*
  * modelo.js — Motor de cálculo.
@@ -4330,16 +4348,41 @@ function categoriaCct(texto) {
  * aparte en todo lo operativo, y los sigue contando en el costo, que es donde
  * sí pesan.
  */
+/* La nómina no siempre lo dice, y por eso se puede marcar a mano.
+ *
+ * El bloqueo viaja en el cargo —«DIRECTOR TECNICO CON BLOQUEO»— en cinco de las
+ * fichas del área, pero hay gente cargada como Director Técnico a secas que en
+ * la práctica no pisa el local: presta la matrícula y nada más. Para el panel
+ * esa persona era un FTE del piso de su tienda.
+ *
+ * Arreglarlo escribiéndole «CON BLOQUEO» al cargo duraría hasta la nómina
+ * siguiente, que vuelve a pisar `cargo`, `nivelCargo` y `categoriaConvenio`
+ * —son campos de `CAMPOS_NOMINA`—. Por eso es una marca propia, en una clave
+ * que la importación no toca, como `c.laboratorio` con la especialidad: lo que
+ * sabe el coordinador y la planilla no trae se guarda aparte.
+ */
+const MOTIVOS_NO_PRESENCIAL = [
+  { id: 'bloqueo',      nombre: 'Bloqueo de título' },
+  { id: 'noPresencial', nombre: 'No presencial' }
+];
+const MOTIVO_NO_PRESENCIAL_POR_ID = MOTIVOS_NO_PRESENCIAL
+  .reduce((a, x) => (a[x.id] = x, a), {});
+
 function esNoPresencial(colaborador) {
   const c = colaborador || {};
   const texto = _normCct([c.categoriaConvenio, c.cargo, c.nivelCargo].join(' '));
   if (/NOPRESENCIAL/.test(texto)) {
-    return { noPresencial: true, motivo: 'No presencial' };
+    return { noPresencial: true, motivo: 'No presencial', aMano: false };
   }
   if (/BLOQUE/.test(texto)) {
-    return { noPresencial: true, motivo: 'Bloqueo de título' };
+    return { noPresencial: true, motivo: 'Bloqueo de título', aMano: false };
   }
-  return { noPresencial: false, motivo: '' };
+  /* La marca a mano va después del cargo: lo que dice la nómina se respeta, y
+     esto completa lo que no dice. Cuando una nómina posterior traiga el cargo
+     con el bloqueo escrito, las dos coinciden y no hay nada que decidir. */
+  const m = MOTIVO_NO_PRESENCIAL_POR_ID[String(c.noPresencialManual || '')];
+  if (m) return { noPresencial: true, motivo: m.nombre, aMano: true };
+  return { noPresencial: false, motivo: '', aMano: false };
 }
 
 /* ---------------- Escalafón por antigüedad (art. 13) ---------------- */
@@ -4971,7 +5014,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CCT, CATEGORIAS_CCT, CATEGORIAS_CCT_POR_ID, MAPA_CATEGORIA_CCT, categoriaCct,
     NOVEDAD_A_LICENCIA,
-    esNoPresencial, ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
+    esNoPresencial, MOTIVOS_NO_PRESENCIAL, MOTIVO_NO_PRESENCIAL_POR_ID,
+    ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
     LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT,
     jornadaDeVinculo,
     ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,
@@ -10365,6 +10409,24 @@ const Store = (() => {
       });
       e.config.laboratorioMarcado = true;
     }
+    /* Quien presta la matrícula y no pisa el local, cuando la nómina lo trae
+       como Director Técnico a secas: para el panel era un FTE del piso de su
+       tienda. Se escribe una sola vez sobre el padrón ya cargado y después se
+       cambia desde la ficha de la persona, como la especialidad del
+       laboratorio. */
+    if (!e.config.noPresencialesMarcados && typeof NO_PRESENCIALES_AREA3 !== 'undefined') {
+      const llave = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z]/g, '');
+      const porNombre = {};
+      (e.sucursales || []).forEach(s => (s.colaboradores || []).forEach(c => {
+        if (c.nombre) porNombre[llave(c.nombre)] = c;
+      }));
+      NO_PRESENCIALES_AREA3.forEach(x => {
+        const c = porNombre[llave(x.n)];
+        if (c && !c.noPresencialManual) c.noPresencialManual = x.motivo;
+      });
+      e.config.noPresencialesMarcados = true;
+    }
     if (!e.config.ventanaVacacionesCorregida) {
       if (Number(e.config.parametros.vacacionesMesDesde) === 7) {
         e.config.parametros.vacacionesMesDesde = PARAMETROS_DEFECTO.vacacionesMesDesde;
@@ -12613,6 +12675,24 @@ const Store = (() => {
      * `marcarAdef()`: volver a ser del piso es una respuesta válida, y un
      * campo vacío lo contaría como laboratorio sin especialidad.
      */
+    /**
+     * Que esta persona no cubre turno aunque su cargo no lo diga.
+     *
+     * Vacío **borra la marca**, como `marcarLaboratorio()` y `marcarAdef()`:
+     * volver a ser del piso es una respuesta válida. No toca el cargo: la
+     * nómina lo vuelve a escribir todos los meses y la marca tiene que
+     * sobrevivir a eso.
+     */
+    marcarNoPresencial(colabId, motivo) {
+      const c = this.colaboradorPorId(colabId);
+      if (!c) return null;
+      const id = String(motivo || '').trim();
+      if (!id || !MOTIVO_NO_PRESENCIAL_POR_ID[id]) delete c.noPresencialManual;
+      else c.noPresencialManual = id;
+      guardar();
+      return c;
+    },
+
     marcarLaboratorio(colabId, especialidad) {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;
@@ -19319,6 +19399,11 @@ const App = (() => {
 
       <h4>Dónde trabaja</h4>`;
 
+    /* La nómina no siempre dice que alguien no cubre turno: cuando lo dice
+       viaja en el cargo y acá se lee, y cuando no, se marca a mano. Las dos
+       cosas las decide `esNoPresencial()`, que es el único lugar. */
+    const np = esNoPresencial(c);
+
     return `${bloquePrueba || '<h4>Dónde trabaja</h4>'}
       <div class="grid c2">
         <label class="campo"><span>Laboratorio</span>
@@ -19327,11 +19412,25 @@ const App = (() => {
             ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
               String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
           </select></label>
-        ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda" style="align-self:end">
-          <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
-          tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
-          la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+        ${np.noPresencial && !np.aMano
+          ? `<p class="ayuda" style="align-self:end"><strong>No cubre turno: ${esc(np.motivo.toLowerCase())}.</strong>
+             Lo dice su cargo en la nómina —${esc(c.cargo || c.categoriaConvenio || 'sin cargo')}—,
+             así que no hace falta marcarlo acá.</p>`
+          : `<label class="campo"><span>¿Cubre turno en el piso?</span>
+              <select data-nopres="${c.id}">
+                <option value="">Sí, cuenta en la dotación de piso</option>
+                ${MOTIVOS_NO_PRESENCIAL.map(x => `<option value="${x.id}"${
+                  String(c.noPresencialManual || '') === x.id ? ' selected' : ''}>No — ${esc(x.nombre.toLowerCase())}</option>`).join('')}
+              </select></label>`}
       </div>
+      ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda">
+        <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
+        tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
+        la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+      ${np.aMano ? `<p class="ayuda"><strong>Marcada a mano: presta la habilitación y no cubre turno.</strong>
+        Sale de la dotación de piso de su tienda y del prellenado del día, y sigue contando
+        en el plantel y en el costo. La nómina la trae como ${esc(c.cargo || 'sin cargo')},
+        que es por lo que hace falta la marca: el cargo lo reescribe el mes que viene.</p>` : ''}
 
       <h4>Curso de ADEF ${eo
       ? `<span class="chip ${eo.chip}">${esc(eo.nombre)}</span>`
@@ -23932,6 +24031,13 @@ const App = (() => {
       const [id, hito, campo] = pr.dataset.prueba.split('|');
       Store.registrarEvaluacionPrueba(id, hito, { [campo]: pr.value });
       if (campo === 'resultado') refrescar();
+    });
+
+    cont.addEventListener('change', ev => {
+      const npm = ev.target.closest('[data-nopres]');
+      if (!npm) return;
+      Store.marcarNoPresencial(npm.dataset.nopres, npm.value);
+      refrescar();
     });
 
     cont.addEventListener('change', ev => {

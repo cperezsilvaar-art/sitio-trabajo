@@ -256,16 +256,41 @@ function categoriaCct(texto) {
  * aparte en todo lo operativo, y los sigue contando en el costo, que es donde
  * sí pesan.
  */
+/* La nómina no siempre lo dice, y por eso se puede marcar a mano.
+ *
+ * El bloqueo viaja en el cargo —«DIRECTOR TECNICO CON BLOQUEO»— en cinco de las
+ * fichas del área, pero hay gente cargada como Director Técnico a secas que en
+ * la práctica no pisa el local: presta la matrícula y nada más. Para el panel
+ * esa persona era un FTE del piso de su tienda.
+ *
+ * Arreglarlo escribiéndole «CON BLOQUEO» al cargo duraría hasta la nómina
+ * siguiente, que vuelve a pisar `cargo`, `nivelCargo` y `categoriaConvenio`
+ * —son campos de `CAMPOS_NOMINA`—. Por eso es una marca propia, en una clave
+ * que la importación no toca, como `c.laboratorio` con la especialidad: lo que
+ * sabe el coordinador y la planilla no trae se guarda aparte.
+ */
+const MOTIVOS_NO_PRESENCIAL = [
+  { id: 'bloqueo',      nombre: 'Bloqueo de título' },
+  { id: 'noPresencial', nombre: 'No presencial' }
+];
+const MOTIVO_NO_PRESENCIAL_POR_ID = MOTIVOS_NO_PRESENCIAL
+  .reduce((a, x) => (a[x.id] = x, a), {});
+
 function esNoPresencial(colaborador) {
   const c = colaborador || {};
   const texto = _normCct([c.categoriaConvenio, c.cargo, c.nivelCargo].join(' '));
   if (/NOPRESENCIAL/.test(texto)) {
-    return { noPresencial: true, motivo: 'No presencial' };
+    return { noPresencial: true, motivo: 'No presencial', aMano: false };
   }
   if (/BLOQUE/.test(texto)) {
-    return { noPresencial: true, motivo: 'Bloqueo de título' };
+    return { noPresencial: true, motivo: 'Bloqueo de título', aMano: false };
   }
-  return { noPresencial: false, motivo: '' };
+  /* La marca a mano va después del cargo: lo que dice la nómina se respeta, y
+     esto completa lo que no dice. Cuando una nómina posterior traiga el cargo
+     con el bloqueo escrito, las dos coinciden y no hay nada que decidir. */
+  const m = MOTIVO_NO_PRESENCIAL_POR_ID[String(c.noPresencialManual || '')];
+  if (m) return { noPresencial: true, motivo: m.nombre, aMano: true };
+  return { noPresencial: false, motivo: '', aMano: false };
 }
 
 /* ---------------- Escalafón por antigüedad (art. 13) ---------------- */
@@ -897,7 +922,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     CCT, CATEGORIAS_CCT, CATEGORIAS_CCT_POR_ID, MAPA_CATEGORIA_CCT, categoriaCct,
     NOVEDAD_A_LICENCIA,
-    esNoPresencial, ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
+    esNoPresencial, MOTIVOS_NO_PRESENCIAL, MOTIVO_NO_PRESENCIAL_POR_ID,
+    ESCALAFON_ANTIGUEDAD, escalafonDe, VACACIONES_CCT, vacacionesDe,
     LICENCIAS_CCT, LICENCIAS_CCT_POR_ID, saldoLicencias, alertasLicencias, JORNADA_CCT,
     jornadaDeVinculo,
     ESTADOS_ADEF, ESTADOS_ADEF_POR_ID, tramosDeAntiguedad, situacionArt8,

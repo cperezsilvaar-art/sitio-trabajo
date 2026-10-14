@@ -3820,6 +3820,11 @@ const App = (() => {
 
       <h4>Dónde trabaja</h4>`;
 
+    /* La nómina no siempre dice que alguien no cubre turno: cuando lo dice
+       viaja en el cargo y acá se lee, y cuando no, se marca a mano. Las dos
+       cosas las decide `esNoPresencial()`, que es el único lugar. */
+    const np = esNoPresencial(c);
+
     return `${bloquePrueba || '<h4>Dónde trabaja</h4>'}
       <div class="grid c2">
         <label class="campo"><span>Laboratorio</span>
@@ -3828,11 +3833,25 @@ const App = (() => {
             ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
               String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
           </select></label>
-        ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda" style="align-self:end">
-          <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
-          tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
-          la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+        ${np.noPresencial && !np.aMano
+          ? `<p class="ayuda" style="align-self:end"><strong>No cubre turno: ${esc(np.motivo.toLowerCase())}.</strong>
+             Lo dice su cargo en la nómina —${esc(c.cargo || c.categoriaConvenio || 'sin cargo')}—,
+             así que no hace falta marcarlo acá.</p>`
+          : `<label class="campo"><span>¿Cubre turno en el piso?</span>
+              <select data-nopres="${c.id}">
+                <option value="">Sí, cuenta en la dotación de piso</option>
+                ${MOTIVOS_NO_PRESENCIAL.map(x => `<option value="${x.id}"${
+                  String(c.noPresencialManual || '') === x.id ? ' selected' : ''}>No — ${esc(x.nombre.toLowerCase())}</option>`).join('')}
+              </select></label>`}
       </div>
+      ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda">
+        <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
+        tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
+        la nómina la carga como ${esc(c.cargo || 'APV')} y no está en el mostrador.</p>` : ''}
+      ${np.aMano ? `<p class="ayuda"><strong>Marcada a mano: presta la habilitación y no cubre turno.</strong>
+        Sale de la dotación de piso de su tienda y del prellenado del día, y sigue contando
+        en el plantel y en el costo. La nómina la trae como ${esc(c.cargo || 'sin cargo')},
+        que es por lo que hace falta la marca: el cargo lo reescribe el mes que viene.</p>` : ''}
 
       <h4>Curso de ADEF ${eo
       ? `<span class="chip ${eo.chip}">${esc(eo.nombre)}</span>`
@@ -8433,6 +8452,13 @@ const App = (() => {
       const [id, hito, campo] = pr.dataset.prueba.split('|');
       Store.registrarEvaluacionPrueba(id, hito, { [campo]: pr.value });
       if (campo === 'resultado') refrescar();
+    });
+
+    cont.addEventListener('change', ev => {
+      const npm = ev.target.closest('[data-nopres]');
+      if (!npm) return;
+      Store.marcarNoPresencial(npm.dataset.nopres, npm.value);
+      refrescar();
     });
 
     cont.addEventListener('change', ev => {
