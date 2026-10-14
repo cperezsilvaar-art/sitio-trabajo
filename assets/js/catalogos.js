@@ -46,6 +46,11 @@ const ESPECIALIDADES_LABORATORIO = [
 const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
   .reduce((a, x) => (a[x.id] = x, a), {});
 
+/* La respuesta «está en el piso», que es distinta de no haber contestado:
+   quien no tiene nada cargado cae en lo que diga la unidad de negocio de la
+   nómina, y esto la contradice a propósito. */
+const PISO_DE_LA_TIENDA = 'piso';
+
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
 

@@ -1314,7 +1314,7 @@ const App = (() => {
              siempre escrito — el color lo acompaña. */
           const lb = esDeLaboratorio(c);
           return lb.laboratorio
-            ? `<span class="chip-lab ${lb.token}">Laboratorio · ${esc(lb.nombre)}</span>
+            ? `<span class="chip-lab ${lb.token}">${esc(lb.casillero)}</span>
                <em class="nom-cargo-real">${esc(c.cargo || '')}</em>`
             : esc(c.cargo || c.posicion || 'sin puesto cargado');
         })()}</span>
@@ -3445,9 +3445,18 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación de piso', dp.personas ? fmtNum(dp.fte, 1) + ' FTE' : '—',
+          /* El laboratorio es plantel de la tienda y cuesta, pero no es piso:
+             esta tira dice «Dotación de piso» y la pantalla ya aclara dos
+             bloques más abajo que la dotación de piso es la de farmacia. El
+             número tiene que decir lo mismo que el rótulo. */
+          const ftePiso = dp.fte - dp.laboratorio.fte;
+          const personasPiso = dp.personas - dp.laboratorio.personas;
+          return kpi('Dotación de piso', dp.personas ? fmtNum(ftePiso, 1) + ' FTE' : '—',
             !dp.personas ? 'sin plantel cargado'
-              : `${dp.personas} persona${dp.personas === 1 ? '' : 's'}${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
+              : `${personasPiso} persona${personasPiso === 1 ? '' : 's'} en el piso${
+                  dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}${
+                  dp.laboratorio.personas
+                    ? ` · ${dp.laboratorio.personas} del laboratorio, aparte` : ''}`,
             sinPos ? 'aviso' : '');
         })()}
         ${kpi('No cubren turno', (dp.noPresenciales.length + dp.sinActividad.length) || '—',
@@ -3723,6 +3732,8 @@ const App = (() => {
           no atiende el mostrador y no cubre su turno: la nómina la carga como
           «Asistente de piso de ventas» y por eso la tienda parecía tener
           ${laboratorio.filter(c => c.posicion === 'APV').length} APV de más.
+          Entran acá por la especialidad que les cargaste o porque su
+          <strong>unidad de negocio</strong> en la nómina dice laboratorio.
           Acá se agrupa <strong>por especialidad</strong>, que es como se organiza el trabajo
           adentro: alopatía y homeopatía son dos mesadas distintas, y lo que decide si mañana
           se puede producir es cuánta gente queda en cada una.
@@ -3736,6 +3747,11 @@ const App = (() => {
             return kpi(x.nombre, g.length,
               `${fmtNum(g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0), 1)} FTE`);
           }).join('')}
+          ${(() => {
+            const g = laboratorio.filter(c => esDeLaboratorio(c).porUnidad);
+            return g.length ? kpi('Sin especialidad', g.length,
+              'la nómina dice laboratorio y no cuál · se carga en su ficha', 'aviso') : '';
+          })()}
         </div>
         ${organigramaLaboratorio(laboratorio)}
         <p class="ayuda">Siguen contando en la dotación de la tienda —son plantel y cuestan—,
@@ -3829,7 +3845,8 @@ const App = (() => {
       <div class="grid c2">
         <label class="campo"><span>Laboratorio</span>
           <select data-lab="${c.id}">
-            <option value="">Piso de la tienda</option>
+            <option value="${PISO_DE_LA_TIENDA}"${
+              !esDeLaboratorio(c).laboratorio ? ' selected' : ''}>Piso de la tienda</option>
             ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
               String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
           </select></label>
@@ -3844,6 +3861,10 @@ const App = (() => {
                   String(c.noPresencialManual || '') === x.id ? ' selected' : ''}>No — ${esc(x.nombre.toLowerCase())}</option>`).join('')}
               </select></label>`}
       </div>
+      ${esDeLaboratorio(c).porUnidad ? `<p class="ayuda">
+        <strong>Entró al laboratorio por la nómina y no a mano:</strong> su unidad de negocio dice
+        «${esc(c.unidadNegocio || '')}», así que salió de la cobertura del piso y le falta la
+        especialidad. Si en realidad está en el mostrador, poné <em>Piso de la tienda</em>.</p>` : ''}
       ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda">
         <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
         tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
@@ -4926,20 +4947,31 @@ const App = (() => {
        calibración y el entrenamiento valen igual para el laboratorio. */
     const tarjeta = c => tarjetaDePersona(c, 'lab ' + esDeLaboratorio(c).token);
 
+    /* El grupo de los que entraron por la unidad de negocio y todavía no
+       tienen mesada. Va último y no es una especialidad más: iterar solo las
+       tres los dejaba afuera del cuadro, o sea los perdía justo después de
+       haberlos sacado del piso. */
+    const grupo = (nombre, token, g, ayuda) => {
+      if (!g.length) return '';
+      const fte = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+      return `<div class="org-nivel">
+        <div class="org-grupo lab-grupo ${token}">
+          <h4>${esc(nombre)} <span class="chip">${g.length}</span>${
+            fte === g.length ? '' : ` <span class="chip azul">${fmtNum(fte, 1)} FTE</span>`}</h4>
+          ${ayuda ? `<p class="ayuda">${ayuda}</p>` : ''}
+          <div class="org-fila">${g.map(tarjeta).join('')}</div>
+        </div>
+      </div>`;
+    };
+    const orden = g => g.slice().sort((a, b) =>
+      (peso(a) - peso(b)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+
     return `<div class="organigrama lab">
-      ${ESPECIALIDADES_LABORATORIO.map(e => {
-        const g = (porEsp[e.id] || []).slice().sort((a, b) =>
-          (peso(a) - peso(b)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
-        if (!g.length) return '';
-        const fte = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
-        return `<div class="org-nivel">
-          <div class="org-grupo lab-grupo ${e.token}">
-            <h4>${esc(e.nombre)} <span class="chip">${g.length}</span>${
-              fte === g.length ? '' : ` <span class="chip azul">${fmtNum(fte, 1)} FTE</span>`}</h4>
-            <div class="org-fila">${g.map(tarjeta).join('')}</div>
-          </div>
-        </div>`;
-      }).join('')}
+      ${ESPECIALIDADES_LABORATORIO.map(e =>
+        grupo(e.nombre, e.token, orden(porEsp[e.id] || []), '')).join('')}
+      ${grupo('Sin especialidad', '', orden(porEsp[''] || []),
+        'La nómina los trae en la unidad de negocio Laboratorio y no dice en qué mesada. '
+        + 'Ya salieron de la cobertura del piso; la especialidad se carga en su ficha.')}
     </div>`;
   }
 

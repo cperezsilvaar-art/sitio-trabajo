@@ -1322,6 +1322,37 @@ dónde se la *cuenta*, así que se deriva y no se guarda. **Sigue contando en la
 dotación**, que es plantel y cuesta, y `dotacionPlantel().laboratorio` lo
 devuelve aparte.
 
+**Y la nómina lo dice sola: la unidad de negocio.** La especialidad la sabe el
+coordinador, pero la columna UNIDAD DE NEGOCIO trae «OPERACIONES -
+LABORATORIO» en **catorce** fichas del área y el panel no la miraba: quedaban
+contadas en el piso de su farmacia la Directora Técnica del laboratorio, su
+farmacéutica, el chofer y dos APV —uno de ellos cargado en Villa del Parque, que
+por eso mostraba 5 APV donde hay 4—. `esDeLaboratorio()` la lee cuando no hay
+especialidad marcada y devuelve `porUnidad: true`: **entran al casillero del
+laboratorio y la especialidad queda pendiente**, que es un dato que falta y no
+una persona del mostrador. Se nombra —un KPI en ámbar, un grupo propio en el
+organigrama y una línea en la ficha— en vez de inventarle una mesada.
+
+**Por eso `c.laboratorio` tiene un valor que dice «está en el piso»**
+(`PISO_DE_LA_TIENDA`, `'piso'`). La ficha ofrecía sacar a alguien del
+laboratorio poniéndolo en el piso, y con la unidad de negocio decidiendo, una
+marca vacía volvía a caer en el laboratorio: el botón no habría hecho nada.
+Vacío sigue siendo «nadie contestó todavía» y se deduce; `'piso'` es una
+respuesta y le gana a la nómina, como «sin relevar» contra un estado del curso
+de ADEF.
+
+**El grupo «Sin especialidad» del organigrama no es una mesada más y va igual.**
+Iterar las tres especialidades dejaba a esa gente afuera del cuadro, o sea la
+perdía justo después de haberla sacado del piso. Va último, neutro, y dice qué
+hacer: la especialidad se carga en la ficha.
+
+**«Dotación de piso» dejó de contar al laboratorio.** La misma pantalla aclaraba
+dos bloques más abajo que «la dotación de piso de la tienda es la de farmacia» y
+el número de arriba los sumaba igual. Ahora el KPI es el piso y el subtítulo
+nombra al laboratorio aparte —«8 personas en el piso · 1 del laboratorio,
+aparte»—. `Store.dotacionPlantel().fte` **no cambió**: es plantel y cuesta, y
+sigue siendo la cuenta del área.
+
 **El laboratorio tiene su propio organigrama y no un grupo abajo del de
 farmacia.** `#/sucursal/<id>` arma dos cuadros: *Organigrama · Farmacia*, que
 es el piso, y *Organigrama · Laboratorio*, en su propia tarjeta. No es un

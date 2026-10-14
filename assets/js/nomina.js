@@ -444,13 +444,37 @@ function esDeLaboratorio(colaborador) {
   const id = String(c.laboratorio || '').trim();
   const esp = typeof ESPECIALIDAD_LAB_POR_ID !== 'undefined'
     ? ESPECIALIDAD_LAB_POR_ID[id] : null;
-  return {
-    laboratorio: !!esp,
-    especialidad: esp ? esp.id : '',
-    nombre: esp ? esp.nombre : '',
-    corto: esp ? esp.corto : '',
-    token: esp ? esp.token : ''
-  };
+  if (esp) {
+    return { laboratorio: true, especialidad: esp.id, nombre: esp.nombre,
+             corto: esp.corto, token: esp.token,
+             casillero: 'Laboratorio · ' + esp.nombre, porUnidad: false };
+  }
+  /* `'piso'` es el coordinador diciendo que sí está en el mostrador, y gana
+     sobre la unidad de negocio. Hace falta porque la ficha ofrece sacar a
+     alguien del laboratorio, y sin un valor explícito la marca vacía volvería
+     a caer en la unidad: el botón no haría nada. No es lo mismo que vacío
+     —que es «nadie contestó todavía»—, igual que «sin relevar» en el curso
+     de ADEF. */
+  if (id === PISO_DE_LA_TIENDA) {
+    return { laboratorio: false, especialidad: '', nombre: '', corto: '',
+             token: '', casillero: '', porUnidad: false };
+  }
+  /* **La nómina lo dice sola, en la unidad de negocio.** La especialidad la
+     sabe el coordinador y se marca a mano, pero la columna UNIDAD DE NEGOCIO
+     trae «OPERACIONES - LABORATORIO» en catorce fichas del área, y esa es la
+     palabra de la planilla: el chofer, la farmacéutica, la Directora Técnica
+     del laboratorio y un APV cargado en otra tienda estaban contados en el
+     piso de su farmacia porque nadie los había marcado todavía.
+     Entran igual al casillero del laboratorio y la especialidad queda
+     pendiente — que es un dato que falta, no una persona del mostrador. */
+  const u = String(c.unidadNegocio || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (/LABORATORIO/.test(u)) {
+    return { laboratorio: true, especialidad: '', nombre: 'Sin especialidad',
+             corto: 'Lab', token: '', casillero: 'Laboratorio', porUnidad: true };
+  }
+  return { laboratorio: false, especialidad: '', nombre: '', corto: '',
+           token: '', casillero: '', porUnidad: false };
 }
 
 /**
@@ -468,7 +492,7 @@ function esDeLaboratorio(colaborador) {
  */
 function posicionDeCobertura(colaborador) {
   const lab = esDeLaboratorio(colaborador);
-  if (lab.laboratorio) return 'Laboratorio · ' + lab.nombre;
+  if (lab.laboratorio) return lab.casillero;
   return (colaborador || {}).posicion || 'Sin posición';
 }
 

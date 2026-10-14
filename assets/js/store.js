@@ -2511,7 +2511,11 @@ const Store = (() => {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;
       const id = String(especialidad || '').trim();
-      if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
+      /* `'piso'` se guarda: es una respuesta —«está en el mostrador»— y tiene
+         que ganarle a la unidad de negocio de la nómina. Vacío sigue borrando
+         la marca, que es «todavía nadie contestó». */
+      if (id === PISO_DE_LA_TIENDA) c.laboratorio = id;
+      else if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
       else c.laboratorio = id;
       guardar();
       return c;

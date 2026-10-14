@@ -1583,6 +1583,11 @@ const ESPECIALIDADES_LABORATORIO = [
 const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
   .reduce((a, x) => (a[x.id] = x, a), {});
 
+/* La respuesta «está en el piso», que es distinta de no haber contestado:
+   quien no tiene nada cargado cae en lo que diga la unidad de negocio de la
+   nómina, y esto la contradice a propósito. */
+const PISO_DE_LA_TIENDA = 'piso';
+
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
 
@@ -4056,13 +4061,37 @@ function esDeLaboratorio(colaborador) {
   const id = String(c.laboratorio || '').trim();
   const esp = typeof ESPECIALIDAD_LAB_POR_ID !== 'undefined'
     ? ESPECIALIDAD_LAB_POR_ID[id] : null;
-  return {
-    laboratorio: !!esp,
-    especialidad: esp ? esp.id : '',
-    nombre: esp ? esp.nombre : '',
-    corto: esp ? esp.corto : '',
-    token: esp ? esp.token : ''
-  };
+  if (esp) {
+    return { laboratorio: true, especialidad: esp.id, nombre: esp.nombre,
+             corto: esp.corto, token: esp.token,
+             casillero: 'Laboratorio · ' + esp.nombre, porUnidad: false };
+  }
+  /* `'piso'` es el coordinador diciendo que sí está en el mostrador, y gana
+     sobre la unidad de negocio. Hace falta porque la ficha ofrece sacar a
+     alguien del laboratorio, y sin un valor explícito la marca vacía volvería
+     a caer en la unidad: el botón no haría nada. No es lo mismo que vacío
+     —que es «nadie contestó todavía»—, igual que «sin relevar» en el curso
+     de ADEF. */
+  if (id === PISO_DE_LA_TIENDA) {
+    return { laboratorio: false, especialidad: '', nombre: '', corto: '',
+             token: '', casillero: '', porUnidad: false };
+  }
+  /* **La nómina lo dice sola, en la unidad de negocio.** La especialidad la
+     sabe el coordinador y se marca a mano, pero la columna UNIDAD DE NEGOCIO
+     trae «OPERACIONES - LABORATORIO» en catorce fichas del área, y esa es la
+     palabra de la planilla: el chofer, la farmacéutica, la Directora Técnica
+     del laboratorio y un APV cargado en otra tienda estaban contados en el
+     piso de su farmacia porque nadie los había marcado todavía.
+     Entran igual al casillero del laboratorio y la especialidad queda
+     pendiente — que es un dato que falta, no una persona del mostrador. */
+  const u = String(c.unidadNegocio || '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  if (/LABORATORIO/.test(u)) {
+    return { laboratorio: true, especialidad: '', nombre: 'Sin especialidad',
+             corto: 'Lab', token: '', casillero: 'Laboratorio', porUnidad: true };
+  }
+  return { laboratorio: false, especialidad: '', nombre: '', corto: '',
+           token: '', casillero: '', porUnidad: false };
 }
 
 /**
@@ -4080,7 +4109,7 @@ function esDeLaboratorio(colaborador) {
  */
 function posicionDeCobertura(colaborador) {
   const lab = esDeLaboratorio(colaborador);
-  if (lab.laboratorio) return 'Laboratorio · ' + lab.nombre;
+  if (lab.laboratorio) return lab.casillero;
   return (colaborador || {}).posicion || 'Sin posición';
 }
 
@@ -12697,7 +12726,11 @@ const Store = (() => {
       const c = this.colaboradorPorId(colabId);
       if (!c) return null;
       const id = String(especialidad || '').trim();
-      if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
+      /* `'piso'` se guarda: es una respuesta —«está en el mostrador»— y tiene
+         que ganarle a la unidad de negocio de la nómina. Vacío sigue borrando
+         la marca, que es «todavía nadie contestó». */
+      if (id === PISO_DE_LA_TIENDA) c.laboratorio = id;
+      else if (!id || !ESPECIALIDAD_LAB_POR_ID[id]) delete c.laboratorio;
       else c.laboratorio = id;
       guardar();
       return c;
@@ -16893,7 +16926,7 @@ const App = (() => {
              siempre escrito — el color lo acompaña. */
           const lb = esDeLaboratorio(c);
           return lb.laboratorio
-            ? `<span class="chip-lab ${lb.token}">Laboratorio · ${esc(lb.nombre)}</span>
+            ? `<span class="chip-lab ${lb.token}">${esc(lb.casillero)}</span>
                <em class="nom-cargo-real">${esc(c.cargo || '')}</em>`
             : esc(c.cargo || c.posicion || 'sin puesto cargado');
         })()}</span>
@@ -19024,9 +19057,18 @@ const App = (() => {
       <div class="kpis">
         ${(() => {
           const sinPos = plantel.filter(c => !c.posicion).length;
-          return kpi('Dotación de piso', dp.personas ? fmtNum(dp.fte, 1) + ' FTE' : '—',
+          /* El laboratorio es plantel de la tienda y cuesta, pero no es piso:
+             esta tira dice «Dotación de piso» y la pantalla ya aclara dos
+             bloques más abajo que la dotación de piso es la de farmacia. El
+             número tiene que decir lo mismo que el rótulo. */
+          const ftePiso = dp.fte - dp.laboratorio.fte;
+          const personasPiso = dp.personas - dp.laboratorio.personas;
+          return kpi('Dotación de piso', dp.personas ? fmtNum(ftePiso, 1) + ' FTE' : '—',
             !dp.personas ? 'sin plantel cargado'
-              : `${dp.personas} persona${dp.personas === 1 ? '' : 's'}${dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}`,
+              : `${personasPiso} persona${personasPiso === 1 ? '' : 's'} en el piso${
+                  dp.parciales ? ` · ${dp.parciales} de media jornada` : ''}${
+                  dp.laboratorio.personas
+                    ? ` · ${dp.laboratorio.personas} del laboratorio, aparte` : ''}`,
             sinPos ? 'aviso' : '');
         })()}
         ${kpi('No cubren turno', (dp.noPresenciales.length + dp.sinActividad.length) || '—',
@@ -19302,6 +19344,8 @@ const App = (() => {
           no atiende el mostrador y no cubre su turno: la nómina la carga como
           «Asistente de piso de ventas» y por eso la tienda parecía tener
           ${laboratorio.filter(c => c.posicion === 'APV').length} APV de más.
+          Entran acá por la especialidad que les cargaste o porque su
+          <strong>unidad de negocio</strong> en la nómina dice laboratorio.
           Acá se agrupa <strong>por especialidad</strong>, que es como se organiza el trabajo
           adentro: alopatía y homeopatía son dos mesadas distintas, y lo que decide si mañana
           se puede producir es cuánta gente queda en cada una.
@@ -19315,6 +19359,11 @@ const App = (() => {
             return kpi(x.nombre, g.length,
               `${fmtNum(g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0), 1)} FTE`);
           }).join('')}
+          ${(() => {
+            const g = laboratorio.filter(c => esDeLaboratorio(c).porUnidad);
+            return g.length ? kpi('Sin especialidad', g.length,
+              'la nómina dice laboratorio y no cuál · se carga en su ficha', 'aviso') : '';
+          })()}
         </div>
         ${organigramaLaboratorio(laboratorio)}
         <p class="ayuda">Siguen contando en la dotación de la tienda —son plantel y cuestan—,
@@ -19408,7 +19457,8 @@ const App = (() => {
       <div class="grid c2">
         <label class="campo"><span>Laboratorio</span>
           <select data-lab="${c.id}">
-            <option value="">Piso de la tienda</option>
+            <option value="${PISO_DE_LA_TIENDA}"${
+              !esDeLaboratorio(c).laboratorio ? ' selected' : ''}>Piso de la tienda</option>
             ${ESPECIALIDADES_LABORATORIO.map(x => `<option value="${x.id}"${
               String(c.laboratorio || '') === x.id ? ' selected' : ''}>${esc(x.nombre)}</option>`).join('')}
           </select></label>
@@ -19423,6 +19473,10 @@ const App = (() => {
                   String(c.noPresencialManual || '') === x.id ? ' selected' : ''}>No — ${esc(x.nombre.toLowerCase())}</option>`).join('')}
               </select></label>`}
       </div>
+      ${esDeLaboratorio(c).porUnidad ? `<p class="ayuda">
+        <strong>Entró al laboratorio por la nómina y no a mano:</strong> su unidad de negocio dice
+        «${esc(c.unidadNegocio || '')}», así que salió de la cobertura del piso y le falta la
+        especialidad. Si en realidad está en el mostrador, poné <em>Piso de la tienda</em>.</p>` : ''}
       ${esDeLaboratorio(c).laboratorio ? `<p class="ayuda">
         <strong>No cuenta en la cobertura del piso.</strong> Sigue en la dotación de la
         tienda, pero en la cuenta de puestos va en su casillero y no en el de su cargo:
@@ -20505,20 +20559,31 @@ const App = (() => {
        calibración y el entrenamiento valen igual para el laboratorio. */
     const tarjeta = c => tarjetaDePersona(c, 'lab ' + esDeLaboratorio(c).token);
 
+    /* El grupo de los que entraron por la unidad de negocio y todavía no
+       tienen mesada. Va último y no es una especialidad más: iterar solo las
+       tres los dejaba afuera del cuadro, o sea los perdía justo después de
+       haberlos sacado del piso. */
+    const grupo = (nombre, token, g, ayuda) => {
+      if (!g.length) return '';
+      const fte = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
+      return `<div class="org-nivel">
+        <div class="org-grupo lab-grupo ${token}">
+          <h4>${esc(nombre)} <span class="chip">${g.length}</span>${
+            fte === g.length ? '' : ` <span class="chip azul">${fmtNum(fte, 1)} FTE</span>`}</h4>
+          ${ayuda ? `<p class="ayuda">${ayuda}</p>` : ''}
+          <div class="org-fila">${g.map(tarjeta).join('')}</div>
+        </div>
+      </div>`;
+    };
+    const orden = g => g.slice().sort((a, b) =>
+      (peso(a) - peso(b)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+
     return `<div class="organigrama lab">
-      ${ESPECIALIDADES_LABORATORIO.map(e => {
-        const g = (porEsp[e.id] || []).slice().sort((a, b) =>
-          (peso(a) - peso(b)) || (a.nombre || '').localeCompare(b.nombre || '', 'es'));
-        if (!g.length) return '';
-        const fte = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
-        return `<div class="org-nivel">
-          <div class="org-grupo lab-grupo ${e.token}">
-            <h4>${esc(e.nombre)} <span class="chip">${g.length}</span>${
-              fte === g.length ? '' : ` <span class="chip azul">${fmtNum(fte, 1)} FTE</span>`}</h4>
-            <div class="org-fila">${g.map(tarjeta).join('')}</div>
-          </div>
-        </div>`;
-      }).join('')}
+      ${ESPECIALIDADES_LABORATORIO.map(e =>
+        grupo(e.nombre, e.token, orden(porEsp[e.id] || []), '')).join('')}
+      ${grupo('Sin especialidad', '', orden(porEsp[''] || []),
+        'La nómina los trae en la unidad de negocio Laboratorio y no dice en qué mesada. '
+        + 'Ya salieron de la cobertura del piso; la especialidad se carga en su ficha.')}
     </div>`;
   }
 
