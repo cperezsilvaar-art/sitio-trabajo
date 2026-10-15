@@ -1588,6 +1588,16 @@ const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
    nómina, y esto la contradice a propósito. */
 const PISO_DE_LA_TIENDA = 'piso';
 
+/* La copia que sale para afuera.
+ *
+ * `--demo` arma la página de demostración **del propio coordinador**: ahí el
+ * cartel dice «tu panel de trabajo es el que abrís desde el archivo», que es
+ * cierto para él y es una pista falsa para cualquier otro —en su copia no hay
+ * ningún otro panel con el padrón de verdad—. `--compartir` inyecta esto en
+ * true y los dos carteles cambian de texto; todo lo demás se comporta igual. */
+const esCopiaParaCompartir = () =>
+  typeof COPIA_PARA_COMPARTIR !== 'undefined' && COPIA_PARA_COMPARTIR;
+
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
 
@@ -10024,7 +10034,12 @@ const Acceso = (() => {
              uno no logra entrar. Y las dos portadas eran idénticas, así que
              quedarse afuera de la página publicada se confundía con quedarse
              afuera del panel de trabajo. */''}
-        ${typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+        ${esCopiaParaCompartir()
+          ? `<p class="pm-pie pm-demo"><strong>Ésta es una copia para probar el panel.</strong>
+             Las sucursales y las personas que trae están inventadas: cargá las tuyas y queda
+             todo guardado en este navegador. La clave, si le ponés una, es de esta copia y de
+             nadie más —no hay forma de recuperarla—, así que exportá el respaldo.</p>`
+          : typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
           ? `<p class="pm-pie pm-demo"><strong>Ésta es la página de demostración.</strong>
              Las personas que trae están inventadas. Tu panel de trabajo es el que abrís
              desde el archivo, y tiene su propia clave: la de acá no lo abre, y la de allá
@@ -16286,7 +16301,18 @@ const App = (() => {
       ${/* La página publicada lleva cinco personas inventadas en lugar del
             padrón. Sin decirlo, abrir el link y ver cinco nombres que no
             conocés se lee como que se perdieron los datos. */
-        typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+        esCopiaParaCompartir()
+        ? `<div class="aviso-caja" id="aviso-demo">
+            <strong>Ésta es una copia para probar el panel.</strong> Las cuatro sucursales y
+            las cinco personas que ves están inventadas, y ninguna tienda tiene cargados sus
+            referentes ni su CUIT.
+            <br>Para hacerlo tuyo: las sucursales se dan de alta en
+            <a href="#/config">Configuración</a> y la gente en <a href="#/nomina">Nómina</a>,
+            a mano o pegando la nómina del mes. Todo queda guardado en este navegador y no
+            viaja a ningún lado, así que el respaldo de <a href="#/config">Configuración</a>
+            es lo único que te queda si cambiás de computadora.
+          </div>`
+        : typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
         ? `<div class="aviso-caja" id="aviso-demo">
             <strong>Ésta es la página de demostración.</strong> Las personas que ves acá están
             inventadas y las tiendas no tienen cargados sus referentes: una página publicada es
@@ -26200,8 +26226,9 @@ const App = (() => {
       const r = Store.cargarPlantelArea3();
       render();
       if (r && r.cargadas !== 0) {
-        avisar(`Cargamos las ${PLANTEL_AREA3.length} personas inventadas de la demostración `
-             + 'para que la página no abra en cero.');
+        avisar(`Cargamos las ${PLANTEL_AREA3.length} personas inventadas `
+             + (esCopiaParaCompartir() ? 'de ejemplo, para que el panel no abra en cero.'
+                                       : 'de la demostración para que la página no abra en cero.'));
       }
     }
 

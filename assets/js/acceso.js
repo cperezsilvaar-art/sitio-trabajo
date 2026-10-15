@@ -215,7 +215,12 @@ const Acceso = (() => {
              uno no logra entrar. Y las dos portadas eran idénticas, así que
              quedarse afuera de la página publicada se confundía con quedarse
              afuera del panel de trabajo. */''}
-        ${typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+        ${esCopiaParaCompartir()
+          ? `<p class="pm-pie pm-demo"><strong>Ésta es una copia para probar el panel.</strong>
+             Las sucursales y las personas que trae están inventadas: cargá las tuyas y queda
+             todo guardado en este navegador. La clave, si le ponés una, es de esta copia y de
+             nadie más —no hay forma de recuperarla—, así que exportá el respaldo.</p>`
+          : typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
           ? `<p class="pm-pie pm-demo"><strong>Ésta es la página de demostración.</strong>
              Las personas que trae están inventadas. Tu panel de trabajo es el que abrís
              desde el archivo, y tiene su propia clave: la de acá no lo abre, y la de allá

@@ -88,6 +88,7 @@ function revisar(html) {
   const ejemplos = new Set([
     'APELLIDO, NOMBRE', 'APELLIDO, NOMBRES', 'APELLIDO, CARGO', 'CUIL, APELLIDO',
     'CUIL, DNI', 'CUIT, ART', 'ART, ANSES', 'CCT, CATEGORIAS', 'DOT, ORG',
+    'OPERADORES, ARTS',
     'ESTÁ DECIDIDO, FALTA',
     'PEREZ, MARTA', 'PEREZ, MARIA'
   ]);

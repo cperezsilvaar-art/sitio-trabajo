@@ -674,7 +674,18 @@ const App = (() => {
       ${/* La página publicada lleva cinco personas inventadas en lugar del
             padrón. Sin decirlo, abrir el link y ver cinco nombres que no
             conocés se lee como que se perdieron los datos. */
-        typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
+        esCopiaParaCompartir()
+        ? `<div class="aviso-caja" id="aviso-demo">
+            <strong>Ésta es una copia para probar el panel.</strong> Las cuatro sucursales y
+            las cinco personas que ves están inventadas, y ninguna tienda tiene cargados sus
+            referentes ni su CUIT.
+            <br>Para hacerlo tuyo: las sucursales se dan de alta en
+            <a href="#/config">Configuración</a> y la gente en <a href="#/nomina">Nómina</a>,
+            a mano o pegando la nómina del mes. Todo queda guardado en este navegador y no
+            viaja a ningún lado, así que el respaldo de <a href="#/config">Configuración</a>
+            es lo único que te queda si cambiás de computadora.
+          </div>`
+        : typeof PAGINA_DE_DEMOSTRACION !== 'undefined' && PAGINA_DE_DEMOSTRACION
         ? `<div class="aviso-caja" id="aviso-demo">
             <strong>Ésta es la página de demostración.</strong> Las personas que ves acá están
             inventadas y las tiendas no tienen cargados sus referentes: una página publicada es
@@ -10588,8 +10599,9 @@ const App = (() => {
       const r = Store.cargarPlantelArea3();
       render();
       if (r && r.cargadas !== 0) {
-        avisar(`Cargamos las ${PLANTEL_AREA3.length} personas inventadas de la demostración `
-             + 'para que la página no abra en cero.');
+        avisar(`Cargamos las ${PLANTEL_AREA3.length} personas inventadas `
+             + (esCopiaParaCompartir() ? 'de ejemplo, para que el panel no abra en cero.'
+                                       : 'de la demostración para que la página no abra en cero.'));
       }
     }
 

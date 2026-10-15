@@ -51,6 +51,16 @@ const ESPECIALIDAD_LAB_POR_ID = ESPECIALIDADES_LABORATORIO
    nómina, y esto la contradice a propósito. */
 const PISO_DE_LA_TIENDA = 'piso';
 
+/* La copia que sale para afuera.
+ *
+ * `--demo` arma la página de demostración **del propio coordinador**: ahí el
+ * cartel dice «tu panel de trabajo es el que abrís desde el archivo», que es
+ * cierto para él y es una pista falsa para cualquier otro —en su copia no hay
+ * ningún otro panel con el padrón de verdad—. `--compartir` inyecta esto en
+ * true y los dos carteles cambian de texto; todo lo demás se comporta igual. */
+const esCopiaParaCompartir = () =>
+  typeof COPIA_PARA_COMPARTIR !== 'undefined' && COPIA_PARA_COMPARTIR;
+
 /* `nivel` ordena el organigrama de la sucursal: 1 es el Gerente de Tienda,
    2 las posiciones que responden a él y 3 el piso de venta. */
 

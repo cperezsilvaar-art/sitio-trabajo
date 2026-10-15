@@ -28,10 +28,23 @@ if not scripts:
 # parece rota: no se entiende qué hace el panel hasta que alguien carga gente,
 # y en la página publicada no hay gente que cargar. Las dos barren igual los
 # nombres de los referentes de las sucursales.
-demo = '--demo' in sys.argv
+#   --compartir    la copia que se le pasa a alguien de otra empresa: arriba
+#                  de `--demo`, cambia las doce sucursales por cuatro
+#                  inventadas y le saca el nombre de la cadena, del área y del
+#                  coordinador.
+#
+# `--compartir` existe porque las otras dos barren **personas** y dejan las
+# tiendas enteras —código, RVD, dirección, CUIT, razón social—, que es dato de
+# la compañía: en la página del propio coordinador eso es lo que la hace
+# servible, y en una copia que sale para afuera no tiene por qué viajar.
+compartir = '--compartir' in sys.argv
+demo = '--demo' in sys.argv or compartir
 sin_plantel = '--sin-plantel' in sys.argv or demo
 if sin_plantel:
     scripts = [x for x in scripts if 'plantel-area3' not in x]
+if compartir:
+    scripts = ['assets/js/sucursales-demo.js' if 'sucursales-area3' in x else x
+               for x in scripts]
 
 
 def sin_personas(texto):
@@ -65,6 +78,59 @@ def sin_personas(texto):
                   "const NOMBRES_A_LIMPIAR = []", texto)
 
 
+# Lo que se reemplaza en `--compartir`, de lo más específico a lo más general:
+# el orden importa, porque la última regla es una palabra que aparece adentro
+# de las anteriores.
+#
+# Va acá y no editando los comentarios del repositorio: un comentario que dice
+# «el laboratorio de Olivos está cargado como APV» es la razón por la que ese
+# código existe y tiene que seguir diciendo la verdad para quien lo lee. Lo que
+# cambia no es el código: es que esta copia sale para afuera. Es la misma
+# división que ya hace `sin_personas()`.
+MARCA_AFUERA = [
+    # El prompt del asistente nombra a las tres cosas en una sola oración.
+    ("'Sos el asistente de Christian Pérez, Coordinador de RRHH del Área 3 de Farmatodo Argentina.'",
+     "'Sos el asistente del Coordinador de RRHH del área.'"),
+    ("coordinador: 'Christian Pérez'", "coordinador: ''"),
+    ('Christian Pérez', 'el coordinador de RRHH'),
+    ('Christian', 'el coordinador'),
+    # Las tiendas que los comentarios y los placeholders nombran de ejemplo.
+    # En mayúsculas y cortadas por el ancho de la línea: así las escriben el
+    # padrón y los comentarios que explican cómo se empareja cada tienda.
+    ('San Martín Center', 'Sucursal Sur'), ('Martín Center', 'Martín Sur'),
+    ('SM CENTER', 'SUC SUR'), ('OLIVOS', 'NORTE'), ('DEVOTO', 'SUR'),
+    ('Ana de Botánico', 'Marta de Centro'),
+    ('Botánico', 'Centro'), ('BOTANICO', 'CENTRO'),
+    ('Olivos', 'Norte'), ('Devoto', 'Sur'), ('Rivadavia', 'Oeste'),
+    ('FTD ARG', 'SUC'),
+    ('Iron Lynx', 'otra razón social'),
+    # La marca. `farmatodo` en minúscula son las claves del almacenamiento y el
+    # nombre del archivo de respaldo, y se reemplazan igual para que sigan
+    # coincidiendo entre sí.
+    ('Farmatodo Argentina', 'la cadena'),
+    ('FARMATODO', 'LA CADENA'), ('Farmatodo', 'la cadena'), ('farmatodo', 'panel'),
+    ('Área 3', 'Área 1'), ('ÁREA 3', 'ÁREA 1'), ('AREA 3', 'AREA 1'),
+]
+
+
+# Lo único que lleva la marca adentro y **no** se puede tocar: la clave con la
+# que `nomina.js` reconoce la columna «Fecha de Ingreso Farmatodo» del Excel.
+# Es un identificador de JavaScript, así que reemplazarla no cambia un texto:
+# deja la página sin compilar. Lo agarró el chequeo del archivo armado.
+INTOCABLES = ['FECHADEINGRESOFARMATODOINGRESOAFTD']
+
+
+def sin_marca(texto):
+    """Saca el nombre de la cadena, del área y del coordinador."""
+    for i, x in enumerate(INTOCABLES):
+        texto = texto.replace(x, f'\0{i}\0')
+    for viejo, nuevo in MARCA_AFUERA:
+        texto = texto.replace(viejo, nuevo)
+    for i, x in enumerate(INTOCABLES):
+        texto = texto.replace(f'\0{i}\0', x)
+    return texto
+
+
 def fuente(ruta):
     texto = (raiz / ruta).read_text(encoding='utf-8')
     return sin_personas(texto) if sin_plantel and 'sucursales-area3' in ruta else texto
@@ -90,9 +156,19 @@ if sin_plantel:
     # en vez de abrir vacía, que es peor que la fuga que vinimos a evitar.
     js = ('const LABORATORIO_AREA3 = [];\n'
           'const NO_PRESENCIALES_AREA3 = [];\n') + js
+if compartir:
+    # Los dos carteles —el de la portada y el de arriba del Panel— dicen otra
+    # cosa en una copia que no es la demostración del coordinador.
+    js = 'const COPIA_PARA_COMPARTIR = true;\n' + js
 
 cuerpo = html.split('<body>', 1)[1].split('</body>', 1)[0]
 cuerpo = re.sub(r'\s*<script src="[^"]+"></script>', '', cuerpo).strip()
+
+if compartir:
+    # Último, cuando ya están adentro el plantel de ejemplo y los dos carteles:
+    # el barrido corría antes de las inyecciones y el plantel de ejemplo —que
+    # vive en la primera tienda del área— se llevaba su nombre a la copia.
+    css, js, cuerpo = sin_marca(css), sin_marca(js), sin_marca(cuerpo)
 
 salida = f"""<title>Panel de Control de RRHH</title>
 <style>

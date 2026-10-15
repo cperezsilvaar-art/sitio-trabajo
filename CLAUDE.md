@@ -1851,6 +1851,13 @@ y Chromium headless, que viven en el directorio de trabajo temporal de la sesió
 node check-publicacion.js
 ```
 
+**Si la copia es para alguien de otra empresa** (`--compartir`), el chequeo es
+el otro, y llama al de arriba:
+
+```
+node check-compartir.js
+```
+
 **Si se tocó el anexo de los gerentes**, además:
 
 ```
@@ -1929,6 +1936,36 @@ placeholders van con nombres inventados**, y las siglas que el patrón agarra de
 más —«CUIL, DNI», «ART, ANSES»— están nombradas una por una en el script, como
 `APELLIDOS_QUE_SON_PALABRAS`: lo que aparezca nuevo lo tiene que mirar una
 persona.
+
+**Y hay una tercera build, para pasarle una copia a alguien de otra empresa**
+(`--compartir`, documentada en `docs/copia-para-compartir.md`). `--demo` y
+`--sin-plantel` barren **personas** y dejan las doce sucursales enteras —código,
+RVD, dirección, CUIT, razón social—, que es dato de la compañía: en la página
+del propio coordinador eso es lo que la hace servible para mostrarla, y en una
+copia que sale para afuera no tiene por qué viajar. `--compartir` va arriba de
+`--demo` y además pone `assets/js/sucursales-demo.js` —cuatro tiendas
+inventadas, sin razón social ni CUIT, porque inventar un CUIT es inventar una
+empresa que puede existir— y corre `sin_marca()`, que saca el nombre de la
+cadena, del área y del coordinador del archivo armado. **El chequeo es
+`node check-compartir.js` y no es opcional**: llama al de publicación —las
+personas las cuida uno solo, dos listas de nombres garantizan que un día
+difieran— y le suma las sucursales, derivando lo prohibido de
+`sucursales-area3.js` en vez de una lista escrita a mano.
+
+**El barrido corre último y hay un identificador que no se toca.** Las
+inyecciones —el plantel de ejemplo, los carteles— entran al bundle después de
+armarlo, así que un barrido anterior las deja pasar: las cinco personas de
+ejemplo viven en la primera tienda del área y se llevaban su nombre. Y
+`FECHADEINGRESOFARMATODOINGRESOAFTD`, la clave con la que `nomina.js` reconoce
+una columna del Excel, lleva la marca adentro de un **identificador**:
+reemplazarla deja la página sin compilar, así que está en `INTOCABLES`. Lo
+agarró el tercer chequeo de la verificación.
+
+**Los dos carteles cambian de texto** (`COPIA_PARA_COMPARTIR`,
+`esCopiaParaCompartir()` en `catalogos.js`): el de `--demo` dice «tu panel de
+trabajo es el que abrís desde el archivo», que es cierto para el coordinador y
+es una pista falsa para cualquier otro —en su copia no hay ningún otro panel con
+el padrón de verdad—. El de la copia dice qué es y dónde cargar lo propio.
 
 El respaldo que se exporta desde Configuración **no está cifrado** y lleva esos
 datos adentro; la pantalla de Configuración lo advierte cuando hay alguno
