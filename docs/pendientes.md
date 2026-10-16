@@ -52,6 +52,52 @@ Dos cosas para tener presentes en esa conversación:
 - **Capacitación nueva en Academia Farmatodo — Venta por Obras Sociales.**
   Llegó por mail el 30/09. Hay que comunicarla al área.
 
+## Farmacias Escuela e identificadores
+
+Lo lleva **Capacitación** (Oriana Ornelas, VP de RR.HH.), no el área. Minuta de
+la reunión de Argentina del **15/10/2026**, con Mariano, Reinaldo, Yannaly,
+Andreina y Adriana. Está acá porque **dos cosas caen sobre el Área 3**: las
+cuatro tiendas que participan y el traslado de gente entre tiendas.
+
+| Fecha | Qué | Proyecto |
+|---|---|---|
+| lun 19 o mar 20/10 | Se envía la invitación a la sesión de cierre | Farmacia Escuela |
+| oct (fecha de la RMO) | Se presenta el plan de identificadores y sus normas de uso | Identificadores |
+| **jue 22/10, 16 a 17 h** | **Sesión de cierre del entrenamiento e inicio de la formalización, con las 4 tiendas** | Farmacia Escuela |
+| vie 23/10 | Comunicado por correo a directores y gerentes de área (propuesta, para los dos planes) | Los dos |
+| lun 26/10 | Comunicado de Farmacias Escuela por Todos en Contacto | Farmacia Escuela |
+| lun 02/11 | Comunicado de lanyards por Todos en Contacto (propuesta) | Identificadores |
+| noviembre | Fase de reconocimiento, una vez que lleguen los materiales | Farmacia Escuela |
+| sin fecha | Inicio oficial del uso de identificadores: se define cuando lleguen | Identificadores |
+
+**Las dos fechas de noviembre dependen de un envío**, no de una decisión: la
+fase de reconocimiento y el inicio de los identificadores esperan los
+materiales. Lo que viene para Argentina: 5 audífonos Logitech, 150 lanyards
+—140 con identificador y 10 identificadores sueltos—, 4 kits de reconocimiento
+(4 cajas, 4 placas, 70 chocolates y 4 normas de instalación) y 55 termos con 55
+hojas de stickers. **Si no llegan, las dos fechas se corren**, así que conviene
+preguntar por el envío antes del 02/11 y no después.
+
+**Dos cosas de la minuta no cierran y hay que confirmarlas.** Los próximos
+pasos dicen que el comunicado de Farmacias Escuela se envía el **24/10**, que
+cae **sábado**, y el calendario de la misma minuta dice el lunes 26. Y la fecha
+del comunicado a GA y DR figura a la vez como propuesta del 23/10 y como
+pendiente de definir.
+
+**Lo que toca al panel: el traslado y la formación.** Se planteó cómo garantizar
+que quien se traslada a una Farmacia Escuela esté formado a tiempo. La salida
+propuesta es integrar los movimientos de Argentina con John y, mientras eso no
+esté, **actualizar a mano la plantilla semanal de Academia Farmatodo** para que
+el curso se active y avance en los dashboards.
+
+El panel ya sabe la mitad: el traspaso se carga en la ficha de la persona
+(`c.movimientos`) y `aplicarMovimientosVencidos()` lo vuelca el día que
+corresponde. Lo que falta para que avise es **saber cuáles son las cuatro
+tiendas**: con esa lista, aplicar un traspaso a una de ellas puede dejar el
+pendiente de cargar a esa persona en la plantilla semanal. **No se inventan**
+—la minuta dice «las 4 tiendas» y no las nombra—, así que hasta que estén
+confirmadas esto es un apunte y no una función.
+
 ## Con fecha
 
 - **11/10 — cesiones del Área 3.** Es el dead line.
