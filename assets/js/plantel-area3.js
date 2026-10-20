@@ -1,0 +1,209 @@
+/*
+ * plantel-area3.js — El plantel del Área 3, de la nómina de septiembre de 2026.
+ *
+ * Está acá y no solo en el navegador por una razón concreta: cuando el
+ * navegador se limpia, el padrón de sucursales vuelve solo y el plantel no, y
+ * el panel abre sin nadie adentro. Con esto, "Cargar el plantel del área" lo
+ * repone en un clic.
+ *
+ * Guarda únicamente lo que el panel necesita para trabajar: nombre, sexo,
+ * tienda, cargo, categoría, nivel, jornada, fechas de ingreso, estatus y unidad
+ * de negocio. **No guarda CUIL, DNI, fecha de nacimiento, teléfono, domicilio ni
+ * mails**: esos siguen viviendo solo en el navegador y entran al pegar la
+ * nómina, que completa cada ficha sin duplicar a nadie.
+ *
+ * `sx` es el sexo que trae la nómina, M o F. Está para que la composición por
+ * sucursal del Panel no abra vacía en un navegador limpio. La edad no está, y
+ * no hay que agregarla: sale de la fecha de nacimiento, que no entra acá.
+ *
+ * `j: 0.5` es la media jornada. Cuando no está, la jornada es completa.
+ */
+
+const PLANTEL_AREA3 = [
+  {"ap": "BIALOSTOCKY", "no": "NOEMI B.", "sx": "F", "t": "OLIVOS", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO", "niv": "DIRECTOR TECNICO", "ing": "1989-08-10", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "DIAZ", "no": "ALEJANDRO EZEQUIEL", "sx": "M", "t": "SM CENTER", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "1997-10-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MANCUSO", "no": "CHRISTIAN ALFREDO", "sx": "M", "t": "LA NOBLEZA", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO", "niv": "DIRECTOR TECNICO", "ing": "2002-08-15", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ANEROT", "no": "ARIEL GERARDO", "sx": "M", "t": "FLOTANTES ÁREA 3", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2001-04-10", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "TRINIDAD IBARRA", "no": "ANDREA VERÓNICA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO", "niv": "DIRECTOR TECNICO", "ing": "2007-07-24", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GRAMUGLIA", "no": "PABLO", "sx": "M", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2002-11-04", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "GONZALEZ", "no": "MARIELA", "sx": "F", "t": "SM CENTER", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2003-09-12", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PAOLINI", "no": "SANDRA MARCELA", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2003-11-15", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BRUNO", "no": "ALMA", "sx": "F", "t": "DEVOTO", "cat": "PERFUMERIA", "cargo": "ASESORA DE BELLEZA", "niv": "ASESORA DE BELLEZA", "ing": "2004-11-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "HERNÁNDEZ", "no": "SANDRA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2005-03-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BARROSO", "no": "DEILDRE MARIA", "sx": "F", "t": "MARK", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO", "niv": "DIRECTOR TECNICO", "ing": "2022-01-21", "ftd": "2022-01-21", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DURAND MENACHO", "no": "JHONNY J.", "sx": "M", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2007-03-02", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "PALACIOS", "no": "PATRICIA ALEJANDRA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2007-12-17", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PALACIOS", "no": "JUAN PABLO", "sx": "M", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2008-01-11", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "BARDALES ROSALES", "no": "YUDY", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2008-01-28", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "ECHEVARRIA", "no": "MYRIAM LUCIANA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2008-04-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "SALVATIERRA", "no": "MONICA NOEMI", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2008-09-15", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "KAPLAN", "no": "LAURA", "sx": "F", "t": "SCALABRINI", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO TP", "niv": "DIRECTOR TECNICO", "ing": "2024-11-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA", "j": 0.5},
+  {"ap": "GUZMAN", "no": "NILDA ANTONIA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2009-04-21", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "RODRIGUEZ CALVO", "no": "ERIKA ANDREA", "sx": "F", "t": "FLOTANTES ÁREA 3", "cat": "FUERA DE CONVENIO", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2009-05-14", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SANTOS TORREALBA", "no": "YESSIKA", "sx": "F", "t": "BOTANICO", "cat": "DIRECTOR TECNICO", "cargo": "DIRECTOR TECNICO", "niv": "DIRECTOR TECNICO", "ing": "2024-11-19", "ftd": "2024-11-19", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "LUNA", "no": "MIRIAN SOLEDAD", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "INICIAL B", "cargo": "LIMPIEZA", "niv": "LIMPIEZA", "ing": "2012-03-15", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BENITEZ", "no": "GRACIELA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2013-04-03", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "SALINAS", "no": "AGUSTIN ALEJANDRO", "sx": "M", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2014-03-11", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GARCIA", "no": "EDUARDO ADOLFO", "sx": "M", "t": "SM CENTER", "cat": "DT NO PRESENCIAL", "cargo": "DIRECTOR TECNICO CON BLOQUEO", "niv": "DT CON BLOQUEO", "ing": "2000-08-31", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PERALTA", "no": "FLORENCIA NATALIA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2016-02-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CLAVEL", "no": "NATALIA CAROLINA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2016-02-16", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "ARRIETA", "no": "LORENA", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2016-04-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BONAZZOLA", "no": "GISELA VIRGINIA", "sx": "F", "t": "OLIVOS", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2016-08-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MELO", "no": "PRISCILA NICOLE", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2017-04-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "FIORE", "no": "NATALIA", "sx": "F", "t": "OLLEROS", "cat": "DT NO PRESENCIAL", "cargo": "DIRECTOR TECNICO CON BLOQUEO", "niv": "DT CON BLOQUEO", "ing": "2010-01-22", "ftd": "2025-10-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DELLA", "no": "BIANCA MARIA JIMENA", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2017-06-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CRISCI", "no": "GABRIELA SUSANA", "sx": "F", "t": "RIVADAVIA", "cat": "DT NO PRESENCIAL", "cargo": "DIRECTOR TECNICO CON BLOQUEO", "niv": "DT CON BLOQUEO", "ing": "2011-11-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DOMINGUEZ", "no": "LORENA", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2018-11-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ABAD", "no": "GONZALO EZEQUIEL", "sx": "M", "t": "DEVOTO", "cat": "DT NO PRESENCIAL", "cargo": "DIRECTOR TECNICO CON BLOQUEO", "niv": "DT CON BLOQUEO", "ing": "2015-07-21", "ftd": "2025-08-01", "est": "FUERA DE NOMINA (HONORARIOS)", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GANAM", "no": "MAYRA YAMILETH", "sx": "F", "t": "OLLEROS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2019-02-01", "ftd": "2025-10-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "COLL", "no": "JOSE ALBERTO", "sx": "M", "t": "MAYOL", "cat": "DT NO PRESENCIAL", "cargo": "DIRECTOR TECNICO CON BLOQUEO", "niv": "DT CON BLOQUEO", "ing": "2024-12-01", "ftd": "2024-12-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "COLOMBO", "no": "JOSE ANTONIO", "sx": "M", "t": "OLIVOS", "cat": "INICIAL B", "cargo": "CHOFER", "niv": "CHOFER", "ing": "2019-12-02", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "FERRARI", "no": "ALICIA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2019-12-07", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ROLON", "no": "NAHUEL AGUSTÍN", "sx": "M", "t": "SM CENTER", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2020-05-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MARTINEZ", "no": "HORACIO", "sx": "M", "t": "DEVOTO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2020-07-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PEREZ", "no": "MARIA EUGENIA", "sx": "F", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2020-09-03", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PERAZZO", "no": "CARLA AGUSTINA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2020-09-04", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DIAZ", "no": "CYNTIA BELEN", "sx": "F", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2021-01-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "TORO", "no": "LUIS", "sx": "M", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2021-04-06", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "TAVELLA", "no": "MICHEL", "sx": "M", "t": "DEVOTO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2021-08-17", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CORONA", "no": "MILENA MARTINA", "sx": "F", "t": "OLIVOS", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2021-09-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "FERNANDEZ BIROCCIO", "no": "CAROLINA BEATRIZ", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2021-10-01", "ftd": "2021-10-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "AIROLDI", "no": "AGUSTINA", "sx": "F", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2022-02-14", "ftd": "2022-02-14", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CORONEL VIZCARRA", "no": "ELIANA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2022-04-12", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MIGLIO", "no": "FACUNDO", "sx": "M", "t": "DEVOTO", "cat": "FARMA AUX. JORNADA PARCIAL", "cargo": "FARMA AUX. JORNADA PARCIAL", "ing": "2012-02-01", "ftd": "2025-10-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA", "j": 0.5},
+  {"ap": "PELLEGRINI MENENDEZ", "no": "MARIEL", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2022-11-14", "ftd": "2022-11-14", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BARRIENTOS", "no": "ROCIO", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2022-12-21", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "FALAVIGNA", "no": "ANABELLA", "sx": "F", "t": "DEVOTO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-01-09", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DELGADO MOUZO", "no": "PABLO TOMAS", "sx": "M", "t": "SM CENTER", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-01-20", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "LOPEZ", "no": "BRENDA", "sx": "F", "t": "SCALABRINI", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-02-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SILVA", "no": "DANIELA ALEJANDRA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-05-10", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SAAVEDRA", "no": "MARY", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-05-15", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "RODRIGUEZ", "no": "DIEGO SEBASTIÁN", "sx": "M", "t": "SCALABRINI", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-05-16", "ftd": "2023-05-16", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CASTILLO", "no": "NATALIA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2023-07-26", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "HENRIQUEZ BOLIVAR", "no": "GUSTAVO ADOLFO", "sx": "M", "t": "RIVADAVIA", "cat": "FUERA DE CONVENIO", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2023-08-01", "ftd": "2023-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PIÑEIRO", "no": "FERNANDA MARIA", "sx": "F", "t": "SCALABRINI", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2023-11-22", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "AVALOS", "no": "MICAELA ROCIO", "sx": "F", "t": "DEVOTO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-11-29", "ftd": "2023-11-29", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CORDICH", "no": "ANABELLA ELIDA", "sx": "F", "t": "SCALABRINI", "cat": "FARMA. AUX. BLOQUEO", "cargo": "FARM. AUX. BLOQUEO", "niv": "FARM. AUXL. BLOQUEO", "ing": "2017-04-05", "ftd": "2025-08-01", "est": "FUERA DE NOMINA (HONORARIOS)", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ALTAMIRANO", "no": "JULIETA LUCÍA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-12-13", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "SOSA", "no": "WANDA LUJAN", "sx": "F", "t": "SM CENTER", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2023-12-20", "ftd": "2023-12-20", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ROJAS", "no": "SILVIA", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2024-01-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ROJAS ARAUJO", "no": "JULYE STHEPANY", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2024-03-04", "ftd": "2024-03-04", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "DIAZ", "no": "CRISTIAN ARIEL", "sx": "M", "t": "OLIVOS", "cat": "FUERA DE CONVENIO", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2024-07-08", "ftd": "2024-07-08", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MONTENEGRO", "no": "SOLEDAD", "sx": "F", "t": "DEVOTO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2024-09-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CARRIZO", "no": "ROCIO", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2024-10-14", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CASTRO", "no": "ZOILA", "sx": "F", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2024-11-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MAÑAS", "no": "NATALIA", "sx": "F", "t": "RIVADAVIA", "cat": "FARMA. AUX. BLOQUEO", "cargo": "FARM. AUX. BLOQUEO", "niv": "FARM. AUXL. BLOQUEO", "ing": "2026-04-01", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ANDRADA", "no": "SABRINA", "sx": "F", "t": "LA NOBLEZA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2024-12-02", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "FERRARO", "no": "CLAUDIA PAOLA", "sx": "F", "t": "SM CENTER", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2024-12-30", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "KOMKE", "no": "ERICA", "sx": "F", "t": "OLIVOS", "cat": "FARMACEUTICO AUXILIAR", "cargo": "FARMACEUTICO AUXILIAR", "niv": "FARMACEUTICO", "ing": "2001-08-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "RIVERO MUJICA", "no": "ANGEL EDUARDO", "sx": "M", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-03-05", "ftd": "2025-03-05", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GORRIN SUAREZ", "no": "SCARLET DANIELA", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-04-01", "ftd": "2025-04-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ANTURY ARTUNDUAGA", "no": "ANA CATERINE", "sx": "F", "t": "BOTANICO", "cat": "FUERA DE CONVENIO", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2025-04-15", "ftd": "2025-04-15", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BRICEÑO PEREZ", "no": "KAREN FABIOLA", "sx": "F", "t": "DEVOTO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-04-23", "ftd": "2025-04-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BELLO BASTIDAS", "no": "MARIA VALENTINA", "sx": "F", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-04-23", "ftd": "2025-04-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GRANDI", "no": "SHAIEL CAMILA", "sx": "F", "t": "SM CENTER", "cat": "PERFUMERIA", "cargo": "ASESORA DE BELLEZA", "niv": "ASESORA DE BELLEZA", "ing": "2025-05-02", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ORDONEZ ROMERO", "no": "PAOLA CHIQUINQUIRÁ", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-05-15", "ftd": "2025-05-15", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MIERS", "no": "WILLAN ROLANDO", "sx": "M", "t": "DEVOTO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-05-26", "ftd": "2025-05-26", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SEQUEIRA", "no": "FIAMA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-06-13", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "INSIGNARES CHIRINOS", "no": "KEVIN ODACIR", "sx": "M", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2025-07-01", "ftd": "2025-07-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "KUNZI", "no": "LUJAN ROCIO", "sx": "F", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-07-01", "ftd": "2025-07-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MARTINEZ", "no": "MARTIN DIEGO", "sx": "M", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-07-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ANTUÑEZ", "no": "AYELEN", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-07-07", "ftd": "2026-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - LABORATORIO"},
+  {"ap": "RODRIGUEZ", "no": "DAIANA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-07-24", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ZORRILLA RINCON", "no": "EDGAR MANUEL", "sx": "M", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-08-13", "ftd": "2025-08-13", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PEREZ", "no": "MARIEL", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-09-15", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VILUYO CHOQUE", "no": "ESTEBAN ALFONSO", "sx": "M", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-09-18", "ftd": "2025-09-18", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BRAMBILLA", "no": "ARIEL", "sx": "M", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-10-01", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "URBINA LEGUA", "no": "KEYLA ANTONELLA", "sx": "F", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-10-01", "ftd": "2025-10-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "ARRIBAS", "no": "JULIETA LAURA", "sx": "F", "t": "VILLA DEL PARQUE", "cat": "FARMACEUTICO AUXILIAR", "cargo": "FARMACEUTICO AUXILIAR", "niv": "FARMACEUTICO", "ing": "2023-05-02", "ftd": "2025-03-01", "est": "LICENCIA SIN GOCE DE SUELDO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BENITEZ", "no": "RODRIGO", "sx": "M", "t": "SCALABRINI", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2025-10-21", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GOMEZ", "no": "CARLA PERLA", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-11-01", "ftd": "2025-11-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MANZOL ARANA", "no": "GABRIELA ESTHER", "sx": "F", "t": "MARK", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2025-11-03", "ftd": "2025-11-03", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MANSILLA", "no": "DEBORA VERONICA", "sx": "F", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-12-01", "ftd": "2025-12-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PARGAMENT", "no": "ALEJO", "sx": "M", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-12-15", "ftd": "2025-03-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MANRIQUEZ", "no": "JOSE", "sx": "M", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2025-12-16", "ftd": "2025-12-16", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GILES", "no": "MARCELO FABIAN", "sx": "M", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-01-12", "ftd": "2026-01-12", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CONTRERAS", "no": "DANIEL", "sx": "M", "t": "BOTANICO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-01-16", "ftd": "2026-01-16", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CARPIO", "no": "DIANA", "sx": "F", "t": "BOTANICO", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-01-16", "ftd": "2026-01-16", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PEÑARANDA", "no": "MELINA BELEN", "sx": "F", "t": "OLLEROS", "cat": "PERFUMERIA", "cargo": "ASESORA DE BELLEZA", "niv": "ASESORA DE BELLEZA", "ing": "2026-01-19", "ftd": "2026-01-19", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CORIA", "no": "NATALIA", "sx": "F", "t": "DEVOTO", "cat": "PERFUMERIA", "cargo": "ASESORA DE BELLEZA", "niv": "ASESORA DE BELLEZA", "ing": "2026-01-19", "ftd": "2026-01-19", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "LUNA", "no": "JUAN GABRIEL", "sx": "M", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-01-20", "ftd": "2026-01-20", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "TAPIA", "no": "MIRYAN DEL VALLE", "sx": "F", "t": "OLLEROS", "cat": "FARMACEUTICO AUXILIAR", "cargo": "FARMACEUTICO AUXILIAR", "niv": "FARMACEUTICO", "ing": "2025-01-06", "ftd": "2025-01-06", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "RANGEL", "no": "IVANOVA", "sx": "F", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-01-28", "ftd": "2026-01-28", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GUERRA ZAMBRANO", "no": "VANESSA ALEJANDRA", "sx": "F", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-02-02", "ftd": "2026-02-02", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BARON APONTE", "no": "VICTOR EDUARDO", "sx": "M", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-02-13", "ftd": "2026-02-13", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VASSALLO", "no": "MARCELO GABRIEL", "sx": "M", "t": "SM CENTER", "cat": "FARMACEUTICO AUXILIAR", "cargo": "FARMACEUTICO AUXILIAR TP", "niv": "FARMACEUTICO", "ing": "2025-05-05", "ftd": "2025-08-01", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA", "j": 0.5},
+  {"ap": "TREJO HERNANDEZ", "no": "WILSON GABRIEL", "sx": "M", "t": "OLLEROS", "cat": "FUERA DE CONVENIO", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2026-03-10", "ftd": "2021-09-06", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PANDURO AMES", "no": "ELIZABETH ROSARIO", "sx": "F", "t": "BOTANICO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-03-16", "ftd": "2026-03-16", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CAPUTO", "no": "VANINA PAULA", "sx": "F", "t": "MARK", "cat": "PERFUMERIA", "cargo": "ASESORA DE BELLEZA", "niv": "ASESORA DE BELLEZA", "ing": "2026-03-19", "ftd": "2026-03-19", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VALERIO BETANCOURT", "no": "ANDREA VALENTINA", "sx": "F", "t": "RIVADAVIA", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2026-06-08", "ftd": "2026-06-08", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "REVAINERA", "no": "DANIEL AGUSTIN", "sx": "M", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-10", "ftd": "2026-06-10", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GOMEZ", "no": "CANDELA AGUSTINA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-18", "ftd": "2026-06-18", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BAREIRO", "no": "CANDELA ALEJANDRA", "sx": "F", "t": "MARK", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-18", "ftd": "2026-06-18", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VIDAL", "no": "GABRIEL RICARDO", "sx": "M", "t": "LA NOBLEZA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-18", "ftd": "2026-06-18", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GONZALEZ", "no": "JOAQUIN EZEQUIEL", "sx": "M", "t": "SM CENTER", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-18", "ftd": "2026-06-18", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VENCHIARUTTI", "no": "LUCAS DANIEL", "sx": "M", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-22", "ftd": "2026-06-22", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "PEÑA PEÑA", "no": "RICHARD ALEXANDER", "sx": "M", "t": "SCALABRINI", "cat": "GERENTE DE TIENDA", "cargo": "GERENTE DE TIENDA", "niv": "GERENTE DE TIENDA", "ing": "2026-06-22", "ftd": "2026-06-22", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "COSTILLA", "no": "ALEXIS", "sx": "M", "t": "SCALABRINI", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-23", "ftd": "2026-06-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SUELDO SANCHEZ", "no": "GIULIANA CARLA", "sx": "F", "t": "OLLEROS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-23", "ftd": "2026-06-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "VILLAR", "no": "LUCIA JAZMIN", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-06-23", "ftd": "2026-06-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "CASTELLANO AMEZQUITA", "no": "RANDY ANGELO", "sx": "M", "t": "DEVOTO", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2026-06-23", "ftd": "2026-06-23", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "GIL MAHMUD", "no": "JESUS ENRIQUE", "sx": "M", "t": "RIVADAVIA", "cat": "EMPLEADO DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTA SENIOR", "niv": "APV SENIOR", "ing": "2026-06-25", "ftd": "2026-06-25", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "SOTO SANCHEZ", "no": "JOSENNYTH DARIMAR", "sx": "F", "t": "SCALABRINI", "cat": "PERFUMERIA", "cargo": "ASESORA DERMO", "niv": "ASESORA DERMO", "ing": "2026-08-03", "ftd": "2026-08-03", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "BERNIGAUD", "no": "BRENDA ORIANA", "sx": "F", "t": "FLOTANTES ÁREA 3", "cat": "PERFUMERIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-08-03", "ftd": "2026-08-03", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "MUÑOZ BRUNO", "no": "PAUL RICHARD", "sx": "M", "t": "OLLEROS", "cat": "PERFUMERIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2026-08-03", "ftd": "2026-08-03", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"},
+  {"ap": "HERRERO", "no": "CARLA ANDREA", "sx": "F", "t": "OLIVOS", "cat": "EMPLEADO ESP. DE FARMACIA", "cargo": "ASISTENTE DE PISO DE VENTAS", "niv": "BASE FARMACIA", "ing": "2004-11-27", "est": "INDETERMINADO", "uni": "OPERACIONES - FARMACIA"}
+];
+
+/* ============ Quién trabaja en el laboratorio y en qué ============
+ *
+ * El laboratorio de Olivos prepara **alopatía** y **homeopatía**, y su gente
+ * está cargada en la nómina como «ASISTENTE DE PISO DE VENTAS», o sea como
+ * APV: **ocho personas que la tienda cuenta en el piso y no están en el
+ * piso**. Con eso, la cobertura por posición de Olivos miente —y es
+ * justamente el número que decide si una tienda puede dar vacaciones—.
+ *
+ * La especialidad **no viene en ninguna planilla**: la sabe el coordinador. Por
+ * eso vive acá, al lado del plantel, y no se deriva del cargo ni de la unidad
+ * de negocio, que dicen otra cosa. Se empareja por nombre y la ficha de cada
+ * persona la deja cambiar.
+ *
+ * Va en este archivo y no en `catalogos.js` **porque son nombres de personas**:
+ * la build de la página publicada vacía este archivo entero, y `catalogos.js`
+ * viaja tal cual. Lo verifica `check-publicacion.js`.
+ */
+const LABORATORIO_AREA3 = [
+  { n: 'DURAND MENACHO, JHONNY J.',       esp: 'alopatia' },
+  { n: 'ANTUÑEZ, AYELEN',                 esp: 'alopatia' },
+  { n: 'PALACIOS, JUAN PABLO',            esp: 'alopatia' },
+  { n: 'HERRERO, CARLA ANDREA',           esp: 'homeopatia' },
+  { n: 'SEQUEIRA, FIAMA',                 esp: 'homeopatia' },
+  { n: 'BENITEZ, GRACIELA',               esp: 'homeopatia' },
+  { n: 'ALTAMIRANO, JULIETA LUCÍA',       esp: 'homeopatia' },
+  { n: 'ECHEVARRIA, MYRIAM LUCIANA',      esp: 'homeopatia' },
+  { n: 'BARDALES ROSALES, YUDY',          esp: 'homeopatia' },
+  { n: 'CLAVEL, NATALIA CAROLINA',        esp: 'administrativa' }
+  /* Falta **MEDIN, VANESA** —farmacéutica auxiliar de alopatía—: todavía no
+     está en el padrón del área porque le falta la cesión. Cuando entre, se
+     marca desde su ficha; agregarla acá no la haría aparecer. */
+];
+
+/* Quién no cubre turno aunque la nómina no lo diga.
+ *
+ * El bloqueo de matrícula viaja en el cargo en cinco fichas del área —«DIRECTOR
+ * TECNICO CON BLOQUEO»—, pero no en todas: hay Directores Técnicos cargados a
+ * secas que prestan la habilitación y no están en el local. El panel los
+ * contaba como un FTE del piso de su tienda.
+ *
+ * Va acá por lo mismo que `LABORATORIO_AREA3`: **son nombres de personas** y la
+ * build de la página publicada vacía este archivo entero. Y se marca en una
+ * clave propia (`c.noPresencialManual`) y no en el cargo, porque el cargo lo
+ * reescribe la nómina del mes.
+ */
+const NO_PRESENCIALES_AREA3 = [
+  { n: 'TRINIDAD IBARRA, ANDREA VERÓNICA', motivo: 'noPresencial' }
+];
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { PLANTEL_AREA3, LABORATORIO_AREA3, NO_PRESENCIALES_AREA3 };
+}

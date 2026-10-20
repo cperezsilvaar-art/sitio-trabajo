@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Avisar un reclamo a RRHH — Área 3 (no es el panel)</title>
+<!--
+  anexo-gerentes.html — lo que usan los Gerentes de Tienda.
+
+  NO SE EDITA A MANO: lo escribe `build-anexo.py` desde la plantilla
+  `anexo-gerentes.plantilla.html`, inyectando las tiendas de
+  `sucursales-area3.js` y los motivos de `reclamos.js` y `casos.js`. Una
+  segunda lista de motivos que se desincroniza de la del panel es el problema
+  que `MAPA_CARGOS` ya evitó derivándose de `CARGOS_NOMINA`.
+
+  Tres cosas que la definen:
+
+  - **No es un formulario de Google**, y eso fue un pedido explícito. Es la
+    misma paleta del panel, abre en el teléfono, sin login y sin conexión.
+
+  - **No lleva el padrón adentro.** El nombre del colaborador lo escribe el
+    gerente. Listar a las 136 personas en una página que abren catorce
+    personas con un link es exactamente lo que la regla de `--demo` existe
+    para evitar. Por eso se pide legajo o DNI: con número el emparejamiento
+    contra el padrón es exacto, y sin número el panel nombra las filas que no
+    cayeron en nadie en vez de perderlas en silencio.
+
+  - **No va por WhatsApp, y es una decisión del coordinador.** La primera
+    versión abría el chat con el mensaje ya escrito, con el argumento de que
+    el gerente seguía haciendo el gesto de siempre. El coordinador lo
+    descartó: un reclamo de sueldo que entra a su chat personal se mezcla con
+    todo lo demás, y la informalidad que molestaba vuelve por la puerta del
+    canal. Quedan **mail y copiar**, con el texto idéntico — el importador lo
+    toma de donde venga. **No reponer el botón de WhatsApp.**
+
+  - **Es solo para reclamos de sueldo.** Había una tercera rama —«una
+    situación que necesita seguimiento»— y se eliminó a pedido del
+    coordinador. Un gerente no usa un formulario para eso, y si lo usara, lo
+    que quedaría es una impresión escrita sobre una persona en una herramienta
+    de la empresa, sin una conversación atrás. Es lo mismo que se rechazó
+    cuando se pidió un «panel de empleados complejos»: se sigue la situación,
+    no se etiqueta a la persona. Un reclamo y una carta documento son hechos.
+-->
+<style>
+/* La paleta del panel, sin el archivo: esta página tiene que ser un solo
+   archivo para poder publicarse o mandarse por mail. */
+:root {
+  color-scheme: light;
+  --azul: #0b3b72; --azul-claro: #1e6fc4; --marino-hondo: #072c57;
+  --rojo: #c8102e; --fondo: #f5f7fa; --panel: #fff; --panel-alt: #f7f9fc;
+  --borde: #dce3ec; --borde-fuerte: #bfcbda;
+  --texto: #10233b; --texto-suave: #55657c;
+  --verde: #1a7f4b; --ambar: #b7791f;
+  --radio: 10px;
+  --sombra: 0 1px 2px rgba(16,32,54,.06), 0 4px 14px rgba(16,32,54,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --azul: #7fb2e6; --azul-claro: #9cc7f2; --marino-hondo: #050f1d;
+    --rojo: #ff6b7a; --fondo: #0d1626; --panel: #152034; --panel-alt: #1b283f;
+    --borde: #27354e; --borde-fuerte: #3a4a68;
+    --texto: #e7edf6; --texto-suave: #9aabc2;
+    --verde: #4cc38a; --ambar: #e0a94a;
+    --sombra: 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fondo); color: var(--texto);
+  font: 16px/1.55 "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+header {
+  background: var(--azul);
+  background-image: linear-gradient(158deg, var(--azul) 0%, var(--marino-hondo) 100%);
+  color: #fff; padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 20px;
+}
+header .marca { display: flex; align-items: center; gap: 12px; }
+header svg { width: 30px; height: 30px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
+header strong { display: block; font-size: 17px; line-height: 1.2; }
+header em {
+  display: block; font-style: normal; font-size: 10.5px; margin-top: 3px;
+  text-transform: uppercase; letter-spacing: .12em; color: rgba(255,255,255,.6);
+}
+header p { margin: 16px 0 0; font-size: 14.5px; color: rgba(255,255,255,.88); max-width: 46ch; }
+/* **Esta página no es el panel y tiene que decirlo.** Comparte la paleta y la
+   marca con el tablero de RRHH, así que se confunde con él: el propio
+   coordinador la abrió buscando su padrón y creyó que se le había borrado
+   todo. Es el mismo error que ya había pasado con la página de demostración y
+   se arregló igual — diciéndolo en la portada, no esperando que se deduzca. */
+header p.no-es-el-panel {
+  margin-top: 12px; font-size: 13px; line-height: 1.55;
+  color: rgba(255,255,255,.72);
+  border-left: 2px solid rgba(255,255,255,.3); padding-left: 11px;
+}
+
+main { max-width: 620px; margin: 0 auto; padding: 18px 16px calc(40px + env(safe-area-inset-bottom, 0px)); }
+section {
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
+  padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--sombra);
+}
+h2 { margin: 0 0 4px; font-size: 15px; color: var(--azul); }
+p.ayuda { margin: 0 0 14px; font-size: 13.5px; color: var(--texto-suave); }
+
+/* Elegir qué se avisa: tres opciones grandes, porque es la primera decisión y
+   se toma con el pulgar. */
+.ramas { display: grid; gap: 10px; }
+.rama {
+  display: block; width: 100%; text-align: left; font: inherit; cursor: pointer;
+  background: var(--panel-alt); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 13px 15px; color: inherit;
+}
+.rama:hover { border-color: var(--azul-claro); }
+.rama[aria-pressed="true"] {
+  border-color: var(--azul); background: var(--panel);
+  outline: 2px solid var(--azul-claro); outline-offset: -2px;
+}
+.rama strong { display: block; font-size: 15px; }
+.rama span { display: block; font-size: 13px; color: var(--texto-suave); margin-top: 2px; }
+
+label.campo { display: block; margin-bottom: 13px; font-size: 12px; font-weight: 600; color: var(--texto-suave); }
+label.campo > span { display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
+label.campo > em { display: block; font-style: normal; font-weight: 400; text-transform: none; letter-spacing: 0; margin-top: 5px; font-size: 12.5px; }
+input, select, textarea {
+  width: 100%; padding: 11px 12px; border: 1px solid var(--borde-fuerte); border-radius: 8px;
+  background: var(--panel); color: var(--texto); font: inherit; font-size: 16px; font-weight: 400;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul-claro); outline-offset: -1px; }
+textarea { min-height: 92px; resize: vertical; }
+.dos { display: grid; gap: 0 12px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 460px) { .dos { grid-template-columns: 1fr; } }
+
+pre.previo {
+  background: var(--panel-alt); border: 1px solid var(--borde); border-radius: 8px;
+  padding: 13px; margin: 0 0 14px; font-size: 13px; line-height: 1.5;
+  white-space: pre-wrap; word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+.botones { display: grid; gap: 9px; }
+a.b, button.b {
+  display: block; width: 100%; text-align: center; text-decoration: none;
+  background: var(--azul); color: #fff; border: 0; padding: 14px 16px; border-radius: 9px;
+  font: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+}
+a.b:hover, button.b:hover { background: var(--azul-claro); }
+a.b.sec, button.b.sec { background: transparent; color: var(--azul); border: 1px solid var(--borde-fuerte); }
+a.b.sec:hover, button.b.sec:hover { background: var(--panel-alt); }
+.falta {
+  margin: 0 0 14px; font-size: 13.5px; font-weight: 600; color: var(--rojo);
+  background: rgba(200,16,46,.08); border-radius: 7px; padding: 10px 12px;
+}
+.listo {
+  margin: 14px 0 0; font-size: 13.5px; color: var(--verde); font-weight: 600;
+}
+.nota {
+  margin: 14px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--texto-suave);
+  border-left: 3px solid var(--ambar); padding-left: 12px;
+}
+footer { text-align: center; color: var(--texto-suave); font-size: 12px; padding: 0 16px 30px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="marca">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>
+    <span><strong>Avisar a RRHH</strong><em>Área 3 · Farmatodo</em></span>
+  </div>
+  <p>Para los <strong>reclamos de sueldo</strong> de tu gente. Lo llenás en un minuto,
+     lo copiás y se lo mandás a RRHH ordenado y con su fecha: así no se pierde y te
+     puede contestar.</p>
+  <p class="no-es-el-panel">Esto <strong>no es el panel de RRHH</strong>: es solo el
+     formulario para avisar un reclamo. No guarda ningún dato de nadie y no hay nada
+     que buscar acá adentro.</p>
+</header>
+
+<main>
+  <section>
+    <h2>1. ¿Qué querés avisar?</h2>
+    <p class="ayuda">Elegí una. Según lo que marques te voy a pedir distintas cosas.</p>
+    <div class="ramas" id="ramas"></div>
+  </section>
+
+  <form id="form" hidden autocomplete="off">
+    <section>
+      <h2>2. De quién se trata</h2>
+      <p class="ayuda">El DNI no es obligatorio, pero con eso no hay forma de que
+         se confunda con un homónimo.</p>
+
+      <label class="campo"><span>Tienda</span>
+        <select id="tienda" required></select></label>
+
+      <label class="campo"><span>Nombre del colaborador</span>
+        <input id="colaborador" placeholder="Apellido y nombre" required></label>
+
+      <!-- **El DNI primero, y no el legajo.** Se midió el padrón: el legajo está
+           cargado en 0 de 141 personas y el DNI en 139. Pedir primero el que no
+           sirve es pedir un dato que no va a emparejar con nada. El legajo se
+           sigue aceptando para cuando la nómina lo traiga.
+           (Esto es un comentario de HTML y no `${...}`: la página no es un
+           template literal, así que un `${}` acá se imprime como texto.) -->
+      <label class="campo"><span>DNI</span>
+        <input id="legajo" inputmode="numeric" placeholder="Sin puntos. O el legajo, si es lo que tenés"></label>
+    </section>
+
+    <section>
+      <h2 id="tituloQue">3. Qué pasó</h2>
+      <p class="ayuda" id="ayudaQue"></p>
+
+      <label class="campo" id="campoMotivo"><span id="rotuloMotivo">Motivo</span>
+        <select id="motivo"></select></label>
+
+      <div class="dos" id="camposPlata">
+        <label class="campo"><span>Período</span>
+          <input id="periodo" placeholder="Ej. septiembre 2026"></label>
+        <label class="campo"><span>Monto aproximado</span>
+          <input id="monto" inputmode="decimal" placeholder="Si lo sabés"></label>
+      </div>
+
+      <label class="campo" id="campoRecibido"><span>Cuándo llegó</span>
+        <input id="recibido" type="date"></label>
+
+      <label class="campo"><span id="rotuloDetalle">Contalo en dos renglones</span>
+        <textarea id="detalle" required placeholder="Qué pasó, cuándo, y cualquier dato que sirva para resolverlo"></textarea></label>
+
+      <label class="campo"><span>Tu nombre</span>
+        <input id="informa" placeholder="Para saber a quién contestarle" required>
+        <em>Se guarda en este teléfono: la próxima vez ya va a estar puesto.</em></label>
+    </section>
+
+    <section>
+      <h2>4. Mandalo vos</h2>
+      <!-- **«Mandalo vos» y no «Mandalo».** Esta página no se conecta con
+           ningún lado: arma el texto y alguien lo tiene que enviar. El propio
+           coordinador cargó un reclamo de prueba y esperó que apareciera en su
+           panel — tres veces—. Si le pasó a él, que sabe cómo funciona, el
+           botón solo no alcanza: hay que decir que el envío es un acto de la
+           persona, antes de que lo apriete. -->
+      <p class="ayuda">Esto es lo que vas a mandar. Revisalo antes.</p>
+      <p class="falta" id="falta" hidden></p>
+      <pre class="previo" id="previo"></pre>
+      <!-- Copiar va primero y como botón principal: es el único que funciona
+           en cualquier lado. El de mail abre el programa de correo, y adentro
+           de un visor o de algunos navegadores de teléfono eso está bloqueado
+           y no pasa nada visible — que es exactamente cómo se siente un error
+           sin serlo. -->
+      <div class="botones">
+        <button class="b" type="button" id="btnCopiar">Copiar el texto</button>
+        <a class="b sec" id="btnMail" href="#" hidden>Abrir el mail ya escrito</a>
+      </div>
+      <p class="listo" id="listo" hidden></p>
+      <p class="nota"><strong>Esta página no manda nada sola.</strong> Copiá el
+         texto y pegalo en el mensaje que le mandás a RRHH. Hasta que no lo
+         mandes, acá no quedó registrado nada.</p>
+      <p class="nota">No adjuntes certificados ni documentación acá: eso se
+         entrega como siempre. Esto es el aviso, para que quede asentado y con
+         fecha.</p>
+    </section>
+  </form>
+</main>
+
+<footer>Panel de Control de RRHH · Área 3</footer>
+
+<script>
+/* --------------------------------------------------------------------------
+   Lo que el generador inyecta. Nada de esto se escribe a mano acá.
+   -------------------------------------------------------------------------- */
+const TIENDAS = /*{TIENDAS}*/[]/*{/TIENDAS}*/;
+const MOTIVOS_RECLAMO = /*{MOTIVOS_RECLAMO}*/[]/*{/MOTIVOS_RECLAMO}*/;
+const MAIL_RRHH = /*{MAIL_RRHH}*/''/*{/MAIL_RRHH}*/;
+
+/* Las tres ramas. El `id` es lo que viaja en la primera línea del mensaje y lo
+   que el importador del panel lee para decidir si esto es un reclamo o un
+   caso: son dos cosas distintas de su lado, y el gerente no tiene por qué
+   saberlo. */
+const RAMAS = [
+  { id: 'RECLAMO', titulo: 'Un reclamo de sueldo',
+    ayuda: 'Le pagaron mal, le descontaron algo, le falta un adicional.',
+    tituloQue: '3. Qué le pagaron mal',
+    ayudaQue: 'Si no sabés exactamente cuál es, elegí lo más parecido y contalo abajo.',
+    rotuloMotivo: 'Qué le pagaron mal', motivos: 'reclamo', plata: true },
+
+  { id: 'LEGAL', titulo: 'Llegó una carta documento o una intimación',
+    ayuda: 'Cualquier papel del abogado o del sindicato de un colaborador.',
+    tituloQue: '3. Qué llegó',
+    ayudaQue: 'Avisá apenas llega, aunque todavía no lo hayas leído entero: los plazos corren.',
+    rotuloMotivo: 'Qué llegó', motivos: 'legal', recibido: true,
+    rotuloDetalle: 'Qué dice, en dos renglones' }
+
+];
+
+const MOTIVOS_LEGAL = [
+  'Carta documento', 'Telegrama', 'Intimación del sindicato',
+  'Nota del estudio jurídico', 'Otro papel legal'
+];
+
+const $ = s => document.querySelector(s);
+const CLAVE_MEMORIA = 'anexo-gerentes-rrhh3';
+let rama = null;
+
+/* Lo que no cambia de una carga a la otra se recuerda en este teléfono: la
+   tienda y quién la manda. Es una comodidad del que carga y no viaja a ningún
+   lado. En un navegador que bloquea el almacenamiento tira, así que va con
+   try/catch y la página funciona igual sin esto. */
+function recordar(datos) {
+  try { localStorage.setItem(CLAVE_MEMORIA, JSON.stringify(datos)); } catch (e) { /* da igual */ }
+}
+function recordado() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_MEMORIA) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+
+function pintarRamas() {
+  $('#ramas').innerHTML = RAMAS.map(r => `
+    <button type="button" class="rama" data-rama="${r.id}" aria-pressed="false">
+      <strong>${r.titulo}</strong><span>${r.ayuda}</span>
+    </button>`).join('');
+}
+
+function pintarTiendas() {
+  const previa = recordado().tienda || '';
+  $('#tienda').innerHTML = '<option value="">— elegí tu tienda —</option>' +
+    TIENDAS.map(t => `<option value="${t}"${t === previa ? ' selected' : ''}>${t}</option>`).join('');
+}
+
+function motivosDe(cual) {
+  if (cual === 'legal') return MOTIVOS_LEGAL.map(x => ({ grupo: '', nombre: x }));
+  return MOTIVOS_RECLAMO;
+}
+
+function pintarMotivos() {
+  const lista = motivosDe(rama.motivos);
+  /* Los reclamos vienen agrupados —Liquidación, Encuadre, Beneficios— y con
+     quince opciones el agrupado es lo que hace que se encuentre la propia. */
+  const grupos = [];
+  lista.forEach(m => {
+    const g = grupos.find(x => x.nombre === (m.grupo || ''));
+    if (g) g.items.push(m.nombre);
+    else grupos.push({ nombre: m.grupo || '', items: [m.nombre] });
+  });
+  $('#motivo').innerHTML = '<option value="">— elegí una —</option>' + grupos.map(g => g.nombre
+    ? `<optgroup label="${g.nombre}">${g.items.map(n => `<option>${n}</option>`).join('')}</optgroup>`
+    : g.items.map(n => `<option>${n}</option>`).join('')).join('');
+}
+
+function elegirRama(id) {
+  rama = RAMAS.find(r => r.id === id) || null;
+  document.querySelectorAll('[data-rama]').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.rama === id));
+  });
+  if (!rama) return;
+
+  $('#form').hidden = false;
+  $('#tituloQue').textContent = rama.tituloQue;
+  $('#ayudaQue').textContent = rama.ayudaQue;
+  $('#rotuloMotivo').textContent = rama.rotuloMotivo;
+  $('#rotuloDetalle').textContent = rama.rotuloDetalle || 'Contalo en dos renglones';
+  $('#camposPlata').hidden = !rama.plata;
+  $('#campoRecibido').hidden = !rama.recibido;
+  pintarMotivos();
+  redibujar();
+  $('#form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* El mensaje. Una línea por dato, con la clave adelante: se lee bien en el
+   chat y el panel lo parsea sin ambigüedad. La primera línea es la que el
+   importador usa para partir cuando se pegan varios de una. */
+function armarTexto() {
+  if (!rama) return '';
+  const v = id => ($(id).value || '').trim();
+  const lineas = [`#RRHH3 ${rama.id}`];
+  const poner = (k, x) => { if (x) lineas.push(`${k}: ${x}`); };
+
+  poner('Tienda', v('#tienda'));
+  poner('Colaborador', v('#colaborador'));
+  poner('DNI', v('#legajo'));
+  poner(rama.id === 'RECLAMO' ? 'Motivo' : rama.id === 'LEGAL' ? 'Recibido' : 'Situación', v('#motivo'));
+  if (rama.plata) { poner('Período', v('#periodo')); poner('Monto', v('#monto')); }
+  if (rama.recibido) poner('Fecha de llegada', v('#recibido'));
+  /* El detalle puede traer saltos de línea y el formato es una línea por dato:
+     se aplastan para que no rompan el parseo del otro lado. */
+  poner('Detalle', v('#detalle').replace(/\s*\n+\s*/g, ' / '));
+  poner('Informa', v('#informa'));
+  lineas.push(`Fecha: ${new Date().toISOString().slice(0, 10)}`);
+  return lineas.join('\n');
+}
+
+function loQueFalta() {
+  const falta = [];
+  if (!($('#tienda').value || '').trim()) falta.push('la tienda');
+  if (!($('#colaborador').value || '').trim()) falta.push('el nombre del colaborador');
+  if (!($('#motivo').value || '').trim()) falta.push(rama.rotuloMotivo.toLowerCase());
+  if (!($('#detalle').value || '').trim()) falta.push('el detalle');
+  if (!($('#informa').value || '').trim()) falta.push('tu nombre');
+  return falta;
+}
+
+function redibujar() {
+  if (!rama) return;
+  const texto = armarTexto();
+  $('#previo').textContent = texto;
+
+  const falta = loQueFalta();
+  const completo = !falta.length;
+  $('#falta').hidden = completo;
+  if (!completo) {
+    $('#falta').textContent = 'Antes de mandarlo falta ' +
+      (falta.length === 1 ? falta[0] : falta.slice(0, -1).join(', ') + ' y ' + falta.slice(-1)) + '.';
+  }
+
+  /* Los botones se muestran solo cuando el mensaje está completo: mandar algo
+     a medias obliga a una segunda vuelta de WhatsApp, que es justo lo que esto
+     viene a sacar. */
+  const asunto = `RRHH Área 3 · ${rama.titulo} · ${($('#colaborador').value || '').trim()}`;
+  if (MAIL_RRHH) {
+    $('#btnMail').hidden = !completo;
+    $('#btnMail').href = `mailto:${MAIL_RRHH}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}`;
+  }
+  $('#btnCopiar').disabled = !completo;
+  $('#listo').hidden = true;
+}
+
+async function copiar() {
+  const texto = armarTexto();
+  try {
+    await navigator.clipboard.writeText(texto);
+  } catch (e) {
+    /* `navigator.clipboard` no existe en http sin TLS ni en algunos navegadores
+       viejos de Android. El respaldo es seleccionar el texto para que el
+       gerente copie con el teclado: dejarlo sin salida sería peor. */
+    const r = document.createRange();
+    r.selectNodeContents($('#previo'));
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(r);
+    $('#listo').textContent = 'Está seleccionado: copialo y mandámelo.';
+    $('#listo').hidden = false;
+    return;
+  }
+  $('#listo').textContent = 'Copiado. Ahora pegalo en un mensaje para RRHH y mandalo: ' +
+    'si no lo mandás, no llegó a ningún lado.';
+  $('#listo').hidden = false;
+}
+
+pintarRamas();
+pintarTiendas();
+const memoria = recordado();
+if (memoria.informa) $('#informa').value = memoria.informa;
+
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-rama]');
+  if (b) { elegirRama(b.dataset.rama); return; }
+  if (ev.target.closest('#btnCopiar')) copiar();
+});
+document.addEventListener('input', redibujar);
+document.addEventListener('change', () => {
+  recordar({ tienda: $('#tienda').value || '', informa: ($('#informa').value || '').trim() });
+  redibujar();
+});
+</script>
+</body>
+</html>
