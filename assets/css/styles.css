@@ -126,6 +126,10 @@ nav.tabs a {
   border-bottom: 3px solid transparent; white-space: nowrap;
 }
 nav.tabs a:hover { color: var(--texto); }
+/* El filtro de tiendas se envuelve en vez de scrollear: con trece, una fila
+   que se corta esconde justo la que se está buscando. */
+nav.tabs.tiendas { flex-wrap: wrap; overflow: visible; }
+nav.tabs.tiendas a { padding: 9px 12px; font-size: 13px; }
 nav.tabs a.activo { color: var(--azul); border-bottom-color: var(--rojo); font-weight: 600; }
 
 /* La principal vive adentro de la lateral: mismo marcado, otra forma. */
@@ -1404,6 +1408,9 @@ a.org-persona { text-decoration: none; }
   color: var(--texto-suave); white-space: normal;
 }
 .org-persona { max-width: 220px; }
+/* El chip de un estatus largo —«licencia sin goce de sueldo»— no entra en una
+   línea de 220px y se salía de la tarjeta por el costado. */
+.org-persona .chip { white-space: normal; }
 
 /* El cuadro del período de prueba: una columna por evaluación, y la que
    decide marcada — después de ella no queda tiempo para conversar nada. */
@@ -1416,3 +1423,89 @@ a.org-persona { text-decoration: none; }
   background: var(--panel); color: var(--texto);
 }
 .rojo-txt { color: var(--rojo-alerta); font-weight: 600; }
+
+/* ===================== El organigrama de una tienda =====================
+ *
+ * El cuadro viejo era una fila por posición: contestaba cuánta gente de cada
+ * puesto hay —que ya lo dice la tira de KPIs— y no quién responde a quién, que
+ * es lo que se mira con el Gerente de Operaciones enfrente.
+ *
+ * Las líneas son **bordes y no un SVG**: el panel abre desde `file://` y sin
+ * conexión, y un dibujo con coordenadas habría que recalcularlo cada vez que
+ * entra alguien. Acá el navegador acomoda las cajas y las líneas las siguen.
+ *
+ * Y no lleva ningún color nuevo: los tonos que ya están —el azul de la cima,
+ * el ámbar de la vacante, el relleno de quien está en desarrollo— dicen todo
+ * lo que hay que decir, y un cuarto color sobre el verde del 9-box no pasa el
+ * validador de daltonismo. */
+.arbol { margin-top: 10px; }
+
+/* La cima: el gerente al medio y al costado lo que no cuelga del piso de
+   venta —la farmacia de un lado, el asistente del otro—. */
+.arbol-cima {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: start; gap: 22px; justify-items: center;
+}
+.arbol-raiz { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.arbol-raiz .org-persona { border-color: var(--azul); background: var(--panel-alt); }
+
+.arbol-lado { display: flex; flex-direction: column; gap: 16px; }
+.arbol-lado.izq { justify-self: end; }
+.arbol-lado.der { justify-self: start; }
+.arbol-ala { position: relative; display: flex; flex-direction: column; gap: 14px; }
+/* La línea horizontal que la ata al gerente. */
+.arbol-ala::before {
+  content: ''; position: absolute; top: 26px; width: 22px;
+  border-top: 1px solid var(--borde);
+}
+.arbol-ala.izq::before { right: -22px; }
+.arbol-ala.der::before { left: -22px; }
+.arbol-ala h5, .rama h5 {
+  margin: 0 0 2px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--texto-suave); text-align: center;
+}
+.arbol-ala .ayuda { margin: 0; font-size: 11px; text-align: center; max-width: 230px; }
+
+/* El tronco que baja del gerente hasta el bus de las ramas. */
+.arbol-tronco { width: 0; height: 22px; margin: 0 auto; border-left: 1px solid var(--borde); }
+
+.arbol-ramas { display: flex; justify-content: center; gap: 20px; align-items: flex-start; }
+.rama { position: relative; padding-top: 24px; display: flex; flex-direction: column; gap: 14px; }
+/* El bus: media línea por rama, y las de las puntas se recortan para que el
+   trazo arranque y termine en el centro de la primera y la última. */
+.rama::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  border-top: 1px solid var(--borde);
+}
+.rama:first-child::after { left: 50%; }
+.rama:last-child::after  { right: 50%; }
+.rama:only-child::after  { display: none; }
+.rama::before {
+  content: ''; position: absolute; top: 0; left: 50%; height: 24px;
+  border-left: 1px solid var(--borde);
+}
+
+.rama-nivel { position: relative; }
+.rama-nivel + .rama-nivel::before {
+  content: ''; position: absolute; top: -14px; left: 50%; height: 14px;
+  border-left: 1px solid var(--borde);
+}
+.rama-nivel .org-fila { justify-content: center; }
+.rama-pos {
+  display: block; font-size: 11px; color: var(--texto-suave);
+  text-align: center; margin-bottom: 4px;
+}
+
+/* En el teléfono el árbol se lee en vertical: las líneas de cada rama pasan a
+   un filete a la izquierda, que es lo que entra sin scroll horizontal. */
+@media (max-width: 820px) {
+  .arbol-cima { grid-template-columns: 1fr; gap: 14px; }
+  .arbol-lado.izq, .arbol-lado.der { justify-self: stretch; }
+  .arbol-ala::before { display: none; }
+  .arbol-ala { border-left: 2px solid var(--borde); padding-left: 12px; }
+  .arbol-ramas { flex-direction: column; gap: 14px; }
+  .rama { padding-top: 0; border-left: 2px solid var(--borde); padding-left: 12px; }
+  .rama::before, .rama::after { display: none; }
+  .rama-nivel .org-fila { justify-content: flex-start; }
+  .rama-pos, .arbol-ala h5, .rama h5 { text-align: left; }
+}

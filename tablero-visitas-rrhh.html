@@ -128,6 +128,10 @@ nav.tabs a {
   border-bottom: 3px solid transparent; white-space: nowrap;
 }
 nav.tabs a:hover { color: var(--texto); }
+/* El filtro de tiendas se envuelve en vez de scrollear: con trece, una fila
+   que se corta esconde justo la que se está buscando. */
+nav.tabs.tiendas { flex-wrap: wrap; overflow: visible; }
+nav.tabs.tiendas a { padding: 9px 12px; font-size: 13px; }
 nav.tabs a.activo { color: var(--azul); border-bottom-color: var(--rojo); font-weight: 600; }
 
 /* La principal vive adentro de la lateral: mismo marcado, otra forma. */
@@ -1406,6 +1410,9 @@ a.org-persona { text-decoration: none; }
   color: var(--texto-suave); white-space: normal;
 }
 .org-persona { max-width: 220px; }
+/* El chip de un estatus largo —«licencia sin goce de sueldo»— no entra en una
+   línea de 220px y se salía de la tarjeta por el costado. */
+.org-persona .chip { white-space: normal; }
 
 /* El cuadro del período de prueba: una columna por evaluación, y la que
    decide marcada — después de ella no queda tiempo para conversar nada. */
@@ -1418,6 +1425,92 @@ a.org-persona { text-decoration: none; }
   background: var(--panel); color: var(--texto);
 }
 .rojo-txt { color: var(--rojo-alerta); font-weight: 600; }
+
+/* ===================== El organigrama de una tienda =====================
+ *
+ * El cuadro viejo era una fila por posición: contestaba cuánta gente de cada
+ * puesto hay —que ya lo dice la tira de KPIs— y no quién responde a quién, que
+ * es lo que se mira con el Gerente de Operaciones enfrente.
+ *
+ * Las líneas son **bordes y no un SVG**: el panel abre desde `file://` y sin
+ * conexión, y un dibujo con coordenadas habría que recalcularlo cada vez que
+ * entra alguien. Acá el navegador acomoda las cajas y las líneas las siguen.
+ *
+ * Y no lleva ningún color nuevo: los tonos que ya están —el azul de la cima,
+ * el ámbar de la vacante, el relleno de quien está en desarrollo— dicen todo
+ * lo que hay que decir, y un cuarto color sobre el verde del 9-box no pasa el
+ * validador de daltonismo. */
+.arbol { margin-top: 10px; }
+
+/* La cima: el gerente al medio y al costado lo que no cuelga del piso de
+   venta —la farmacia de un lado, el asistente del otro—. */
+.arbol-cima {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: start; gap: 22px; justify-items: center;
+}
+.arbol-raiz { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.arbol-raiz .org-persona { border-color: var(--azul); background: var(--panel-alt); }
+
+.arbol-lado { display: flex; flex-direction: column; gap: 16px; }
+.arbol-lado.izq { justify-self: end; }
+.arbol-lado.der { justify-self: start; }
+.arbol-ala { position: relative; display: flex; flex-direction: column; gap: 14px; }
+/* La línea horizontal que la ata al gerente. */
+.arbol-ala::before {
+  content: ''; position: absolute; top: 26px; width: 22px;
+  border-top: 1px solid var(--borde);
+}
+.arbol-ala.izq::before { right: -22px; }
+.arbol-ala.der::before { left: -22px; }
+.arbol-ala h5, .rama h5 {
+  margin: 0 0 2px; font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--texto-suave); text-align: center;
+}
+.arbol-ala .ayuda { margin: 0; font-size: 11px; text-align: center; max-width: 230px; }
+
+/* El tronco que baja del gerente hasta el bus de las ramas. */
+.arbol-tronco { width: 0; height: 22px; margin: 0 auto; border-left: 1px solid var(--borde); }
+
+.arbol-ramas { display: flex; justify-content: center; gap: 20px; align-items: flex-start; }
+.rama { position: relative; padding-top: 24px; display: flex; flex-direction: column; gap: 14px; }
+/* El bus: media línea por rama, y las de las puntas se recortan para que el
+   trazo arranque y termine en el centro de la primera y la última. */
+.rama::after {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  border-top: 1px solid var(--borde);
+}
+.rama:first-child::after { left: 50%; }
+.rama:last-child::after  { right: 50%; }
+.rama:only-child::after  { display: none; }
+.rama::before {
+  content: ''; position: absolute; top: 0; left: 50%; height: 24px;
+  border-left: 1px solid var(--borde);
+}
+
+.rama-nivel { position: relative; }
+.rama-nivel + .rama-nivel::before {
+  content: ''; position: absolute; top: -14px; left: 50%; height: 14px;
+  border-left: 1px solid var(--borde);
+}
+.rama-nivel .org-fila { justify-content: center; }
+.rama-pos {
+  display: block; font-size: 11px; color: var(--texto-suave);
+  text-align: center; margin-bottom: 4px;
+}
+
+/* En el teléfono el árbol se lee en vertical: las líneas de cada rama pasan a
+   un filete a la izquierda, que es lo que entra sin scroll horizontal. */
+@media (max-width: 820px) {
+  .arbol-cima { grid-template-columns: 1fr; gap: 14px; }
+  .arbol-lado.izq, .arbol-lado.der { justify-self: stretch; }
+  .arbol-ala::before { display: none; }
+  .arbol-ala { border-left: 2px solid var(--borde); padding-left: 12px; }
+  .arbol-ramas { flex-direction: column; gap: 14px; }
+  .rama { padding-top: 0; border-left: 2px solid var(--borde); padding-left: 12px; }
+  .rama::before, .rama::after { display: none; }
+  .rama-nivel .org-fila { justify-content: flex-start; }
+  .rama-pos, .arbol-ala h5, .rama h5 { text-align: left; }
+}
 
 </style>
 
@@ -6202,6 +6295,237 @@ if (typeof module !== 'undefined' && module.exports) {
     antiguedadParaVacaciones, derechoDeVacaciones, tramosDeVacaciones,
     filaDeVacaciones, planDeVacaciones, coberturaDeVacaciones, vacacionesDelArea,
     tramosFueraDeVentana, COLUMNAS_PLAN_VACACIONES
+  };
+}
+
+/* ============== organigrama.js — la cadena de mando de una tienda ==============
+ *
+ * El cuadro que había agrupaba por posición: una fila de Seniors, una fila de
+ * APV, una fila de DT. Eso contesta «cuánta gente de cada puesto tengo», que ya
+ * lo contesta la tira de arriba, y **no contesta quién responde a quién**, que
+ * es lo que se mira con el Gerente de Operaciones enfrente.
+ *
+ * Acá vive solamente **dónde cae cada persona**. El dibujo es de `app.js`: dos
+ * cosas distintas, y la de acá se puede probar sin navegador.
+ *
+ * **Las reglas son por posición y no por una jerarquía cargada a mano.** El
+ * panel no guarda quién le reporta a quién —la nómina no lo trae— así que la
+ * estructura se deduce del puesto, que es el dato que sí está y que se corrige
+ * en un solo lugar: la ficha de la persona. Mover a alguien en el cuadro es
+ * cambiarle el puesto en Nómina, nunca arrastrar una tarjeta: un organigrama
+ * que se edita por arrastre guarda una segunda verdad al lado de la nómina, y
+ * el día que difieren no hay forma de saber cuál vale.
+ *
+ * **Nadie se cae del cuadro.** Una posición que estas reglas no conocen no
+ * desaparece: sale en `sinUbicar` y la pantalla la nombra, como el grupo «Sin
+ * especialidad» del laboratorio. Perder a una persona del organigrama es peor
+ * que mostrarla en el lugar equivocado, porque lo segundo se ve.
+ */
+
+/* El laboratorio no entra: es otra unidad de negocio y tiene su propio cuadro.
+   Y los flotantes del área no son una tienda, así que tampoco tienen cadena de
+   mando propia. */
+
+/** Los cargos que van al costado del gerente y no abajo de nadie. */
+const CARGOS_ASISTENTE_GERENTE = ['LIMPIEZA'];
+
+/**
+ * Las ramas que cuelgan del gerente, en orden, con qué posición las arma.
+ *
+ * `niveles` es la cadena de abajo del gerente: el primero responde al gerente,
+ * el segundo al primero. Perfumería es **una rama aparte y no un nivel abajo
+ * del Senior**: la Asesora de Dermo no le responde al APV Senior, le responde
+ * al Gerente de Tienda.
+ */
+const RAMAS_ORGANIGRAMA = [
+  { id: 'piso',       titulo: 'Piso de venta', niveles: ['Senior', 'APV'] },
+  { id: 'perfumeria', titulo: 'Perfumería',    niveles: ['Asesora de Dermo', 'Asesora de Belleza'] }
+];
+
+/** La rama de la farmacia, que va al costado del gerente y no abajo. */
+const RAMA_FARMACIA = { id: 'farmacia', titulo: 'Farmacia', niveles: ['DT', 'Farmacéutico'] };
+
+const POSICIONES_UBICADAS = ['Gerente de Tienda', 'Otros']
+  .concat(RAMA_FARMACIA.niveles)
+  .concat(RAMAS_ORGANIGRAMA.reduce((a, r) => a.concat(r.niveles), []));
+
+const _nodoPersona = c => ({ tipo: 'persona', id: c.id, persona: c, nombre: c.nombre || '' });
+
+/**
+ * ¿Son la misma persona escrita de dos formas?
+ *
+ * La ficha de la tienda guarda «Marta Inés Pérez» y el padrón
+ * «PEREZ, MARTA INES»: el mismo nombre, con la coma y el orden al revés. Se comparan **las palabras**, sin acentos ni orden, y hacen falta al
+ * menos dos iguales: con una sola, cualquier «María» sería cualquier otra.
+ */
+function _mismasPalabras(a, b) {
+  const palabras = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase().split(/[^A-Z]+/).filter(x => x.length > 2);
+  const A = palabras(a), B = palabras(b);
+  if (A.length < 2 || B.length < 2) return false;
+  const comunes = A.filter(x => B.indexOf(x) >= 0).length;
+  return comunes >= 2 && comunes >= Math.min(A.length, B.length) - 1;
+}
+
+/** La vacante es un nodo más: lo que la define es que ahí no hay nadie. */
+const _nodoVacante = v => ({ tipo: 'vacante', id: v.id, vacante: v,
+                             nombre: v.cargo || v.posicion || '' });
+
+/** Dónde cuenta esta persona en el cuadro. */
+function posicionEnElArbol(colaborador) {
+  const c = colaborador || {};
+  const pos = String(c.posicion || '').trim();
+  if (!pos) return 'Sin posición';
+  return pos;
+}
+
+/** La posición de una vacante sale de su cargo, como en el resto del panel. */
+function posicionDeVacante(vacante) {
+  const v = vacante || {};
+  if (v.posicion) return v.posicion;
+  const cn = typeof CARGOS_NOMINA !== 'undefined'
+    ? CARGOS_NOMINA.find(x => x.cargo === v.cargo) : null;
+  return (cn && cn.posicion) || 'Sin posición';
+}
+
+/**
+ * El árbol de una tienda.
+ *
+ * Devuelve la raíz —el Gerente de Tienda—, lo que va **al costado** (la
+ * farmacia y el asistente del gerente), las ramas de abajo y lo que las reglas
+ * no supieron ubicar.
+ *
+ * El plantel es el de hoy: quien está de baja no está en el cuadro, que es la
+ * misma regla de `sigueEnElPlantel()` para todo lo que describe el presente.
+ */
+function arbolDeTienda(sucursal, hoy) {
+  const s = sucursal || {};
+  /* El día se recibe, y si no viene se usa el de hoy: `hoyISO()` vive adentro
+     de `app.js` y desde acá no se ve. Una fecha vacía dejaría a
+     `sigueEnElPlantel()` decidiendo contra nada. */
+  const dia = hoy || new Date().toISOString().slice(0, 10);
+
+  const gente = (s.colaboradores || []).filter(c => {
+    if (typeof sigueEnElPlantel === 'function' && !sigueEnElPlantel(c, dia)) return false;
+    /* El laboratorio tiene su propio cuadro: mezclarlos hace leer veintiséis
+       personas donde el mostrador tiene ocho. */
+    if (typeof esDeLaboratorio === 'function' && esDeLaboratorio(c).laboratorio) return false;
+    return true;
+  });
+
+  const vacantes = (s.vacantes || []).filter(v => !v.cubiertaEl);
+
+  /* **Quién es el gerente, cuando la nómina no lo dice.** En seis tiendas del
+     área no hay nadie con el cargo de Gerente de Tienda y el cuadro quedaba
+     sin cabeza, aunque la ficha de la tienda nombra a su gerente: es gente
+     cargada como APV Senior que de hecho conduce la tienda. Se la pone arriba
+     y **se dice de dónde salió**, que es la misma regla que el aviso de la
+     razón social: nombrar y ofrecer corregir, no pisar en silencio. El arreglo
+     de verdad es el cargo, y se hace en su ficha. */
+  const conCargoDeGerente = gente.filter(c => posicionEnElArbol(c) === 'Gerente de Tienda');
+  const candidato = conCargoDeGerente.length
+    ? null
+    : gente.find(c => _mismasPalabras(c.nombre, s.gerente)) || null;
+  /* **Al Director Técnico no se lo saca de la farmacia ni para hacerlo
+     gerente.** En una de las tiendas del área la misma persona figura en la
+     ficha como gerente y como DT, y subirla a la cima dejaba a esa tienda sin
+     la rama de la habilitación, que es justo lo que no puede faltar. Se queda
+     donde está y la pantalla dice que además conduce la tienda. */
+  const enLaFarmacia = c => RAMA_FARMACIA.niveles.indexOf(posicionEnElArbol(c)) >= 0;
+  const deLaFicha = candidato && !enLaFarmacia(candidato) ? candidato : null;
+  const gerenteEnFarmacia = candidato && enLaFarmacia(candidato) ? candidato : null;
+
+  const porPos = {};
+  gente.forEach(c => {
+    if (deLaFicha && c.id === deLaFicha.id) return;
+    const k = posicionEnElArbol(c);
+    (porPos[k] || (porPos[k] = [])).push(_nodoPersona(c));
+  });
+  vacantes.forEach(v => {
+    const k = posicionDeVacante(v);
+    (porPos[k] || (porPos[k] = [])).push(_nodoVacante(v));
+  });
+
+  /* Orden adentro de cada nivel: primero quien tiene jornada completa y después
+     por nombre, y las vacantes al final — el hueco se lee después de la gente
+     que sí está. */
+  const orden = (a, b) => {
+    if (a.tipo !== b.tipo) return a.tipo === 'vacante' ? 1 : -1;
+    return String(a.nombre).localeCompare(String(b.nombre), 'es');
+  };
+  const tomar = pos => (porPos[pos] || []).slice().sort(orden);
+
+  /* El asistente del gerente: la persona de limpieza va al costado y no abajo
+     del Senior, porque no es del piso de venta. Lo que no es limpieza pero cae
+     en «Otros» también va acá, con su cargo escrito: es gente de la tienda que
+     no está en la cadena del mostrador. */
+  const otros = tomar('Otros');
+  const esAsistente = n => n.tipo === 'persona' &&
+    CARGOS_ASISTENTE_GERENTE.some(x => String(n.persona.cargo || '').toUpperCase().indexOf(x) >= 0);
+
+  const raiz = deLaFicha ? [_nodoPersona(deLaFicha)] : tomar('Gerente de Tienda');
+
+  const nivelesDe = lista => lista
+    .map(pos => ({ posicion: pos, nodos: tomar(pos) }))
+    .filter(n => n.nodos.length);
+
+  const ramas = RAMAS_ORGANIGRAMA
+    .map(r => Object.assign({}, r, { niveles: nivelesDe(r.niveles) }))
+    .filter(r => r.niveles.length);
+
+  const laterales = [];
+  const farmacia = nivelesDe(RAMA_FARMACIA.niveles);
+  if (farmacia.length) {
+    laterales.push(Object.assign({}, RAMA_FARMACIA, {
+      niveles: farmacia, lado: 'der',
+      ayuda: 'La habilitación de la farmacia. Responde al Gerente de Tienda y no al revés.'
+    }));
+  }
+  if (otros.length) {
+    laterales.push({
+      id: 'asistente', titulo: 'Asistente del gerente', lado: 'izq',
+      niveles: [{ posicion: 'Otros', nodos: otros }],
+      ayuda: otros.every(esAsistente)
+        ? 'Limpieza: no cubre turno del mostrador y no cuelga del piso de venta.'
+        : 'Gente de la tienda que no está en la cadena del mostrador.'
+    });
+  }
+
+  const sinUbicar = Object.keys(porPos)
+    .filter(k => POSICIONES_UBICADAS.indexOf(k) < 0)
+    .map(k => ({ posicion: k, nodos: tomar(k) }));
+
+  const contar = n => n.reduce((a, x) => a + (x.tipo === 'persona' ? 1 : 0), 0);
+  const deNiveles = ns => ns.reduce((a, n) => a + contar(n.nodos), 0);
+
+  return {
+    sucursal: s,
+    raiz,
+    /* De dónde salió la cabeza del cuadro: `'cargo'` es lo normal —alguien con
+       el cargo de Gerente de Tienda—, `'ficha'` es el nombre que guarda la
+       ficha de la tienda y `''` es que no hay ninguno de los dos. */
+    raizSegun: deLaFicha ? 'ficha' : (raiz.length ? 'cargo' : ''),
+    /* Quien conduce la tienda y además es su Director Técnico: se nombra, y
+       se lo sigue dibujando en la rama de la farmacia. */
+    gerenteEnFarmacia: gerenteEnFarmacia
+      ? { nombre: gerenteEnFarmacia.nombre, cargo: gerenteEnFarmacia.cargo || '' } : null,
+    laterales,
+    ramas,
+    sinUbicar,
+    /* Cuánta gente quedó dibujada, para poder decirlo al pie: un cuadro que
+       muestra 9 de 11 personas sin avisar es un cuadro que miente. */
+    personas: contar(raiz) + laterales.reduce((a, l) => a + deNiveles(l.niveles), 0)
+      + ramas.reduce((a, r) => a + deNiveles(r.niveles), 0)
+      + sinUbicar.reduce((a, n) => a + contar(n.nodos), 0),
+    plantel: gente.length,
+    vacantes: vacantes.length
+  };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    arbolDeTienda, posicionEnElArbol, posicionDeVacante,
+    RAMAS_ORGANIGRAMA, RAMA_FARMACIA, CARGOS_ASISTENTE_GERENTE, POSICIONES_UBICADAS
   };
 }
 
@@ -15787,6 +16111,20 @@ const App = (() => {
     </nav>`;
   }
 
+  /* `#/sucursales` tiene dos solapas y no dos entradas de menú, por lo mismo
+     que el Panel: es la misma tienda mirada de dos formas. La lista contesta
+     «qué tienda pide algo» y el organigrama «cómo está armada ésta». Una
+     entrada más en el menú para el cuadro habría dejado tres lugares desde
+     donde entrar a una tienda, y ya son dos a propósito. */
+  function solapasDeSucursales(cual, sucursalId) {
+    const item = (id, ruta, nombre) =>
+      `<a href="${ruta}" class="${cual === id ? 'activo' : ''}">${nombre}</a>`;
+    return `<nav class="tabs">
+      ${item('lista', '#/sucursales', 'Las tiendas')}
+      ${item('organigrama', '#/sucursales/organigrama' + (sucursalId ? '/' + sucursalId : ''), 'Organigrama')}
+    </nav>`;
+  }
+
   /* `#/nomina` tiene dos solapas y no dos entradas de menú: son la misma lista
      de personas mirada de dos formas. El padrón contesta «¿quién es esta
      persona?»; el relevamiento contesta «¿cómo viene el plantel con el curso?».
@@ -16550,6 +16888,7 @@ const App = (() => {
 
     return `
       <h1 class="titulo">Sucursales</h1>
+      ${solapasDeSucursales('lista')}
       <p class="subtitulo">
         Las ${tiendas.length} tiendas del área${staff ? ' —y la gente que no es de ninguna—' : ''}, una por
         fila, con lo que hay que resolver en cada una. Tocá el nombre para entrar. Los números
@@ -19036,6 +19375,79 @@ const App = (() => {
   let perfilAbierto = null;
   let formMovimiento = null;   // { colabId, tipo } del formulario de baja o movimiento abierto
 
+  /**
+   * El organigrama de una tienda, con el filtro arriba.
+   *
+   * Es la misma función que dibuja el cuadro adentro de la ficha de la tienda
+   * —`cuadroOrganigrama()`—, en una pantalla donde se cambia de tienda con un
+   * clic. La ficha es para trabajar esa tienda; esto es para mirar cómo está
+   * armada y compararla con la de al lado sin volver atrás cada vez.
+   */
+  function vistaOrganigrama(sucId) {
+    const e = Store.get();
+    contexto = e;
+    visitaEnCurso = null;
+    const tiendas = e.sucursales.filter(s => s.tipo !== 'staff');
+    const s = tiendas.find(x => x.id === sucId) || tiendas[0] || null;
+
+    const cabeza = titulo => `
+      <h1 class="titulo">Organigrama</h1>
+      ${solapasDeSucursales('organigrama', s ? s.id : '')}
+      ${titulo}`;
+
+    if (!s) {
+      return cabeza(`<p class="vacio">Todavía no hay ninguna tienda cargada.
+        Se dan de alta en <a href="#/config">Configuración</a>.</p>`);
+    }
+
+    const a = arbolDeTienda(s, hoyISO());
+    const dp = Store.dotacionPlantel(s.id) || { fte: 0, personas: 0, laboratorio: { personas: 0, fte: 0 } };
+    const plantel = (s.colaboradores || []).filter(c => sigueEnElPlantel(c, hoyISO()));
+    const laboratorio = plantel.filter(c => esDeLaboratorio(c).laboratorio);
+
+    return cabeza(`
+      <p class="subtitulo">
+        Quién responde a quién en <strong>${esc(s.nombre || s.codigo)}</strong>. Sale del puesto
+        que cada uno tiene cargado, así que <strong>se mueve desde la ficha de la persona</strong>
+        —en <a href="#/nomina">Nómina</a>— y con los traspasos entre tiendas: acá no se arrastra
+        nada, para que no haya dos verdades sobre el mismo puesto.
+      </p>
+
+      <nav class="tabs tiendas">
+        ${tiendas.map(x => `<a href="#/sucursales/organigrama/${x.id}"
+          class="${x.id === s.id ? 'activo' : ''}">${esc(x.nombre || x.codigo)}</a>`).join('')}
+      </nav>
+
+      <section class="tarjeta">
+        <div class="tc-cab">
+          <div>
+            <strong style="font-size:17px">${esc(s.nombre || s.codigo)}</strong>
+            <span>${a.personas} persona${a.personas === 1 ? '' : 's'} en el cuadro${
+              a.vacantes ? ` · ${a.vacantes} vacante${a.vacantes === 1 ? '' : 's'}` : ''} ·
+              ${fmtNum(dp.fte - dp.laboratorio.fte, 1)} FTE en el piso</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <a class="b sec" href="#/sucursal/${s.id}">Ver la ficha de la tienda</a>
+          </div>
+        </div>
+        ${a.personas || a.vacantes
+          ? cuadroOrganigrama(s)
+          : `<p class="vacio">Esta tienda no tiene plantel cargado. Se importa la nómina al pie de
+             <a href="#/nomina">Nómina</a>.</p>`}
+      </section>
+
+      ${laboratorio.length ? `<section class="tarjeta seccion-lab">
+        <h2>Organigrama · Laboratorio</h2>
+        <p class="ayuda">Otra unidad de negocio adentro de la misma tienda: prepara recetas, no
+          atiende el mostrador y por eso no cuelga del Gerente de Tienda. Se agrupa por
+          especialidad, que es como se organiza el trabajo adentro.</p>
+        ${organigramaLaboratorio(laboratorio)}
+      </section>` : ''}
+
+      ${perfilAbierto ? perfilColaborador(s, (s.colaboradores || []).find(c => c.id === perfilAbierto)) : ''}
+    `);
+  }
+
   function vistaSucursal(id) {
     const e = Store.get();
     contexto = e;
@@ -19045,9 +19457,11 @@ const App = (() => {
 
     /* El bloqueo de título y los no presenciales se cuentan aparte: están en la
        nómina y cuestan, pero no cubren un turno. Sumarlos a la dotación hace
-       ver una tienda completa donde falta gente para atender. */
+       ver una tienda completa donde falta gente para atender. En el
+       organigrama **sí están** —el DT de la farmacia es el DT aunque no pise
+       el local— y su tarjeta lo dice; lo que los separa es la cuenta, no la
+       estructura. */
     const activos = (s.colaboradores || []).filter(c => c.activo !== false);
-    const noPresenciales = activos.filter(c => esNoPresencial(c).noPresencial);
     const plantel = activos.filter(c => !esNoPresencial(c).noPresencial);
     const visitas = Store.visitasDe(s.id);
     const ultima = visitas[0] || null;
@@ -19066,11 +19480,6 @@ const App = (() => {
     const farmacia = plantel.filter(c => !esDeLaboratorio(c).laboratorio);
     const fteLab = laboratorio.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
 
-    const porPosicion = {};
-    farmacia.forEach(c => {
-      const k = c.posicion || 'Sin posición';
-      (porPosicion[k] || (porPosicion[k] = [])).push(c);
-    });
 
     return `
       <h1 class="titulo">${esc(s.nombre || s.codigo)}</h1>
@@ -19290,11 +19699,13 @@ const App = (() => {
         <h2>Organigrama${laboratorio.length ? ' · Farmacia' : ''}</h2>
         <p class="ayuda">
           ${laboratorio.length
-            ? `El plantel <strong>del piso de la farmacia</strong>, ordenado por posición. El
-               laboratorio tiene su propio cuadro, abajo: es otra unidad de negocio y no un
-               escalón de ésta.`
-            : 'El plantel que está en el piso, ordenado por posición.'}
-          Las tarjetas se abren para ver el perfil completo.
+            ? `<strong>Quién responde a quién</strong> en el piso de la farmacia. El laboratorio
+               tiene su propio cuadro, abajo: es otra unidad de negocio y no un escalón de ésta.`
+            : '<strong>Quién responde a quién</strong> en esta tienda.'}
+          Sale del puesto que cada uno tiene cargado, así que se mueve desde la ficha de la
+          persona. Las tarjetas se abren para ver el perfil completo, y el mismo cuadro con el
+          filtro de tiendas está en <a href="#/sucursales/organigrama/${s.id}">Sucursales →
+          Organigrama</a>.
         </p>
 
         ${(() => {
@@ -19323,24 +19734,9 @@ const App = (() => {
           </div>`;
         })()}
         ${farmacia.length || vacantesAbiertas.length
-          ? organigrama(s, porPosicion, vacantesAbiertas)
+          ? cuadroOrganigrama(s)
           : '<p class="vacio">Todavía no hay plantel cargado. Importá la nómina desde Configuración.</p>'}
 
-        ${noPresenciales.length ? `<h3 style="margin-top:22px">Fuera de la dotación de piso</h3>
-          <p class="ayuda">
-            Prestan la habilitación profesional que la farmacia necesita para abrir, pero no
-            cubren un turno ni reemplazan una ausencia. Están en la nómina y cuestan; no cuentan
-            para la cobertura.
-          </p>
-          <div class="org-grupo">
-            ${noPresenciales.map(c => `<button class="org-persona no-presencial${perfilAbierto === c.id ? ' abierta' : ''}"
-              data-accion="ver-perfil" data-id="${c.id}" title="Ver el perfil de ${esc(c.nombre)}">
-              <strong>${esc(c.nombre)}</strong>
-              <span>${esc(c.cargo || c.posicion || '')}</span>
-              ${c.categoriaConvenio ? `<span class="cat">${esc(c.categoriaConvenio)}</span>` : ''}
-              <span class="chip ambar">${esc(esNoPresencial(c).motivo)}</span>
-            </button>`).join('')}
-          </div>` : ''}
 
         ${dp.bajas.length ? `<h3 style="margin-top:22px">Bajas registradas</h3>
           <p class="ayuda">Ya salieron de la dotación y del FTE de la tienda. Si cargaste alguna
@@ -20489,67 +20885,105 @@ const App = (() => {
         <span class="box-lectura">${esc(g.corto)}</span>` : ''}
       ${lb.laboratorio ? `<span class="chip-lab ${lb.token}" style="margin-top:4px">${esc(lb.nombre)}</span>` : ''}
       ${jornadaDeVinculo(c).parcial ? '<span class="chip azul" style="margin-top:4px">media jornada · 0,5 FTE</span>' : ''}
-      ${especial ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>`
-                 : (c.fechaIngreso ? `<span>desde ${fmtFecha(c.fechaIngreso)}</span>` : '')}
+      ${especial ? `<span class="chip ambar" style="margin-top:4px">${esc(c.estatus)}</span>` : ''}
+      ${/* Quien presta la matrícula y no cubre turno entra al cuadro —es el DT
+            de esa farmacia— pero tiene que decirlo en la tarjeta: antes vivía
+            en una lista aparte, abajo del organigrama, y ahí se leía que la
+            tienda tenía un DT más de los que tiene. */
+        esNoPresencial(c).noPresencial
+          ? `<span class="chip ambar" style="margin-top:4px" title="No cubre turno: no cuenta para la dotación de piso">${
+              esc(esNoPresencial(c).motivo)}</span>` : ''}
+      ${/* La antigüedad va **siempre que haya fecha**, también cuando la
+            persona tiene un estatus especial: es el dato que se mira para
+            saber con quién se está hablando, y esconderlo justo en la ficha
+            de la que está con licencia sin goce no tiene sentido. */
+        c.fechaIngreso ? `<span>${(() => {
+          const a = antiguedadAnios(c.fechaIngreso);
+          return a === null ? 'desde ' + fmtFecha(c.fechaIngreso)
+            : `${fmtNum(a, 1)} año${a === 1 ? '' : 's'} · desde ${fmtFecha(c.fechaIngreso)}`;
+        })()}</span>` : ''}
     </button>`;
   }
 
-  /** Organigrama simple: el gerente arriba, y debajo cada posición en su nivel. */
-  function organigrama(s, porPosicion, vacantes) {
-    const niveles = [1, 2, 3];
-    /* **La vacante se dibuja como una tarjeta más**, al lado de la gente del
-       puesto que falta: es la forma de que «me falta un farmacéutico en
-       Devoto» se vea mirando la tienda y no entrando a otra pantalla. Va
-       punteada y sin nombre, porque lo que la define es que ahí no hay nadie.
-       Se agrupa por la posición del cargo, así cae junto a sus pares. */
-    const vac = {};
-    (vacantes || []).forEach(v => {
-      const cn = CARGOS_NOMINA.find(x => x.cargo === v.cargo);
-      const k = v.posicion || (cn && cn.posicion) || 'Sin posición';
-      (vac[k] || (vac[k] = [])).push(v);
-    });
-    const conGente = k => porPosicion[k] || vac[k];
-    const posicionesDe = n => POSICIONES.filter(p => p.nivel === n && conGente(p.nombre));
-    const sueltos = Object.keys(Object.assign({}, porPosicion, vac))
-      .filter(k => !POSICIONES.some(p => p.nombre === k));
+  /* **La vacante es una tarjeta más**, al lado de la gente del puesto que
+     falta: es la forma de que «me falta un farmacéutico» se vea mirando la
+     tienda y no entrando a otra pantalla. Va punteada y en ámbar, porque lo
+     que la define es que ahí no hay nadie. */
+  function tarjetaDeVacante(v) {
+    const d = _dias(v.abiertaEl, hoyISO());
+    return `<a class="org-persona vacante" href="#/vacantes"
+        title="Vacante abierta${v.abiertaEl ? ' el ' + fmtFecha(v.abiertaEl) : ''}">
+      <strong>Vacante</strong>
+      <span>${esc(v.cargo || v.posicion || 'sin puesto definido')}</span>
+      ${d === null ? '' : `<span class="chip ${d >= 45 ? 'rojo' : d >= 21 ? 'ambar' : ''}"
+        style="margin-top:4px">abierta hace ${d} día${d === 1 ? '' : 's'}</span>`}
+    </a>`;
+  }
 
-    const especial = c => c.estatus && c.estatus.toUpperCase() !== 'INDETERMINADO';
-    const tarjeta = c => tarjetaDePersona(c);
+  /**
+   * El cuadro de una tienda: **quién responde a quién**.
+   *
+   * Dibuja lo que decide `arbolDeTienda()` (`organigrama.js`) y no decide
+   * nada: dónde cae cada persona sale de su puesto, y el puesto se corrige en
+   * su ficha. Por eso acá no se arrastra nada — un organigrama que se edita
+   * arrastrando guarda una segunda verdad al lado de la nómina.
+   *
+   * Las tarjetas son las mismas de siempre (`tarjetaDePersona()`), así que lo
+   * que ya dicen —el 9-box, quién está en desarrollo, la media jornada— se lee
+   * igual acá que en el laboratorio.
+   */
+  function cuadroOrganigrama(s) {
+    const a = arbolDeTienda(s, hoyISO());
+    const tarjeta = n => n.tipo === 'vacante'
+      ? tarjetaDeVacante(n.vacante) : tarjetaDePersona(n.persona);
+    const fila = nodos => `<div class="org-fila">${nodos.map(tarjeta).join('')}</div>`;
+    const nivel = n => `<div class="rama-nivel">
+      <span class="rama-pos">${esc(n.posicion)}${n.nodos.length > 1 ? ` · ${n.nodos.length}` : ''}</span>
+      ${fila(n.nodos)}
+    </div>`;
+    const ala = l => `<div class="arbol-ala ${l.lado}">
+      <h5>${esc(l.titulo)}</h5>
+      ${l.niveles.map(nivel).join('')}
+      ${l.ayuda ? `<p class="ayuda">${esc(l.ayuda)}</p>` : ''}
+    </div>`;
+    const lado = cual => `<div class="arbol-lado ${cual}">${
+      a.laterales.filter(l => l.lado === cual).map(ala).join('')}</div>`;
 
-    /* El título del grupo cuenta cabezas y FTE: con tiempo parcial no son lo
-       mismo, y la que decide la cobertura es la segunda. */
-    const tarjetaVacante = v => {
-      const d = _dias(v.abiertaEl, hoyISO());
-      return `<a class="org-persona vacante" href="#/vacantes"
-          title="Vacante abierta${v.abiertaEl ? ' el ' + fmtFecha(v.abiertaEl) : ''}">
-        <strong>Vacante</strong>
-        <span>${esc(v.cargo || v.posicion || 'sin puesto definido')}</span>
-        ${d === null ? '' : `<span class="chip ${d >= 45 ? 'rojo' : d >= 21 ? 'ambar' : ''}"
-          style="margin-top:4px">abierta hace ${d} día${d === 1 ? '' : 's'}</span>`}
-      </a>`;
-    };
+    return `<div class="arbol">
+      <div class="arbol-cima">
+        ${lado('izq')}
+        <div class="arbol-raiz">${a.raiz.length ? a.raiz.map(tarjeta).join('')
+          /* Sin gerente por ningún lado el cuadro no se cae: se dice que
+             falta, que es además lo que hay que ir a cargar. */
+          : a.gerenteEnFarmacia
+          ? `<div class="org-persona vacante">
+               <strong>El gerente es el Director Técnico</strong>
+               <span>${esc(a.gerenteEnFarmacia.nombre)}, en la rama de Farmacia</span></div>`
+          : `<a class="org-persona vacante" href="#/nomina">
+               <strong>Sin gerente de tienda</strong>
+               <span>nadie con ese puesto en el padrón ni en la ficha</span></a>`}</div>
+        ${lado('der')}
+      </div>
+      ${a.ramas.length ? `<div class="arbol-tronco"></div>
+        <div class="arbol-ramas">
+          ${a.ramas.map(r => `<div class="rama">
+            <h5>${esc(r.titulo)}</h5>
+            ${r.niveles.map(nivel).join('')}
+          </div>`).join('')}
+        </div>` : ''}
 
-    const grupo = (nombre, gente, huecos) => {
-      const g = gente || [], h = huecos || [];
-      return `<div class="org-grupo">
-        <h4>${esc(nombre)} <span class="chip">${g.length}</span>${(() => {
-          const f = g.reduce((a, c) => a + jornadaDeVinculo(c).fte, 0);
-          return f === g.length ? '' : ` <span class="chip azul">${fmtNum(f, 1)} FTE</span>`;
-        })()}${h.length ? ` <span class="chip ambar">${h.length} vacante${
-          h.length === 1 ? '' : 's'}</span>` : ''}</h4>
-        <div class="org-fila">${g.map(tarjeta).join('')}${h.map(tarjetaVacante).join('')}</div>
-      </div>`;
-    };
-
-    return `<div class="organigrama">
-      ${niveles.map(n => {
-        const pos = posicionesDe(n);
-        if (!pos.length) return '';
-        return `<div class="org-nivel${n === 1 ? ' cima' : ''}">
-          ${pos.map(p => grupo(p.nombre, porPosicion[p.nombre], vac[p.nombre])).join('')}
-        </div>`;
-      }).join('')}
-      ${sueltos.map(k => `<div class="org-nivel">${grupo(k, porPosicion[k], vac[k])}</div>`).join('')}
+      ${a.raizSegun === 'ficha' ? `<p class="ayuda" style="text-align:center;margin:18px auto 0;max-width:620px">
+        Arriba va quien figura como <strong>gerente en la ficha de la tienda</strong>: en el padrón
+        no hay nadie con ese cargo. El cuadro lo dice en vez de quedarse sin cabeza, y el arreglo
+        es cargarle el cargo en <a href="#/nomina">su ficha</a>.</p>` : ''}
+      ${a.sinUbicar.length ? `<div class="aviso-caja" style="margin-top:18px">
+        <strong>${a.sinUbicar.reduce((n, x) => n + x.nodos.length, 0)} sin ubicar en el cuadro.</strong>
+        El puesto que tienen cargado no entra en ninguna rama. No desaparecen —se los ve acá—
+        y se arreglan corrigiendo el puesto en su ficha.
+        ${a.sinUbicar.map(n => `<div style="margin-top:8px">
+          <span class="rama-pos" style="text-align:left">${esc(n.posicion)}</span>
+          ${fila(n.nodos)}</div>`).join('')}
+      </div>` : ''}
     </div>`;
   }
 
@@ -23739,7 +24173,13 @@ const App = (() => {
     /* `#/visitas` era el nombre de esta pantalla y sigue andando: hay enlaces
        guardados y el botón de «Visitar» de la ficha de cada tienda. */
     else if (ruta[0] === 'sucursales' || ruta[0] === 'visitas') {
-      vistaActual = vistaSucursales; html = vistaSucursales();
+      if (ruta[1] === 'organigrama') {
+        const sid = ruta[2] || '';
+        vistaActual = () => vistaOrganigrama(sid);
+        html = vistaOrganigrama(sid);
+      } else {
+        vistaActual = vistaSucursales; html = vistaSucursales();
+      }
     }
     else if (ruta[0] === 'desarrollo') {
       if (ruta[1] === 'talento') { vistaActual = vistaTalento; html = vistaTalento(); }

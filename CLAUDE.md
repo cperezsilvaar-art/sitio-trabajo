@@ -76,13 +76,14 @@ visita cargada.
 
 - Orden de carga en `index.html`: `catalogos`, `sucursales-area3`,
   `plantel-area3`, `modelo`, `talento`, `novedades`, `nomina`, `convenio`,
-  `ausencias`, `vacaciones`, `desarrollo`, `indicadores`, `casos`, `checklist`, `reclamos`,
+  `ausencias`, `vacaciones`, `organigrama`, `desarrollo`, `indicadores`, `casos`, `checklist`, `reclamos`,
   `agenda`, `asistente`, `diario`, `acceso`, `store`, `reporte`, `app`.
   `build-pagina-unica.py` lee ese orden del HTML.
 - Ruteo por hash: `#/red`, `#/nomina`, `#/asistente` (y `#/agenda`, que es la
   misma), `#/diario` (y `#/presentismo`), `#/operacion` (y `#/ventas`),
   `#/sucursales` (y `#/visitas`, que es la misma), `#/desarrollo[/<id>]`,
   `#/reclamos`, `#/movimientos[/cesiones|/bajas]`, `#/vacantes`,
+  `#/sucursales/organigrama[/<sucursalId>]`,
   `#/vacaciones[/<sucursalId>]`, `#/sucursal/<id>`,
   `#/estadistica[/<tab>]`, `#/visita/<id>/<tab>`, `#/config`.
 - Persistencia en `localStorage`, cifrable con PBKDF2-SHA256 + AES-GCM.
@@ -1352,6 +1353,58 @@ el número de arriba los sumaba igual. Ahora el KPI es el piso y el subtítulo
 nombra al laboratorio aparte —«8 personas en el piso · 1 del laboratorio,
 aparte»—. `Store.dotacionPlantel().fte` **no cambió**: es plantel y cuesta, y
 sigue siendo la cuenta del área.
+
+**El organigrama de una tienda es un árbol y no una fila por posición**
+(`assets/js/organigrama.js`, documentado en `docs/organigrama.md`). El cuadro
+que había agrupaba por puesto: contestaba cuánta gente de cada uno hay —que ya
+lo dice la tira de KPIs— y no **quién responde a quién**, que es lo que se mira
+con el Gerente de Operaciones enfrente. Ahora el Gerente de Tienda es la raíz,
+**la farmacia va al costado y no abajo del piso de venta** —el DT presta la
+habilitación y responde al gerente, no al APV Senior; el farmacéutico cuelga
+del DT—, *Piso de venta* es Senior y abajo APV, **Perfumería es una rama y no
+un nivel** —la Asesora de Dermo no le responde al Senior— y la limpieza va al
+costado como *asistente del gerente*. `arbolDeTienda()` decide y `app.js`
+dibuja: el modelo se prueba sin navegador.
+
+**Se mueve desde la ficha de la persona y nunca arrastrando.** Dónde cae cada
+uno sale de su puesto, que se corrige en Nómina o llega con un traspaso. Un
+organigrama que se edita por arrastre guarda **una segunda verdad al lado de la
+nómina**, y el día que difieren no hay forma de saber cuál vale — la misma razón
+por la que el casillero del laboratorio se deriva y no se guarda. **No agregar
+arrastre al cuadro.**
+
+**Nadie se cae del cuadro**: la posición que las reglas no conocen sale al pie,
+en *sin ubicar*, con nombre. Y **quien no cubre turno está igual, con su chip**:
+el DT con bloqueo es el DT de esa farmacia aunque no pise el local. La lista
+aparte de *Fuera de la dotación de piso* se eliminó —estaba para un cuadro que
+los excluía—; lo que los separa es la cuenta, que sigue en el KPI *No cubren
+turno*.
+
+**Cuando la nómina no dice quién es el gerente, lo dice la ficha de la tienda.**
+En seis tiendas no hay nadie con ese cargo —quien conduce está cargado como APV
+Senior— y el cuadro quedaba sin cabeza. Toma al que nombra la ficha,
+emparejando por palabras del nombre (`_mismasPalabras()`, que resuelve «Marta
+Inés Pérez» contra «PEREZ, MARTA INES»), y **lo dice**: es la regla del aviso de
+la razón social, nombrar y ofrecer corregir en vez de pisar en silencio. **Al DT
+no se lo sube a la cima ni para esto**: en una tienda la misma persona figura
+como gerente y como DT, y subirla dejaba a esa farmacia sin la rama de la
+habilitación.
+
+**Son dos solapas y no dos entradas del menú**: *Las tiendas* (`#/sucursales`)
+contesta qué tienda pide algo y *Organigrama* cómo está armada ésta, con un
+filtro de un clic. Una entrada más habría dejado tres lugares desde donde entrar
+a una tienda, y son dos a propósito. El mismo `cuadroOrganigrama()` se dibuja en
+las dos pantallas, como `bloquePlanDesarrollo()`.
+
+**Las líneas son bordes de CSS y no un SVG**: el panel abre desde `file://` y un
+dibujo con coordenadas habría que recalcularlo en cada render. Abajo de 820px el
+árbol se lee en vertical con un filete a la izquierda. **No lleva ningún color
+nuevo** — un cuarto hue contra el verde del 9-box no pasa el validador.
+
+**La tarjeta del organigrama muestra la antigüedad**, que es lo que se mira para
+saber con quién se está hablando, y **también cuando la persona tiene un estatus
+especial**: esconderla justo en la ficha de quien está con licencia sin goce no
+tiene sentido.
 
 **El laboratorio tiene su propio organigrama y no un grupo abajo del de
 farmacia.** `#/sucursal/<id>` arma dos cuadros: *Organigrama · Farmacia*, que
