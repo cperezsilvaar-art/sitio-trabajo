@@ -758,6 +758,13 @@ const App = (() => {
               'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
+      <section class="tarjeta" id="mosaico-caja">
+        <h2>Ir a</h2>
+        <p class="ayuda">Las mismas secciones del menú, con lo que tiene pendiente cada una.
+          Tocá un cuadro para entrar.</p>
+        <div class="mosaico" id="mosaico-secciones"></div>
+      </section>
+
       ${bloqueComposicion(e)}
 
       <section class="tarjeta">
@@ -7541,6 +7548,42 @@ const App = (() => {
     </section>`;
   }
 
+  /**
+   * Los cuadrados para ir a cada sección.
+   *
+   * **Salen del propio menú**: mismo orden, mismos íconos, mismos contadores.
+   * Una segunda lista de secciones escrita a mano se desincroniza el día que
+   * se agrega una pantalla —es lo que ya evitó `MAPA_CARGOS` derivándose de
+   * `CARGOS_NOMINA`— y acá además se desincronizarían los íconos, que son SVG
+   * en línea y no se ven hasta que alguien los mira.
+   *
+   * Se llena **después** de `contadoresDelMenu()`, que es quien sabe cuántas
+   * cosas pendientes tiene cada pantalla: el cuadro copia ese número en vez de
+   * volver a contarlo.
+   */
+  const FUERA_DEL_MOSAICO = ['#/red', '#/config'];
+  function pintarMosaico() {
+    const caja = $('#mosaico-secciones');
+    if (!caja) return;
+    const items = [...document.querySelectorAll('nav.tabs.principal a')]
+      .filter(a => FUERA_DEL_MOSAICO.indexOf(a.getAttribute('href')) < 0);
+    caja.innerHTML = items.map(a => {
+      const svg = a.querySelector('svg');
+      const nom = a.querySelector('span');
+      const b = a.querySelector('.lat-badge');
+      const grupo = a.closest('.nav-grupo');
+      const rotulo = grupo && grupo.querySelector('.grupo') ? grupo.querySelector('.grupo').textContent : '';
+      const cuenta = b && !b.hidden ? b.textContent : '';
+      return `<a class="mos" href="${a.getAttribute('href')}"
+          title="${esc(a.getAttribute('title') || (nom ? nom.textContent : ''))}">
+        ${svg ? svg.outerHTML : ''}
+        <strong>${esc(nom ? nom.textContent : '')}</strong>
+        ${rotulo ? `<span class="mos-grupo">${esc(rotulo)}</span>` : ''}
+        ${cuenta ? `<b class="mos-badge">${esc(cuenta)}</b>` : ''}
+      </a>`;
+    }).join('');
+  }
+
   function contadoresDelMenu(e) {
     const cuentas = {
       ausencias: alertasDeAusencias(e, hoyISO()).length,
@@ -8300,6 +8343,7 @@ const App = (() => {
       a.classList.toggle('activo', activo);
     });
     contadoresDelMenu(e);
+    pintarMosaico();
     ordenarKpis();
     avisoDeGuardado();
     selloDeGuardado();

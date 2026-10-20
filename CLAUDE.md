@@ -154,6 +154,39 @@ Tres cosas que hay que respetar al tocarla:
   aplicar. Se esconden en cero a propósito — un cero permanente deja de leerse a
   los dos días y ocupa el lugar de un número que importa.
 
+**La forma de las cosas sale de tres radios y dos sombras, no de un valor
+suelto.** `--radio-chico` (9px) es el botón, el campo y el chip; `--radio`
+(14px) la tarjeta chica y el indicador; `--radio-grande` (18px) el bloque. Un
+chip con el radio de una tarjeta se ve inflado y una tarjeta con el del chip se
+ve dura. `--sombra` es lo que está apoyado y `--sombra-alta` lo que se levanta
+al pasar por encima: **lo que lleva a otra pantalla lo dice antes de que lo
+toquen**, y por eso la tarjeta de una tienda y los cuadrados de *Ir a* se
+levantan igual. Todo respeta `prefers-reduced-motion`.
+
+**El indicador es un cuadrado y el estado va arriba.** Era una barra de ancho
+entero con un filete de 4px a la izquierda: con tres números la tira se estiraba
+a lo ancho de la pantalla y el valor quedaba solo adentro de un rectángulo
+vacío. Ahora tiene tope de ancho (272px), alto mínimo y el número en 30px, y el
+color del estado es un filete **arriba** — al costado de un número grande se lee
+como el margen de la tarjeta y no como un semáforo. La tira sigue siendo `flex`
+por lo de siempre, y `ordenarKpis()` sigue sacando los que no tienen número.
+
+**Los cuadrados para ir a las secciones los arma el propio menú**
+(`pintarMosaico()`, bloque *Ir a* del Panel). No hay una segunda lista de
+secciones ni de íconos: lee `nav.tabs.principal` —mismo orden, mismos SVG— y
+**copia el contador que ya calculó `contadoresDelMenu()`**, así que nunca cuenta
+dos veces. El Panel y Configuración quedan afuera: uno es donde ya estás y el
+otro es puesta a punto. **El menú sigue siendo la navegación** —está en las
+dieciocho pantallas—; esto es la puerta ancha en la pantalla en la que se cae al
+entrar, que es lo que se pidió cuando el pedido fue «fácil ir a las secciones».
+
+**El refresco no trajo ningún color nuevo.** Los tonos están validados para
+daltonismo y contraste contra los dos fondos, y agregar uno obligaría a correr
+el validador de vuelta sobre toda la paleta. Lo que cambió es forma, aire y
+tipografía: el título de pantalla pasó a 26px con interletrado ajustado, el de
+bloque a 17px y en el color del texto en vez del azul —un encabezado azul
+adentro de una tarjeta compite con los enlaces, que son lo único que se toca—.
+
 **Un indicador sin número no ocupa un lugar de indicador.** Es la misma regla
 que la de los contadores, una pantalla más adentro. El Panel abría con diez
 tarjetas de las que seis decían «—» —FTE y costo del mes cerrado, ausentismo,

@@ -23,8 +23,15 @@
   --verde:       #1a7f4b;
   --ambar:       #b7791f;
   --rojo-alerta: #c0392b;
-  --sombra:      0 1px 2px rgba(16, 32, 54, .06), 0 4px 14px rgba(16, 32, 54, .06);
-  --radio:       10px;
+  --sombra:      0 1px 2px rgba(16, 32, 54, .05), 0 6px 18px rgba(16, 32, 54, .07);
+  /* La segunda sombra es para lo que se levanta al pasar por encima: una
+     tarjeta que se puede tocar tiene que decirlo antes de que la toquen. */
+  --sombra-alta: 0 2px 6px rgba(16, 32, 54, .08), 0 14px 32px rgba(16, 32, 54, .13);
+  /* Tres radios y no uno: el chip y el botón se ven inflados con el radio de
+     una tarjeta, y la tarjeta se ve dura con el del chip. */
+  --radio-chico: 9px;
+  --radio:       14px;
+  --radio-grande:18px;
   --lateral-ancho: 236px;
 }
 
@@ -49,7 +56,8 @@
   --verde:       #4cc38a;
   --ambar:       #e0a94a;
   --rojo-alerta: #ff7a6b;
-  --sombra:      0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  --sombra:      0 1px 2px rgba(0,0,0,.32), 0 6px 18px rgba(0,0,0,.28);
+  --sombra-alta: 0 2px 8px rgba(0,0,0,.38), 0 16px 34px rgba(0,0,0,.42);
   }
 }
 
@@ -70,7 +78,8 @@
   --verde:       #4cc38a;
   --ambar:       #e0a94a;
   --rojo-alerta: #ff7a6b;
-  --sombra:      0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.25);
+  --sombra:      0 1px 2px rgba(0,0,0,.32), 0 6px 18px rgba(0,0,0,.28);
+  --sombra-alta: 0 2px 8px rgba(0,0,0,.38), 0 16px 34px rgba(0,0,0,.42);
 }
 
 * { box-sizing: border-box; }
@@ -206,7 +215,7 @@ header.app .marca-chica {
 }
 header.app button, header.app select {
   background: var(--panel); color: var(--texto); border: 1px solid var(--borde-fuerte);
-  padding: 7px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+  padding: 7px 13px; border-radius: var(--radio-chico); font-size: 13px; cursor: pointer;
 }
 header.app button:hover { border-color: var(--azul); color: var(--azul); }
 header.app select { width: auto; max-width: 260px; }
@@ -247,15 +256,16 @@ main { padding: 22px; max-width: 1180px; margin: 0 auto; width: 100%; }
 
 /* ------------------------------ Bloques -------------------------------- */
 section.tarjeta {
-  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio);
-  padding: 18px 20px; margin-bottom: 18px; box-shadow: var(--sombra);
+  background: var(--panel); border: 1px solid var(--borde); border-radius: var(--radio-grande);
+  padding: 22px 24px; margin-bottom: 20px; box-shadow: var(--sombra);
 }
 section.tarjeta > h2 {
-  margin: 0 0 4px; font-size: 16px; color: var(--azul); letter-spacing: .2px;
+  margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--texto);
+  letter-spacing: -.01em;
 }
 section.tarjeta > p.ayuda { margin: 0 0 16px; color: var(--texto-suave); font-size: 13px; }
 
-h1.titulo { font-size: 22px; margin: 0 0 4px; }
+h1.titulo { font-size: 26px; font-weight: 700; letter-spacing: -.02em; margin: 0 0 6px; }
 p.subtitulo { color: var(--texto-suave); margin: 0 0 18px; font-size: 14px; }
 
 /* ------------------------------- KPIs ---------------------------------- */
@@ -263,18 +273,36 @@ p.subtitulo { color: var(--texto-suave); margin: 0 0 18px; font-size: 14px; }
    grilla de columnas iguales los dos o tres que quedan se estiraban a media
    pantalla cada uno. Con `flex` crecen hasta donde tiene sentido leer un
    número y ahí paran. */
-.kpis { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.kpis { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 20px; }
+/* El indicador es un **cuadrado** y no una barra de ancho entero: con tres
+   números la tira se estiraba a lo ancho de la pantalla y el valor quedaba
+   solo en un rectángulo vacío. Tope de ancho más corto y alto mínimo para que
+   los de una fila se lean como piezas del mismo tamaño. */
 .kpi {
-  flex: 1 1 190px; min-width: 0; max-width: 360px;
-  background: var(--panel); border: 1px solid var(--borde); border-left: 4px solid var(--azul-claro);
-  border-radius: var(--radio); padding: 14px 16px; box-shadow: var(--sombra);
+  flex: 1 1 180px; min-width: 0; max-width: 272px; min-height: 112px;
+  display: flex; flex-direction: column; justify-content: center;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); padding: 16px 18px; box-shadow: var(--sombra);
+  position: relative; overflow: hidden;
 }
-.kpi .etiqueta { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--texto-suave); }
-.kpi .valor { font-size: 24px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
-.kpi .nota { font-size: 12px; color: var(--texto-suave); margin-top: 2px; }
-.kpi.alerta { border-left-color: var(--rojo-alerta); }
-.kpi.ok { border-left-color: var(--verde); }
-.kpi.aviso { border-left-color: var(--ambar); }
+/* El estado va en un filete arriba y no en el borde izquierdo: con el número
+   grande, una línea vertical al costado se lee como el margen de la tarjeta. */
+.kpi::before {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: var(--azul-claro);
+}
+.kpi .etiqueta {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--texto-suave); font-weight: 600;
+}
+.kpi .valor {
+  font-size: 30px; font-weight: 700; line-height: 1.1; margin-top: 6px;
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+.kpi .nota { font-size: 12px; color: var(--texto-suave); margin-top: 4px; }
+.kpi.alerta::before { background: var(--rojo-alerta); }
+.kpi.ok::before { background: var(--verde); }
+.kpi.aviso::before { background: var(--ambar); }
 
 /* ------------------------------ Tablas --------------------------------- */
 .tabla-scroll { overflow-x: auto; }
@@ -285,6 +313,9 @@ th {
   letter-spacing: .6px; color: var(--texto-suave); font-weight: 600; white-space: nowrap;
 }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* La fila se marca al pasar por encima: en una tabla de catorce tiendas y seis
+   columnas, el ojo pierde el renglón a la mitad. */
+tbody tr:hover > td { background: var(--panel-alt); }
 td.tipo { white-space: nowrap; }
 tr.total td { font-weight: 700; background: var(--panel-alt); border-top: 2px solid var(--borde-fuerte); }
 tbody tr:hover { background: var(--panel-alt); }
@@ -300,7 +331,8 @@ label.campo { display: block; font-size: 12px; color: var(--texto-suave); font-w
 label.campo > span { display: block; margin-bottom: 5px; text-transform: uppercase; letter-spacing: .5px; }
 
 input, select, textarea {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--borde-fuerte); border-radius: 8px;
+  width: 100%; padding: 9px 11px; border: 1px solid var(--borde-fuerte);
+  border-radius: var(--radio-chico);
   background: var(--panel); color: var(--texto); font: inherit; font-size: 14px; font-weight: 400;
 }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul-claro); outline-offset: -1px; }
@@ -309,8 +341,10 @@ table input, table select { padding: 6px 8px; font-size: 13px; }
 input.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 button.b, a.b {
-  background: var(--azul); color: #fff; border: 0; padding: 9px 16px; border-radius: 8px;
+  background: var(--azul); color: #fff; border: 0; padding: 10px 18px;
+  border-radius: var(--radio-chico);
   font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background .14s ease-out, border-color .14s ease-out;
 }
 button.b:hover, a.b:hover { background: var(--azul-claro); }
 /* Un enlace que se ve como botón necesita que le digan las dos cosas que el
@@ -762,6 +796,14 @@ img.pm-local { border-radius: 14px; object-fit: cover; }
   box-shadow: var(--sombra);
 }
 .suc-card.vacia { opacity: .72; }
+/* La tarjeta de una tienda se levanta al pasar por encima, como los cuadrados
+   de «Ir a»: las dos llevan a otra pantalla y tienen que decirlo igual. */
+.suc-card { transition: transform .14s ease-out, box-shadow .14s ease-out, border-color .14s ease-out; }
+.suc-card:hover { transform: translateY(-2px); box-shadow: var(--sombra-alta); border-color: var(--azul-claro); }
+@media (prefers-reduced-motion: reduce) {
+  .suc-card { transition: none; }
+  .suc-card:hover { transform: none; }
+}
 .suc-card > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .suc-card > header a {
   display: block; font-weight: 700; font-size: 15px; color: var(--azul); text-decoration: none;
@@ -1510,6 +1552,52 @@ a.org-persona { text-decoration: none; }
   .rama::before, .rama::after { display: none; }
   .rama-nivel .org-fila { justify-content: flex-start; }
   .rama-pos, .arbol-ala h5, .rama h5 { text-align: left; }
+}
+
+/* ======================= Los cuadrados para ir a =======================
+ *
+ * El pedido fue «más moderno, con cuadrados y fácil ir a las secciones». El
+ * menú de la izquierda sigue siendo la navegación —es la que está siempre— y
+ * esto es la puerta ancha en el Panel, que es la pantalla en la que se cae al
+ * entrar.
+ *
+ * Los cuadros **los arma el propio menú** (`pintarMosaico()`), así que no hay
+ * una segunda lista de secciones ni de íconos que mantener. */
+.mosaico {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+.mos {
+  position: relative; display: flex; flex-direction: column; gap: 8px;
+  min-height: 118px; padding: 16px; text-decoration: none;
+  background: var(--panel); border: 1px solid var(--borde);
+  border-radius: var(--radio); color: var(--texto);
+  transition: transform .14s ease-out, box-shadow .14s ease-out, border-color .14s ease-out;
+}
+.mos:hover {
+  transform: translateY(-2px); border-color: var(--azul-claro); box-shadow: var(--sombra-alta);
+}
+.mos svg {
+  width: 26px; height: 26px; fill: none; stroke: var(--azul);
+  stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.mos strong { font-size: 14px; font-weight: 650; line-height: 1.25; margin-top: auto; }
+.mos .mos-grupo {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--texto-suave);
+}
+/* El contador es el mismo del menú, copiado: nunca se cuenta dos veces. */
+.mos .mos-badge {
+  position: absolute; top: 12px; right: 12px;
+  min-width: 22px; padding: 0 7px; border-radius: 999px;
+  background: var(--rojo); color: #fff;
+  font-size: 11.5px; font-weight: 700; line-height: 20px; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: reduce) { .mos { transition: none; } .mos:hover { transform: none; } }
+@media (max-width: 560px) {
+  .mosaico { grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 10px; }
+  .mos { min-height: 104px; padding: 13px; }
 }
 
 </style>
@@ -16709,6 +16797,13 @@ const App = (() => {
               'al Gerente de Operaciones', enviadas < visitadas ? 'aviso' : 'ok')}
       </div>
 
+      <section class="tarjeta" id="mosaico-caja">
+        <h2>Ir a</h2>
+        <p class="ayuda">Las mismas secciones del menú, con lo que tiene pendiente cada una.
+          Tocá un cuadro para entrar.</p>
+        <div class="mosaico" id="mosaico-secciones"></div>
+      </section>
+
       ${bloqueComposicion(e)}
 
       <section class="tarjeta">
@@ -23492,6 +23587,42 @@ const App = (() => {
     </section>`;
   }
 
+  /**
+   * Los cuadrados para ir a cada sección.
+   *
+   * **Salen del propio menú**: mismo orden, mismos íconos, mismos contadores.
+   * Una segunda lista de secciones escrita a mano se desincroniza el día que
+   * se agrega una pantalla —es lo que ya evitó `MAPA_CARGOS` derivándose de
+   * `CARGOS_NOMINA`— y acá además se desincronizarían los íconos, que son SVG
+   * en línea y no se ven hasta que alguien los mira.
+   *
+   * Se llena **después** de `contadoresDelMenu()`, que es quien sabe cuántas
+   * cosas pendientes tiene cada pantalla: el cuadro copia ese número en vez de
+   * volver a contarlo.
+   */
+  const FUERA_DEL_MOSAICO = ['#/red', '#/config'];
+  function pintarMosaico() {
+    const caja = $('#mosaico-secciones');
+    if (!caja) return;
+    const items = [...document.querySelectorAll('nav.tabs.principal a')]
+      .filter(a => FUERA_DEL_MOSAICO.indexOf(a.getAttribute('href')) < 0);
+    caja.innerHTML = items.map(a => {
+      const svg = a.querySelector('svg');
+      const nom = a.querySelector('span');
+      const b = a.querySelector('.lat-badge');
+      const grupo = a.closest('.nav-grupo');
+      const rotulo = grupo && grupo.querySelector('.grupo') ? grupo.querySelector('.grupo').textContent : '';
+      const cuenta = b && !b.hidden ? b.textContent : '';
+      return `<a class="mos" href="${a.getAttribute('href')}"
+          title="${esc(a.getAttribute('title') || (nom ? nom.textContent : ''))}">
+        ${svg ? svg.outerHTML : ''}
+        <strong>${esc(nom ? nom.textContent : '')}</strong>
+        ${rotulo ? `<span class="mos-grupo">${esc(rotulo)}</span>` : ''}
+        ${cuenta ? `<b class="mos-badge">${esc(cuenta)}</b>` : ''}
+      </a>`;
+    }).join('');
+  }
+
   function contadoresDelMenu(e) {
     const cuentas = {
       ausencias: alertasDeAusencias(e, hoyISO()).length,
@@ -24251,6 +24382,7 @@ const App = (() => {
       a.classList.toggle('activo', activo);
     });
     contadoresDelMenu(e);
+    pintarMosaico();
     ordenarKpis();
     avisoDeGuardado();
     selloDeGuardado();
