@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+html, body {
+  background: #f1f5f9;
+}
+code {
+  @apply rounded bg-slate-100 px-1 font-mono text-[0.85em] text-navy-800;
+}
+
+@media print {
+  aside, header, .no-print, nav { display: none !important; }
+  body { background: #fff; }
+  main { padding: 0 !important; }
+  .print-area { border: none !important; box-shadow: none !important; }
+}
