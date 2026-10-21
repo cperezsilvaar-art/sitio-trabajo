@@ -1,5 +1,6 @@
 import { FileSpreadsheet, Printer } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { PrintScheduleButton } from '../components/PrintSchedule';
 import { Button, Card, Empty, MonthPicker, PageHeader, Select, StatusBadge } from '../components/ui';
 import { hourlyProfile } from '../lib/calc';
 import { MONTHS, POSITIONS } from '../lib/constants';
@@ -57,6 +58,17 @@ export function Reportes() {
           </div>
         ))}
       </div>
+
+      <Card title="Planilla para cartelera (PDF)" subtitle="Horarios del mes listos para imprimir, con columna de firma de cada empleado" className="no-print mt-6">
+        <div className="flex flex-wrap gap-3">
+          {bundles.map((b) => (
+            <div key={b.store.id} className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2">
+              <span className="text-sm font-medium text-navy-900">{b.store.name}</span>
+              <PrintScheduleButton storeId={b.store.id} year={year} month={month} />
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <div className="mt-6">
         <div className="no-print mb-3 flex items-center justify-between">

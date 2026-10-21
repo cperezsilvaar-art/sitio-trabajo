@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { DailyCoverageChart } from '../components/charts';
 import { MonthCalendar } from '../components/MonthCalendar';
 import { PlanWorkflow } from '../components/PlanWorkflow';
+import { PrintScheduleButton } from '../components/PrintSchedule';
 import { ScheduleGrid, frequentShifts } from '../components/ScheduleGrid';
 import { AlertList, Button, Card, Empty, Modal, MonthPicker, PageHeader, Select, StoreName, cx } from '../components/ui';
 import { POSITIONS, WEEKDAYS_SHORT } from '../lib/constants';
@@ -64,6 +65,7 @@ export function Planificacion() {
           <button onClick={() => setView('calendario')} className={cx('flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm', view === 'calendario' ? 'bg-navy-800 text-white' : 'text-slate-600')}><CalendarDays size={15} /> Calendario</button>
         </div>
         {!readOnly && <Button variant="secondary" size="sm" onClick={() => setTools(true)}><CopyPlus size={15} /> Copiar día / duplicar semana</Button>}
+        <PrintScheduleButton storeId={store.id} year={year} month={month} />
         <Link to="/empleados"><Button variant="ghost" size="sm"><UserPlus size={15} /> Gestionar empleados</Button></Link>
         {!readOnly && (
           <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void flushNow()} title="Los cambios se guardan automáticamente como borrador; este botón fuerza el guardado inmediato.">

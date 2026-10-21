@@ -1,9 +1,15 @@
 import * as XLSX from 'xlsx';
+import { saveFile } from './download';
 import type { PlanAnalysis } from './calc';
 import { KIND_LABEL, MONTHS, POSITIONS, POSITION_BY_ID, STATUS_LABEL, WEEKDAYS_SHORT } from './constants';
 import { pad, weekday } from './dates';
 import { entryLabel } from './parse';
 import type { Employee, Entry, Plan, Store, StoreSettings } from './types';
+
+function writeBook(wb: XLSX.WorkBook, fileName: string) {
+  const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  return saveFile(fileName, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+}
 
 export interface StoreBundle {
   store: Store;
@@ -57,7 +63,7 @@ export function exportSchedules(bundles: StoreBundle[], fileName: string) {
   const wb = XLSX.utils.book_new();
   const used = new Set<string>();
   for (const b of bundles) XLSX.utils.book_append_sheet(wb, sheet(scheduleSheets(b), [26, 26, 9, ...b.a.dates.map(() => 11), 8, 10]), safeName(b.store.code, used));
-  XLSX.writeFile(wb, fileName);
+  return writeBook(wb, fileName);
 }
 
 export function employeeRows(bundles: StoreBundle[]): Row[] {
@@ -95,7 +101,7 @@ export function exportEmployees(bundles: StoreBundle[], fileName: string) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet(employeeSummaryRows(bundles), [28, 28, 28, 9, 10, 12, 12, 12, 12, 12]), 'Resumen por empleado');
   XLSX.utils.book_append_sheet(wb, sheet(employeeRows(bundles), [28, 28, 26, 11, 6, 11, 8, 8, 7, 24, 30, 17]), 'Detalle de turnos');
-  XLSX.writeFile(wb, fileName);
+  return writeBook(wb, fileName);
 }
 
 export function positionRows(bundles: StoreBundle[]): Row[] {
@@ -129,7 +135,7 @@ export function exportCoverage(bundles: StoreBundle[], fileName: string) {
   const wb = XLSX.utils.book_new();
   const used = new Set<string>();
   for (const b of bundles) XLSX.utils.book_append_sheet(wb, sheet(coverageRows(b), [11, 5, 9, 8, 10, 12, ...POSITIONS.map(() => 8), ...Array(24).fill(6)]), safeName(b.store.code, used));
-  XLSX.writeFile(wb, fileName);
+  return writeBook(wb, fileName);
 }
 
 export function comparisonRows(bundles: StoreBundle[]): Row[] {
@@ -164,7 +170,7 @@ export function exportSimple(sheets: { name: string; rows: Row[]; widths?: numbe
   const wb = XLSX.utils.book_new();
   const used = new Set<string>();
   for (const s of sheets) XLSX.utils.book_append_sheet(wb, sheet(s.rows, s.widths), safeName(s.name, used));
-  XLSX.writeFile(wb, fileName);
+  return writeBook(wb, fileName);
 }
 
 export function exportFull(bundles: StoreBundle[], fileName: string) {
@@ -177,5 +183,5 @@ export function exportFull(bundles: StoreBundle[], fileName: string) {
   XLSX.utils.book_append_sheet(wb, sheet(employeeSummaryRows(bundles)), safeName('Horas por empleado', used));
   for (const b of bundles) XLSX.utils.book_append_sheet(wb, sheet(scheduleSheets(b), [26, 26, 9, ...b.a.dates.map(() => 11), 8, 10]), safeName(`Horario ${b.store.code}`, used));
   for (const b of bundles) XLSX.utils.book_append_sheet(wb, sheet(coverageRows(b)), safeName(`Cobertura ${b.store.code}`, used));
-  XLSX.writeFile(wb, fileName);
+  return writeBook(wb, fileName);
 }
