@@ -1,6 +1,6 @@
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { Button, Card, DemoBadge, Empty, Input, Modal, PageHeader, Select, cx } from '../components/ui';
+import { Button, Card, DemoBadge, Empty, Input, Modal, PageHeader, Select, cx, useConfirm } from '../components/ui';
 import { POSITIONS, POSITION_BY_ID, POSITION_COLORS } from '../lib/constants';
 import { nowIso, uid } from '../lib/dates';
 import { useData } from '../lib/store';
@@ -15,6 +15,7 @@ export function Empleados() {
   const [q, setQ] = useState('');
   const [edit, setEdit] = useState<Employee | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const confirmUi = useConfirm();
 
   const list = employees.filter((e) =>
     (!storeId || e.store_id === storeId) && (!pos || e.position_id === pos) &&
@@ -97,8 +98,8 @@ export function Empleados() {
                       <div className="flex justify-end gap-1">
                         <Button size="sm" variant="ghost" onClick={() => { setErr(null); setEdit({ ...e }); }}><Pencil size={14} /> Editar</Button>
                         <Button size="sm" variant="ghost" onClick={async () => {
-                          if (!confirm(`¿Eliminar a ${e.name}?`)) return;
-                          try { await deleteEmployee(e); } catch (x) { alert((x as Error).message); }
+                          if (!(await confirmUi.ask(`¿Eliminar a ${e.name}?`))) return;
+                          try { await deleteEmployee(e); } catch (x) { await confirmUi.notify((x as Error).message); }
                         }}><Trash2 size={14} /></Button>
                       </div>
                     )}
@@ -110,6 +111,7 @@ export function Empleados() {
         ) : <div className="p-6"><Empty>No hay empleados para los filtros seleccionados.</Empty></div>}
       </Card>
 
+      {confirmUi.dialog}
       <Modal open={!!edit} title={edit && employees.some((x) => x.id === edit.id) ? 'Editar empleado' : 'Nuevo empleado'} onClose={() => setEdit(null)}
         footer={<><Button variant="secondary" onClick={() => setEdit(null)}>Cancelar</Button><Button onClick={() => void save()}>Guardar</Button></>}>
         {edit && (

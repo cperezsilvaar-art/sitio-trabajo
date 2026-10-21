@@ -1,6 +1,6 @@
 import { Database, Plus, Save, Trash2, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Button, Card, DemoBadge, Input, Modal, PageHeader, Select, cx } from '../components/ui';
+import { Button, Card, DemoBadge, Input, Modal, PageHeader, Select, cx, useConfirm } from '../components/ui';
 import { POSITIONS, WEEKDAYS } from '../lib/constants';
 import { nowIso, pad, uid } from '../lib/dates';
 import { defaultHours, defaultSettings } from '../lib/demo';
@@ -14,6 +14,7 @@ export function Configuracion() {
   const [selId, setSelId] = useState<string | null>(visible[0]?.id ?? null);
   const [draft, setDraft] = useState<{ store: Store; st: StoreSettings } | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const confirmUi = useConfirm();
 
   useEffect(() => {
     const s = stores.find((x) => x.id === selId) ?? visible[0];
@@ -163,7 +164,7 @@ export function Configuracion() {
                 <Button onClick={() => void save()}><Save size={16} /> Guardar tienda y parámetros</Button>
                 {stores.some((s) => s.id === d.store.id) && (
                   <Button variant="ghost" onClick={async () => {
-                    if (!confirm(`¿Eliminar "${d.store.name}" con todos sus empleados, horarios e historial? Esta acción no se puede deshacer.`)) return;
+                    if (!(await confirmUi.ask(`¿Eliminar "${d.store.name}" con todos sus empleados, horarios e historial? Esta acción no se puede deshacer.`))) return;
                     await deleteStore(d.store);
                     setSelId(null);
                     setDraft(null);
@@ -176,6 +177,7 @@ export function Configuracion() {
         )}
       </div>
 
+      {confirmUi.dialog}
       {isAdmin && <UsersSection />}
       {isAdmin && <DemoSection />}
     </div>
@@ -249,13 +251,15 @@ function UsersSection() {
 function DemoSection() {
   const { mode, stores, loadDemo, removeDemo, resetLocal } = useData();
   const [busy, setBusy] = useState(false);
+  const confirmUi = useConfirm();
   const demoCount = stores.filter((s) => s.is_demo).length;
   const run = async (f: () => Promise<void>) => {
     setBusy(true);
-    try { await f(); } catch (e) { alert((e as Error).message); } finally { setBusy(false); }
+    try { await f(); } catch (e) { await confirmUi.notify((e as Error).message); } finally { setBusy(false); }
   };
   return (
     <Card title="Datos de demostración" className="mt-6">
+      {confirmUi.dialog}
       <div className="flex flex-wrap items-start gap-4">
         <Database className="mt-1 text-amber-600" />
         <div className="min-w-0 flex-1 text-sm text-slate-600">
@@ -264,8 +268,8 @@ function DemoSection() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" disabled={busy} onClick={() => run(loadDemo)}>Cargar demostración</Button>
-          <Button variant="secondary" disabled={busy || !demoCount} onClick={() => confirm('¿Eliminar todas las tiendas, empleados, horarios y usuarios de demostración?') && run(removeDemo)}>Eliminar datos demo</Button>
-          {mode === 'local' && <Button variant="danger" disabled={busy} onClick={() => confirm('Se borrarán TODOS los datos guardados en este navegador y se regenerará la demostración. ¿Continuar?') && resetLocal()}>Reiniciar base local</Button>}
+          <Button variant="secondary" disabled={busy || !demoCount} onClick={async () => (await confirmUi.ask('¿Eliminar todas las tiendas, empleados, horarios y usuarios de demostración?')) && run(removeDemo)}>Eliminar datos demo</Button>
+          {mode === 'local' && <Button variant="danger" disabled={busy} onClick={async () => (await confirmUi.ask('Se borrarán TODOS los datos guardados en este navegador y se regenerará la demostración. ¿Continuar?')) && resetLocal()}>Reiniciar base local</Button>}
         </div>
       </div>
     </Card>

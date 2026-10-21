@@ -1,5 +1,5 @@
 import { AlertOctagon, AlertTriangle, ChevronLeft, ChevronRight, Info, X } from 'lucide-react';
-import { useEffect, type ButtonHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type InputHTMLAttributes } from 'react';
+import { useEffect, useState, type ButtonHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type InputHTMLAttributes } from 'react';
 import { MONTHS, STATUS_LABEL, STATUS_STYLE } from '../lib/constants';
 import type { AnalysisAlert } from '../lib/calc';
 import type { PlanStatus, Store } from '../lib/types';
@@ -224,4 +224,31 @@ export function Progress({ value, tone }: { value: number; tone?: 'good' | 'warn
       <div className={cx('h-full rounded-full', c)} style={{ width: `${Math.min(100, value * 100)}%` }} />
     </div>
   );
+}
+
+/** Confirmación dentro de la página (las ventanas nativas confirm/alert no funcionan en todos los entornos). */
+export function useConfirm() {
+  const [state, setState] = useState<{ message: string; danger: boolean; info?: boolean; resolve: (v: boolean) => void } | null>(null);
+  const ask = (message: string, danger = true) => new Promise<boolean>((resolve) => setState({ message, danger, resolve }));
+  const notify = (message: string) => new Promise<boolean>((resolve) => setState({ message, danger: false, info: true, resolve }));
+  const close = (v: boolean) => {
+    state?.resolve(v);
+    setState(null);
+  };
+  const dialog = (
+    <Modal
+      open={!!state}
+      title={state?.info ? 'Atención' : 'Confirmar'}
+      onClose={() => close(false)}
+      footer={state?.info ? <Button onClick={() => close(true)}>Entendido</Button> : (
+        <>
+          <Button variant="secondary" onClick={() => close(false)}>Cancelar</Button>
+          <Button variant={state?.danger ? 'danger' : 'primary'} onClick={() => close(true)}>Confirmar</Button>
+        </>
+      )}
+    >
+      <p className="text-sm text-slate-700">{state?.message}</p>
+    </Modal>
+  );
+  return { ask, notify, dialog };
 }
