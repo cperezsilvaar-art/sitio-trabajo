@@ -29,8 +29,7 @@ function escapeHtml(s: string) {
 export function printDocument(opts: { title: string; content: string; draft: boolean; footer?: string }) {
   const w = window.open('', '_blank');
   if (!w) {
-    alert('El navegador bloqueó la ventana de impresión. Permita las ventanas emergentes para este sitio.');
-    return;
+    throw new Error('El navegador bloqueó la ventana de impresión. Permita las ventanas emergentes para este sitio.');
   }
   const wm = opts.draft
     ? `<div class="wm">BORRADOR</div><div class="banner">BORRADOR – Sin validez hasta su aprobación por Recursos Humanos. No entregar al colaborador.</div>`

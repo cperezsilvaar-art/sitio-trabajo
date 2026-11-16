@@ -12,9 +12,36 @@ const SESSION_KEY = 'portal-rh:session';
 
 type Row = Record<string, unknown> & { id: string };
 
-function openDb(): Promise<IDBDatabase> {
+/** Almacenamiento de sesión tolerante: en marcos restringidos localStorage puede no existir. */
+const memSession = new Map<string, string>();
+const session = {
+  get(k: string) { try { return localStorage.getItem(k); } catch { return memSession.get(k) ?? null; } },
+  set(k: string, v: string) { try { localStorage.setItem(k, v); } catch { memSession.set(k, v); } },
+  remove(k: string) { try { localStorage.removeItem(k); } catch { memSession.delete(k); } },
+};
+
+/** IndexedDB del navegador o, si está bloqueado, una base en memoria (los datos se pierden al recargar). */
+async function idbFactory(): Promise<IDBFactory> {
+  try {
+    const f = globalThis.indexedDB;
+    if (f) {
+      await new Promise<void>((res, rej) => {
+        const t = f.open('portal-rh-probe');
+        t.onsuccess = () => { t.result.close(); res(); };
+        t.onerror = () => rej(t.error);
+      });
+      return f;
+    }
+  } catch { /* se usa memoria */ }
+  const { indexedDB: mem } = await import('fake-indexeddb');
+  LocalBackend.inMemory = true;
+  return mem;
+}
+
+async function openDb(): Promise<IDBDatabase> {
+  const factory = await idbFactory();
   return new Promise((resolve, reject) => {
-    const r = indexedDB.open(DB_NAME, 1);
+    const r = factory.open(DB_NAME, 1);
     r.onupgradeneeded = () => {
       for (const t of [...TABLES, '_passwords']) if (!r.result.objectStoreNames.contains(t)) r.result.createObjectStore(t, { keyPath: 'id' });
     };
@@ -32,6 +59,8 @@ function req<T>(r: IDBRequest<T>) {
 
 export class LocalBackend implements Backend {
   mode = 'local' as const;
+  /** true si el navegador bloqueó IndexedDB y los datos viven sólo en memoria. */
+  static inMemory = false;
   private user: Profile | null = null;
   private db: Promise<IDBDatabase> = openDb();
   private channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('portal-rh') : null;
@@ -63,12 +92,12 @@ export class LocalBackend implements Backend {
     const tx = db.transaction([...TABLES, '_passwords'], 'readwrite');
     for (const t of [...TABLES, '_passwords']) tx.objectStore(t).clear();
     await new Promise((res) => { tx.oncomplete = res; });
-    localStorage.removeItem(SESSION_KEY);
+    session.remove(SESSION_KEY);
     this.user = null;
   }
 
   async restoreSession() {
-    const id = localStorage.getItem(SESSION_KEY);
+    const id = session.get(SESSION_KEY);
     if (!id) return null;
     const p = (await this.raw<Profile>('profiles')).find((x) => x.id === id && x.active) ?? null;
     this.user = p;
@@ -81,13 +110,13 @@ export class LocalBackend implements Backend {
     if (!p || !pw || pw.pw !== password) throw new Error('Usuario o contraseña incorrectos.');
     if (!p.active) throw new Error('El usuario está desactivado. Consulte a RH.');
     this.user = p;
-    localStorage.setItem(SESSION_KEY, p.id);
+    session.set(SESSION_KEY, p.id);
     return p;
   }
 
   async signOut() {
     this.user = null;
-    localStorage.removeItem(SESSION_KEY);
+    session.remove(SESSION_KEY);
   }
 
   /** Mismas reglas de lectura que las políticas RLS. */

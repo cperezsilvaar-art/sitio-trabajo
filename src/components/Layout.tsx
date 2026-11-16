@@ -79,7 +79,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {user.role === 'gerente' && (
           <button className="ml-1 flex items-center gap-1.5 rounded border border-chrome-300 bg-chrome-100 px-2.5 py-1 hover:bg-white" onClick={() => nav('/solicitudes/nueva')}><Plus size={15} /> Crear</button>
         )}
-        {isDemo && <span className="ml-2 hidden rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 sm:inline">Modo demostración · datos sólo en este navegador</span>}
+        {isDemo && <span className="ml-2 hidden rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900 sm:inline">{import.meta.env.VITE_EMBED === '1' ? 'Demo en línea · datos ficticios · impresión y descargas desactivadas' : 'Modo demostración · datos sólo en este navegador'}</span>}
         <div className="ml-auto flex items-center gap-1">
           <Link to="/biblioteca?cat=instructivo" className="rounded p-1.5 hover:bg-chrome-300" title="Ayuda"><HelpCircle size={19} /></Link>
           <div className="relative">

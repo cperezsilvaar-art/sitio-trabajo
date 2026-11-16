@@ -11,6 +11,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const go = async (e?: string, p?: string) => {
     setBusy(true);
@@ -57,8 +58,8 @@ export function Login() {
                 </button>
               ))}
             </div>
-            <Button variant="link" className="mt-4" onClick={() => { if (confirm('¿Borrar todos los datos de la demostración y volver a cargarlos?')) resetDemo(); }}>
-              Restablecer datos de demostración
+            <Button variant="link" className="mt-4" onClick={() => { if (confirmReset) { setConfirmReset(false); resetDemo(); } else setConfirmReset(true); }}>
+              {confirmReset ? '¿Seguro? Se borran todos los cambios. Clic de nuevo para confirmar' : 'Restablecer datos de demostración'}
             </Button>
           </div>
         )}

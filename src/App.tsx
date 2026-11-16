@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { HashRouter, MemoryRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { DataProvider, useData } from './lib/store';
 import type { Role } from './lib/types';
@@ -44,12 +44,15 @@ function Shell() {
   );
 }
 
+/** En la demo publicada dentro de Claude la navegación no usa la barra de direcciones. */
+const Router = import.meta.env.VITE_EMBED === '1' ? MemoryRouter : HashRouter;
+
 export default function App() {
   return (
     <DataProvider>
-      <HashRouter>
+      <Router>
         <Shell />
-      </HashRouter>
+      </Router>
     </DataProvider>
   );
 }
