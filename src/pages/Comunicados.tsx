@@ -63,12 +63,13 @@ export function Cartelera() {
   const { user, data } = useData();
   if (!user) return null;
   const isManager = user.role === 'gerente';
+  const canPublish = user.role === 'coordinador' || user.role === 'admin_rh';
   const live = data.announcements.filter(isLive).sort(order);
   const unread = live.filter((a) => !data.announcement_reads.some((r) => r.announcement_id === a.id && r.user_id === user.id));
   const shown = (isManager ? [...unread, ...live.filter((a) => !unread.includes(a))] : live).slice(0, 3);
   return (
     <Card title={<span className="flex items-center gap-2"><Megaphone size={20} className="text-brand-600" /> Comunicados importantes {isManager && unread.length > 0 && <Pill tone="blue">{unread.length} sin leer</Pill>}</span>}
-      actions={<><Link to="/comunicados" className="text-[15px] text-brand-500 hover:underline">Ver la cartelera completa</Link>{!isManager && <Link to="/comunicados?nuevo=1"><Button size="sm"><Plus size={14} /> Publicar</Button></Link>}</>}>
+      actions={<><Link to="/comunicados" className="text-[15px] text-brand-500 hover:underline">Ver la cartelera completa</Link>{canPublish && <Link to="/comunicados?nuevo=1"><Button size="sm"><Plus size={14} /> Publicar</Button></Link>}</>}>
       {shown.length === 0 ? <p className="text-sm text-ink-400">No hay comunicados vigentes.</p> : (
         <div className="grid gap-4 lg:grid-cols-3">{shown.map((a) => <Aviso key={a.id} a={a} compact />)}</div>
       )}
@@ -78,7 +79,7 @@ export function Cartelera() {
 
 export function Comunicados() {
   const { user, data, svc, run } = useData();
-  const isManager = user?.role === 'gerente';
+  const isManager = user?.role === 'gerente' || user?.role === 'gerente_area';
   const [params] = useSearchParams();
   const [edit, setEdit] = useState<Announcement | null>(() => (params.get('nuevo') && !isManager ? blank() : null));
   const [isNew, setIsNew] = useState(!!edit);

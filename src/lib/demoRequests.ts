@@ -3,6 +3,7 @@ import { emptyRequestData } from './service';
 import { employees, measureTypes, profiles, situationTypes, stores } from './seed';
 import { renderForRequest, sha256 } from './template';
 import type {
+  Vacancy,
   Announcement, AnnouncementRead, Gestion, StoredFile,
   AuditEvent, DisciplinaryRequest, FinalDocument, Notification, RequestData, RequestRevision, RequestStatus, TemplateVersion,
 } from './types';
@@ -273,4 +274,68 @@ export function buildDemoAnnouncements(): { announcements: Announcement[]; annou
     { id: 'ann-demo-3:u-ger310', announcement_id: 'ann-demo-3', user_id: 'u-ger310', user_name: 'Valeria Sosa', at: ago(5) },
   ];
   return { announcements, announcement_reads };
+}
+
+/* ---------- Vacantes de ejemplo ---------- */
+
+export function buildDemoVacancies(): { vacancies: Vacancy[]; audit_events: AuditEvent[]; notifications: Notification[] } {
+  const vacancies: Vacancy[] = [];
+  const audit_events: AuditEvent[] = [];
+  const notifications: Notification[] = [];
+  const P = (id: string) => profiles.find((p) => p.id === id)!;
+  const ev = (v: Vacancy, actor: string, at: string, action: string, to: string | null, comment: string, from: string | null = null) => {
+    const p = P(actor);
+    audit_events.push({ id: `ev-${v.number}-${audit_events.length}`, entity: 'vacancy', entity_id: v.id, action, actor_id: p.id, actor_name: p.name, actor_role: p.role, at, internal: false, from_status: from as never, to_status: to as never, comment });
+  };
+  const base = (n: string, mgr: string, storeId: string, position: string, extra: Partial<Vacancy>): Vacancy => {
+    const st = stores.find((s) => s.id === storeId)!;
+    const am = profiles.find((p) => p.role === 'gerente_area' && p.areas.includes(st.area))!;
+    const co = profiles.find((p) => p.role === 'coordinador' && p.areas.includes(st.area))!;
+    return {
+      id: `vac-${n}`, number: n, status: 'pendiente_area', store_id: st.id, store_name: st.name, area: st.area, position, shift: 'Mañana', workday: 'completa',
+      reason: 'nueva', replaced_employee_id: '', replaced_employee_name: '', leaving_reason: '', leaving_date: '', needed_by: day(-20), profile_notes: '',
+      manager_id: mgr, manager_name: P(mgr).name, area_manager_id: am.id, area_manager_name: am.name, area_decided_at: null,
+      coordinator_id: co.id, coordinator_name: co.name, candidate_name: '', candidate_legajo: '', hire_date: '',
+      created_at: ago(1), updated_at: ago(1), closed_at: null, ...extra,
+    };
+  };
+
+  // 1. Recién pedida: espera al gerente de área.
+  const v1 = base('VTE-2026-1117-R7KQ', 'u-ger310', 's-310', 'Repositor/a', { created_at: ago(1), profile_notes: 'Turno mañana, para reposición y recepción de mercadería. Disponibilidad sábados.' });
+  ev(v1, 'u-ger310', v1.created_at, 'vacante_solicitada', 'pendiente_area', 'Repositor/a · Sucursal 310. Posición disponible dentro del headcount.');
+  notifications.push({ id: 'n-vte1', user_id: 'u-ga3', request_id: null, link: `/vacantes/${v1.id}`, message: `Valeria Sosa solicita una vacante de Repositor/a en ${v1.store_name}. Espera tu autorización.`, read: false, at: v1.created_at });
+
+  // 2. Reemplazo en entrevistas.
+  const g = employees.find((e) => e.id === 'e-13')!;
+  const v2 = base('VTE-2026-1104-M2LD', 'u-ger101', 's-101', g.position, {
+    status: 'entrevistas', reason: 'reemplazo', replaced_employee_id: g.id, replaced_employee_name: g.name, leaving_reason: 'Renuncia', leaving_date: day(-6),
+    created_at: ago(14), updated_at: ago(2), area_decided_at: ago(13), shift: 'Tarde',
+  });
+  ev(v2, 'u-ger101', ago(14), 'vacante_solicitada', 'pendiente_area', `${g.position} · Sucursal 101. Reemplazo de ${g.name} (Renuncia).`);
+  ev(v2, 'u-ga1', ago(13), 'vacante_autorizada', 'autorizada', 'Autorizada. Priorizar disponibilidad horaria de tarde.', 'pendiente_area');
+  ev(v2, 'u-coord1', ago(11), 'vacante_etapa', 'en_busqueda', 'Publicada en Bumeran, Computrabajo y LinkedIn. Pedimos referidos al equipo.', 'autorizada');
+  ev(v2, 'u-coord1', ago(7), 'novedad', null, '38 postulantes. Preseleccionamos 6 para entrevista telefónica.');
+  ev(v2, 'u-coord1', ago(4), 'vacante_etapa', 'entrevistas', 'Entrevistas presenciales el jueves y viernes con la gerente de la tienda.', 'en_busqueda');
+  ev(v2, 'u-coord1', ago(2), 'novedad', null, 'Quedan 2 finalistas. Definimos el lunes.');
+
+  // 3. Reemplazo en preocupacional, con candidata elegida.
+  const f = employees.find((e) => e.id === 'e-6')!;
+  const v3 = base('VTE-2026-1028-B9TE', 'u-ger310', 's-311', f.position, {
+    status: 'preocupacional', reason: 'reemplazo', replaced_employee_id: f.id, replaced_employee_name: f.name, leaving_reason: 'Traslado a otra tienda', leaving_date: day(-3),
+    created_at: ago(21), updated_at: ago(1), area_decided_at: ago(20), candidate_name: 'María Laura Quiroga',
+  });
+  ev(v3, 'u-ger310', ago(21), 'vacante_solicitada', 'pendiente_area', `${f.position} · Sucursal 311. Reemplazo de ${f.name} (Traslado a otra tienda).`);
+  ev(v3, 'u-ga3', ago(20), 'vacante_autorizada', 'autorizada', 'Autorizada.', 'pendiente_area');
+  ev(v3, 'u-coord3', ago(18), 'vacante_etapa', 'en_busqueda', 'Búsqueda publicada. Farmacéutico/a con matrícula provincial vigente.', 'autorizada');
+  ev(v3, 'u-coord3', ago(10), 'vacante_etapa', 'entrevistas', '4 candidatos con matrícula. Entrevistas con Valeria y la DT.', 'en_busqueda');
+  ev(v3, 'u-coord3', ago(3), 'vacante_etapa', 'preocupacional', 'Elegida: María Laura Quiroga. Turno de preocupacional el miércoles; pedimos documentación y matrícula.', 'entrevistas');
+  ev(v3, 'u-coord3', ago(1), 'novedad', null, 'Preocupacional realizado. Esperamos el resultado (48 h).');
+
+  // 4. Rechazada por el gerente de área.
+  const v4 = base('VTE-2026-1112-Z1PA', 'u-ger205', 's-205', 'Repositor/a', { status: 'rechazada', created_at: ago(6), updated_at: ago(5), area_decided_at: ago(5), closed_at: ago(5) });
+  ev(v4, 'u-ger205', ago(6), 'vacante_solicitada', 'pendiente_area', 'Repositor/a · Sucursal 205. Posición disponible dentro del headcount.');
+  ev(v4, 'u-ga2', ago(5), 'vacante_rechazada', 'rechazada', 'Por ahora no: el volumen de la tienda no lo justifica. Lo revemos en enero.', 'pendiente_area');
+
+  vacancies.push(v1, v2, v3, v4);
+  return { vacancies, audit_events, notifications };
 }

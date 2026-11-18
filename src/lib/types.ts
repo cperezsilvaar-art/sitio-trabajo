@@ -1,9 +1,10 @@
 // Modelo de datos del Portal RH. Los nombres de tabla y columnas coinciden con supabase/schema.sql.
 
-export type Role = 'gerente' | 'coordinador' | 'admin_rh';
+export type Role = 'gerente' | 'gerente_area' | 'coordinador' | 'admin_rh';
 
 export const ROLE_LABEL: Record<Role, string> = {
   gerente: 'Gerente de tienda',
+  gerente_area: 'Gerente de área',
   coordinador: 'Coordinador/a de RH',
   admin_rh: 'Administrador/a de RH',
 };
@@ -250,7 +251,7 @@ export type EventAction =
 export interface AuditEvent {
   id: string;
   /** Solicitud, modelo o configuración a la que se refiere. */
-  entity: 'request' | 'gestion' | 'announcement' | 'template' | 'measure_type' | 'config' | 'user';
+  entity: 'request' | 'gestion' | 'announcement' | 'vacancy' | 'headcount' | 'template' | 'measure_type' | 'config' | 'user';
   entity_id: string;
   action: EventAction | string;
   actor_id: string;
@@ -325,7 +326,9 @@ export type TableName =
   | 'files'
   | 'gestiones'
   | 'announcements'
-  | 'announcement_reads';
+  | 'announcement_reads'
+  | 'headcount'
+  | 'vacancies';
 
 /* ---------- Licencias y vacaciones ---------- */
 
@@ -445,4 +448,101 @@ export interface AnnouncementRead {
   user_id: string;
   user_name: string;
   at: string;
+}
+
+/* ---------- Headcount y vacantes ---------- */
+
+/** Puestos autorizados de una tienda. id = `${store_id}:${position}`. */
+export interface Headcount {
+  id: string;
+  store_id: string;
+  position: string;
+  authorized: number;
+  updated_by_name: string;
+  updated_at: string;
+}
+
+export type VacancyStatus =
+  | 'pendiente_area'
+  | 'rechazada'
+  | 'autorizada'
+  | 'en_busqueda'
+  | 'entrevistas'
+  | 'preocupacional'
+  | 'ingreso'
+  | 'cubierta'
+  | 'cancelada';
+
+export const VACANCY_STATUS_LABEL: Record<VacancyStatus, string> = {
+  pendiente_area: 'Esperando al gerente de área',
+  rechazada: 'Rechazada por el gerente de área',
+  autorizada: 'Autorizada · esperando a RH',
+  en_busqueda: 'Búsqueda publicada',
+  entrevistas: 'Entrevistas y selección',
+  preocupacional: 'Preocupacional y documentación',
+  ingreso: 'Ingreso programado',
+  cubierta: 'Cubierta',
+  cancelada: 'Cancelada',
+};
+
+/** Etapas del "line up", en orden. */
+export const VACANCY_STAGES: VacancyStatus[] = ['pendiente_area', 'autorizada', 'en_busqueda', 'entrevistas', 'preocupacional', 'ingreso', 'cubierta'];
+
+export const VACANCY_STAGE_SHORT: Record<VacancyStatus, string> = {
+  pendiente_area: 'Solicitada', rechazada: 'Rechazada', autorizada: 'Autorizada', en_busqueda: 'Búsqueda', entrevistas: 'Entrevistas',
+  preocupacional: 'Preocupacional', ingreso: 'Ingreso', cubierta: 'Cubierta', cancelada: 'Cancelada',
+};
+
+export const VACANCY_STATUS_STYLE: Record<VacancyStatus, string> = {
+  pendiente_area: 'bg-amber-50 text-amber-800 ring-amber-300',
+  rechazada: 'bg-rose-50 text-rose-800 ring-rose-300',
+  autorizada: 'bg-sky-50 text-sky-800 ring-sky-300',
+  en_busqueda: 'bg-violet-50 text-violet-800 ring-violet-300',
+  entrevistas: 'bg-violet-50 text-violet-800 ring-violet-300',
+  preocupacional: 'bg-violet-50 text-violet-800 ring-violet-300',
+  ingreso: 'bg-teal-50 text-teal-800 ring-teal-300',
+  cubierta: 'bg-emerald-50 text-emerald-800 ring-emerald-300',
+  cancelada: 'bg-slate-200 text-slate-700 ring-slate-400',
+};
+
+export const VACANCY_REASONS = [
+  { id: 'reemplazo', name: 'Reemplazo de un colaborador que se va o se fue' },
+  { id: 'nueva', name: 'Posición disponible dentro del headcount' },
+] as const;
+
+export const LEAVING_REASONS = ['Renuncia', 'Despido', 'Fin de período de prueba', 'Traslado a otra tienda', 'Jubilación', 'Otro'];
+
+export const SHIFTS = ['Mañana', 'Tarde', 'Noche', 'Rotativo', 'Fin de semana'];
+
+export interface Vacancy {
+  id: string;
+  number: string;
+  status: VacancyStatus;
+  store_id: string;
+  store_name: string;
+  area: string;
+  position: string;
+  shift: string;
+  /** Jornada: completa o parcial. */
+  workday: 'completa' | 'parcial';
+  reason: 'reemplazo' | 'nueva';
+  replaced_employee_id: string;
+  replaced_employee_name: string;
+  leaving_reason: string;
+  leaving_date: string;
+  needed_by: string;
+  profile_notes: string;
+  manager_id: string;
+  manager_name: string;
+  area_manager_id: string | null;
+  area_manager_name: string | null;
+  area_decided_at: string | null;
+  coordinator_id: string | null;
+  coordinator_name: string | null;
+  candidate_name: string;
+  candidate_legajo: string;
+  hire_date: string;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
 }

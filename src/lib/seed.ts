@@ -3,7 +3,7 @@
 // revisados por el área legal.
 
 import type {
-  Employee, GestionKind, FieldDef, MeasureType, Policy, Profile, SituationType, Store, StoredFile, Template, TemplateVersion,
+  Employee, GestionKind, Headcount, FieldDef, MeasureType, Policy, Profile, SituationType, Store, StoredFile, Template, TemplateVersion,
 } from './types';
 import { bytesToBase64 } from './template';
 
@@ -26,6 +26,9 @@ export const profiles: Profile[] = [
   { id: 'u-coord1', email: 'coord.area1@demo.portal', name: 'Martín Ríos', role: 'coordinador', store_ids: [], areas: ['Área 1'], active: true },
   { id: 'u-coord2', email: 'coord.area2@demo.portal', name: 'Paula Gómez', role: 'coordinador', store_ids: [], areas: ['Área 2'], active: true },
   { id: 'u-coord3', email: 'coord.area3@demo.portal', name: 'Christian Pérez', role: 'coordinador', store_ids: [], areas: ['Área 3'], active: true },
+  { id: 'u-ga1', email: 'gerente.area1@demo.portal', name: 'Fernando Paz', role: 'gerente_area', store_ids: [], areas: ['Área 1'], active: true },
+  { id: 'u-ga2', email: 'gerente.area2@demo.portal', name: 'Lucía Ferro', role: 'gerente_area', store_ids: [], areas: ['Área 2'], active: true },
+  { id: 'u-ga3', email: 'gerente.area3@demo.portal', name: 'Ricardo Molina', role: 'gerente_area', store_ids: [], areas: ['Área 3'], active: true },
   { id: 'u-ger101', email: 'gerente.101@demo.portal', name: 'Sofía Álvarez', role: 'gerente', store_ids: ['s-101', 's-102'], areas: ['Área 1'], active: true },
   { id: 'u-ger205', email: 'gerente.205@demo.portal', name: 'Diego Fernández', role: 'gerente', store_ids: ['s-205'], areas: ['Área 2'], active: true },
   { id: 'u-ger310', email: 'gerente.310@demo.portal', name: 'Valeria Sosa', role: 'gerente', store_ids: ['s-310', 's-311'], areas: ['Área 3'], active: true },
@@ -297,6 +300,21 @@ export async function makeDocx(text: string, title?: string): Promise<string> {
   return bytesToBase64(zip.generate({ type: 'uint8array' }) as Uint8Array);
 }
 
+/** Headcount de ejemplo: lo que hay, más un lugar libre en algunos puestos. */
+export function buildHeadcount(): Headcount[] {
+  const out: Headcount[] = [];
+  for (const st of stores) {
+    const counts = new Map<string, number>();
+    for (const e of employees.filter((x) => x.store_id === st.id)) counts.set(e.position, (counts.get(e.position) ?? 0) + 1);
+    counts.set('Cajero/a', (counts.get('Cajero/a') ?? 0) + (st.id === 's-310' || st.id === 's-101' ? 1 : 0));
+    counts.set('Repositor/a', Math.max(counts.get('Repositor/a') ?? 0, 1));
+    for (const [position, authorized] of counts) {
+      out.push({ id: `${st.id}:${position}`, store_id: st.id, position, authorized, updated_by_name: 'Laura Méndez', updated_at: daysAgo(30) });
+    }
+  }
+  return out;
+}
+
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 export async function buildSeed() {
@@ -336,7 +354,7 @@ export async function buildSeed() {
       measure_types: measureTypes,
       situation_types: situationTypes,
       policy: [policy],
-      templates, template_versions: versions, files,
+      templates, template_versions: versions, files, headcount: buildHeadcount(),
     },
     passwords: Object.fromEntries(profiles.map((p) => [p.id, DEMO_PASSWORD])),
     now,

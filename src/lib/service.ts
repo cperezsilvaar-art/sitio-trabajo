@@ -4,6 +4,7 @@
 import type { Backend } from './backend/types';
 import { buildValues, bytesToBase64, fillDocx, renderForRequest, sha256 } from './template';
 import type {
+  Headcount, Vacancy, VacancyStatus,
   Announcement, AnnouncementRead,
   Gestion, GestionKind, GestionStatus,
   Attachment, AuditEvent, DisciplinaryRequest, Employee, FieldDef, FinalDocument, MeasureType, Notification, Policy,
@@ -11,6 +12,8 @@ import type {
   TemplateVersion,
 } from './types';
 import { DOCX_MIME } from './seed';
+import { canRequest, nextStage, resolveAreaManager, vDenyReason, type VAction } from './vacantes';
+import { VACANCY_STATUS_LABEL } from './types';
 import { daysInclusive, gDenyReason, leaveChecks, statusFor, vacationChecks, type GAction } from './gestiones';
 import { LEAVE_TYPES } from './types';
 import { buildGestionValues, render } from './template';
@@ -32,11 +35,13 @@ export interface Snapshot {
   gestiones: Gestion[];
   announcements: Announcement[];
   announcement_reads: AnnouncementRead[];
+  headcount: Headcount[];
+  vacancies: Vacancy[];
   policy: Policy;
 }
 
 export const EMPTY_SNAPSHOT: Snapshot = {
-  gestiones: [], announcements: [], announcement_reads: [],
+  gestiones: [], announcements: [], announcement_reads: [], headcount: [], vacancies: [],
   profiles: [], stores: [], employees: [], templates: [], template_versions: [], measure_types: [], situation_types: [],
   requests: [], request_revisions: [], final_documents: [], audit_events: [], notifications: [],
   policy: {
@@ -71,7 +76,7 @@ export class PortalService {
   async load(): Promise<Snapshot> {
     const tables: TableName[] = [
       'profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types',
-      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'gestiones', 'announcements', 'announcement_reads',
+      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'gestiones', 'announcements', 'announcement_reads', 'headcount', 'vacancies',
     ];
     const rows = await Promise.all(tables.map((t) => this.backend.all(t)));
     const s = Object.fromEntries(tables.map((t, i) => [t, rows[i]])) as unknown as Snapshot & { policy: Policy[] };
@@ -598,6 +603,137 @@ export class PortalService {
     const rid = `${id}:${this.user.id}`;
     if (this.snap().announcement_reads.some((r) => r.id === rid)) return;
     await this.backend.insert<AnnouncementRead>('announcement_reads', [{ id: rid, announcement_id: id, user_id: this.user.id, user_name: this.user.name, at: nowIso() }]);
+  }
+
+  /* ---------- headcount y vacantes ---------- */
+
+  private canManageArea(area: string) {
+    return this.user.role === 'admin_rh' || (this.user.role === 'coordinador' && this.user.areas.includes(area));
+  }
+
+  async saveHeadcount(storeId: string, position: string, authorized: number) {
+    const st = this.snap().stores.find((x) => x.id === storeId);
+    if (!st || !this.canManageArea(st.area)) throw new PortalError('Sólo RH configura el headcount de sus áreas.');
+    if (!position.trim()) throw new PortalError('Indicá el puesto.');
+    if (!Number.isInteger(authorized) || authorized < 0) throw new PortalError('La cantidad debe ser un número entero, 0 o más.');
+    const id = `${storeId}:${position.trim()}`;
+    const prev = this.snap().headcount.find((h) => h.id === id);
+    const row: Headcount = { id, store_id: storeId, position: position.trim(), authorized, updated_by_name: this.user.name, updated_at: nowIso() };
+    if (prev) await this.backend.update<Headcount>('headcount', id, row);
+    else await this.backend.insert('headcount', [row]);
+    await this.log({ entity: 'headcount', entity_id: id, action: 'headcount_actualizado', comment: `${st.name} · ${row.position}: ${prev?.authorized ?? 0} → ${authorized} autorizados.` });
+  }
+
+  private vacancy(id: string) {
+    const v = this.snap().vacancies.find((x) => x.id === id);
+    if (!v) throw new PortalError('Vacante inexistente o sin acceso.');
+    return v;
+  }
+
+  private vEnsure(a: VAction, v: Vacancy) {
+    const why = vDenyReason(a, this.user, v);
+    if (why) throw new PortalError(why);
+  }
+
+  private notifyV(user_id: string | null | undefined, v: Vacancy, message: string) {
+    return this.notify(user_id, null, message, `/vacantes/${v.id}`);
+  }
+
+  async requestVacancy(data: Pick<Vacancy, 'store_id' | 'position' | 'shift' | 'workday' | 'reason' | 'replaced_employee_id' | 'leaving_reason' | 'leaving_date' | 'needed_by' | 'profile_notes'>) {
+    if (this.user.role !== 'gerente') throw new PortalError('Las vacantes las solicita el gerente de la tienda.');
+    const s = this.snap();
+    const st = s.stores.find((x) => x.id === data.store_id);
+    if (!st || !this.user.store_ids.includes(st.id)) throw new PortalError('Elegí una tienda a tu cargo.');
+    if (!data.position) throw new PortalError('Elegí el puesto.');
+    const check = canRequest(data, s.headcount, s.employees, s.vacancies);
+    if (!check.ok) throw new PortalError(check.reason!);
+    if (data.reason === 'reemplazo' && !data.leaving_reason) throw new PortalError('Indicá el motivo del egreso.');
+    const am = resolveAreaManager(st.area, s.profiles);
+    if (!am) throw new PortalError(`No hay gerente de área configurado para el ${st.area}. Avisá a RH.`);
+    const coord = resolveCoordinator(st.area, s.policy, s.profiles);
+    const replaced = s.employees.find((e) => e.id === data.replaced_employee_id);
+    const d = new Date();
+    const v: Vacancy = {
+      ...data, id: uid('vac'),
+      number: `VTE-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
+      status: 'pendiente_area', store_name: st.name, area: st.area, replaced_employee_name: replaced?.name ?? '',
+      manager_id: this.user.id, manager_name: this.user.name, area_manager_id: am.id, area_manager_name: am.name, area_decided_at: null,
+      coordinator_id: coord?.id ?? null, coordinator_name: coord?.name ?? null, candidate_name: '', candidate_legajo: '', hire_date: '',
+      created_at: nowIso(), updated_at: nowIso(), closed_at: null,
+    };
+    await this.backend.insert('vacancies', [v]);
+    const why = v.reason === 'reemplazo' ? `Reemplazo de ${v.replaced_employee_name} (${v.leaving_reason}).` : 'Posición disponible dentro del headcount.';
+    await this.log({ entity: 'vacancy', entity_id: v.id, action: 'vacante_solicitada', to_status: 'pendiente_area' as never, comment: `${v.position} · ${v.store_name}. ${why}` });
+    await this.notifyV(am.id, v, `${this.user.name} solicita una vacante de ${v.position} en ${v.store_name}. Espera tu autorización.`);
+    return v.id;
+  }
+
+  async decideVacancy(id: string, decision: 'autorizar' | 'rechazar', comment: string) {
+    const v = this.vacancy(id);
+    this.vEnsure('autorizar', v);
+    if (decision === 'rechazar' && !comment.trim()) throw new PortalError('Indicá el motivo del rechazo: el gerente lo ve.');
+    const to: VacancyStatus = decision === 'autorizar' ? 'autorizada' : 'rechazada';
+    await this.backend.update<Vacancy>('vacancies', id, {
+      status: to, area_manager_id: this.user.id, area_manager_name: this.user.name, area_decided_at: nowIso(), updated_at: nowIso(),
+      ...(to === 'rechazada' ? { closed_at: nowIso() } : {}),
+    });
+    await this.log({ entity: 'vacancy', entity_id: id, action: decision === 'autorizar' ? 'vacante_autorizada' : 'vacante_rechazada', from_status: v.status as never, to_status: to as never, comment: comment || (decision === 'autorizar' ? 'Autorizada.' : '') });
+    await this.notifyV(v.manager_id, v, decision === 'autorizar' ? `${this.user.name} autorizó la vacante ${v.number} (${v.position}). Pasa a RH.` : `${this.user.name} rechazó la vacante ${v.number}: ${comment}`);
+    if (decision === 'autorizar') {
+      const rh = this.snap().profiles.filter((p) => p.active && p.role === 'coordinador' && p.areas.includes(v.area));
+      for (const p of rh) await this.notifyV(p.id, v, `Vacante autorizada para buscar: ${v.position} en ${v.store_name} (${v.number}).`);
+    }
+  }
+
+  /** RH toma la vacante o la pasa a la etapa siguiente, con una novedad. */
+  async advanceVacancy(id: string, comment: string, extra: Partial<Pick<Vacancy, 'candidate_name' | 'candidate_legajo' | 'hire_date'>> = {}) {
+    const v = this.vacancy(id);
+    this.vEnsure(v.status === 'autorizada' ? 'tomar' : 'avanzar', v);
+    const to = nextStage(v.status);
+    if (!to) throw new PortalError('No hay una etapa siguiente.');
+    if (to === 'ingreso' && (!extra.candidate_name?.trim() || !extra.hire_date)) throw new PortalError('Para programar el ingreso indicá quién ingresa y la fecha.');
+    const patch: Partial<Vacancy> = { status: to, updated_at: nowIso(), ...extra };
+    if (v.status === 'autorizada') Object.assign(patch, { coordinator_id: this.user.id, coordinator_name: this.user.name });
+    if (to === 'cubierta') patch.closed_at = nowIso();
+    await this.backend.update<Vacancy>('vacancies', id, patch);
+    if (to === 'cubierta') {
+      const merged = { ...v, ...patch };
+      const name = merged.candidate_name || 'Ingresante';
+      await this.backend.insert<Employee>('employees', [{
+        id: uid('e'), legajo: merged.candidate_legajo || `PEND-${v.number.slice(-4)}`, name, position: v.position, store_id: v.store_id,
+        hire_date: merged.hire_date || nowIso().slice(0, 10), active: true,
+      }]);
+      if (v.reason === 'reemplazo' && v.replaced_employee_id) {
+        const e = this.snap().employees.find((x) => x.id === v.replaced_employee_id);
+        if (e?.active) await this.backend.update<Employee>('employees', e.id, { active: false });
+      }
+    }
+    await this.log({
+      entity: 'vacancy', entity_id: id, action: 'vacante_etapa', from_status: v.status as never, to_status: to as never,
+      comment: [comment, extra.candidate_name && `Ingresa: ${extra.candidate_name}${extra.hire_date ? ` el ${extra.hire_date}` : ''}.`, to === 'cubierta' && 'Alta en el plantel de la tienda.'].filter(Boolean).join(' '),
+    });
+    const msg = `${v.number} (${v.position}, ${v.store_name}): ${VACANCY_STATUS_LABEL[to]}.${comment ? ` ${comment}` : ''}`;
+    await this.notifyV(v.manager_id, v, msg);
+    await this.notifyV(v.area_manager_id, v, msg);
+  }
+
+  async vacancyNote(id: string, comment: string) {
+    const v = this.vacancy(id);
+    this.vEnsure('novedad', v);
+    if (!comment.trim()) return;
+    await this.log({ entity: 'vacancy', entity_id: id, action: 'novedad', comment });
+    await this.backend.update<Vacancy>('vacancies', id, { updated_at: nowIso() });
+    const msg = `Novedad en ${v.number} (${v.position}): ${comment}`;
+    for (const uidTo of [v.manager_id, v.area_manager_id, v.coordinator_id]) await this.notifyV(uidTo, v, msg);
+  }
+
+  async cancelVacancy(id: string, reason: string) {
+    const v = this.vacancy(id);
+    this.vEnsure('cancelar', v);
+    if (!reason.trim()) throw new PortalError('Indicá el motivo.');
+    await this.backend.update<Vacancy>('vacancies', id, { status: 'cancelada', closed_at: nowIso(), updated_at: nowIso() });
+    await this.log({ entity: 'vacancy', entity_id: id, action: 'vacante_cancelada', from_status: v.status as never, to_status: 'cancelada' as never, comment: reason });
+    for (const uidTo of [v.manager_id, v.area_manager_id, v.coordinator_id]) await this.notifyV(uidTo, v, `${v.number} (${v.position}) fue cancelada: ${reason}`);
   }
 
   isApprover() {

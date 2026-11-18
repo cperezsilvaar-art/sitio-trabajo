@@ -16,7 +16,7 @@ create table if not exists public.profiles (
   id text primary key,                       -- = auth.users.id
   email text not null unique,
   name text not null,
-  role text not null check (role in ('gerente','coordinador','admin_rh')),
+  role text not null check (role in ('gerente','gerente_area','coordinador','admin_rh')),
   store_ids text[] not null default '{}',
   areas text[] not null default '{}',
   active boolean not null default true
@@ -152,6 +152,26 @@ create table if not exists public.announcement_reads (
   unique (announcement_id, user_id)
 );
 
+-- Headcount y vacantes
+create table if not exists public.headcount (
+  id text primary key, store_id text not null references public.stores(id), position text not null,
+  authorized int not null check (authorized >= 0), updated_by_name text not null default '', updated_at timestamptz not null default now(),
+  unique (store_id, position)
+);
+create table if not exists public.vacancies (
+  id text primary key, number text not null unique,
+  status text not null check (status in ('pendiente_area','rechazada','autorizada','en_busqueda','entrevistas','preocupacional','ingreso','cubierta','cancelada')),
+  store_id text not null references public.stores(id), store_name text not null, area text not null, position text not null,
+  shift text not null default '', workday text not null default 'completa', reason text not null check (reason in ('reemplazo','nueva')),
+  replaced_employee_id text not null default '', replaced_employee_name text not null default '', leaving_reason text not null default '',
+  leaving_date text not null default '', needed_by text not null default '', profile_notes text not null default '',
+  manager_id text not null references public.profiles(id), manager_name text not null,
+  area_manager_id text references public.profiles(id), area_manager_name text, area_decided_at timestamptz,
+  coordinator_id text references public.profiles(id), coordinator_name text,
+  candidate_name text not null default '', candidate_legajo text not null default '', hire_date text not null default '',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), closed_at timestamptz
+);
+
 -- ---------- Funciones de apoyo ----------
 
 create or replace function public.me() returns public.profiles
@@ -247,6 +267,92 @@ end $$;
 drop trigger if exists gestiones_guard on public.gestiones;
 create trigger gestiones_guard before insert or update or delete on public.gestiones
 for each row execute function public.gestiones_guard();
+
+create or replace function public.can_see_vacancy(v public.vacancies) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case (select role from public.me())
+    when 'admin_rh' then true
+    when 'coordinador' then v.area = any((public.me()).areas)
+    when 'gerente_area' then v.area = any((public.me()).areas)
+    when 'gerente' then v.manager_id = auth.uid()::text
+    else false end
+$$;
+
+create or replace function public.can_see_vacancy_id(vid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select public.can_see_vacancy(v) from public.vacancies v where v.id = vid), false)
+$$;
+
+/** RH de las áreas de la tienda (o administrador). */
+create or replace function public.is_rh_of_store(sid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select public.is_admin() or (public.my_role() = 'coordinador' and exists (
+    select 1 from public.stores s where s.id = sid and s.area = any((public.me()).areas)))
+$$;
+
+/** Lugares disponibles en el headcount (sin contar la vacante indicada). */
+create or replace function public.headcount_available(sid text, pos text, replaced text, skip text) returns int
+language sql stable security definer set search_path = public as $$
+  with open as (
+    select * from public.vacancies v where v.store_id = sid and v.position = pos and v.id <> coalesce(skip, '')
+      and v.status in ('pendiente_area','autorizada','en_busqueda','entrevistas','preocupacional','ingreso')
+  ), act as (
+    select e.id from public.employees e where e.active and e.store_id = sid and e.position = pos
+  )
+  select coalesce((select authorized from public.headcount h where h.store_id = sid and h.position = pos), 0)
+    - ((select count(*) from act)::int
+       - (select count(*) from act where act.id in (select replaced_employee_id from open where reason = 'reemplazo'))::int
+       - (case when replaced <> '' and replaced in (select id from act) then 1 else 0 end))
+    - (select count(*) from open)::int
+$$;
+
+create or replace function public.vacancies_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare u public.profiles := public.me(); rh boolean;
+begin
+  if u.id is null then raise exception 'Usuario sin perfil activo.'; end if;
+  rh := u.role in ('coordinador','admin_rh');
+  if tg_op = 'INSERT' then
+    if u.role <> 'gerente' or new.manager_id <> u.id then raise exception 'Las vacantes las pide el gerente, a su nombre.'; end if;
+    if not (new.store_id = any(u.store_ids)) then raise exception 'La tienda no está a su cargo.'; end if;
+    if new.status <> 'pendiente_area' then raise exception 'Las vacantes nacen esperando al gerente de área.'; end if;
+    if new.reason = 'reemplazo' and exists (select 1 from public.vacancies v where v.replaced_employee_id = new.replaced_employee_id
+        and v.status in ('pendiente_area','autorizada','en_busqueda','entrevistas','preocupacional','ingreso')) then
+      raise exception 'Ya hay una vacante abierta para reemplazar a esa persona.';
+    end if;
+    if public.headcount_available(new.store_id, new.position, case when new.reason = 'reemplazo' then new.replaced_employee_id else '' end, new.id) <= 0 then
+      raise exception 'Sin vacante disponible en el headcount para %.', new.position;
+    end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then raise exception 'Las vacantes no se borran: se cancelan.'; end if;
+  if old.status in ('cubierta','cancelada','rechazada') then raise exception 'La vacante está cerrada.'; end if;
+  if row(new.store_id, new.position, new.reason, new.replaced_employee_id, new.manager_id, new.number)
+     is distinct from row(old.store_id, old.position, old.reason, old.replaced_employee_id, old.manager_id, old.number) then
+    raise exception 'Los datos del pedido no se modifican: cancelá y pedí otra.';
+  end if;
+  if new.status is distinct from old.status then
+    if new.status in ('autorizada','rechazada') then
+      if u.role <> 'gerente_area' or not (old.area = any(u.areas)) or old.status <> 'pendiente_area' then raise exception 'La autoriza el gerente de área.'; end if;
+      new.area_manager_id := u.id; new.area_decided_at := now();
+    elsif new.status = 'cancelada' then
+      if not (rh or u.role = 'gerente_area' or (u.id = old.manager_id and old.status = 'pendiente_area')) then raise exception 'No puede cancelarla.'; end if;
+    elsif not (rh and (
+      (old.status = 'autorizada' and new.status = 'en_busqueda') or (old.status = 'en_busqueda' and new.status = 'entrevistas') or
+      (old.status = 'entrevistas' and new.status = 'preocupacional') or (old.status = 'preocupacional' and new.status = 'ingreso') or
+      (old.status = 'ingreso' and new.status = 'cubierta'))) then
+      raise exception 'Transición no permitida: % → %.', old.status, new.status;
+    end if;
+  elsif not (rh or u.role = 'gerente_area' or u.id = old.manager_id) then
+    raise exception 'No puede modificar la vacante.';
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+
+drop trigger if exists vacancies_guard on public.vacancies;
+create trigger vacancies_guard before insert or update or delete on public.vacancies
+for each row execute function public.vacancies_guard();
 
 -- ---------- Reglas del circuito (trigger) ----------
 
@@ -464,6 +570,8 @@ alter table public.notifications enable row level security;
 alter table public.gestiones enable row level security;
 alter table public.announcements enable row level security;
 alter table public.announcement_reads enable row level security;
+alter table public.headcount enable row level security;
+alter table public.vacancies enable row level security;
 
 -- Catálogos: lectura para usuarios activos; escritura sólo administradores de RH.
 do $$ declare t text; begin
@@ -522,6 +630,23 @@ create policy gestiones_ins on public.gestiones for insert to authenticated with
 drop policy if exists gestiones_upd on public.gestiones;
 create policy gestiones_upd on public.gestiones for update to authenticated using (public.can_see_gestion(gestiones)) with check (true);
 
+-- Headcount: todos lo leen; lo edita RH del área de la tienda.
+drop policy if exists hc_read on public.headcount;
+create policy hc_read on public.headcount for select to authenticated using (public.me() is not null);
+drop policy if exists hc_write on public.headcount;
+create policy hc_write on public.headcount for all to authenticated using (public.is_rh_of_store(store_id)) with check (public.is_rh_of_store(store_id));
+-- RH del área también da de alta y baja colaboradores (al cubrir una vacante).
+drop policy if exists employees_rh on public.employees;
+create policy employees_rh on public.employees for all to authenticated using (public.is_rh_of_store(store_id)) with check (public.is_rh_of_store(store_id));
+
+-- Vacantes
+drop policy if exists vac_read on public.vacancies;
+create policy vac_read on public.vacancies for select to authenticated using (public.can_see_vacancy(vacancies));
+drop policy if exists vac_ins on public.vacancies;
+create policy vac_ins on public.vacancies for insert to authenticated with check (manager_id = auth.uid()::text);
+drop policy if exists vac_upd on public.vacancies;
+create policy vac_upd on public.vacancies for update to authenticated using (public.can_see_vacancy(vacancies)) with check (true);
+
 -- Cartelera: RH publica; cada gerente ve lo vigente para su área y registra su lectura.
 drop policy if exists ann_read on public.announcements;
 create policy ann_read on public.announcements for select to authenticated using (
@@ -546,6 +671,8 @@ drop policy if exists audit_read on public.audit_events;
 create policy audit_read on public.audit_events for select to authenticated using (
   case when entity = 'request' then public.can_see_request_id(entity_id) and (not internal or public.my_role() <> 'gerente')
        when entity = 'announcement' then true
+       when entity = 'vacancy' then public.can_see_vacancy_id(entity_id)
+       when entity = 'headcount' then true
        when entity = 'gestion' then public.can_see_gestion_id(entity_id) and (not internal or public.my_role() <> 'gerente')
        else public.my_role() in ('coordinador','admin_rh') end);
 drop policy if exists audit_ins on public.audit_events;
@@ -563,7 +690,7 @@ create policy notif_upd on public.notifications for update to authenticated usin
 -- Tiempo real
 do $$ begin
   begin
-    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates, public.gestiones, public.announcements;
+    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates, public.gestiones, public.announcements, public.vacancies, public.headcount;
   exception when others then null;
   end;
 end $$;

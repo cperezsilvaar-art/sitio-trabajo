@@ -1,4 +1,5 @@
-import type { DisciplinaryRequest, Gestion, Profile, TableName } from '../types';
+import type { DisciplinaryRequest, Gestion, Profile, TableName, Vacancy } from '../types';
+import { canSeeVacancy } from '../vacantes';
 import { APPEND_ONLY, PermissionError, TABLES, type Backend } from './types';
 
 /**
@@ -41,7 +42,7 @@ async function idbFactory(): Promise<IDBFactory> {
 async function openDb(): Promise<IDBDatabase> {
   const factory = await idbFactory();
   return new Promise((resolve, reject) => {
-    const r = factory.open(DB_NAME, 3);
+    const r = factory.open(DB_NAME, 4);
     r.onupgradeneeded = () => {
       for (const t of [...TABLES, '_passwords']) if (!r.result.objectStoreNames.contains(t)) r.result.createObjectStore(t, { keyPath: 'id' });
     };
@@ -124,7 +125,7 @@ export class LocalBackend implements Backend {
   }
 
   /** Mismas reglas de lectura que las políticas RLS. */
-  private visible(table: TableName, row: Row, ctx: { requests: Map<string, DisciplinaryRequest>; gestiones: Map<string, Gestion> }): boolean {
+  private visible(table: TableName, row: Row, ctx: { requests: Map<string, DisciplinaryRequest>; gestiones: Map<string, Gestion>; vacancies: Map<string, Vacancy> }): boolean {
     const u = this.user!;
     if (u.role === 'admin_rh') return true;
     const reqOk = (id: unknown) => {
@@ -139,7 +140,12 @@ export class LocalBackend implements Backend {
       if (u.role === 'coordinador') return u.areas.includes(g.area) || g.coordinator_id === u.id;
       return g.manager_id === u.id;
     };
+    const vacOk = (id: unknown) => {
+      const v = ctx.vacancies.get(id as string);
+      return !!v && canSeeVacancy(u, v);
+    };
     switch (table) {
+      case 'vacancies': return vacOk(row.id);
       case 'announcements': {
         if (u.role !== 'gerente') return true;
         const a = row as unknown as { active: boolean; areas: string[]; expires_at: string | null };
@@ -153,6 +159,7 @@ export class LocalBackend implements Backend {
       case 'final_documents': return reqOk(row.request_id);
       case 'audit_events':
         if (row.entity === 'gestion') return gesOk(row.entity_id);
+        if (row.entity === 'vacancy') return vacOk(row.entity_id);
         if (row.entity !== 'request') return u.role !== 'gerente';
         if (u.role === 'gerente' && row.internal) return false;
         return reqOk(row.entity_id);
@@ -169,11 +176,22 @@ export class LocalBackend implements Backend {
     const rows = await this.raw<Row>(table);
     const requests = new Map((await this.raw<DisciplinaryRequest>('requests')).map((r) => [r.id, r]));
     const gestiones = new Map((await this.raw<Gestion>('gestiones')).map((r) => [r.id, r]));
-    return rows.filter((r) => this.visible(table, r, { requests, gestiones })) as unknown as T[];
+    const vacancies = new Map((await this.raw<Vacancy>('vacancies')).map((r) => [r.id, r]));
+    return rows.filter((r) => this.visible(table, r, { requests, gestiones, vacancies })) as unknown as T[];
+  }
+
+  /** Coordinador: tiendas de sus áreas. */
+  private async storeInMyAreas(storeId: unknown) {
+    const u = this.user!;
+    if (u.role === 'admin_rh') return true;
+    if (u.role !== 'coordinador') return false;
+    const st = (await this.raw<{ id: string; area: string }>('stores')).find((x) => x.id === storeId);
+    return !!st && u.areas.includes(st.area);
   }
 
   private canInsert(table: TableName, row: Row) {
     const u = this.user!;
+    if (table === 'vacancies') return u.role === 'gerente' && row.manager_id === u.id;
     if (['profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types', 'policy'].includes(table)) {
       return u.role === 'admin_rh';
     }
@@ -186,9 +204,14 @@ export class LocalBackend implements Backend {
 
   async insert<T extends object>(table: TableName, rows: T[]) {
     if (!this.user) throw new PermissionError('Sesión vencida.');
+    // Primero se verifican permisos (pueden requerir lecturas) y recién después se abre la escritura:
+    // IndexedDB cierra la transacción si se espera otra operación en el medio.
+    for (const row of rows as unknown as Row[]) {
+      if ((table === 'employees' || table === 'headcount') && (await this.storeInMyAreas(row.store_id))) continue;
+      if (!this.canInsert(table, row)) throw new PermissionError('No tiene permisos para registrar estos datos.');
+    }
     const s = await this.store(table, 'readwrite');
     for (const row of rows as unknown as Row[]) {
-      if (!this.canInsert(table, row)) throw new PermissionError('No tiene permisos para registrar estos datos.');
       const exists = await req(s.get(row.id));
       if (exists) throw new PermissionError('El registro ya existe.');
       await req(s.add(row));
@@ -200,8 +223,7 @@ export class LocalBackend implements Backend {
     if (!this.user) throw new PermissionError('Sesión vencida.');
     if (APPEND_ONLY.includes(table)) throw new PermissionError('Este registro es parte del historial y no puede modificarse.');
     const u = this.user;
-    const s = await this.store(table, 'readwrite');
-    const current = (await req(s.get(id))) as Row | undefined;
+    const current = (await req((await this.store(table, 'readonly')).get(id))) as Row | undefined;
     if (!current) throw new Error('Registro inexistente.');
     if (table === 'requests') {
       const r = current as unknown as DisciplinaryRequest;
@@ -232,6 +254,22 @@ export class LocalBackend implements Backend {
         throw new PermissionError('En este estado los datos de la gestión no pueden modificarse.');
       }
       if (['cerrada', 'anulada'].includes(g.status)) throw new PermissionError('La gestión está cerrada.');
+    } else if (table === 'vacancies') {
+      const v = current as unknown as Vacancy;
+      const p = patch as Partial<Vacancy>;
+      if (!canSeeVacancy(u, v)) throw new PermissionError('No tiene acceso a esta vacante.');
+      const rh = u.role === 'coordinador' || u.role === 'admin_rh';
+      if (p.status && p.status !== v.status) {
+        const okArea = u.role === 'gerente_area' && v.status === 'pendiente_area' && ['autorizada', 'rechazada', 'cancelada'].includes(p.status) && v.manager_id !== u.id;
+        const okRH = rh && (p.status === 'cancelada' || ['autorizada', 'en_busqueda', 'entrevistas', 'preocupacional', 'ingreso'].includes(v.status));
+        const okMgr = v.manager_id === u.id && v.status === 'pendiente_area' && p.status === 'cancelada';
+        if (!(okArea || okRH || (u.role === 'gerente_area' && p.status === 'cancelada') || okMgr)) throw new PermissionError('No puede cambiar la vacante a ese estado.');
+      }
+      const data = Object.keys(p).filter((k) => ['store_id', 'position', 'reason', 'replaced_employee_id', 'manager_id'].includes(k));
+      if (data.length) throw new PermissionError('Los datos del pedido no se modifican: cancelá y pedí otra.');
+      if (['cubierta', 'cancelada', 'rechazada'].includes(v.status)) throw new PermissionError('La vacante está cerrada.');
+    } else if (table === 'employees' || table === 'headcount') {
+      if (!(await this.storeInMyAreas(current.store_id))) throw new PermissionError('Sólo RH de esa área puede modificarlo.');
     } else if (table === 'announcements') {
       if (u.role === 'gerente' || (current.author_id !== u.id && u.role !== 'admin_rh')) {
         throw new PermissionError('Sólo quien publicó el comunicado (o un administrador de RH) puede modificarlo.');
@@ -241,7 +279,7 @@ export class LocalBackend implements Backend {
     } else if (u.role !== 'admin_rh') {
       throw new PermissionError('Sólo administradores de RH pueden modificar la configuración.');
     }
-    await req(s.put({ ...current, ...patch, id }));
+    await req((await this.store(table, 'readwrite')).put({ ...current, ...patch, id }));
     this.channel?.postMessage(table);
   }
 

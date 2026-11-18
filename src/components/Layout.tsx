@@ -1,9 +1,10 @@
-import { Bell, FileText, HelpCircle, Home, LogOut, Menu, Plus, Search } from 'lucide-react';
+import { Bell, HelpCircle, Home, LogOut, Menu, Plus, Search } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useData } from '../lib/store';
 import { ROLE_LABEL } from '../lib/types';
 import { fmtDateTime } from '../lib/template';
+import { Logo } from './Logo';
 import { Button, cx } from './ui';
 
 interface NavItem { to: string; label: string; badge?: ReactNode }
@@ -24,6 +25,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const unreadAnn = user.role === 'gerente'
     ? data.announcements.filter((a) => !data.announcement_reads.some((r) => r.announcement_id === a.id && r.user_id === user.id)).length
     : 0;
+  const vPend = user.role === 'gerente_area'
+    ? data.vacancies.filter((v) => v.status === 'pendiente_area').length
+    : user.role === 'gerente' ? 0 : data.vacancies.filter((v) => v.status === 'autorizada').length;
   const gPend = user.role === 'gerente'
     ? data.gestiones.filter((g) => g.manager_id === user.id && ['pendiente_certificado', 'pendiente_firma', 'observada'].includes(g.status)).length
     : data.gestiones.filter((g) => g.status === 'enviada').length;
@@ -46,11 +50,28 @@ export function Layout({ children }: { children: ReactNode }) {
         { to: '/solicitudes/nueva', label: 'Solicitar medida disciplinaria' },
         { to: '/gestiones', label: 'Mis licencias y vacaciones', badge: gPend ? <Count n={gPend} /> : null },
       ] });
+      g.push({ title: 'Vacantes', items: [
+        { to: '/vacantes/nueva', label: 'Solicitar vacante' },
+        { to: '/vacantes', label: 'Mis vacantes' },
+        { to: '/headcount', label: 'Headcount de mis tiendas' },
+      ] });
+    } else if (user.role === 'gerente_area') {
+      g.push({ items: [{ to: '/', label: 'Inicio' }, { to: '/comunicados', label: 'Cartelera de comunicados' }] });
+      g.push({ title: 'Vacantes', items: [
+        { to: '/vacantes?f=accion', label: 'Para autorizar', badge: vPend ? <Count n={vPend} /> : null },
+        { to: '/vacantes', label: 'Vacantes en curso' },
+        { to: '/headcount', label: 'Headcount de mis áreas' },
+      ] });
     } else {
       g.push({ items: [{ to: '/', label: 'Inicio' }, { to: '/comunicados', label: 'Cartelera de comunicados' }] });
       g.push({ title: 'Aprobaciones', items: [
         { to: '/aprobaciones', label: 'Solicitudes pendientes de aprobación', badge: pending ? <Count n={pending} /> : null },
         { to: '/solicitudes', label: 'Todas las solicitudes' },
+      ] });
+      g.push({ title: 'Vacantes', items: [
+        { to: '/vacantes?f=accion', label: 'Autorizadas para buscar', badge: vPend ? <Count n={vPend} /> : null },
+        { to: '/vacantes', label: 'Vacantes en curso' },
+        { to: '/headcount', label: 'Headcount' },
       ] });
       g.push({ title: 'Licencias y vacaciones', items: [
         { to: '/gestiones?f=pendientes', label: 'Para revisar', badge: gPend ? <Count n={gPend} /> : null },
@@ -72,7 +93,7 @@ export function Layout({ children }: { children: ReactNode }) {
         { to: '/admin/circuito', label: 'Circuito, permisos y usuarios' },
       ] });
     }
-    if (user.role !== 'gerente') g.push({ title: 'Control', items: [{ to: '/auditoria', label: 'Historial de auditoría' }] });
+    if (user.role === 'coordinador' || user.role === 'admin_rh') g.push({ title: 'Control', items: [{ to: '/auditoria', label: 'Historial de auditoría' }] });
     return g;
   })();
 
@@ -83,7 +104,9 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const cta = user.role === 'gerente'
     ? <Button onClick={() => nav('/solicitudes/nueva')}>Nueva solicitud</Button>
-    : user.role === 'admin_rh'
+    : user.role === 'gerente_area'
+      ? <Button onClick={() => nav('/vacantes?f=accion')}>Para autorizar ({vPend})</Button>
+      : user.role === 'admin_rh'
       ? <Button onClick={() => nav('/admin/modelos/nuevo')}>Cargar modelo</Button>
       : <Button onClick={() => nav('/aprobaciones')}>Pendientes ({pending})</Button>;
 
@@ -133,8 +156,8 @@ export function Layout({ children }: { children: ReactNode }) {
 
       {/* Encabezado */}
       <header className="flex flex-wrap items-center gap-4 border-b border-chrome-300 bg-white px-5 py-3">
-        <div className="grid h-8 w-8 place-items-center rounded bg-brand-500 text-white"><FileText size={18} /></div>
-        <div className="text-[17px] text-ink-900">Te damos la bienvenida al <span className="font-semibold">Portal RH</span></div>
+        <Logo size={34} className="rounded-sm" />
+        <div className="text-[17px] text-ink-900">Te damos la bienvenida al <span className="font-semibold">Portal de RR. HH.</span> <span className="text-ink-400">· Farmatodo</span></div>
         <form className="ml-auto flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); nav(`/solicitudes?q=${encodeURIComponent(q)}`); }}>
           <label className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[15px] hover:bg-chrome-100 focus-within:bg-chrome-100">
             <Search size={19} />
@@ -168,6 +191,12 @@ export function Layout({ children }: { children: ReactNode }) {
                   Tu coordinador/a de RH es <b>{coord?.name ?? 'el área de RH'}</b>. Ninguna sanción se comunica sin su aprobación.
                 </p>
                 <Button className="mt-3" onClick={() => nav('/biblioteca?cat=procedimiento')}>Ver procedimiento</Button>
+              </>
+            ) : user.role === 'gerente_area' ? (
+              <>
+                <div className="text-[17px] font-bold text-ink-900">Vacantes</div>
+                <p className="mt-1 text-sm text-ink-700">Autorizás o rechazás los pedidos de tus tiendas; después RH hace la búsqueda y vas viendo cada etapa.</p>
+                <Button className="mt-3" onClick={() => nav('/vacantes?f=accion')}>Ver pendientes</Button>
               </>
             ) : (
               <>

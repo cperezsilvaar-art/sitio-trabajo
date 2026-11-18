@@ -97,3 +97,28 @@ select pg_temp.expect_error($$insert into announcement_reads (id, announcement_i
 set test.uid = '00000000-0000-0000-0000-00000000000d';
 update announcements set title='editado por otro' where id='a1';
 select 'otro coordinador no pudo editar: ' || (title = 'Cierre') from announcements where id='a1';
+
+-- ===== Headcount y vacantes =====
+reset role;
+insert into profiles values ('00000000-0000-0000-0000-0000000000a3','ga3@x','Gerente Área 3','gerente_area','{}','{"Área 3"}',true);
+insert into employees values ('e2','101','Beto','Cajero','s1',null,null,true);
+set role authenticated;
+set test.uid = '00000000-0000-0000-0000-00000000000c';
+insert into headcount (id, store_id, position, authorized) values ('s1:Cajero','s1','Cajero',2);
+set test.uid = '00000000-0000-0000-0000-00000000000d';
+select pg_temp.expect_error($$insert into headcount (id, store_id, position, authorized) values ('s1:Repositor','s1','Repositor',5)$$, 'row-level');
+set test.uid = '00000000-0000-0000-0000-00000000000e';
+insert into vacancies (id, number, status, store_id, store_name, area, position, reason, manager_id, manager_name)
+values ('v1','VTE-1','pendiente_area','s1','Suc 1','Área 3','Cajero','nueva','00000000-0000-0000-0000-00000000000e','Gerente');
+select pg_temp.expect_error($$insert into vacancies (id, number, status, store_id, store_name, area, position, reason, manager_id, manager_name) values ('v2','VTE-2','pendiente_area','s1','Suc 1','Área 3','Cajero','nueva','00000000-0000-0000-0000-00000000000e','Gerente')$$, 'Sin vacante');
+insert into vacancies (id, number, status, store_id, store_name, area, position, reason, replaced_employee_id, manager_id, manager_name)
+values ('v3','VTE-3','pendiente_area','s1','Suc 1','Área 3','Cajero','reemplazo','e2','00000000-0000-0000-0000-00000000000e','Gerente');
+set test.uid = '00000000-0000-0000-0000-00000000000c';
+select pg_temp.expect_error($$update vacancies set status='autorizada' where id='v1'$$, 'gerente de área');
+set test.uid = '00000000-0000-0000-0000-0000000000a3';
+update vacancies set status='autorizada' where id='v1';
+select pg_temp.expect_error($$update vacancies set status='entrevistas' where id='v1'$$, 'Transición');
+set test.uid = '00000000-0000-0000-0000-00000000000c';
+update vacancies set status='en_busqueda' where id='v1';
+select pg_temp.expect_error($$update vacancies set status='cubierta' where id='v1'$$, 'Transición');
+select 'vacante v1 en: ' || status from vacancies where id='v1';

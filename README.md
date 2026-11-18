@@ -1,4 +1,4 @@
-# Portal RH · Gestiones, sanciones y aprobaciones
+# Portal de RR. HH. · Farmatodo
 
 Portal de Recursos Humanos para gerentes de tienda y el equipo de RH. Además de
 consultar documentación, permite **pedir medidas disciplinarias con un formulario
@@ -43,6 +43,7 @@ npm run build      # genera dist/ (sitio estático)
 |---|---|---|
 | `admin.rh@demo.portal` | Administrador/a de RH | Todo; administra modelos, tipos, circuito y usuarios |
 | `coord.area1@demo.portal` … `coord.area3@demo.portal` | Coordinador/a de RH | Su área |
+| `gerente.area1@demo.portal` … `gerente.area3@demo.portal` | Gerente de área | Autoriza vacantes de su área |
 | `gerente.101@demo.portal`, `gerente.205@demo.portal`, `gerente.310@demo.portal` | Gerente de tienda | Sus tiendas |
 
 Personas, legajos y tiendas son ficticios. Los textos de los modelos de ejemplo
@@ -110,6 +111,30 @@ el **historial de versiones** y restaurar una anterior. Cada cambio de contenido
 una versión nueva; las solicitudes ya enviadas conservan la versión con la que se generaron.
 También: tipos de medida (con requisitos de antecedentes/respaldo), tipos de situación,
 política de aprobación, ruteo por área y usuarios.
+
+### Licencias y vacaciones
+- **Licencias:** el gerente avisa (tipo, fechas, cuándo avisó el colaborador) y RH se entera en el momento.
+  El certificado se carga entonces o después; el portal marca los **certificados demorados** (plazo configurable).
+  No se pide diagnóstico. RH **da por recibida** u **observa** (p. ej. certificado sin sello) y el gerente corrige.
+- **Vacaciones:** el gerente carga período y fechas; el portal genera la **notificación de vacaciones** con el
+  modelo de RH (Word o impresión) para que firme el colaborador. Al subir la copia firmada llega a RH.
+  Advierte si no empieza un lunes (art. 151), si se notifica con menos de 45 días (art. 154), si excede los días
+  por antigüedad (art. 150) o si ingresó en el segundo semestre (art. 153). Si cambian las fechas, la firma
+  anterior deja de valer y hay que volver a firmar.
+
+### Cartelera de comunicados
+Los coordinadores y RH publican comunicados (informativo, importante, urgente) para todas las áreas o algunas,
+con adjuntos, vencimiento y fijado arriba. Aparecen al tope del inicio de los gerentes, les llega un aviso y
+marcan "leído"; RH ve quién lo leyó y quién no.
+
+### Vacantes y headcount
+- **Headcount:** RH (cada coordinador en sus áreas) define cuántos puestos autorizados tiene cada tienda.
+  Disponibles = autorizados − ocupados − vacantes en curso. Un reemplazo de alguien que se va libera su lugar.
+- **El gerente sólo puede pedir** puestos con lugar disponible. La vacante va al **gerente de área** (rol nuevo),
+  que autoriza o rechaza; después RH la toma y la avanza por etapas: búsqueda → entrevistas → preocupacional →
+  ingreso → cubierta, cargando **novedades** en cada paso.
+- Gerente, gerente de área y RH ven el **line up**: en qué etapa está, cuándo entró a cada una y cuántos días lleva.
+- Al cubrirla, el ingresante se da de alta en el plantel de la tienda (y se da de baja a quien reemplaza).
 
 ### 8. Seguridad y control
 | Regla | Dónde se aplica |

@@ -4,6 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { RequestTable } from '../components/RequestTable';
 import { GestionTable } from './Gestiones';
 import { Cartelera } from './Comunicados';
+import { VacancyTable } from './Vacantes';
+import { OPEN_STATUSES } from '../lib/vacantes';
 import { Button, Card, cx } from '../components/ui';
 import { useData } from '../lib/store';
 import { CATEGORY_LABEL, type TemplateCategory } from '../lib/types';
@@ -30,7 +32,9 @@ export function Inicio() {
   const nav = useNavigate();
   const [view, setView] = useState<'list' | 'grid'>('list');
   if (!user) return null;
+  if (user.role === 'gerente_area') return <InicioGerenteArea />;
   const isManager = user.role === 'gerente';
+  const openVac = data.vacancies.filter((v) => OPEN_STATUSES.includes(v.status) && (!isManager || v.manager_id === user.id)).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5);
 
   const mine = data.requests.filter((r) => (isManager ? r.manager_id === user.id : true));
   const recent = [...mine].sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 6);
@@ -118,9 +122,36 @@ export function Inicio() {
       </section>
 
       <section>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-ink-900">Vacantes en curso</h2>
+          {isManager && <Link to="/vacantes/nueva"><Button size="sm" variant="outline">Solicitar vacante</Button></Link>}
+        </div>
+        <VacancyTable rows={openVac} />
+        <div className="mt-2 text-right"><Link to="/vacantes" className="text-[15px] text-brand-500 hover:underline">Ver todas</Link></div>
+      </section>
+
+      <section>
         <h2 className="mb-2 text-xl font-bold text-ink-900">Licencias y vacaciones</h2>
         <GestionTable rows={recentG} compact={isManager} />
         <div className="mt-2 text-right"><Link to="/gestiones" className="text-[15px] text-brand-500 hover:underline">Ver todas</Link></div>
+      </section>
+    </div>
+  );
+}
+
+function InicioGerenteArea() {
+  const { user, data } = useData();
+  const pending = data.vacancies.filter((v) => v.status === 'pendiente_area').sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const open = data.vacancies.filter((v) => OPEN_STATUSES.includes(v.status) && v.status !== 'pendiente_area').sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  return (
+    <div className="mx-auto max-w-[1500px] space-y-7">
+      <Cartelera />
+      <Card title={`Vacantes para autorizar (${pending.length})`} actions={<Link to="/headcount" className="text-[15px] text-brand-500 hover:underline">Ver headcount de {user?.areas.join(', ')}</Link>}>
+        <VacancyTable rows={pending} />
+      </Card>
+      <section>
+        <h2 className="mb-2 text-xl font-bold text-ink-900">Búsquedas en curso</h2>
+        <VacancyTable rows={open} />
       </section>
     </div>
   );
