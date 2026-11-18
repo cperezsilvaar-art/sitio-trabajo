@@ -50,7 +50,7 @@ create table if not exists public.templates (
   id text primary key, title text not null,
   category text not null check (category in ('sancion','comunicacion','procedimiento','instructivo','otro')),
   description text not null default '', active boolean not null default true,
-  measure_type_ids text[] not null default '{}', current_version_id text,
+  measure_type_ids text[] not null default '{}', gestion_kinds text[] not null default '{}', current_version_id text,
   created_at timestamptz not null default now(), updated_at timestamptz not null default now()
 );
 
@@ -68,7 +68,9 @@ create table if not exists public.policy (
   routing jsonb not null default '{}',
   comment_required_on_approve boolean not null default false,
   review_sla_days int not null default 2,
-  draft_disclaimer text not null default ''
+  draft_disclaimer text not null default '',
+  certificate_days int not null default 2,
+  vacation_notice_days int not null default 45
 );
 insert into public.policy (id) values ('policy') on conflict do nothing;
 
@@ -114,9 +116,26 @@ create index if not exists audit_entity_idx on public.audit_events (entity, enti
 
 create table if not exists public.notifications (
   id text primary key, user_id text not null references public.profiles(id), request_id text,
-  message text not null, read boolean not null default false, at timestamptz not null default now()
+  message text not null, read boolean not null default false, at timestamptz not null default now(), link text
 );
 create index if not exists notifications_user_idx on public.notifications (user_id, read);
+
+-- Licencias y vacaciones
+create table if not exists public.gestiones (
+  id text primary key, number text not null unique,
+  kind text not null check (kind in ('licencia','vacaciones')),
+  status text not null check (status in ('pendiente_certificado','pendiente_firma','enviada','observada','recibida','cerrada','anulada')),
+  manager_id text not null references public.profiles(id), manager_name text not null,
+  coordinator_id text references public.profiles(id), coordinator_name text,
+  employee_id text not null, employee_name text not null, legajo text not null, position text not null default '', hire_date text not null default '',
+  store_id text not null, store_name text not null, area text not null,
+  start_date text not null default '', end_date text not null default '', days int not null default 0,
+  leave_type text not null default '', leave_type_name text not null default '', notice_date text not null default '',
+  period_year int not null default 0, template_version_id text not null default '', notes text not null default '',
+  attachments jsonb not null default '[]',
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(), submitted_at timestamptz,
+  reviewed_by text references public.profiles(id), reviewed_by_name text, reviewed_at timestamptz, return_date text
+);
 
 -- ---------- Funciones de apoyo ----------
 
@@ -150,6 +169,69 @@ create or replace function public.can_see_request_id(rid text) returns boolean
 language sql stable security definer set search_path = public as $$
   select coalesce((select public.can_see_request(r) from public.requests r where r.id = rid), false)
 $$;
+
+create or replace function public.can_see_gestion(g public.gestiones) returns boolean
+language sql stable security definer set search_path = public as $$
+  select case (select role from public.me())
+    when 'admin_rh' then true
+    when 'coordinador' then g.area = any((public.me()).areas) or g.coordinator_id = auth.uid()::text
+    when 'gerente' then g.manager_id = auth.uid()::text
+    else false end
+$$;
+
+create or replace function public.can_see_gestion_id(gid text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce((select public.can_see_gestion(g) from public.gestiones g where g.id = gid), false)
+$$;
+
+create or replace function public.gestiones_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  u public.profiles := public.me();
+  data_changed boolean;
+begin
+  if u.id is null then raise exception 'Usuario sin perfil activo.'; end if;
+  if tg_op = 'INSERT' then
+    if u.role <> 'gerente' or new.manager_id <> u.id then raise exception 'Las licencias y vacaciones las carga el gerente, a su nombre.'; end if;
+    if not (new.store_id = any(u.store_ids)) then raise exception 'La tienda no está a su cargo.'; end if;
+    if new.status not in ('pendiente_certificado','pendiente_firma','enviada') then raise exception 'Estado inicial inválido.'; end if;
+    return new;
+  end if;
+  if tg_op = 'DELETE' then raise exception 'Las gestiones no se borran: se anulan.'; end if;
+  if old.status in ('cerrada','anulada') then raise exception 'La gestión está cerrada.'; end if;
+  if new.manager_id <> old.manager_id or new.number <> old.number or new.kind <> old.kind or new.employee_id <> old.employee_id then
+    raise exception 'Datos de origen inmutables.';
+  end if;
+  data_changed := row(new.start_date, new.end_date, new.days, new.leave_type, new.notice_date, new.period_year, new.notes, new.attachments)
+       is distinct from row(old.start_date, old.end_date, old.days, old.leave_type, old.notice_date, old.period_year, old.notes, old.attachments);
+  if data_changed and (u.id <> old.manager_id or old.status not in ('pendiente_certificado','pendiente_firma','observada')) then
+    raise exception 'En este estado los datos de la gestión no pueden modificarse.';
+  end if;
+  if new.status is distinct from old.status then
+    if not (
+      (old.status in ('pendiente_certificado','pendiente_firma') and new.status in ('enviada','anulada')) or
+      (old.status = 'enviada' and new.status in ('recibida','observada','anulada')) or
+      (old.status = 'observada' and new.status in ('enviada','pendiente_firma','pendiente_certificado','anulada')) or
+      (old.status = 'recibida' and new.status in ('cerrada','anulada'))
+    ) then raise exception 'Transición no permitida: % → %.', old.status, new.status; end if;
+    if new.status in ('recibida','observada') then
+      if not public.is_approver() or u.id = old.manager_id then raise exception 'La recepción la registra RH.'; end if;
+      new.reviewed_by := u.id; new.reviewed_at := now();
+    end if;
+    if new.status in ('enviada','pendiente_firma','pendiente_certificado') and u.id <> old.manager_id then
+      raise exception 'Sólo el gerente envía la gestión.';
+    end if;
+    if new.status = 'cerrada' and u.id <> old.manager_id and not public.is_approver() then raise exception 'No puede cerrarla.'; end if;
+    if new.status = 'anulada' and old.status = 'recibida' and not public.is_approver() then raise exception 'Ya fue recibida: la anula RH.'; end if;
+    if new.status = 'anulada' and u.id <> old.manager_id and not public.is_approver() then raise exception 'No puede anularla.'; end if;
+  end if;
+  new.updated_at := now();
+  return new;
+end $$;
+
+drop trigger if exists gestiones_guard on public.gestiones;
+create trigger gestiones_guard before insert or update or delete on public.gestiones
+for each row execute function public.gestiones_guard();
 
 -- ---------- Reglas del circuito (trigger) ----------
 
@@ -364,6 +446,7 @@ alter table public.request_revisions enable row level security;
 alter table public.final_documents enable row level security;
 alter table public.audit_events enable row level security;
 alter table public.notifications enable row level security;
+alter table public.gestiones enable row level security;
 
 -- Catálogos: lectura para usuarios activos; escritura sólo administradores de RH.
 do $$ declare t text; begin
@@ -414,10 +497,19 @@ create policy finals_read on public.final_documents for select to authenticated 
 drop policy if exists finals_ins on public.final_documents;
 create policy finals_ins on public.final_documents for insert to authenticated with check (public.can_see_request_id(request_id));
 
+-- Licencias y vacaciones
+drop policy if exists gestiones_read on public.gestiones;
+create policy gestiones_read on public.gestiones for select to authenticated using (public.can_see_gestion(gestiones));
+drop policy if exists gestiones_ins on public.gestiones;
+create policy gestiones_ins on public.gestiones for insert to authenticated with check (manager_id = auth.uid()::text);
+drop policy if exists gestiones_upd on public.gestiones;
+create policy gestiones_upd on public.gestiones for update to authenticated using (public.can_see_gestion(gestiones)) with check (true);
+
 -- Auditoría: el gerente no ve observaciones internas; nadie escribe a nombre de otro.
 drop policy if exists audit_read on public.audit_events;
 create policy audit_read on public.audit_events for select to authenticated using (
   case when entity = 'request' then public.can_see_request_id(entity_id) and (not internal or public.my_role() <> 'gerente')
+       when entity = 'gestion' then public.can_see_gestion_id(entity_id) and (not internal or public.my_role() <> 'gerente')
        else public.my_role() in ('coordinador','admin_rh') end);
 drop policy if exists audit_ins on public.audit_events;
 create policy audit_ins on public.audit_events for insert to authenticated with check (
@@ -434,7 +526,7 @@ create policy notif_upd on public.notifications for update to authenticated usin
 -- Tiempo real
 do $$ begin
   begin
-    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates;
+    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates, public.gestiones;
   exception when others then null;
   end;
 end $$;

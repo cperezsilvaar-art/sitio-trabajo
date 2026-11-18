@@ -21,6 +21,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const unread = data.notifications.filter((n) => !n.read && n.user_id === user.id);
   const pending = data.requests.filter((r) => r.status === 'enviada' || r.status === 'pendiente_revision').length;
   const attention = data.requests.filter((r) => r.manager_id === user.id && (r.status === 'requiere_modificaciones' || r.status === 'borrador')).length;
+  const gPend = user.role === 'gerente'
+    ? data.gestiones.filter((g) => g.manager_id === user.id && ['pendiente_certificado', 'pendiente_firma', 'observada'].includes(g.status)).length
+    : data.gestiones.filter((g) => g.status === 'enviada').length;
   const coord = user.role === 'gerente'
     ? data.profiles.find((p) => p.id === data.policy.routing[user.areas[0]]) ?? data.profiles.find((p) => p.role === 'coordinador' && p.areas.some((a) => user.areas.includes(a)))
     : null;
@@ -33,12 +36,22 @@ export function Layout({ children }: { children: ReactNode }) {
         { to: '/solicitudes', label: 'Mis solicitudes' },
         { to: '/solicitudes?f=atencion', label: 'Requieren mi atención', badge: attention ? <Count n={attention} /> : null },
       ] });
-      g.push({ title: 'Gestiones', items: [{ to: '/solicitudes/nueva', label: 'Solicitar medida disciplinaria' }] });
+      g.push({ title: 'Gestiones', items: [
+        { to: '/gestiones/nueva/licencia', label: 'Avisar licencia' },
+        { to: '/gestiones/nueva/vacaciones', label: 'Cargar vacaciones' },
+        { to: '/solicitudes/nueva', label: 'Solicitar medida disciplinaria' },
+        { to: '/gestiones', label: 'Mis licencias y vacaciones', badge: gPend ? <Count n={gPend} /> : null },
+      ] });
     } else {
       g.push({ items: [{ to: '/', label: 'Inicio' }] });
       g.push({ title: 'Aprobaciones', items: [
         { to: '/aprobaciones', label: 'Solicitudes pendientes de aprobación', badge: pending ? <Count n={pending} /> : null },
         { to: '/solicitudes', label: 'Todas las solicitudes' },
+      ] });
+      g.push({ title: 'Licencias y vacaciones', items: [
+        { to: '/gestiones?f=pendientes', label: 'Para revisar', badge: gPend ? <Count n={gPend} /> : null },
+        { to: '/gestiones?tipo=licencia', label: 'Licencias' },
+        { to: '/gestiones?tipo=vacaciones', label: 'Vacaciones' },
       ] });
     }
     g.push({ title: 'Biblioteca de RH', items: [
@@ -96,7 +109,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 <div className="max-h-96 overflow-y-auto">
                   {data.notifications.filter((n) => n.user_id === user.id).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 15).map((n) => (
                     <button key={n.id} className={cx('block w-full border-b border-chrome-100 px-4 py-3 text-left text-sm hover:bg-chrome-100', !n.read && 'bg-brand-50')}
-                      onClick={() => { setBellOpen(false); if (!n.read) run((s) => s.markRead([n.id])); if (n.request_id) nav(`/solicitudes/${n.request_id}`); }}>
+                      onClick={() => { setBellOpen(false); if (!n.read) run((s) => s.markRead([n.id])); if (n.link) nav(n.link); else if (n.request_id) nav(`/solicitudes/${n.request_id}`); }}>
                       <div className="text-ink-700">{n.message}</div>
                       <div className="mt-0.5 text-xs text-ink-400">{fmtDateTime(n.at)}</div>
                     </button>

@@ -1,9 +1,9 @@
 // Descarga e impresión de documentos. El borrador siempre sale marcado como BORRADOR;
 // el definitivo sólo existe si RH aprobó la solicitud.
 
-import { base64ToBytes, buildValues, fillDocx } from './template';
+import { base64ToBytes, buildGestionValues, buildValues, fillDocx } from './template';
 import type { PortalService } from './service';
-import type { DisciplinaryRequest, FinalDocument, RequestData, StoredFile, TemplateVersion } from './types';
+import type { DisciplinaryRequest, FinalDocument, Gestion, RequestData, StoredFile, TemplateVersion } from './types';
 
 export function downloadBytes(name: string, bytes: Uint8Array | string, mime: string) {
   const blob = new Blob([typeof bytes === 'string' ? bytes : (bytes as BlobPart)], { type: mime });
@@ -72,4 +72,20 @@ export async function downloadFinal(svc: PortalService, req: DisciplinaryRequest
   }
   printDocument({ title: `${req.number} – ${req.measure_type_name} – ${req.employee_name}`, content: doc.content, draft: false, footer });
   await svc.logDownload(req.id, `Impresión del documento definitivo v${doc.revision}.`);
+}
+
+/** Notificación de vacaciones para firmar: Word del modelo si existe; si no, impresión. */
+export async function downloadVacationNotice(svc: PortalService, g: Gestion) {
+  const tv = svc.templateVersion(g.template_version_id) ?? svc.vacationTemplateVersion();
+  if (!tv) throw new Error('No hay modelo de notificación de vacaciones.');
+  const values = buildGestionValues(g, g.created_at);
+  if (tv.file_id) {
+    const tpl = await svc.getFile(tv.file_id);
+    if (tpl && tpl.name.toLowerCase().endsWith('.docx')) {
+      const bytes = await fillDocx(tpl.data, values);
+      downloadBytes(`${g.number} – Notificación de vacaciones – ${g.employee_name}.docx`, bytes, tpl.mime);
+      return;
+    }
+  }
+  printDocument({ title: `${g.number} – Notificación de vacaciones`, content: svc.renderVacationNotice(g), draft: false });
 }

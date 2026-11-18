@@ -5,7 +5,7 @@ import { Button, Card, cx, Empty, fmtSize, Input, Modal, Notice, Pill, StatusBad
 import { downloadDraftDocx, downloadFinal, downloadStored, printDocument } from '../lib/documents';
 import { useData } from '../lib/store';
 import { fmtDate, fmtDateTime } from '../lib/template';
-import { ROLE_LABEL, STATUS_LABEL, type AuditEvent, type DisciplinaryRequest, type RequestData, type RequestRevision, type RequestStatus } from '../lib/types';
+import { GESTION_STATUS_LABEL, ROLE_LABEL, STATUS_LABEL, type AuditEvent, type DisciplinaryRequest, type RequestData, type RequestRevision, type RequestStatus } from '../lib/types';
 import { can, denyReason, isOverdue } from '../lib/workflow';
 
 const FLOW: RequestStatus[] = ['borrador', 'enviada', 'pendiente_revision', 'aprobada', 'cerrada'];
@@ -15,6 +15,7 @@ const ACTION_LABEL: Record<string, string> = {
   tomada: 'Revisión iniciada', modificaciones_solicitadas: 'Modificaciones solicitadas', aprobada: 'Aprobada', rechazada: 'Rechazada',
   cerrada: 'Caso cerrado', notificada: 'Notificación al colaborador', rectificacion_iniciada: 'Rectificación iniciada',
   observacion_interna: 'Observación interna de RH', comentario: 'Comentario', documento_descargado: 'Documento descargado',
+  recibida: 'Recibida por RH', observada: 'Observada por RH', anulada: 'Anulada',
 };
 
 export function SolicitudDetalle() {
@@ -368,6 +369,8 @@ function Versiones({ revisions, approved }: { revisions: RequestRevision[]; appr
   );
 }
 
+const statusName = (s: string) => (STATUS_LABEL as Record<string, string>)[s] ?? (GESTION_STATUS_LABEL as Record<string, string>)[s] ?? s;
+
 export function Historial({ events }: { events: AuditEvent[] }) {
   if (!events.length) return <Empty>Sin registros.</Empty>;
   return (
@@ -377,7 +380,7 @@ export function Historial({ events }: { events: AuditEvent[] }) {
           <span className={cx('absolute -left-[7px] mt-1.5 h-3 w-3 rounded-full ring-4 ring-white', e.action === 'aprobada' ? 'bg-emerald-500' : e.action === 'rechazada' ? 'bg-rose-500' : e.internal ? 'bg-amber-400' : 'bg-brand-500')} />
           <div className="text-sm">
             <span className="font-semibold text-ink-900">{ACTION_LABEL[e.action] ?? e.action}</span>
-            {e.from_status && e.to_status && <span className="text-ink-500"> · {STATUS_LABEL[e.from_status]} → {STATUS_LABEL[e.to_status]}</span>}
+            {e.from_status && e.to_status && <span className="text-ink-500"> · {statusName(e.from_status)} → {statusName(e.to_status)}</span>}
             {e.revision ? <span className="text-ink-400"> · v{e.revision}</span> : null}
             {e.internal && <> <Pill tone="amber">Interno RH</Pill></>}
           </div>

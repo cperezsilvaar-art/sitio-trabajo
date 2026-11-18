@@ -110,7 +110,11 @@ export function AdminCircuito() {
             </div>
             <Checkbox label="Los coordinadores sólo deciden solicitudes de sus áreas" checked={p.restrict_to_area} onChange={(v) => setP({ ...p, restrict_to_area: v })} />
             <Checkbox label="Exigir comentario al aprobar" checked={p.comment_required_on_approve} onChange={(v) => setP({ ...p, comment_required_on_approve: v })} />
-            <Input label="Plazo de revisión (días hábiles)" type="number" min={1} value={p.review_sla_days} onChange={(e) => setP({ ...p, review_sla_days: Number(e.target.value) })} />
+            <Input label="Plazo de revisión de medidas (días hábiles)" type="number" min={1} value={p.review_sla_days} onChange={(e) => setP({ ...p, review_sla_days: Number(e.target.value) })} />
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Plazo para presentar el certificado (días hábiles)" type="number" min={0} value={p.certificate_days ?? 2} onChange={(e) => setP({ ...p, certificate_days: Number(e.target.value) })} />
+              <Input label="Anticipación para notificar vacaciones (días)" type="number" min={0} value={p.vacation_notice_days ?? 45} onChange={(e) => setP({ ...p, vacation_notice_days: Number(e.target.value) })} hint="Art. 154 LCT: 45 días." />
+            </div>
             <Textarea label="Leyenda de los borradores" className="min-h-[70px]" value={p.draft_disclaimer} onChange={(e) => setP({ ...p, draft_disclaimer: e.target.value })} />
           </div>
         </Card>

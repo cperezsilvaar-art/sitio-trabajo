@@ -8,6 +8,9 @@ import { AdminModelos, ModeloEditor } from './pages/AdminModelos';
 import { Aprobaciones } from './pages/Aprobaciones';
 import { Auditoria } from './pages/Auditoria';
 import { Biblioteca } from './pages/Biblioteca';
+import { GestionDetalle } from './pages/GestionDetalle';
+import { GestionForm } from './pages/GestionForm';
+import { Gestiones } from './pages/Gestiones';
 import { Inicio } from './pages/Inicio';
 import { Login } from './pages/Login';
 import { SolicitudDetalle } from './pages/SolicitudDetalle';
@@ -32,6 +35,10 @@ function Shell() {
         <Route path="/solicitudes/nueva" element={<Only roles={['gerente']}><SolicitudForm /></Only>} />
         <Route path="/solicitudes/:id/editar" element={<Only roles={['gerente']}><SolicitudForm /></Only>} />
         <Route path="/solicitudes/:id" element={<SolicitudDetalle />} />
+        <Route path="/gestiones" element={<Gestiones />} />
+        <Route path="/gestiones/nueva/:kind" element={<Only roles={['gerente']}><GestionForm /></Only>} />
+        <Route path="/gestiones/:id/editar" element={<Only roles={['gerente']}><GestionForm /></Only>} />
+        <Route path="/gestiones/:id" element={<GestionDetalle />} />
         <Route path="/aprobaciones" element={<Only roles={['coordinador', 'admin_rh']}><Aprobaciones /></Only>} />
         <Route path="/auditoria" element={<Only roles={['coordinador', 'admin_rh']}><Auditoria /></Only>} />
         <Route path="/admin/modelos" element={<Only roles={['admin_rh']}><AdminModelos /></Only>} />

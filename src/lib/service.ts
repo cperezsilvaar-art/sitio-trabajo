@@ -4,11 +4,15 @@
 import type { Backend } from './backend/types';
 import { buildValues, bytesToBase64, fillDocx, renderForRequest, sha256 } from './template';
 import type {
+  Gestion, GestionKind, GestionStatus,
   Attachment, AuditEvent, DisciplinaryRequest, Employee, FieldDef, FinalDocument, MeasureType, Notification, Policy,
   Profile, RequestData, RequestRevision, RequestStatus, SituationType, Store, StoredFile, TableName, Template,
   TemplateVersion,
 } from './types';
 import { DOCX_MIME } from './seed';
+import { daysInclusive, gDenyReason, leaveChecks, statusFor, vacationChecks, type GAction } from './gestiones';
+import { LEAVE_TYPES } from './types';
+import { buildGestionValues, render } from './template';
 import { canTransition, denyReason, isApprover, resolveCoordinator, validateRequest, type Action } from './workflow';
 
 export interface Snapshot {
@@ -24,10 +28,12 @@ export interface Snapshot {
   final_documents: FinalDocument[];
   audit_events: AuditEvent[];
   notifications: Notification[];
+  gestiones: Gestion[];
   policy: Policy;
 }
 
 export const EMPTY_SNAPSHOT: Snapshot = {
+  gestiones: [],
   profiles: [], stores: [], employees: [], templates: [], template_versions: [], measure_types: [], situation_types: [],
   requests: [], request_revisions: [], final_documents: [], audit_events: [], notifications: [],
   policy: {
@@ -62,7 +68,7 @@ export class PortalService {
   async load(): Promise<Snapshot> {
     const tables: TableName[] = [
       'profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types',
-      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy',
+      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'gestiones',
     ];
     const rows = await Promise.all(tables.map((t) => this.backend.all(t)));
     const s = Object.fromEntries(tables.map((t, i) => [t, rows[i]])) as unknown as Snapshot & { policy: Policy[] };
@@ -79,9 +85,13 @@ export class PortalService {
     await this.backend.insert('audit_events', [ev]);
   }
 
-  private async notify(user_id: string | null | undefined, request_id: string | null, message: string) {
+  private async notify(user_id: string | null | undefined, request_id: string | null, message: string, link?: string) {
     if (!user_id || user_id === this.user.id) return;
-    await this.backend.insert<Notification>('notifications', [{ id: uid('n'), user_id, request_id, message, read: false, at: nowIso() }]);
+    await this.backend.insert<Notification>('notifications', [{ id: uid('n'), user_id, request_id, message, read: false, at: nowIso(), link: link ?? (request_id ? `/solicitudes/${request_id}` : null) }]);
+  }
+
+  private notifyG(user_id: string | null | undefined, gestionId: string, message: string) {
+    return this.notify(user_id, null, message, `/gestiones/${gestionId}`);
   }
 
   private request(id: string) {
@@ -326,7 +336,7 @@ export class PortalService {
     if (this.user.role !== 'admin_rh') throw new PortalError('Sección exclusiva de administradores de RH.');
   }
 
-  async createTemplate(meta: Pick<Template, 'title' | 'category' | 'description' | 'measure_type_ids'>, version: Pick<TemplateVersion, 'body' | 'fields' | 'change_notes'>, file?: File) {
+  async createTemplate(meta: Pick<Template, 'title' | 'category' | 'description' | 'measure_type_ids' | 'gestion_kinds'>, version: Pick<TemplateVersion, 'body' | 'fields' | 'change_notes'>, file?: File) {
     this.ensureAdmin();
     const t: Template = { id: uid('t'), ...meta, active: true, current_version_id: null, created_at: nowIso(), updated_at: nowIso() };
     await this.backend.insert('templates', [t]);
@@ -335,7 +345,7 @@ export class PortalService {
     return t.id;
   }
 
-  async updateTemplateMeta(id: string, patch: Partial<Pick<Template, 'title' | 'category' | 'description' | 'measure_type_ids' | 'active'>>) {
+  async updateTemplateMeta(id: string, patch: Partial<Pick<Template, 'title' | 'category' | 'description' | 'measure_type_ids' | 'gestion_kinds' | 'active'>>) {
     this.ensureAdmin();
     const t = this.snap().templates.find((x) => x.id === id);
     await this.backend.update<Template>('templates', id, { ...patch, updated_at: nowIso() });
@@ -405,6 +415,147 @@ export class PortalService {
     if (isNew) await this.backend.insert('profiles', [p]);
     else await this.backend.update<Profile>('profiles', p.id, p);
     await this.log({ entity: 'user', entity_id: p.id, action: isNew ? 'usuario_creado' : 'usuario_actualizado', comment: `${p.name} – ${p.role} – ${p.active ? 'activo' : 'inactivo'}.` });
+  }
+
+  /* ---------- licencias y vacaciones ---------- */
+
+  private gestion(id: string) {
+    const g = this.snap().gestiones.find((x) => x.id === id);
+    if (!g) throw new PortalError('Gestión inexistente o sin acceso.');
+    return g;
+  }
+
+  private gEnsure(a: GAction, g: Gestion) {
+    const why = gDenyReason(a, this.user, g, this.snap().policy);
+    if (why) throw new PortalError(why);
+  }
+
+  /** Versión vigente del modelo de notificación de vacaciones. */
+  vacationTemplateVersion() {
+    const t = this.snap().templates.find((x) => x.active && (x.gestion_kinds ?? []).includes('vacaciones'));
+    return t?.current_version_id ? this.templateVersion(t.current_version_id) : null;
+  }
+
+  checksFor(g: Gestion) {
+    return g.kind === 'vacaciones' ? vacationChecks(g, this.snap().policy) : leaveChecks(g);
+  }
+
+  renderVacationNotice(g: Gestion) {
+    const tv = this.templateVersion(g.template_version_id) ?? this.vacationTemplateVersion();
+    if (!tv) return '';
+    return render(tv.body, buildGestionValues(g, g.created_at));
+  }
+
+  async createGestion(kind: GestionKind, data: Partial<Gestion>): Promise<string> {
+    if (this.user.role !== 'gerente') throw new PortalError('Las licencias y vacaciones las carga el gerente de la tienda.');
+    const s = this.snap();
+    if (!data.store_id || !this.user.store_ids.includes(data.store_id)) throw new PortalError('Elegí una tienda a tu cargo.');
+    if (!data.employee_id) throw new PortalError('Elegí al colaborador.');
+    const d = new Date();
+    const prefix = kind === 'licencia' ? 'LIC' : 'VAC';
+    const tv = kind === 'vacaciones' ? this.vacationTemplateVersion() : null;
+    if (kind === 'vacaciones' && !tv) throw new PortalError('RH todavía no cargó el modelo de notificación de vacaciones.');
+    const coord = resolveCoordinator(data.area ?? '', s.policy, s.profiles);
+    const coordinator_id = coord?.id ?? s.policy.routing[data.area ?? ''] ?? null;
+    const g: Gestion = {
+      id: uid('g'),
+      number: `${prefix}-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`,
+      kind, status: 'pendiente_firma', manager_id: this.user.id, manager_name: this.user.name,
+      coordinator_id, coordinator_name: coord?.name ?? null,
+      employee_id: '', employee_name: '', legajo: '', position: '', hire_date: '', store_id: '', store_name: '', area: '',
+      start_date: '', end_date: '', days: 0, leave_type: '', leave_type_name: '', notice_date: '', period_year: 0,
+      template_version_id: tv?.id ?? '', notes: '', attachments: [],
+      created_at: nowIso(), updated_at: nowIso(), submitted_at: null, reviewed_by: null, reviewed_by_name: null, reviewed_at: null, return_date: null,
+      ...data,
+    } as Gestion;
+    g.days = daysInclusive(g.start_date, g.end_date);
+    g.leave_type_name = LEAVE_TYPES.find((t) => t.id === g.leave_type)?.name ?? '';
+    const errors = (kind === 'vacaciones' ? vacationChecks(g, s.policy) : leaveChecks(g)).filter((c) => c.level === 'error');
+    if (errors.length) throw new PortalError(errors.map((e) => e.message).join('\n'));
+    g.status = statusFor(g);
+    if (g.status === 'enviada') g.submitted_at = nowIso();
+    await this.backend.insert('gestiones', [g]);
+    const what = kind === 'licencia' ? `Aviso de licencia (${g.leave_type_name}) del ${g.start_date} al ${g.end_date}` : `Vacaciones del ${g.start_date} al ${g.end_date} (${g.days} días)`;
+    await this.log({ entity: 'gestion', entity_id: g.id, action: 'creada', to_status: g.status as never, comment: `${what} para ${g.employee_name}.` });
+    if (kind === 'licencia') {
+      await this.notifyG(coordinator_id, g.id, `${this.user.name} avisó una licencia: ${g.employee_name} (${g.store_name}), ${g.leave_type_name}, desde ${g.start_date}.${g.status === 'pendiente_certificado' ? ' Falta el certificado.' : ''}`);
+    } else if (g.status === 'enviada') {
+      await this.notifyG(coordinator_id, g.id, `${this.user.name} envió la notificación de vacaciones firmada de ${g.employee_name}.`);
+    }
+    return g.id;
+  }
+
+  async updateGestion(id: string, patch: Partial<Gestion>, note = '') {
+    const g = this.gestion(id);
+    this.gEnsure('editar', g);
+    const merged: Gestion = { ...g, ...patch };
+    merged.days = daysInclusive(merged.start_date, merged.end_date);
+    merged.leave_type_name = LEAVE_TYPES.find((t) => t.id === merged.leave_type)?.name ?? merged.leave_type_name;
+    const datesChanged = merged.start_date !== g.start_date || merged.end_date !== g.end_date || merged.period_year !== g.period_year;
+    if (g.kind === 'vacaciones' && datesChanged && merged.attachments.some((a) => a.role === 'firmada')) {
+      // La notificación firmada ya no coincide con las fechas: hay que volver a firmarla.
+      merged.attachments = merged.attachments.filter((a) => a.role !== 'firmada' || !g.attachments.some((x) => x.file_id === a.file_id));
+    }
+    const errors = this.checksFor(merged).filter((c) => c.level === 'error');
+    if (errors.length) throw new PortalError(errors.map((e) => e.message).join('\n'));
+    const to: GestionStatus = statusFor(merged);
+    const p: Partial<Gestion> = {
+      start_date: merged.start_date, end_date: merged.end_date, days: merged.days, leave_type: merged.leave_type,
+      leave_type_name: merged.leave_type_name, notice_date: merged.notice_date, period_year: merged.period_year, notes: merged.notes,
+      attachments: merged.attachments, status: to, updated_at: nowIso(),
+      ...(to === 'enviada' ? { submitted_at: nowIso() } : {}),
+    };
+    await this.backend.update<Gestion>('gestiones', id, p);
+    const added = merged.attachments.filter((a) => !g.attachments.some((x) => x.file_id === a.file_id));
+    const parts = [
+      datesChanged && `Fechas: ${merged.start_date} a ${merged.end_date} (${merged.days} días).`,
+      added.length && `Adjuntó: ${added.map((a) => a.name).join(', ')}.`,
+      g.kind === 'vacaciones' && datesChanged && g.attachments.some((a) => a.role === 'firmada') && 'Cambiaron las fechas: hay que volver a firmar la notificación.',
+      note,
+    ].filter(Boolean).join(' ');
+    await this.log({ entity: 'gestion', entity_id: id, action: to === 'enviada' && g.status !== 'enviada' ? 'enviada' : 'guardada', from_status: g.status as never, to_status: to as never, comment: parts || 'Datos actualizados.' });
+    if (to === 'enviada' && g.status !== 'enviada') {
+      const what = g.kind === 'licencia' ? 'el certificado de la licencia' : 'la notificación de vacaciones firmada';
+      await this.notifyG(g.coordinator_id, g.id, `${this.user.name} envió ${what} de ${g.employee_name} (${g.number}).`);
+    }
+  }
+
+  async reviewGestion(id: string, decision: 'recibir' | 'observar', comment: string) {
+    const g = this.gestion(id);
+    this.gEnsure('revisar', g);
+    if (decision === 'observar' && !comment.trim()) throw new PortalError('Escribí qué hay que corregir: el gerente lo ve.');
+    const to: GestionStatus = decision === 'recibir' ? 'recibida' : 'observada';
+    await this.backend.update<Gestion>('gestiones', id, {
+      status: to, reviewed_by: this.user.id, reviewed_by_name: this.user.name, reviewed_at: nowIso(), updated_at: nowIso(),
+      ...(g.coordinator_id ? {} : { coordinator_id: this.user.id, coordinator_name: this.user.name }),
+    });
+    await this.log({ entity: 'gestion', entity_id: id, action: decision === 'recibir' ? 'recibida' : 'observada', from_status: g.status as never, to_status: to as never, comment: comment || (decision === 'recibir' ? 'Recibida y conforme.' : '') });
+    await this.notifyG(g.manager_id, g.id, decision === 'recibir' ? `RH recibió ${g.number} (${g.employee_name}).` : `RH observó ${g.number} (${g.employee_name}): ${comment}`);
+  }
+
+  async closeGestion(id: string, returnDate: string, comment: string) {
+    const g = this.gestion(id);
+    this.gEnsure('cerrar', g);
+    if (!returnDate) throw new PortalError('Indicá la fecha de reintegro.');
+    await this.backend.update<Gestion>('gestiones', id, { status: 'cerrada', return_date: returnDate, updated_at: nowIso() });
+    await this.log({ entity: 'gestion', entity_id: id, action: 'cerrada', from_status: 'recibida' as never, to_status: 'cerrada' as never, comment: `Reintegro el ${returnDate}. ${comment}`.trim() });
+    await this.notifyG(this.user.id === g.manager_id ? g.coordinator_id : g.manager_id, g.id, `${g.number}: se registró el reintegro de ${g.employee_name} el ${returnDate}.`);
+  }
+
+  async cancelGestion(id: string, reason: string) {
+    const g = this.gestion(id);
+    this.gEnsure('anular', g);
+    if (!reason.trim()) throw new PortalError('Indicá el motivo de la anulación.');
+    await this.backend.update<Gestion>('gestiones', id, { status: 'anulada', updated_at: nowIso() });
+    await this.log({ entity: 'gestion', entity_id: id, action: 'anulada', from_status: g.status as never, to_status: 'anulada' as never, comment: reason });
+    await this.notifyG(this.user.id === g.manager_id ? g.coordinator_id : g.manager_id, g.id, `${g.number} (${g.employee_name}) fue anulada: ${reason}`);
+  }
+
+  async commentGestion(id: string, text: string) {
+    const g = this.gestion(id);
+    if (!text.trim()) return;
+    await this.log({ entity: 'gestion', entity_id: id, action: 'comentario', comment: text });
+    await this.notifyG(this.user.id === g.manager_id ? g.coordinator_id : g.manager_id, g.id, `${g.number}: nuevo comentario de ${this.user.name}.`);
   }
 
   isApprover() {

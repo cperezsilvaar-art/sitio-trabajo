@@ -18,7 +18,7 @@ export const APPEND_ONLY: TableName[] = ['template_versions', 'request_revisions
 
 export const TABLES: TableName[] = [
   'profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types',
-  'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'files',
+  'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'files', 'gestiones',
 ];
 
 export class PermissionError extends Error {}

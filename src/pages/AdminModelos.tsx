@@ -4,8 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Checkbox, cx, DocThumb, Empty, Input, Modal, Notice, PageTitle, Pill, Select, shortDate, Td, Textarea, Th } from '../components/ui';
 import { downloadStored } from '../lib/documents';
 import { useData } from '../lib/store';
-import { docxPlaceholders, fmtDateTime, render, STANDARD_FIELDS, unknownPlaceholders, bytesToBase64 } from '../lib/template';
-import { CATEGORY_LABEL, type FieldDef, type FieldType, type TemplateCategory, type TemplateVersion } from '../lib/types';
+import { docxPlaceholders, extractPlaceholders, fmtDateTime, GESTION_FIELDS, render, STANDARD_FIELDS, unknownPlaceholders, bytesToBase64 } from '../lib/template';
+import { CATEGORY_LABEL, type GestionKind, type FieldDef, type FieldType, type TemplateCategory, type TemplateVersion } from '../lib/types';
 
 export function AdminModelos() {
   const { data } = useData();
@@ -53,7 +53,7 @@ export function ModeloEditor() {
   const versions = useMemo(() => data.template_versions.filter((v) => v.template_id === id).sort((a, b) => b.version - a.version), [data.template_versions, id]);
   const current = versions.find((v) => v.id === t?.current_version_id);
 
-  const [meta, setMeta] = useState({ title: '', category: 'sancion' as TemplateCategory, description: '', measure_type_ids: [] as string[] });
+  const [meta, setMeta] = useState({ title: '', category: 'sancion' as TemplateCategory, description: '', measure_type_ids: [] as string[], gestion_kinds: [] as GestionKind[] });
   const [body, setBody] = useState('');
   const [fields, setFields] = useState<FieldDef[]>([]);
   const [notes, setNotes] = useState('');
@@ -69,7 +69,7 @@ export function ModeloEditor() {
     if (init) return;
     if (isNew) { setInit(true); return; }
     if (t) {
-      setMeta({ title: t.title, category: t.category, description: t.description, measure_type_ids: t.measure_type_ids });
+      setMeta({ title: t.title, category: t.category, description: t.description, measure_type_ids: t.measure_type_ids, gestion_kinds: t.gestion_kinds ?? [] });
       setBody(current?.body ?? '');
       setFields(current?.fields ?? []);
       setInit(true);
@@ -79,11 +79,15 @@ export function ModeloEditor() {
   if (user?.role !== 'admin_rh') return <Notice tone="warn">Sección exclusiva de administradores de RH.</Notice>;
   if (!isNew && !t) return <Empty>Modelo no encontrado.</Empty>;
 
-  const unknown = unknownPlaceholders(body, fields);
+  const forVacation = meta.gestion_kinds.includes('vacaciones');
+  const catalog = forVacation ? GESTION_FIELDS : STANDARD_FIELDS;
+  const unknown = forVacation
+    ? extractPlaceholders(body).filter((k) => !GESTION_FIELDS.some((f) => f.key === k) && !fields.some((f) => f.key === k))
+    : unknownPlaceholders(body, fields);
   const contentChanged = isNew || body !== (current?.body ?? '') || JSON.stringify(fields) !== JSON.stringify(current?.fields ?? []) || !!file;
-  const metaChanged = !isNew && t && (meta.title !== t.title || meta.category !== t.category || meta.description !== t.description || JSON.stringify(meta.measure_type_ids) !== JSON.stringify(t.measure_type_ids));
+  const metaChanged = !isNew && t && (meta.title !== t.title || meta.category !== t.category || meta.description !== t.description || JSON.stringify(meta.measure_type_ids) !== JSON.stringify(t.measure_type_ids) || JSON.stringify(meta.gestion_kinds) !== JSON.stringify(t.gestion_kinds ?? []));
   const sample = Object.fromEntries([
-    ...STANDARD_FIELDS.map((f) => [f.key, `«${f.label}»`]),
+    ...catalog.map((f) => [f.key, `«${f.label}»`]),
     ...fields.map((f) => [f.key, `«${f.label}»`]),
   ]);
 
@@ -93,7 +97,7 @@ export function ModeloEditor() {
     if (f && f.name.toLowerCase().endsWith('.docx')) {
       try {
         const ph = await docxPlaceholders(bytesToBase64(new Uint8Array(await f.arrayBuffer())));
-        const unk = ph.filter((k) => !STANDARD_FIELDS.some((s) => s.key === k) && !fields.some((x) => x.key === k));
+        const unk = ph.filter((k) => !catalog.some((s) => s.key === k) && !fields.some((x) => x.key === k));
         setFileWarn(ph.length === 0
           ? 'El Word no tiene marcadores {{campo}}: se entregará tal cual, sin completar datos.'
           : unk.length ? `El Word usa marcadores que no existen: ${unk.join(', ')}. Agregalos como campos o corregí el archivo.` : `Marcadores detectados en el Word: ${ph.join(', ')}.`);
@@ -112,7 +116,7 @@ export function ModeloEditor() {
       const keys = fields.map((f) => f.key);
       if (keys.some((k) => !/^[a-z][a-z0-9_]*$/.test(k))) throw new Error('Los identificadores de campo sólo admiten minúsculas, números y guión bajo, y deben empezar con una letra.');
       if (new Set(keys).size !== keys.length) throw new Error('Hay campos con el mismo identificador.');
-      if (keys.some((k) => STANDARD_FIELDS.some((s) => s.key === k))) throw new Error('Un campo adicional usa el identificador de un campo estándar.');
+      if (keys.some((k) => catalog.some((s) => s.key === k))) throw new Error('Un campo adicional usa el identificador de un campo estándar.');
       if (fields.some((f) => !f.label.trim())) throw new Error('Todos los campos necesitan un nombre visible.');
       if (fields.some((f) => f.type === 'select' && !(f.options ?? []).length)) throw new Error('Los campos de lista necesitan opciones.');
       if (isNew) {
@@ -165,6 +169,10 @@ export function ModeloEditor() {
                   ))}
                 </div>
                 <p className="mt-1 text-xs text-ink-400">Sin tipos marcados, el documento es sólo de consulta en la biblioteca.</p>
+                <div className="mt-3">
+                  <Checkbox label="Usar como notificación de vacaciones (la que se genera para que firme el colaborador)" checked={forVacation}
+                    onChange={(v) => setMeta({ ...meta, gestion_kinds: v ? ['vacaciones'] : [] })} />
+                </div>
               </div>
             </div>
           </Card>
@@ -175,7 +183,7 @@ export function ModeloEditor() {
             <div className="mt-3">
               <div className="mb-1 text-xs font-semibold uppercase text-ink-500">Insertar campo</div>
               <div className="flex flex-wrap gap-1.5">
-                {[...STANDARD_FIELDS, ...fields.map((f) => ({ key: f.key, label: f.label }))].map((f) => (
+                {[...catalog, ...fields.map((f) => ({ key: f.key, label: f.label }))].map((f) => (
                   <button key={f.key} title={f.label} onClick={() => setBody((b) => `${b}{{${f.key}}}`)} className="rounded border border-chrome-300 bg-chrome-100 px-2 py-0.5 font-mono text-xs hover:bg-chrome-200">{`{{${f.key}}}`}</button>
                 ))}
               </div>

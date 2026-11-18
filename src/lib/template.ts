@@ -167,3 +167,40 @@ export async function sha256(text: string) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/* ---------- Notificación de vacaciones ---------- */
+
+/** Marcadores disponibles en modelos de gestiones (vacaciones). */
+export const GESTION_FIELDS: { key: string; label: string }[] = [
+  { key: 'numero_gestion', label: 'Número de la gestión' },
+  { key: 'colaborador', label: 'Nombre y apellido del colaborador' },
+  { key: 'legajo', label: 'Legajo' },
+  { key: 'puesto', label: 'Puesto' },
+  { key: 'tienda', label: 'Tienda' },
+  { key: 'area', label: 'Área' },
+  { key: 'gerente', label: 'Gerente que la carga' },
+  { key: 'periodo', label: 'Período de vacaciones (año)' },
+  { key: 'dias_vacaciones', label: 'Cantidad de días corridos' },
+  { key: 'fecha_inicio_vacaciones', label: 'Inicio (dd/mm/aaaa)' },
+  { key: 'fecha_inicio_vacaciones_larga', label: 'Inicio en letras' },
+  { key: 'fecha_fin_vacaciones', label: 'Último día (dd/mm/aaaa)' },
+  { key: 'fecha_reintegro', label: 'Día de reintegro (dd/mm/aaaa)' },
+  { key: 'fecha_emision', label: 'Fecha de emisión (dd/mm/aaaa)' },
+  { key: 'fecha_emision_larga', label: 'Fecha de emisión en letras' },
+  { key: 'ciudad', label: 'Ciudad de emisión' },
+  { key: 'observaciones', label: 'Observaciones' },
+];
+
+export function buildGestionValues(g: {
+  number: string; employee_name: string; legajo: string; position: string; store_name: string; area: string; manager_name: string;
+  period_year: number; days: number; start_date: string; end_date: string; notes: string;
+}, issuedAt: string, city = 'Ciudad Autónoma de Buenos Aires'): Record<string, string> {
+  const ret = g.end_date ? new Date(new Date(`${g.end_date}T12:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10) : '';
+  return {
+    numero_gestion: g.number, colaborador: g.employee_name, legajo: g.legajo, puesto: g.position, tienda: g.store_name,
+    area: g.area, gerente: g.manager_name, periodo: g.period_year ? String(g.period_year) : '', dias_vacaciones: g.days ? String(g.days) : '',
+    fecha_inicio_vacaciones: fmtDate(g.start_date), fecha_inicio_vacaciones_larga: fmtDateLong(g.start_date),
+    fecha_fin_vacaciones: fmtDate(g.end_date), fecha_reintegro: fmtDate(ret), fecha_emision: fmtDate(issuedAt),
+    fecha_emision_larga: fmtDateLong(issuedAt), ciudad: city, observaciones: g.notes.trim() || 'Sin observaciones.',
+  };
+}

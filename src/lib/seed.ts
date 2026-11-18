@@ -3,7 +3,7 @@
 // revisados por el área legal.
 
 import type {
-  Employee, FieldDef, MeasureType, Policy, Profile, SituationType, Store, StoredFile, Template, TemplateVersion,
+  Employee, GestionKind, FieldDef, MeasureType, Policy, Profile, SituationType, Store, StoredFile, Template, TemplateVersion,
 } from './types';
 import { bytesToBase64 } from './template';
 
@@ -69,6 +69,8 @@ export const policy: Policy = {
   routing: { 'Área 1': 'u-coord1', 'Área 2': 'u-coord2', 'Área 3': 'u-coord3' },
   comment_required_on_approve: false,
   review_sla_days: 2,
+  certificate_days: 2,
+  vacation_notice_days: 45,
   draft_disclaimer: 'Documento en borrador generado desde el Portal RH. No constituye sanción ni puede comunicarse al colaborador hasta su aprobación por Recursos Humanos.',
 };
 
@@ -219,6 +221,31 @@ Saludos cordiales.
 
 Recursos Humanos`;
 
+const VACACIONES = `{{ciudad}}, {{fecha_emision_larga}}
+
+Sr./Sra. {{colaborador}}
+Legajo N° {{legajo}} – {{puesto}}
+{{tienda}}
+
+Ref.: NOTIFICACIÓN DE VACACIONES – PERÍODO {{periodo}}
+
+Por medio de la presente le notificamos que, conforme a los artículos 150, 151 y 154 de la Ley de Contrato de Trabajo, se le otorgan {{dias_vacaciones}} días corridos de vacaciones anuales correspondientes al período {{periodo}}.
+
+Las vacaciones comenzarán el día {{fecha_inicio_vacaciones_larga}} ({{fecha_inicio_vacaciones}}) y finalizarán el día {{fecha_fin_vacaciones}}, debiendo reintegrarse a sus tareas el día {{fecha_reintegro}} en su horario habitual.
+
+La retribución correspondiente al período de vacaciones le será abonada conforme lo establecido en el artículo 155 de la LCT.
+
+Observaciones: {{observaciones}}
+
+Queda Ud. debidamente notificado/a.
+
+__________________________          __________________________
+Firma del colaborador               Firma del gerente
+Aclaración:                         {{gerente}}
+Fecha de recepción: ____/____/______
+
+Gestión N° {{numero_gestion}}`;
+
 const SUSP_FIELDS: FieldDef[] = [
   { key: 'dias_suspension', label: 'Días de suspensión', type: 'number', required: true, help: 'Máximo 30 días por año (art. 220 LCT). RH valida la cantidad.' },
   { key: 'fecha_inicio_suspension', label: 'Fecha de inicio de la suspensión', type: 'date', required: true },
@@ -233,13 +260,14 @@ const COMUNICACION_FIELDS: FieldDef[] = [
   { key: 'cuerpo', label: 'Texto de la comunicación', type: 'textarea', required: true },
 ];
 
-interface TplSeed { id: string; title: string; category: Template['category']; description: string; measures: string[]; body: string; fields: FieldDef[]; versions?: number }
+interface TplSeed { id: string; title: string; category: Template['category']; description: string; measures: string[]; body: string; fields: FieldDef[]; versions?: number; gestion?: GestionKind[] }
 
 const TEMPLATES: TplSeed[] = [
   { id: 't-apercibimiento', title: 'Modelo de apercibimiento', category: 'sancion', description: 'Notificación de apercibimiento (art. 67 LCT). Incluye espacio para firma y recepción.', measures: ['m-apercibimiento'], body: APERCIBIMIENTO, fields: [], versions: 2 },
   { id: 't-suspension', title: 'Modelo de suspensión', category: 'sancion', description: 'Suspensión disciplinaria sin goce de haberes, con fechas de inicio y reintegro.', measures: ['m-suspension'], body: SUSPENSION, fields: SUSP_FIELDS },
   { id: 't-llamado', title: 'Modelo de llamado de atención', category: 'sancion', description: 'Advertencia formal escrita por faltas leves.', measures: ['m-llamado'], body: LLAMADO, fields: [] },
   { id: 't-descargo', title: 'Citación a descargo', category: 'comunicacion', description: 'Pedido de descargo previo a la decisión de una medida.', measures: ['m-descargo'], body: DESCARGO, fields: DESCARGO_FIELDS },
+  { id: 't-vacaciones', title: 'Notificación de vacaciones', category: 'comunicacion', description: 'Notificación al colaborador del período de vacaciones (arts. 150 a 155 LCT), para firmar.', measures: [], body: VACACIONES, fields: [], gestion: ['vacaciones'] },
   { id: 't-comunicacion', title: 'Comunicación formal al colaborador', category: 'comunicacion', description: 'Modelo general para comunicaciones formales.', measures: [], body: COMUNICACION, fields: COMUNICACION_FIELDS },
   { id: 't-procedimiento', title: 'Procedimiento disciplinario', category: 'procedimiento', description: 'Pasos, plazos y buenas prácticas antes, durante y después de una medida.', measures: [], body: PROCEDIMIENTO, fields: [] },
   { id: 't-instructivo', title: 'Instructivo: medidas disciplinarias en el portal', category: 'instructivo', description: 'Guía paso a paso para gerentes.', measures: [], body: INSTRUCTIVO, fields: [] },
@@ -299,7 +327,7 @@ export async function buildSeed() {
     }
     templates.push({
       id: t.id, title: t.title, category: t.category, description: t.description, active: true,
-      measure_type_ids: t.measures, current_version_id: lastId, created_at: daysAgo(60), updated_at: daysAgo(60 - n * 20),
+      measure_type_ids: t.measures, gestion_kinds: t.gestion ?? [], current_version_id: lastId, created_at: daysAgo(60), updated_at: daysAgo(60 - n * 20),
     });
   }
   return {

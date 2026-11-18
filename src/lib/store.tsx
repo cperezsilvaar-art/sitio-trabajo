@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { backend, isDemo, LocalBackend } from './backend';
-import { buildDemoRequests } from './demoRequests';
+import { buildDemoGestiones, buildDemoRequests } from './demoRequests';
 import { buildSeed } from './seed';
 import { EMPTY_SNAPSHOT, PortalService, type Snapshot } from './service';
 import type { Profile } from './types';
@@ -23,10 +23,18 @@ const C = createContext<Ctx | null>(null);
 
 async function ensureSeed() {
   if (!(backend instanceof LocalBackend)) return;
-  if (!(await backend.isEmpty())) return;
+  if (!(await backend.isEmpty())) {
+    // Datos de una versión anterior de la demo (sin licencias ni vacaciones): se recargan.
+    if (await backend.hasRecord('templates', 't-vacaciones')) return;
+    await backend.resetAll();
+  }
   const s = await buildSeed();
   const demo = await buildDemoRequests(s.data.template_versions);
-  await backend.seed({ ...s.data, ...demo }, s.passwords);
+  const ges = buildDemoGestiones(s.data.template_versions);
+  await backend.seed({
+    ...s.data, ...demo, gestiones: ges.gestiones, files: [...s.data.files, ...ges.files],
+    audit_events: [...demo.audit_events, ...ges.audit_events], notifications: [...demo.notifications, ...ges.notifications],
+  }, s.passwords);
 }
 
 export function DataProvider({ children }: { children: ReactNode }) {

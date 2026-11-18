@@ -66,3 +66,21 @@ select pg_temp.expect_error($$update profiles set role='gerente' where id='00000
 set test.uid = '00000000-0000-0000-0000-00000000000c';
 update policy set restrict_to_area=false;
 select 'coord cambió política: ' || (select count(*) from policy where restrict_to_area=false);
+
+-- ===== Licencias y vacaciones =====
+set test.uid = '00000000-0000-0000-0000-00000000000e';
+insert into gestiones (id, number, kind, status, manager_id, manager_name, employee_id, employee_name, legajo, store_id, store_name, area, leave_type, start_date, end_date)
+values ('g1','LIC-1','licencia','pendiente_certificado','00000000-0000-0000-0000-00000000000e','Gerente','e1','Ana','100','s1','Suc 1','Área 3','enfermedad','2026-11-16','2026-11-18');
+select pg_temp.expect_error($$insert into gestiones (id, number, kind, status, manager_id, manager_name, employee_id, employee_name, legajo, store_id, store_name, area) values ('g2','LIC-2','licencia','enviada','00000000-0000-0000-0000-00000000000e','G','e1','Ana','100','s2','Suc 2','Área 1')$$, 'tienda');
+select pg_temp.expect_error($$update gestiones set status='recibida' where id='g1'$$, 'Transición|RH');
+update gestiones set attachments='[{"file_id":"f","role":"certificado"}]', status='enviada', submitted_at=now() where id='g1';
+select pg_temp.expect_error($$update gestiones set status='recibida' where id='g1'$$, 'RH');
+set test.uid = '00000000-0000-0000-0000-00000000000d';
+select 'coord otra área ve gestiones: ' || count(*) from gestiones;
+set test.uid = '00000000-0000-0000-0000-00000000000c';
+update gestiones set status='recibida' where id='g1';
+select 'recibida por: ' || reviewed_by from gestiones where id='g1';
+set test.uid = '00000000-0000-0000-0000-00000000000e';
+select pg_temp.expect_error($$update gestiones set notes='cambio' where id='g1'$$, 'no pueden modificarse');
+update gestiones set status='cerrada', return_date='2026-11-19' where id='g1';
+select pg_temp.expect_error($$update gestiones set status='anulada' where id='g1'$$, 'cerrada');

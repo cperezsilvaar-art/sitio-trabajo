@@ -1,4 +1,4 @@
-import type { DisciplinaryRequest, Profile, TableName } from '../types';
+import type { DisciplinaryRequest, Gestion, Profile, TableName } from '../types';
 import { APPEND_ONLY, PermissionError, TABLES, type Backend } from './types';
 
 /**
@@ -41,7 +41,7 @@ async function idbFactory(): Promise<IDBFactory> {
 async function openDb(): Promise<IDBDatabase> {
   const factory = await idbFactory();
   return new Promise((resolve, reject) => {
-    const r = factory.open(DB_NAME, 1);
+    const r = factory.open(DB_NAME, 2);
     r.onupgradeneeded = () => {
       for (const t of [...TABLES, '_passwords']) if (!r.result.objectStoreNames.contains(t)) r.result.createObjectStore(t, { keyPath: 'id' });
     };
@@ -71,6 +71,10 @@ export class LocalBackend implements Backend {
 
   private async raw<T>(table: string): Promise<T[]> {
     return req((await this.store(table, 'readonly')).getAll()) as Promise<T[]>;
+  }
+
+  async hasRecord(table: TableName, id: string) {
+    return !!(await req((await this.store(table, 'readonly')).get(id)));
   }
 
   async isEmpty() {
@@ -120,7 +124,7 @@ export class LocalBackend implements Backend {
   }
 
   /** Mismas reglas de lectura que las políticas RLS. */
-  private visible(table: TableName, row: Row, ctx: { requests: Map<string, DisciplinaryRequest> }): boolean {
+  private visible(table: TableName, row: Row, ctx: { requests: Map<string, DisciplinaryRequest>; gestiones: Map<string, Gestion> }): boolean {
     const u = this.user!;
     if (u.role === 'admin_rh') return true;
     const reqOk = (id: unknown) => {
@@ -129,11 +133,19 @@ export class LocalBackend implements Backend {
       if (u.role === 'coordinador') return u.areas.includes(r.area) || r.coordinator_id === u.id;
       return r.manager_id === u.id;
     };
+    const gesOk = (id: unknown) => {
+      const g = ctx.gestiones.get(id as string);
+      if (!g) return false;
+      if (u.role === 'coordinador') return u.areas.includes(g.area) || g.coordinator_id === u.id;
+      return g.manager_id === u.id;
+    };
     switch (table) {
+      case 'gestiones': return gesOk(row.id);
       case 'requests': return reqOk(row.id);
       case 'request_revisions':
       case 'final_documents': return reqOk(row.request_id);
       case 'audit_events':
+        if (row.entity === 'gestion') return gesOk(row.entity_id);
         if (row.entity !== 'request') return u.role !== 'gerente';
         if (u.role === 'gerente' && row.internal) return false;
         return reqOk(row.entity_id);
@@ -149,7 +161,8 @@ export class LocalBackend implements Backend {
     if (!this.user) return [];
     const rows = await this.raw<Row>(table);
     const requests = new Map((await this.raw<DisciplinaryRequest>('requests')).map((r) => [r.id, r]));
-    return rows.filter((r) => this.visible(table, r, { requests })) as unknown as T[];
+    const gestiones = new Map((await this.raw<Gestion>('gestiones')).map((r) => [r.id, r]));
+    return rows.filter((r) => this.visible(table, r, { requests, gestiones })) as unknown as T[];
   }
 
   private canInsert(table: TableName, row: Row) {
@@ -157,7 +170,7 @@ export class LocalBackend implements Backend {
     if (['profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types', 'policy'].includes(table)) {
       return u.role === 'admin_rh';
     }
-    if (table === 'requests') return u.role === 'gerente' && row.manager_id === u.id;
+    if (table === 'requests' || table === 'gestiones') return u.role === 'gerente' && row.manager_id === u.id;
     if (table === 'audit_events') return row.actor_id === u.id;
     return true;
   }
@@ -195,6 +208,21 @@ export class LocalBackend implements Backend {
         const allowed = new Set(['status', 'updated_at', 'closed_at', 'notified_at', 'revision', 'approved_by', 'approved_by_name', 'approved_at', 'approved_revision', 'final_document_id', 'decided_at']);
         if (Object.keys(p).some((k) => !allowed.has(k))) throw new PermissionError('La solicitud está decidida: sus datos no pueden modificarse. Inicie una rectificación.');
       }
+    } else if (table === 'gestiones') {
+      const g = current as unknown as Gestion;
+      const p = patch as Partial<Gestion>;
+      const own = g.manager_id === u.id;
+      const vis = u.role === 'admin_rh' || (u.role === 'coordinador' ? u.areas.includes(g.area) || g.coordinator_id === u.id : own);
+      if (!vis) throw new PermissionError('No tiene acceso a esta gestión.');
+      if ((p.status === 'recibida' || p.status === 'observada') && (u.role === 'gerente' || own)) {
+        throw new PermissionError('La recepción la registra RH.');
+      }
+      const meta = new Set(['status', 'updated_at', 'reviewed_by', 'reviewed_by_name', 'reviewed_at', 'return_date', 'coordinator_id', 'coordinator_name', 'submitted_at']);
+      const dataKeys = Object.keys(p).filter((k) => !meta.has(k));
+      if (dataKeys.length && (!own || !['pendiente_certificado', 'pendiente_firma', 'observada'].includes(g.status))) {
+        throw new PermissionError('En este estado los datos de la gestión no pueden modificarse.');
+      }
+      if (['cerrada', 'anulada'].includes(g.status)) throw new PermissionError('La gestión está cerrada.');
     } else if (table === 'notifications') {
       if (current.user_id !== u.id) throw new PermissionError('No puede modificar avisos ajenos.');
     } else if (u.role !== 'admin_rh') {

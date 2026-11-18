@@ -1,7 +1,8 @@
-import { BookOpen, ClipboardCheck, FilePenLine, FileSearch, LayoutGrid, List, MoreHorizontal, ShieldCheck, Files } from 'lucide-react';
+import { BookOpen, CalendarDays, HeartPulse, ClipboardCheck, FilePenLine, FileSearch, LayoutGrid, List, MoreHorizontal, ShieldCheck, Files } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { RequestTable } from '../components/RequestTable';
+import { GestionTable } from './Gestiones';
 import { Button, Card, cx } from '../components/ui';
 import { useData } from '../lib/store';
 import { CATEGORY_LABEL, type TemplateCategory } from '../lib/types';
@@ -36,22 +37,29 @@ export function Inicio() {
     ? mine.filter((r) => r.status === 'requiere_modificaciones')
     : data.requests.filter((r) => (r.status === 'enviada' || r.status === 'pendiente_revision') && r.manager_id !== user.id);
   const overdue = needsMe.filter((r) => isOverdue(r, data.policy)).length;
+  const gNeeds = isManager
+    ? data.gestiones.filter((g) => g.manager_id === user.id && ['pendiente_certificado', 'pendiente_firma', 'observada'].includes(g.status))
+    : data.gestiones.filter((g) => g.status === 'enviada');
+  const total = needsMe.length + gNeeds.length;
+  const recentG = [...data.gestiones].filter((g) => !isManager || g.manager_id === user.id).sort((a, b) => b.updated_at.localeCompare(a.updated_at)).slice(0, 5);
   const countBy = (c: TemplateCategory) => data.templates.filter((t) => t.category === c && t.active).length;
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-7">
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <Card title="Herramientas recomendadas" actions={<><Link to="/biblioteca" className="text-[15px] text-brand-500 hover:underline">Ver la biblioteca completa</Link><MoreHorizontal size={18} className="text-ink-500" /></>}>
-          <div className="grid gap-6 pt-2 md:grid-cols-3">
+          <div className="grid gap-6 pt-2 md:grid-cols-2 2xl:grid-cols-4">
             {isManager ? (
               <>
+                <Tool icon={<HeartPulse className="text-rose-500" size={22} />} title="Avisar licencia" text="Avisá a RH en el momento y cargá el certificado médico ahora o cuando lo tengas." to="/gestiones/nueva/licencia" />
+                <Tool icon={<CalendarDays className="text-brand-500" size={22} />} title="Cargar vacaciones" text="Generá la notificación para que el colaborador la firme y subí la copia firmada." to="/gestiones/nueva/vacaciones" />
                 <Tool icon={<FilePenLine className="text-amber-500" size={22} />} title="Solicitar medida disciplinaria" text="Formulario guiado: colaborador, hechos, antecedentes y respaldo. El borrador se arma solo con el modelo de RH." to="/solicitudes/nueva" />
-                <Tool icon={<BookOpen className="text-fuchsia-600" size={22} />} title="Consultar modelos" text="Modelos de apercibimiento, suspensión y comunicaciones formales en su versión vigente." to="/biblioteca?cat=sancion" />
-                <Tool icon={<FileSearch className="text-violet-600" size={22} />} title="Seguir mis solicitudes" text="Estado de cada pedido, devoluciones de RH y documentos definitivos para notificar." to="/solicitudes" />
+                <Tool icon={<FileSearch className="text-violet-600" size={22} />} title="Seguir mis gestiones" text="Estado de cada pedido, devoluciones de RH y documentos para notificar." to="/solicitudes" />
               </>
             ) : (
               <>
-                <Tool icon={<ClipboardCheck className="text-amber-500" size={22} />} title="Revisar solicitudes" text="Solicitudes pendientes de aprobación de las áreas que cubrís." to="/aprobaciones" cta="Revisar ahora" />
+                <Tool icon={<ClipboardCheck className="text-amber-500" size={22} />} title="Revisar solicitudes" text="Medidas disciplinarias pendientes de aprobación de las áreas que cubrís." to="/aprobaciones" cta="Revisar ahora" />
+                <Tool icon={<HeartPulse className="text-rose-500" size={22} />} title="Licencias y vacaciones" text="Certificados y notificaciones firmadas que enviaron los gerentes." to="/gestiones?f=pendientes" cta="Revisar ahora" />
                 <Tool icon={<BookOpen className="text-fuchsia-600" size={22} />} title={user.role === 'admin_rh' ? 'Administrar modelos' : 'Biblioteca de RH'} text="Modelos, procedimientos e instructivos con su versión vigente." to={user.role === 'admin_rh' ? '/admin/modelos' : '/biblioteca'} />
                 <Tool icon={<ShieldCheck className="text-violet-600" size={22} />} title="Historial de auditoría" text="Quién hizo qué y cuándo: envíos, observaciones, aprobaciones y versiones." to="/auditoria" cta="Consultar" />
               </>
@@ -64,16 +72,14 @@ export function Inicio() {
               <div className="text-[17px] font-bold text-ink-900">{isManager ? 'Requieren tu atención' : 'Pendientes de tu decisión'}</div>
               <MoreHorizontal size={18} className="text-ink-500" />
             </div>
-            <p className="mt-2 text-[15px] text-ink-700">
-              {needsMe.length === 0
-                ? isManager ? 'No tenés solicitudes devueltas por RH.' : 'No hay solicitudes esperando revisión.'
-                : isManager
-                  ? `${needsMe.length} solicitud${needsMe.length > 1 ? 'es' : ''} con modificaciones pedidas por RH.`
-                  : `${needsMe.length} solicitud${needsMe.length > 1 ? 'es' : ''} esperando revisión${overdue ? `, ${overdue} fuera de plazo` : ''}.`}
-            </p>
+            <ul className="mt-2 space-y-1 text-[15px] text-ink-700">
+              {total === 0 && <li>{isManager ? 'No tenés nada pendiente.' : 'No hay nada esperando revisión.'}</li>}
+              {needsMe.length > 0 && <li><Link className="hover:underline" to={isManager ? '/solicitudes?f=atencion' : '/aprobaciones'}>{needsMe.length} medida{needsMe.length > 1 ? 's' : ''} disciplinaria{needsMe.length > 1 ? 's' : ''} {isManager ? 'devuelta' + (needsMe.length > 1 ? 's' : '') + ' por RH' : 'para decidir'}{overdue ? ` (${overdue} fuera de plazo)` : ''}</Link></li>}
+              {gNeeds.length > 0 && <li><Link className="hover:underline" to="/gestiones?f=pendientes">{gNeeds.length} licencia{gNeeds.length > 1 ? 's' : ''} o vacaciones {isManager ? 'por completar (certificado o firma)' : 'para revisar'}</Link></li>}
+            </ul>
             <div className="mt-auto flex items-end justify-between pt-4">
-              <Button variant="outline" onClick={() => nav(isManager ? '/solicitudes?f=atencion' : '/aprobaciones')}>{needsMe.length ? 'Ver ahora' : 'Ver solicitudes'}</Button>
-              <div className="text-5xl font-bold text-chrome-300">{needsMe.length}</div>
+              <Button variant="outline" onClick={() => nav(gNeeds.length && !needsMe.length ? '/gestiones?f=pendientes' : isManager ? '/solicitudes?f=atencion' : '/aprobaciones')}>{total ? 'Ver ahora' : 'Ver solicitudes'}</Button>
+              <div className="text-5xl font-bold text-chrome-300">{total}</div>
             </div>
           </div>
         </Card>
@@ -107,6 +113,12 @@ export function Inicio() {
         </div>
         <RequestTable rows={recent} view={view} compact={isManager} empty={isManager ? 'Todavía no iniciaste solicitudes.' : 'Sin solicitudes.'} />
         <div className="mt-2 text-right"><Link to="/solicitudes" className="text-[15px] text-brand-500 hover:underline">Ver todas</Link></div>
+      </section>
+
+      <section>
+        <h2 className="mb-2 text-xl font-bold text-ink-900">Licencias y vacaciones</h2>
+        <GestionTable rows={recentG} compact={isManager} />
+        <div className="mt-2 text-right"><Link to="/gestiones" className="text-[15px] text-brand-500 hover:underline">Ver todas</Link></div>
       </section>
     </div>
   );

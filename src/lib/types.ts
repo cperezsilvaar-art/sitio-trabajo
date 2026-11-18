@@ -69,6 +69,8 @@ export interface Template {
   active: boolean;
   /** Tipos de medida (solicitud) que pueden usar este modelo. Vacío = documento sólo de consulta. */
   measure_type_ids: string[];
+  /** Gestiones que usan este modelo (p. ej. la notificación de vacaciones). */
+  gestion_kinds?: GestionKind[];
   current_version_id: string | null;
   created_at: string;
   updated_at: string;
@@ -248,7 +250,7 @@ export type EventAction =
 export interface AuditEvent {
   id: string;
   /** Solicitud, modelo o configuración a la que se refiere. */
-  entity: 'request' | 'template' | 'measure_type' | 'config' | 'user';
+  entity: 'request' | 'gestion' | 'template' | 'measure_type' | 'config' | 'user';
   entity_id: string;
   action: EventAction | string;
   actor_id: string;
@@ -270,6 +272,8 @@ export interface Notification {
   message: string;
   read: boolean;
   at: string;
+  /** Pantalla a la que lleva el aviso. */
+  link?: string | null;
 }
 
 /** Políticas configurables del circuito (una sola fila, id = 'policy'). */
@@ -287,6 +291,10 @@ export interface Policy {
   review_sla_days: number;
   /** Texto legal al pie de los borradores. */
   draft_disclaimer: string;
+  /** Días hábiles para presentar el certificado médico desde el inicio de la licencia. */
+  certificate_days?: number;
+  /** Días corridos de anticipación para notificar vacaciones (art. 154 LCT: 45). */
+  vacation_notice_days?: number;
 }
 
 export interface StoredFile {
@@ -314,4 +322,94 @@ export type TableName =
   | 'audit_events'
   | 'notifications'
   | 'policy'
-  | 'files';
+  | 'files'
+  | 'gestiones';
+
+/* ---------- Licencias y vacaciones ---------- */
+
+export type GestionKind = 'licencia' | 'vacaciones';
+
+export const GESTION_LABEL: Record<GestionKind, string> = { licencia: 'Licencia', vacaciones: 'Vacaciones' };
+
+export type GestionStatus =
+  | 'pendiente_certificado'
+  | 'pendiente_firma'
+  | 'enviada'
+  | 'observada'
+  | 'recibida'
+  | 'cerrada'
+  | 'anulada';
+
+export const GESTION_STATUS_LABEL: Record<GestionStatus, string> = {
+  pendiente_certificado: 'Falta el certificado',
+  pendiente_firma: 'Falta la notificación firmada',
+  enviada: 'Enviada a RH',
+  observada: 'Observada por RH',
+  recibida: 'Recibida por RH',
+  cerrada: 'Cerrada',
+  anulada: 'Anulada',
+};
+
+export const GESTION_STATUS_STYLE: Record<GestionStatus, string> = {
+  pendiente_certificado: 'bg-amber-50 text-amber-800 ring-amber-300',
+  pendiente_firma: 'bg-amber-50 text-amber-800 ring-amber-300',
+  enviada: 'bg-sky-50 text-sky-800 ring-sky-300',
+  observada: 'bg-orange-50 text-orange-800 ring-orange-300',
+  recibida: 'bg-emerald-50 text-emerald-800 ring-emerald-300',
+  cerrada: 'bg-slate-200 text-slate-700 ring-slate-400',
+  anulada: 'bg-rose-50 text-rose-800 ring-rose-300',
+};
+
+/** Tipos de licencia. Las que tienen "certificate: true" exigen certificado. */
+export const LEAVE_TYPES: { id: string; name: string; certificate: boolean; hint?: string }[] = [
+  { id: 'enfermedad', name: 'Enfermedad inculpable', certificate: true, hint: 'Art. 208 LCT. Certificado con fecha, días de reposo, firma y sello del médico.' },
+  { id: 'accidente', name: 'Accidente de trabajo / in itinere (ART)', certificate: true, hint: 'Hacer además la denuncia a la ART.' },
+  { id: 'familiar', name: 'Atención de familiar enfermo', certificate: true },
+  { id: 'maternidad', name: 'Maternidad', certificate: true, hint: 'Certificado con fecha probable de parto.' },
+  { id: 'nacimiento', name: 'Nacimiento de hijo/a', certificate: true, hint: 'Partida o constancia de nacimiento.' },
+  { id: 'matrimonio', name: 'Matrimonio', certificate: true, hint: 'Acta o constancia del Registro Civil.' },
+  { id: 'fallecimiento', name: 'Fallecimiento de familiar', certificate: true, hint: 'Acta o constancia de defunción.' },
+  { id: 'examen', name: 'Examen (estudios)', certificate: true, hint: 'Constancia de la institución.' },
+  { id: 'mudanza', name: 'Mudanza', certificate: false },
+  { id: 'otra', name: 'Otra', certificate: false },
+];
+
+export interface Gestion {
+  id: string;
+  number: string;
+  kind: GestionKind;
+  status: GestionStatus;
+  manager_id: string;
+  manager_name: string;
+  coordinator_id: string | null;
+  coordinator_name: string | null;
+  employee_id: string;
+  employee_name: string;
+  legajo: string;
+  position: string;
+  hire_date: string;
+  store_id: string;
+  store_name: string;
+  area: string;
+  start_date: string;
+  end_date: string;
+  /** Días corridos (vacaciones) o días de reposo/licencia. */
+  days: number;
+  /** Licencia: tipo y fecha en que avisó el colaborador. */
+  leave_type: string;
+  leave_type_name: string;
+  notice_date: string;
+  /** Vacaciones: período (año) al que corresponden y versión del modelo usado. */
+  period_year: number;
+  template_version_id: string;
+  notes: string;
+  /** Certificados (licencia) o notificación firmada (vacaciones) y otros adjuntos. */
+  attachments: (Attachment & { role: 'certificado' | 'firmada' | 'otro' })[];
+  created_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  reviewed_by: string | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  return_date: string | null;
+}
