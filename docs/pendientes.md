@@ -110,12 +110,33 @@ gestionarlo y confirmar la entrega.
 | Chaleco | L | 1 |
 | Chaleco | XS | 1 |
 | Pantalón — **Victor** (BARON APONTE, Victor Eduardo, APV Botánico) | 42 | 1 |
-| Pantalón — **Kevin** (INSIGNARES CHIRINOS, Kevin Odacir, APV Botánico) | 42 | 1 |
+| Pantalón — **Kevin** (INSIGNARES CHIRINOS, Kevin Odacir, APV Senior Botánico) | 42 | 1 |
 
 En el mismo mail figuran **Cata (flotante)** y **un APV de Olleros**. Falta
 confirmar a quién corresponde cada camisa y cada chaleco: el mail lista los
 talles sin decir de quién son. Cata no aparece en la nómina del Área 3 de
 septiembre; si es flotante, puede no estar asignada a una tienda.
+
+## Tarjetas Nubi — todo el equipo de Botánico
+
+Hay que **pedir las tarjetas Nubi para todo el equipo de Botánico**. Según la
+nómina del Área 3 de septiembre son 12 personas (confirmar altas y bajas
+posteriores antes de enviar el pedido):
+
+| Apellido y nombre | Puesto |
+|---|---|
+| ANTURY ARTUNDUAGA, Ana Caterine | Gerente de tienda |
+| SANTOS TORREALBA, Yessika | Director técnico |
+| INSIGNARES CHIRINOS, Kevin Odacir | APV Senior |
+| BARON APONTE, Victor Eduardo | APV |
+| BELLO BASTIDAS, María Valentina | APV |
+| CARPIO, Diana | APV |
+| CONTRERAS, Daniel | APV |
+| LUNA, Juan Gabriel | APV |
+| PANDURO AMES, Elizabeth Rosario | APV |
+| RANGEL, Ivanova | APV |
+| URBINA LEGUA, Keyla Antonella | APV |
+| ZORRILLA RINCON, Edgar Manuel | APV |
 
 ## Con fecha
 
