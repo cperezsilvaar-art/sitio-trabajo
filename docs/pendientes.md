@@ -98,6 +98,25 @@ pendiente de cargar a esa persona en la plantilla semanal. **No se inventan**
 —la minuta dice «las 4 tiendas» y no las nombra—, así que hasta que estén
 confirmadas esto es un apunte y no una función.
 
+## Ropa de trabajo — Botánico
+
+Pedido anotado por mail el **lun 16/11/2026** («Ropa botánico»). Hay que
+gestionarlo y confirmar la entrega.
+
+| Prenda | Talle | Cantidad |
+|---|---|---|
+| Camisa manga larga | L | 1 |
+| Camisa manga larga | XS | 1 |
+| Chaleco | L | 1 |
+| Chaleco | XS | 1 |
+| Pantalón — **Victor** (BARON APONTE, Victor Eduardo, APV Botánico) | 42 | 1 |
+| Pantalón — **Kevin** (INSIGNARES CHIRINOS, Kevin Odacir, APV Botánico) | 42 | 1 |
+
+En el mismo mail figuran **Cata (flotante)** y **un APV de Olleros**. Falta
+confirmar a quién corresponde cada camisa y cada chaleco: el mail lista los
+talles sin decir de quién son. Cata no aparece en la nómina del Área 3 de
+septiembre; si es flotante, puede no estar asignada a una tienda.
+
 ## Con fecha
 
 - **11/10 — cesiones del Área 3.** Es el dead line.
