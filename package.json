@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "build:demo": "tsc -b && vite build --outDir dist-demo"
+    "build:demo": "tsc -b && vite build --outDir dist-demo",
+    "build:portable": "tsc -b && VITE_SINGLE=1 vite build --outDir dist-portable"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

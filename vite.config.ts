@@ -2,8 +2,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-// VITE_EMBED=1 genera la demo como un único HTML (para publicarla como página de Claude).
-const embed = process.env.VITE_EMBED === '1';
+// VITE_EMBED=1: demo para publicar dentro de Claude. VITE_SINGLE=1: demo portátil (un HTML que se abre con doble clic).
+const embed = process.env.VITE_EMBED === '1' || process.env.VITE_SINGLE === '1';
 
 export default defineConfig({
   plugins: embed ? [react(), viteSingleFile()] : [react()],
