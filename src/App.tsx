@@ -8,6 +8,7 @@ import { AdminModelos, ModeloEditor } from './pages/AdminModelos';
 import { Aprobaciones } from './pages/Aprobaciones';
 import { Auditoria } from './pages/Auditoria';
 import { Biblioteca } from './pages/Biblioteca';
+import { Comunicados } from './pages/Comunicados';
 import { GestionDetalle } from './pages/GestionDetalle';
 import { GestionForm } from './pages/GestionForm';
 import { Gestiones } from './pages/Gestiones';
@@ -35,6 +36,7 @@ function Shell() {
         <Route path="/solicitudes/nueva" element={<Only roles={['gerente']}><SolicitudForm /></Only>} />
         <Route path="/solicitudes/:id/editar" element={<Only roles={['gerente']}><SolicitudForm /></Only>} />
         <Route path="/solicitudes/:id" element={<SolicitudDetalle />} />
+        <Route path="/comunicados" element={<Comunicados />} />
         <Route path="/gestiones" element={<Gestiones />} />
         <Route path="/gestiones/nueva/:kind" element={<Only roles={['gerente']}><GestionForm /></Only>} />
         <Route path="/gestiones/:id/editar" element={<Only roles={['gerente']}><GestionForm /></Only>} />

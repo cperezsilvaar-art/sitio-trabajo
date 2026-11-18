@@ -4,6 +4,7 @@
 import type { Backend } from './backend/types';
 import { buildValues, bytesToBase64, fillDocx, renderForRequest, sha256 } from './template';
 import type {
+  Announcement, AnnouncementRead,
   Gestion, GestionKind, GestionStatus,
   Attachment, AuditEvent, DisciplinaryRequest, Employee, FieldDef, FinalDocument, MeasureType, Notification, Policy,
   Profile, RequestData, RequestRevision, RequestStatus, SituationType, Store, StoredFile, TableName, Template,
@@ -29,11 +30,13 @@ export interface Snapshot {
   audit_events: AuditEvent[];
   notifications: Notification[];
   gestiones: Gestion[];
+  announcements: Announcement[];
+  announcement_reads: AnnouncementRead[];
   policy: Policy;
 }
 
 export const EMPTY_SNAPSHOT: Snapshot = {
-  gestiones: [],
+  gestiones: [], announcements: [], announcement_reads: [],
   profiles: [], stores: [], employees: [], templates: [], template_versions: [], measure_types: [], situation_types: [],
   requests: [], request_revisions: [], final_documents: [], audit_events: [], notifications: [],
   policy: {
@@ -68,7 +71,7 @@ export class PortalService {
   async load(): Promise<Snapshot> {
     const tables: TableName[] = [
       'profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types',
-      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'gestiones',
+      'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'gestiones', 'announcements', 'announcement_reads',
     ];
     const rows = await Promise.all(tables.map((t) => this.backend.all(t)));
     const s = Object.fromEntries(tables.map((t, i) => [t, rows[i]])) as unknown as Snapshot & { policy: Policy[] };
@@ -556,6 +559,45 @@ export class PortalService {
     if (!text.trim()) return;
     await this.log({ entity: 'gestion', entity_id: id, action: 'comentario', comment: text });
     await this.notifyG(this.user.id === g.manager_id ? g.coordinator_id : g.manager_id, g.id, `${g.number}: nuevo comentario de ${this.user.name}.`);
+  }
+
+  /* ---------- cartelera de comunicados ---------- */
+
+  /** Gerentes activos que reciben un comunicado. */
+  audienceOf(a: Pick<Announcement, 'areas'>) {
+    return this.snap().profiles.filter((p) => p.active && p.role === 'gerente' && (a.areas.length === 0 || p.areas.some((x) => a.areas.includes(x))));
+  }
+
+  async publishAnnouncement(a: Pick<Announcement, 'title' | 'body' | 'priority' | 'areas' | 'pinned' | 'expires_at' | 'attachments'>) {
+    if (this.user.role === 'gerente') throw new PortalError('Los comunicados los publica RH.');
+    if (!a.title.trim() || !a.body.trim()) throw new PortalError('Completá el título y el texto.');
+    const row: Announcement = {
+      ...a, id: uid('ann'), active: true, author_id: this.user.id, author_name: this.user.name, published_at: nowIso(), updated_at: nowIso(),
+      expires_at: a.expires_at || null,
+    };
+    await this.backend.insert('announcements', [row]);
+    await this.log({ entity: 'announcement', entity_id: row.id, action: 'comunicado_publicado', comment: `${row.title} (${row.priority}; ${row.areas.length ? row.areas.join(', ') : 'todas las áreas'}).` });
+    for (const p of this.audienceOf(row)) {
+      await this.notify(p.id, null, `${row.priority === 'normal' ? 'Nuevo comunicado' : `Comunicado ${row.priority.toUpperCase()}`}: ${row.title}`, '/comunicados');
+    }
+    return row.id;
+  }
+
+  async updateAnnouncement(id: string, patch: Partial<Announcement>) {
+    const a = this.snap().announcements.find((x) => x.id === id);
+    if (!a) throw new PortalError('Comunicado inexistente.');
+    if (this.user.role === 'gerente' || (a.author_id !== this.user.id && this.user.role !== 'admin_rh')) {
+      throw new PortalError('Sólo quien lo publicó (o un administrador de RH) puede modificarlo.');
+    }
+    await this.backend.update<Announcement>('announcements', id, { ...patch, updated_at: nowIso() });
+    const what = patch.active === false ? 'Retirado de la cartelera.' : patch.active === true ? 'Vuelto a publicar.' : 'Editado.';
+    await this.log({ entity: 'announcement', entity_id: id, action: 'comunicado_actualizado', comment: `${a.title}: ${what}` });
+  }
+
+  async markAnnouncementRead(id: string) {
+    const rid = `${id}:${this.user.id}`;
+    if (this.snap().announcement_reads.some((r) => r.id === rid)) return;
+    await this.backend.insert<AnnouncementRead>('announcement_reads', [{ id: rid, announcement_id: id, user_id: this.user.id, user_name: this.user.name, at: nowIso() }]);
   }
 
   isApprover() {

@@ -137,6 +137,21 @@ create table if not exists public.gestiones (
   reviewed_by text references public.profiles(id), reviewed_by_name text, reviewed_at timestamptz, return_date text
 );
 
+-- Cartelera de comunicados
+create table if not exists public.announcements (
+  id text primary key, title text not null, body text not null,
+  priority text not null default 'normal' check (priority in ('normal','importante','urgente')),
+  areas text[] not null default '{}', pinned boolean not null default false, active boolean not null default true,
+  author_id text not null references public.profiles(id), author_name text not null,
+  published_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  expires_at text, attachments jsonb not null default '[]'
+);
+create table if not exists public.announcement_reads (
+  id text primary key, announcement_id text not null references public.announcements(id),
+  user_id text not null references public.profiles(id), user_name text not null, at timestamptz not null default now(),
+  unique (announcement_id, user_id)
+);
+
 -- ---------- Funciones de apoyo ----------
 
 create or replace function public.me() returns public.profiles
@@ -368,7 +383,7 @@ begin
 end $$;
 
 do $$ declare t text; begin
-  foreach t in array array['template_versions','request_revisions','final_documents','audit_events','files'] loop
+  foreach t in array array['template_versions','request_revisions','final_documents','audit_events','files','announcement_reads'] loop
     execute format('drop trigger if exists %I_append_only on public.%I', t, t);
     execute format('create trigger %I_append_only before update or delete on public.%I for each row execute function public.append_only()', t, t);
   end loop;
@@ -447,6 +462,8 @@ alter table public.final_documents enable row level security;
 alter table public.audit_events enable row level security;
 alter table public.notifications enable row level security;
 alter table public.gestiones enable row level security;
+alter table public.announcements enable row level security;
+alter table public.announcement_reads enable row level security;
 
 -- Catálogos: lectura para usuarios activos; escritura sólo administradores de RH.
 do $$ declare t text; begin
@@ -505,10 +522,30 @@ create policy gestiones_ins on public.gestiones for insert to authenticated with
 drop policy if exists gestiones_upd on public.gestiones;
 create policy gestiones_upd on public.gestiones for update to authenticated using (public.can_see_gestion(gestiones)) with check (true);
 
+-- Cartelera: RH publica; cada gerente ve lo vigente para su área y registra su lectura.
+drop policy if exists ann_read on public.announcements;
+create policy ann_read on public.announcements for select to authenticated using (
+  public.my_role() in ('coordinador','admin_rh')
+  or (public.my_role() = 'gerente' and active and (expires_at is null or expires_at >= to_char(now(), 'YYYY-MM-DD'))
+      and (cardinality(areas) = 0 or areas && (public.me()).areas)));
+drop policy if exists ann_ins on public.announcements;
+create policy ann_ins on public.announcements for insert to authenticated with check (
+  public.my_role() in ('coordinador','admin_rh') and author_id = auth.uid()::text);
+drop policy if exists ann_upd on public.announcements;
+create policy ann_upd on public.announcements for update to authenticated using (
+  public.my_role() in ('coordinador','admin_rh') and (author_id = auth.uid()::text or public.is_admin()))
+  with check (author_id = (select a.author_id from public.announcements a where a.id = announcements.id));
+drop policy if exists annr_read on public.announcement_reads;
+create policy annr_read on public.announcement_reads for select to authenticated using (
+  user_id = auth.uid()::text or public.my_role() in ('coordinador','admin_rh'));
+drop policy if exists annr_ins on public.announcement_reads;
+create policy annr_ins on public.announcement_reads for insert to authenticated with check (user_id = auth.uid()::text);
+
 -- Auditoría: el gerente no ve observaciones internas; nadie escribe a nombre de otro.
 drop policy if exists audit_read on public.audit_events;
 create policy audit_read on public.audit_events for select to authenticated using (
   case when entity = 'request' then public.can_see_request_id(entity_id) and (not internal or public.my_role() <> 'gerente')
+       when entity = 'announcement' then true
        when entity = 'gestion' then public.can_see_gestion_id(entity_id) and (not internal or public.my_role() <> 'gerente')
        else public.my_role() in ('coordinador','admin_rh') end);
 drop policy if exists audit_ins on public.audit_events;
@@ -526,7 +563,7 @@ create policy notif_upd on public.notifications for update to authenticated usin
 -- Tiempo real
 do $$ begin
   begin
-    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates, public.gestiones;
+    alter publication supabase_realtime add table public.requests, public.notifications, public.audit_events, public.templates, public.gestiones, public.announcements;
   exception when others then null;
   end;
 end $$;

@@ -21,6 +21,9 @@ export function Layout({ children }: { children: ReactNode }) {
   const unread = data.notifications.filter((n) => !n.read && n.user_id === user.id);
   const pending = data.requests.filter((r) => r.status === 'enviada' || r.status === 'pendiente_revision').length;
   const attention = data.requests.filter((r) => r.manager_id === user.id && (r.status === 'requiere_modificaciones' || r.status === 'borrador')).length;
+  const unreadAnn = user.role === 'gerente'
+    ? data.announcements.filter((a) => !data.announcement_reads.some((r) => r.announcement_id === a.id && r.user_id === user.id)).length
+    : 0;
   const gPend = user.role === 'gerente'
     ? data.gestiones.filter((g) => g.manager_id === user.id && ['pendiente_certificado', 'pendiente_firma', 'observada'].includes(g.status)).length
     : data.gestiones.filter((g) => g.status === 'enviada').length;
@@ -33,6 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
     if (user.role === 'gerente') {
       g.push({ items: [
         { to: '/', label: 'Inicio' },
+        { to: '/comunicados', label: 'Comunicados', badge: unreadAnn ? <Count n={unreadAnn} /> : null },
         { to: '/solicitudes', label: 'Mis solicitudes' },
         { to: '/solicitudes?f=atencion', label: 'Requieren mi atención', badge: attention ? <Count n={attention} /> : null },
       ] });
@@ -43,7 +47,7 @@ export function Layout({ children }: { children: ReactNode }) {
         { to: '/gestiones', label: 'Mis licencias y vacaciones', badge: gPend ? <Count n={gPend} /> : null },
       ] });
     } else {
-      g.push({ items: [{ to: '/', label: 'Inicio' }] });
+      g.push({ items: [{ to: '/', label: 'Inicio' }, { to: '/comunicados', label: 'Cartelera de comunicados' }] });
       g.push({ title: 'Aprobaciones', items: [
         { to: '/aprobaciones', label: 'Solicitudes pendientes de aprobación', badge: pending ? <Count n={pending} /> : null },
         { to: '/solicitudes', label: 'Todas las solicitudes' },

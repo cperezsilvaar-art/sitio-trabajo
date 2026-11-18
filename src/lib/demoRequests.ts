@@ -3,7 +3,7 @@ import { emptyRequestData } from './service';
 import { employees, measureTypes, profiles, situationTypes, stores } from './seed';
 import { renderForRequest, sha256 } from './template';
 import type {
-  Gestion, StoredFile,
+  Announcement, AnnouncementRead, Gestion, StoredFile,
   AuditEvent, DisciplinaryRequest, FinalDocument, Notification, RequestData, RequestRevision, RequestStatus, TemplateVersion,
 } from './types';
 
@@ -243,4 +243,34 @@ export function buildDemoGestiones(versions: TemplateVersion[]) {
 
   gestiones.push(l1, l2, v1, v2, l3);
   return { gestiones, files, audit_events: events, notifications };
+}
+
+/* ---------- Comunicados de ejemplo ---------- */
+
+export function buildDemoAnnouncements(): { announcements: Announcement[]; announcement_reads: AnnouncementRead[] } {
+  const announcements: Announcement[] = [
+    {
+      id: 'ann-demo-1', title: 'Cierre de novedades de noviembre: viernes 21 a las 12 h',
+      body: 'Recordamos que el viernes 21/11 a las 12 h cierra la carga de novedades para la liquidación de noviembre.\n\nAntes de esa hora: licencias con su certificado, vacaciones con la notificación firmada y horas extra autorizadas. Lo que llegue después pasa a diciembre.',
+      priority: 'urgente', areas: [], pinned: true, active: true, author_id: 'u-coord3', author_name: 'Christian Pérez',
+      published_at: ago(1), updated_at: ago(1), expires_at: day(-4), attachments: [],
+    },
+    {
+      id: 'ann-demo-2', title: 'Nuevo modelo de notificación de vacaciones',
+      body: 'Desde hoy las vacaciones se cargan en el portal: "Cargar vacaciones" genera la notificación con el modelo vigente. Hacela firmar por el colaborador con 45 días de anticipación y subí la copia firmada.',
+      priority: 'importante', areas: [], pinned: false, active: true, author_id: 'u-coord1', author_name: 'Martín Ríos',
+      published_at: ago(3), updated_at: ago(3), expires_at: null, attachments: [],
+    },
+    {
+      id: 'ann-demo-3', title: 'Área 3: capacitación de Venta por Obras Sociales en Academia',
+      body: 'Ya está disponible en Academia Farmatodo el curso "Venta por Obras Sociales". Pedimos que todo el equipo lo complete antes de fin de mes. Cualquier problema de acceso, avisen a su coordinador.',
+      priority: 'normal', areas: ['Área 3'], pinned: false, active: true, author_id: 'u-coord3', author_name: 'Christian Pérez',
+      published_at: ago(6), updated_at: ago(6), expires_at: null, attachments: [],
+    },
+  ];
+  const announcement_reads: AnnouncementRead[] = [
+    { id: 'ann-demo-2:u-ger101', announcement_id: 'ann-demo-2', user_id: 'u-ger101', user_name: 'Sofía Álvarez', at: ago(2) },
+    { id: 'ann-demo-3:u-ger310', announcement_id: 'ann-demo-3', user_id: 'u-ger310', user_name: 'Valeria Sosa', at: ago(5) },
+  ];
+  return { announcements, announcement_reads };
 }

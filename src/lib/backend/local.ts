@@ -41,7 +41,7 @@ async function idbFactory(): Promise<IDBFactory> {
 async function openDb(): Promise<IDBDatabase> {
   const factory = await idbFactory();
   return new Promise((resolve, reject) => {
-    const r = factory.open(DB_NAME, 2);
+    const r = factory.open(DB_NAME, 3);
     r.onupgradeneeded = () => {
       for (const t of [...TABLES, '_passwords']) if (!r.result.objectStoreNames.contains(t)) r.result.createObjectStore(t, { keyPath: 'id' });
     };
@@ -140,6 +140,13 @@ export class LocalBackend implements Backend {
       return g.manager_id === u.id;
     };
     switch (table) {
+      case 'announcements': {
+        if (u.role !== 'gerente') return true;
+        const a = row as unknown as { active: boolean; areas: string[]; expires_at: string | null };
+        const today = new Date().toISOString().slice(0, 10);
+        return a.active && (!a.expires_at || a.expires_at >= today) && (a.areas.length === 0 || a.areas.some((x) => u.areas.includes(x)));
+      }
+      case 'announcement_reads': return u.role !== 'gerente' || row.user_id === u.id;
       case 'gestiones': return gesOk(row.id);
       case 'requests': return reqOk(row.id);
       case 'request_revisions':
@@ -171,6 +178,8 @@ export class LocalBackend implements Backend {
       return u.role === 'admin_rh';
     }
     if (table === 'requests' || table === 'gestiones') return u.role === 'gerente' && row.manager_id === u.id;
+    if (table === 'announcements') return u.role !== 'gerente' && row.author_id === u.id;
+    if (table === 'announcement_reads') return row.user_id === u.id;
     if (table === 'audit_events') return row.actor_id === u.id;
     return true;
   }
@@ -223,6 +232,10 @@ export class LocalBackend implements Backend {
         throw new PermissionError('En este estado los datos de la gestión no pueden modificarse.');
       }
       if (['cerrada', 'anulada'].includes(g.status)) throw new PermissionError('La gestión está cerrada.');
+    } else if (table === 'announcements') {
+      if (u.role === 'gerente' || (current.author_id !== u.id && u.role !== 'admin_rh')) {
+        throw new PermissionError('Sólo quien publicó el comunicado (o un administrador de RH) puede modificarlo.');
+      }
     } else if (table === 'notifications') {
       if (current.user_id !== u.id) throw new PermissionError('No puede modificar avisos ajenos.');
     } else if (u.role !== 'admin_rh') {

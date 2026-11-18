@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { RequestTable } from '../components/RequestTable';
 import { GestionTable } from './Gestiones';
+import { Cartelera } from './Comunicados';
 import { Button, Card, cx } from '../components/ui';
 import { useData } from '../lib/store';
 import { CATEGORY_LABEL, type TemplateCategory } from '../lib/types';
@@ -46,6 +47,7 @@ export function Inicio() {
 
   return (
     <div className="mx-auto max-w-[1500px] space-y-7">
+      <Cartelera />
       <div className="grid gap-5 xl:grid-cols-[1fr_400px]">
         <Card title="Herramientas recomendadas" actions={<><Link to="/biblioteca" className="text-[15px] text-brand-500 hover:underline">Ver la biblioteca completa</Link><MoreHorizontal size={18} className="text-ink-500" /></>}>
           <div className="grid gap-6 pt-2 md:grid-cols-2 2xl:grid-cols-4">

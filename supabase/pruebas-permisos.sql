@@ -84,3 +84,16 @@ set test.uid = '00000000-0000-0000-0000-00000000000e';
 select pg_temp.expect_error($$update gestiones set notes='cambio' where id='g1'$$, 'no pueden modificarse');
 update gestiones set status='cerrada', return_date='2026-11-19' where id='g1';
 select pg_temp.expect_error($$update gestiones set status='anulada' where id='g1'$$, 'cerrada');
+
+-- ===== Cartelera =====
+set test.uid = '00000000-0000-0000-0000-00000000000c';
+insert into announcements (id, title, body, areas, author_id, author_name) values ('a1','Cierre','Texto','{"Área 3"}','00000000-0000-0000-0000-00000000000c','Coord 3');
+insert into announcements (id, title, body, areas, author_id, author_name) values ('a2','Sólo Área 1','Texto','{"Área 1"}','00000000-0000-0000-0000-00000000000c','Coord 3');
+set test.uid = '00000000-0000-0000-0000-00000000000e';
+select 'gerente Área 3 ve comunicados: ' || string_agg(id, ',') from announcements;
+select pg_temp.expect_error($$insert into announcements (id, title, body, author_id, author_name) values ('a3','x','x','00000000-0000-0000-0000-00000000000e','G')$$, 'row-level');
+insert into announcement_reads (id, announcement_id, user_id, user_name) values ('a1:g','a1','00000000-0000-0000-0000-00000000000e','G');
+select pg_temp.expect_error($$insert into announcement_reads (id, announcement_id, user_id, user_name) values ('a1:c','a1','00000000-0000-0000-0000-00000000000c','C')$$, 'row-level');
+set test.uid = '00000000-0000-0000-0000-00000000000d';
+update announcements set title='editado por otro' where id='a1';
+select 'otro coordinador no pudo editar: ' || (title = 'Cierre') from announcements where id='a1';

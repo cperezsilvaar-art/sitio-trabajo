@@ -14,11 +14,11 @@ export interface Backend {
 }
 
 /** Tablas en las que sólo se agregan filas: no se editan ni se borran (auditoría y versiones). */
-export const APPEND_ONLY: TableName[] = ['template_versions', 'request_revisions', 'final_documents', 'audit_events', 'files'];
+export const APPEND_ONLY: TableName[] = ['template_versions', 'request_revisions', 'final_documents', 'audit_events', 'files', 'announcement_reads'];
 
 export const TABLES: TableName[] = [
   'profiles', 'stores', 'employees', 'templates', 'template_versions', 'measure_types', 'situation_types',
-  'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'files', 'gestiones',
+  'requests', 'request_revisions', 'final_documents', 'audit_events', 'notifications', 'policy', 'files', 'gestiones', 'announcements', 'announcement_reads',
 ];
 
 export class PermissionError extends Error {}

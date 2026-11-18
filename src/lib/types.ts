@@ -250,7 +250,7 @@ export type EventAction =
 export interface AuditEvent {
   id: string;
   /** Solicitud, modelo o configuración a la que se refiere. */
-  entity: 'request' | 'gestion' | 'template' | 'measure_type' | 'config' | 'user';
+  entity: 'request' | 'gestion' | 'announcement' | 'template' | 'measure_type' | 'config' | 'user';
   entity_id: string;
   action: EventAction | string;
   actor_id: string;
@@ -323,7 +323,9 @@ export type TableName =
   | 'notifications'
   | 'policy'
   | 'files'
-  | 'gestiones';
+  | 'gestiones'
+  | 'announcements'
+  | 'announcement_reads';
 
 /* ---------- Licencias y vacaciones ---------- */
 
@@ -412,4 +414,35 @@ export interface Gestion {
   reviewed_by_name: string | null;
   reviewed_at: string | null;
   return_date: string | null;
+}
+
+/* ---------- Cartelera de comunicados ---------- */
+
+export type AnnouncementPriority = 'normal' | 'importante' | 'urgente';
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  priority: AnnouncementPriority;
+  /** Áreas destinatarias. Vacío = todos los gerentes. */
+  areas: string[];
+  pinned: boolean;
+  active: boolean;
+  author_id: string;
+  author_name: string;
+  published_at: string;
+  updated_at: string;
+  /** Hasta cuándo se muestra en la cartelera (vacío = sin vencimiento). */
+  expires_at: string | null;
+  attachments: Attachment[];
+}
+
+/** Constancia de lectura de un comunicado. */
+export interface AnnouncementRead {
+  id: string;
+  announcement_id: string;
+  user_id: string;
+  user_name: string;
+  at: string;
 }
