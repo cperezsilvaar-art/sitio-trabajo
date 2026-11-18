@@ -74,7 +74,7 @@ export const policy: Policy = {
   review_sla_days: 2,
   certificate_days: 2,
   vacation_notice_days: 45,
-  draft_disclaimer: 'Documento en borrador generado desde el Portal RH. No constituye sanción ni puede comunicarse al colaborador hasta su aprobación por Recursos Humanos.',
+  draft_disclaimer: 'Documento en borrador generado desde el Box de Herramientas RH. No constituye sanción ni puede comunicarse al colaborador hasta su aprobación por Recursos Humanos.',
 };
 
 /* ---------- Modelos ---------- */
@@ -190,15 +190,15 @@ const PROCEDIMIENTO = `PROCEDIMIENTO DISCIPLINARIO – RESUMEN PARA GERENTES
 1. Registrar el hecho el mismo día: qué pasó, cuándo, dónde, quiénes lo vieron. Sin adjetivos ni opiniones.
 2. Reunir el respaldo: planillas de asistencia, arqueos, capturas de cámara (si corresponde), declaraciones de testigos.
 3. Hablar con el colaborador antes de pedir una medida, salvo hechos graves.
-4. Iniciar la solicitud en el Portal RH dentro de las 48 horas hábiles del hecho (la demora puede invalidar la sanción por falta de contemporaneidad).
+4. Iniciar la solicitud en el Box de Herramientas RH dentro de las 48 horas hábiles del hecho (la demora puede invalidar la sanción por falta de contemporaneidad).
 5. RH revisa: proporcionalidad, antecedentes, contemporaneidad y que no exista doble sanción por el mismo hecho.
 6. Sólo con la aprobación de RH se imprime el documento definitivo y se notifica al colaborador, en privado y con un testigo.
 7. Si el colaborador se niega a firmar, dejar constancia con la firma de dos testigos y avisar a RH.
-8. Registrar en el portal la fecha de notificación. El original firmado se envía a RH para el legajo.
+8. Registrar en el Box RH la fecha de notificación. El original firmado se envía a RH para el legajo.
 
 Nunca: comunicar una sanción sin aprobación, sancionar dos veces el mismo hecho, ni aplicar descuentos por fuera de una suspensión aprobada.`;
 
-const INSTRUCTIVO = `INSTRUCTIVO: CÓMO PEDIR UNA MEDIDA DISCIPLINARIA EN EL PORTAL
+const INSTRUCTIVO = `INSTRUCTIVO: CÓMO PEDIR UNA MEDIDA DISCIPLINARIA EN EL BOX DE HERRAMIENTAS RH
 
 Paso 1 · Nueva solicitud: elegir al colaborador. El legajo, el puesto y la tienda se completan solos.
 Paso 2 · El hecho: fecha, tipo de situación y una descripción detallada (mínimo 80 caracteres).
@@ -273,7 +273,7 @@ const TEMPLATES: TplSeed[] = [
   { id: 't-vacaciones', title: 'Notificación de vacaciones', category: 'comunicacion', description: 'Notificación al colaborador del período de vacaciones (arts. 150 a 155 LCT), para firmar.', measures: [], body: VACACIONES, fields: [], gestion: ['vacaciones'] },
   { id: 't-comunicacion', title: 'Comunicación formal al colaborador', category: 'comunicacion', description: 'Modelo general para comunicaciones formales.', measures: [], body: COMUNICACION, fields: COMUNICACION_FIELDS },
   { id: 't-procedimiento', title: 'Procedimiento disciplinario', category: 'procedimiento', description: 'Pasos, plazos y buenas prácticas antes, durante y después de una medida.', measures: [], body: PROCEDIMIENTO, fields: [] },
-  { id: 't-instructivo', title: 'Instructivo: medidas disciplinarias en el portal', category: 'instructivo', description: 'Guía paso a paso para gerentes.', measures: [], body: INSTRUCTIVO, fields: [] },
+  { id: 't-instructivo', title: 'Instructivo: medidas disciplinarias en el Box RH', category: 'instructivo', description: 'Guía paso a paso para gerentes.', measures: [], body: INSTRUCTIVO, fields: [] },
 ];
 
 /* ---------- Word mínimo (para mostrar el flujo con .docx) ---------- */

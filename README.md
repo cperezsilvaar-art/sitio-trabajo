@@ -1,4 +1,4 @@
-# Portal de RR. HH. · Farmatodo
+# Box de Herramientas RH · Farmatodo
 
 Portal de Recursos Humanos para gerentes de tienda y el equipo de RH. Además de
 consultar documentación, permite **pedir medidas disciplinarias con un formulario

@@ -258,7 +258,7 @@ export function buildDemoAnnouncements(): { announcements: Announcement[]; annou
     },
     {
       id: 'ann-demo-2', title: 'Nuevo modelo de notificación de vacaciones',
-      body: 'Desde hoy las vacaciones se cargan en el portal: "Cargar vacaciones" genera la notificación con el modelo vigente. Hacela firmar por el colaborador con 45 días de anticipación y subí la copia firmada.',
+      body: 'Desde hoy las vacaciones se cargan en el Box de Herramientas RH: "Cargar vacaciones" genera la notificación con el modelo vigente. Hacela firmar por el colaborador con 45 días de anticipación y subí la copia firmada.',
       priority: 'importante', areas: [], pinned: false, active: true, author_id: 'u-coord1', author_name: 'Martín Ríos',
       published_at: ago(3), updated_at: ago(3), expires_at: null, attachments: [],
     },

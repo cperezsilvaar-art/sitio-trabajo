@@ -1,4 +1,4 @@
-# Guía del módulo de gestiones, sanciones y aprobaciones
+# Box de Herramientas RH · Guía de uso
 
 ## Para gerentes
 

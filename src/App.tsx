@@ -27,7 +27,7 @@ function Only({ roles, children }: { roles: Role[]; children: ReactNode }) {
 
 function Shell() {
   const { user, booting } = useData();
-  if (booting) return <div className="grid min-h-screen place-items-center text-sm text-ink-500">Cargando Portal RH…</div>;
+  if (booting) return <div className="grid min-h-screen place-items-center text-sm text-ink-500">Cargando el Box de Herramientas RH…</div>;
   if (!user) return <Login />;
   return (
     <Layout>

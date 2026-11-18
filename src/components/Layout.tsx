@@ -157,7 +157,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {/* Encabezado */}
       <header className="flex flex-wrap items-center gap-4 border-b border-chrome-300 bg-white px-5 py-3">
         <Logo size={34} className="rounded-sm" />
-        <div className="text-[17px] text-ink-900">Te damos la bienvenida al <span className="font-semibold">Portal de RR. HH.</span> <span className="text-ink-400">· Farmatodo</span></div>
+        <div className="text-[17px] text-ink-900">Te damos la bienvenida al <span className="font-semibold">Box de Herramientas RH</span> <span className="text-ink-400">· Farmatodo</span></div>
         <form className="ml-auto flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); nav(`/solicitudes?q=${encodeURIComponent(q)}`); }}>
           <label className="flex items-center gap-2 rounded-full px-3 py-1.5 text-[15px] hover:bg-chrome-100 focus-within:bg-chrome-100">
             <Search size={19} />

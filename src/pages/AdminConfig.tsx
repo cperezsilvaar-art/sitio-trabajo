@@ -93,7 +93,7 @@ export function AdminCircuito() {
 
   return (
     <div className="mx-auto max-w-[1300px]">
-      <PageTitle sub="Quién aprueba, cómo se asignan las solicitudes y quién accede al portal. Cada cambio queda en el historial de auditoría.">Circuito, permisos y usuarios</PageTitle>
+      <PageTitle sub="Quién aprueba, cómo se asignan las solicitudes y quién accede al Box. Cada cambio queda en el historial de auditoría.">Circuito, permisos y usuarios</PageTitle>
       {error && <div className="mb-4"><Notice tone="error">{error}</Notice></div>}
       {ok && <div className="mb-4"><Notice tone="ok">{ok}</Notice></div>}
       <div className="grid gap-6 xl:grid-cols-2">

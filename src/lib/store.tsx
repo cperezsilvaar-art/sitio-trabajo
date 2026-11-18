@@ -21,11 +21,14 @@ interface Ctx {
 
 const C = createContext<Ctx | null>(null);
 
+/** Marca de la versión de los datos de demostración: si cambia, la demo se recarga. */
+const SEED_MARK = 'seed-box-v1';
+
 async function ensureSeed() {
   if (!(backend instanceof LocalBackend)) return;
   if (!(await backend.isEmpty())) {
     // Datos de una versión anterior de la demo: se recargan.
-    if (await backend.hasRecord('vacancies', 'vac-VTE-2026-1117-R7KQ')) return;
+    if (await backend.hasRecord('files', SEED_MARK)) return;
     await backend.resetAll();
   }
   const s = await buildSeed();
@@ -34,7 +37,7 @@ async function ensureSeed() {
   const ann = buildDemoAnnouncements();
   const vac = buildDemoVacancies();
   await backend.seed({
-    ...s.data, ...demo, ...ann, gestiones: ges.gestiones, vacancies: vac.vacancies, files: [...s.data.files, ...ges.files],
+    ...s.data, ...demo, ...ann, gestiones: ges.gestiones, vacancies: vac.vacancies, files: [...s.data.files, ...ges.files, { id: SEED_MARK, name: SEED_MARK, mime: 'text/plain', size: 0, data: '', created_at: s.now, created_by: 'u-admin' }],
     audit_events: [...demo.audit_events, ...ges.audit_events, ...vac.audit_events], notifications: [...demo.notifications, ...ges.notifications, ...vac.notifications],
   }, s.passwords);
 }

@@ -27,15 +27,15 @@ export function Login() {
 
   return (
     <div className="min-h-full bg-chrome-100">
-      <div className="flex h-11 items-center bg-brand-700 px-4 text-sm font-semibold text-white">Portal de RR. HH. · Farmatodo</div>
+      <div className="flex h-11 items-center bg-brand-700 px-4 text-sm font-semibold text-white">Box de Herramientas RH · Farmatodo</div>
       <div className="mx-auto grid max-w-5xl gap-8 px-5 py-12 lg:grid-cols-2">
         <div>
           <Logo size={56} className="mb-4 rounded" />
-          <h1 className="text-3xl font-bold text-ink-900">Portal de Recursos Humanos</h1>
+          <h1 className="text-3xl font-bold text-ink-900">Box de Herramientas RH</h1>
           <p className="mt-1 font-semibold text-brand-700">Farmatodo</p>
           <p className="mt-3 text-ink-500">
-            Biblioteca de modelos y procedimientos, solicitudes de medidas disciplinarias con borrador automático,
-            y circuito de aprobación de RH con historial de auditoría.
+            Todo lo que un gerente necesita para gestionar a su equipo, en un solo lugar: comunicados de RH,
+            licencias, vacaciones, vacantes, medidas disciplinarias y la biblioteca de modelos.
           </p>
           <form className="mt-8 space-y-4 rounded-xl border border-chrome-300 bg-white p-6" onSubmit={(e) => { e.preventDefault(); go(); }}>
             <Input label="Correo" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
