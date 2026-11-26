@@ -264,8 +264,7 @@ const LAB_SHORT = "Lab. Vassallo";
 function card(p, guest = false) {
   const tags = [];
   if (guest === "float") tags.push(`<span class="tag tag-float">Flotante</span>`);
-  else if (guest === "imp") tags.push(`<span class="tag tag-lab">${esc(storeName(p.store))}</span>`);
-  else if (p.imputadoEn) tags.push(`<span class="tag tag-work">Imputado en ${esc(storeName(p.imputadoEn))}</span>`);
+  else if (p.ubicacion) tags.push(`<span class="tag tag-work">Trabaja físicamente en ${esc(storeName(p.ubicacion))}</span>`);
   else if (p.trabajaEn) tags.push(`<span class="tag tag-work">Trabaja en ${esc(storeName(p.trabajaEn))}</span>`);
   if (p.empresa && p.store !== "laboratorios-vassallo" && !guest) tags.push(`<span class="tag tag-lab" title="${esc(p.empresa)}">${p.empresa === "Laboratorios Vassallo" ? LAB_SHORT : esc(p.empresa)}</span>`);
   const facts = [];
@@ -297,9 +296,6 @@ function renderChart() {
   const guests = state.data.people
     .filter((p) => p.trabajaEn === state.store && p.store !== state.store)
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const imputed = state.data.people
-    .filter((p) => p.imputadoEn === state.store && p.store !== state.store)
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
   $("#chart").innerHTML = `
     <div class="level level-top">
       ${zone("GT", people, "z-gt")}
@@ -320,9 +316,6 @@ function renderChart() {
     ${guests.length ? `<div class="level level-na"><div class="guest-zone">
       <div class="zone-label">Flotantes trabajando en esta tienda <span>${guests.length}</span></div>
       <div class="zone-cards">${guests.map((g) => card(g, "float")).join("")}</div></div></div>` : ""}
-    ${imputed.length ? `<div class="level level-na"><div class="guest-zone imp-zone">
-      <div class="zone-label">Imputados en esta tienda (de otra unidad) <span>${imputed.length}</span></div>
-      <div class="zone-cards">${imputed.map((g) => card(g, "imp")).join("")}</div></div></div>` : ""}
     ${isEditor() ? `<div class="chart-actions"><button class="btn small" id="btn-add-person">+ Agregar persona a esta tienda</button></div>` : ""}
   `;
 }
@@ -379,7 +372,7 @@ function openCardMenu(cardEl) {
     <dl class="pm-facts">
       ${p.cargo ? `<dt>Cargo (nómina)</dt><dd>${esc(p.cargo)}</dd>` : ""}
       ${p.empresa ? `<dt>Empresa</dt><dd>${esc(p.empresa)}</dd>` : ""}
-      ${p.imputadoEn ? `<dt>Imputado/a en</dt><dd>${esc(storeName(p.imputadoEn))}</dd>` : ""}
+      ${p.ubicacion ? `<dt>Trabaja físicamente en</dt><dd>${esc(storeName(p.ubicacion))}</dd>` : ""}
       ${p.trabajaEn && !isFloatStore(p.trabajaEn) ? `<dt>Imputado/a en</dt><dd>${esc(storeName(p.store))}</dd><dt>Trabaja en</dt><dd>${esc(storeName(p.trabajaEn))}</dd>` : ""}
       ${p.legajo ? `<dt>Legajo</dt><dd>${esc(p.legajo)}</dd>` : ""}
       <dt>Fecha de ingreso</dt><dd>${p.ingreso ? esc(fmtShort(p.ingreso)) : "—"}</dd>
@@ -399,10 +392,10 @@ function openCardMenu(cardEl) {
       .filter((s) => !isFloatStore(s.id))
       .map((s) => `<option value="${esc(s.id)}" ${s.id === p.trabajaEn ? "selected" : ""}>${esc(s.name)}</option>`)
       .join("")}</select>` : ""}
-    ${p.store === "laboratorios-vassallo" || p.imputadoEn ? `<div class="pm-label">Imputado/a en tienda</div>
+    ${p.store === "laboratorios-vassallo" || p.ubicacion ? `<div class="pm-label">Trabaja físicamente en</div>
     <select class="pm-imp"><option value="">— Ninguna —</option>${state.data.stores
       .filter((s) => !isFloatStore(s.id) && s.id !== p.store)
-      .map((s) => `<option value="${esc(s.id)}" ${s.id === p.imputadoEn ? "selected" : ""}>${esc(s.name)}</option>`)
+      .map((s) => `<option value="${esc(s.id)}" ${s.id === p.ubicacion ? "selected" : ""}>${esc(s.name)}</option>`)
       .join("")}</select>` : ""}
     <form class="pm-form" hidden>
       <label>Nombre y apellido<input name="name" value="${esc(p.name)}" required></label>
@@ -452,7 +445,7 @@ function openCardMenu(cardEl) {
   };
   const imp = $(".pm-imp", m);
   if (imp) imp.onchange = (e) => {
-    e.target.value ? (p.imputadoEn = e.target.value) : delete p.imputadoEn;
+    e.target.value ? (p.ubicacion = e.target.value) : delete p.ubicacion;
     m.hidden = true;
     markDirty();
     renderChart();

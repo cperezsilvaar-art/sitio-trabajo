@@ -145,13 +145,12 @@ label.check input { width: auto; }
 .pm-facts dt { color: var(--muted); } .pm-facts dd { margin: 0; font-weight: 600; }
 .pm-form label { margin-top: 8px; }
 .card-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
-.tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; white-space: nowrap; }
+.tag { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; line-height: 1.35; }
 .tag-work { background: #e0f2fe; color: #075985; }
 .tag-float { background: #fef3c7; color: #92400e; }
 .tag-lab { background: #ede9fe; color: #5b21b6; }
 .guest-zone { width: 100%; border: 1px dashed #e6c86e; background: #fffbeb; border-radius: var(--radius); padding: 10px 12px 12px; }
 .card.is-guest { cursor: pointer; }
-.imp-zone { border-color: #c4b5fd; background: #f5f3ff; }
 .chart-actions { margin-top: 18px; }
 
 /* Menú de tarjeta */
