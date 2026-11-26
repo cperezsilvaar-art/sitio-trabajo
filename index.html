@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Área 3 · Operaciones</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230f4c81%22/%3E%3Ctext x=%2216%22 y=%2222%22 font-size=%2216%22 text-anchor=%22middle%22 fill=%22white%22 font-family=%22Arial%22%3EA3%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <!-- Pantalla de acceso -->
+  <section id="login" class="login">
+    <form id="login-form" class="login-card">
+      <h1>Área 3 · Operaciones</h1>
+      <p class="muted">Organigrama y minuta semanal de RRHH</p>
+      <label for="pw">Contraseña</label>
+      <input id="pw" type="password" autocomplete="current-password" required>
+      <label class="check"><input id="remember" type="checkbox"> Recordar en este dispositivo</label>
+      <button type="submit" class="btn primary">Ingresar</button>
+      <p id="login-error" class="error" hidden></p>
+    </form>
+  </section>
+
+  <!-- Aplicación -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">Área 3 · Operaciones</div>
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-view="org" role="tab">Organigrama</button>
+        <button class="tab" data-view="minutes" role="tab">Minuta semanal</button>
+      </nav>
+      <div class="top-actions">
+        <span id="editor-badge" class="badge" hidden>Modo editor</span>
+        <button id="btn-settings" class="btn ghost" title="Configuración">⚙︎</button>
+        <button id="btn-logout" class="btn ghost" title="Salir">Salir</button>
+      </div>
+    </header>
+
+    <div id="dirty-bar" class="dirty-bar" hidden>
+      <span id="dirty-text">Tenés cambios sin guardar.</span>
+      <button id="btn-discard" class="btn ghost small">Descartar</button>
+      <button id="btn-save" class="btn primary small">Guardar cambios</button>
+    </div>
+
+    <!-- ORGANIGRAMA -->
+    <main id="view-org" class="view">
+      <div class="store-picker">
+        <div id="store-pills" class="pills"></div>
+        <select id="store-select" aria-label="Tienda"></select>
+      </div>
+      <h2 id="store-title" class="store-title"></h2>
+      <p class="hint" id="org-hint">Arrastrá una tarjeta a otro nivel para cambiar el puesto, o tocala para ver opciones.</p>
+      <div id="chart" class="chart"></div>
+    </main>
+
+    <!-- MINUTAS -->
+    <main id="view-minutes" class="view" hidden>
+      <div class="minutes-layout">
+        <aside class="history">
+          <div class="history-head">
+            <h3>Historial</h3>
+            <button id="btn-new-minute" class="btn primary small" hidden>+ Nueva minuta</button>
+          </div>
+          <input id="minute-search" type="search" placeholder="Buscar en minutas…">
+          <ul id="minute-list" class="minute-list"></ul>
+        </aside>
+        <section id="minute-detail" class="minute-detail"></section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Menú de tarjeta -->
+  <div id="card-menu" class="popover" hidden></div>
+
+  <!-- Diálogo de configuración -->
+  <dialog id="settings">
+    <form method="dialog" class="dialog-body">
+      <h3>Configuración</h3>
+      <p class="muted small">El <b>modo editor</b> permite cargar minutas y publicar cambios del organigrama para que todos los vean. Se activa con un token de GitHub que queda guardado solo en este navegador.</p>
+      <label for="gh-token">Token de GitHub (modo editor)</label>
+      <input id="gh-token" type="password" placeholder="github_pat_…" autocomplete="off">
+      <div class="row">
+        <button type="button" id="btn-token-save" class="btn primary small">Guardar token</button>
+        <button type="button" id="btn-token-clear" class="btn ghost small">Quitar token</button>
+      </div>
+      <hr>
+      <div id="pw-change" hidden>
+        <label for="new-pw">Cambiar contraseña de acceso</label>
+        <input id="new-pw" type="password" placeholder="Nueva contraseña (mín. 10 caracteres)" autocomplete="new-password">
+        <button type="button" id="btn-pw-change" class="btn small">Cambiar y publicar</button>
+        <hr>
+      </div>
+      <button type="button" id="btn-backup" class="btn small">Descargar respaldo (JSON)</button>
+      <p id="settings-msg" class="muted small"></p>
+      <div class="row end"><button class="btn ghost small" value="close">Cerrar</button></div>
+    </form>
+  </dialog>
+
+  <!-- Diálogo de edición de minuta -->
+  <dialog id="minute-editor" class="wide">
+    <form id="minute-form" method="dialog" class="dialog-body">
+      <h3 id="minute-editor-title">Nueva minuta</h3>
+      <label for="m-date">Fecha (viernes)</label>
+      <input id="m-date" type="date" required>
+      <label for="m-summary">Resumen general (opcional)</label>
+      <textarea id="m-summary" rows="2" placeholder="Lo más importante de la semana en dos líneas"></textarea>
+      <div id="m-sections"></div>
+      <datalist id="people-list"></datalist>
+      <div class="row end">
+        <button type="button" id="btn-minute-delete" class="btn danger small" hidden>Eliminar minuta</button>
+        <span class="spacer"></span>
+        <button class="btn ghost small" value="cancel" formnovalidate>Cancelar</button>
+        <button id="btn-minute-ok" class="btn primary small" value="ok">Guardar minuta</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
