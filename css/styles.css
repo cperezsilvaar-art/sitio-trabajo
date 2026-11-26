@@ -135,6 +135,15 @@ label.check input { width: auto; }
 .role-GT { --rc: #0f4c81; } .role-DT { --rc: #0e7490; } .role-SENIOR { --rc: #4f46e5; }
 .role-APB { --rc: #7c3aed; } .role-DERMO { --rc: #db2777; } .role-ASESORA { --rc: #059669; } .role-NA { --rc: #9ca3af; }
 .z-gt .card { width: 220px; }
+.dt-col { display: flex; flex-direction: column; gap: 10px; }
+.card-facts { margin-top: 6px; padding-top: 6px; border-top: 1px solid #eef0f3; display: grid; gap: 1px; font-size: 12px; color: #4b5563; }
+.card-facts i { font-style: normal; color: var(--muted); display: inline-block; min-width: 52px; }
+.card.is-vacant { background: repeating-linear-gradient(45deg, #fff, #fff 8px, #f6f7f9 8px, #f6f7f9 16px); }
+.card.is-vacant .card-name { color: var(--muted); font-style: italic; }
+.role-FARM { --rc: #0891b2; } .role-OTRO { --rc: #64748b; }
+.pm-facts { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 10px 0 0; font-size: 13px; }
+.pm-facts dt { color: var(--muted); } .pm-facts dd { margin: 0; font-weight: 600; }
+.pm-form label { margin-top: 8px; }
 .chart-actions { margin-top: 18px; }
 
 /* Menú de tarjeta */
@@ -222,6 +231,8 @@ legend { font-weight: 700; font-size: 14px; padding: 0 6px; }
   #store-select { display: block; }
   .store-title { font-size: 24px; }
   .level-top, .level-split { flex-direction: column; align-items: stretch; gap: 0; }
+  .dt-col { gap: 0; }
+  .dt-col > div:last-child:not(.hidden-na) { margin-top: 10px; }
   .level-top .h-link { width: 0; height: 18px; border-top: 0; border-left: 2px dashed #9aa5b4; align-self: center; }
   .level-split .zone + .zone { margin-top: 10px; }
   .level-split .zone { max-width: none; }

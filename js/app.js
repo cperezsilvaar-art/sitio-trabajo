@@ -9,9 +9,11 @@ const ROLES = {
   APB: "Asistente de Piso de Venta",
   DERMO: "Dermo",
   ASESORA: "Asesora",
+  FARM: "Farmacéutico Auxiliar",
+  OTRO: "Otro puesto",
   NA: "Sin puesto asignado",
 };
-const ROLE_ORDER = ["GT", "DT", "SENIOR", "APB", "DERMO", "ASESORA", "NA"];
+const ROLE_ORDER = ["GT", "DT", "FARM", "SENIOR", "APB", "DERMO", "ASESORA", "OTRO", "NA"];
 
 const SECTIONS = [
   { key: "capacitacion", label: "Capacitación", color: "#2563eb" },
@@ -236,16 +238,39 @@ function setStore(id) {
   renderChart();
 }
 
+// Edad / antigüedad calculadas a la fecha de hoy
+function yearsMonths(iso) {
+  if (!iso) return null;
+  const a = parseDate(iso), n = new Date();
+  let m = (n.getFullYear() - a.getFullYear()) * 12 + (n.getMonth() - a.getMonth());
+  if (n.getDate() < a.getDate()) m--;
+  return m < 0 ? null : { y: Math.floor(m / 12), m: m % 12 };
+}
+const age = (p) => yearsMonths(p.nac)?.y ?? null;
+function tenure(p) {
+  const t = yearsMonths(p.ingreso);
+  if (!t) return null;
+  const y = t.y ? `${t.y} ${t.y === 1 ? "año" : "años"}` : "";
+  const m = t.m ? `${t.m} ${t.m === 1 ? "mes" : "meses"}` : "";
+  return [y, m].filter(Boolean).join(" ") || "menos de 1 mes";
+}
+const roleLabel = (p) => (p.role === "OTRO" && p.cargo) || ROLES[p.role];
+
 function card(p) {
-  return `<div class="card role-${p.role}" draggable="true" data-id="${esc(p.id)}" tabindex="0">
-    <div class="card-role">${esc(ROLES[p.role])}</div>
-    <div class="card-name">${esc(p.name)}</div>
+  const facts = [];
+  if (p.ingreso) facts.push(`<span><i>Ingreso</i> ${esc(fmtShort(p.ingreso))}</span>`);
+  if (tenure(p)) facts.push(`<span><i>Antig.</i> ${esc(tenure(p))}</span>`);
+  if (age(p) !== null) facts.push(`<span><i>Edad</i> ${age(p)} años</span>`);
+  return `<div class="card role-${p.role} ${p.vacante ? "is-vacant" : ""}" draggable="true" data-id="${esc(p.id)}" tabindex="0">
+    <div class="card-role">${esc(roleLabel(p))}</div>
+    <div class="card-name">${p.vacante ? "Vacante" : esc(p.name)}</div>
+    ${facts.length ? `<div class="card-facts">${facts.join("")}</div>` : ""}
   </div>`;
 }
 
 function zone(role, people, extraClass = "") {
   const list = people.filter((p) => p.role === role).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const label = { SENIOR: "APB Seniors", APB: "Asistentes de Piso de Venta", ASESORA: "Asesoras" }[role] || ROLES[role];
+  const label = { SENIOR: "APB Seniors", APB: "Asistentes de Piso de Venta", ASESORA: "Asesoras", FARM: "Farmacéuticos Auxiliares", OTRO: "Otros puestos" }[role] || ROLES[role];
   return `<div class="zone ${extraClass}" data-role="${role}">
     <div class="zone-label">${esc(label)} <span>${list.length || ""}</span></div>
     <div class="zone-cards">${list.length ? list.map(card).join("") : `<div class="empty">Vacante</div>`}</div>
@@ -256,12 +281,15 @@ function renderChart() {
   const store = state.data.stores.find((s) => s.id === state.store);
   $("#store-title").textContent = store ? store.name : "";
   const people = state.data.people.filter((p) => p.store === state.store);
-  const na = people.filter((p) => p.role === "NA").length;
+  const has = (r) => people.some((p) => p.role === r);
   $("#chart").innerHTML = `
     <div class="level level-top">
       ${zone("GT", people, "z-gt")}
       <div class="h-link" aria-hidden="true"></div>
-      ${zone("DT", people, "z-dt")}
+      <div class="dt-col">
+        ${zone("DT", people, "z-dt")}
+        <div class="${has("FARM") ? "" : "hidden-na"}">${zone("FARM", people, "z-farm")}</div>
+      </div>
     </div>
     <div class="v-link" aria-hidden="true"></div>
     <div class="level">${zone("SENIOR", people)}</div>
@@ -269,7 +297,8 @@ function renderChart() {
     <div class="level">${zone("APB", people)}</div>
     <div class="v-link" aria-hidden="true"></div>
     <div class="level level-split">${zone("DERMO", people)}${zone("ASESORA", people)}</div>
-    <div class="level level-na ${na ? "" : "hidden-na"}">${zone("NA", people, "z-na")}</div>
+    <div class="level level-na ${has("OTRO") ? "" : "hidden-na"}">${zone("OTRO", people, "z-na")}</div>
+    <div class="level level-na ${has("NA") ? "" : "hidden-na"}">${zone("NA", people, "z-na")}</div>
     ${isEditor() ? `<div class="chart-actions"><button class="btn small" id="btn-add-person">+ Agregar persona a esta tienda</button></div>` : ""}
   `;
 }
@@ -321,18 +350,32 @@ function openCardMenu(cardEl) {
   const p = state.data.people.find((x) => x.id === cardEl.dataset.id);
   const m = $("#card-menu");
   m.innerHTML = `
-    <div class="pm-name">${esc(p.name)}</div>
-    <div class="pm-sub">${esc(ROLES[p.role])} · ${esc(storeName(p.store))}</div>
+    <div class="pm-name">${p.vacante ? "Vacante" : esc(p.name)}</div>
+    <div class="pm-sub">${esc(roleLabel(p))} · ${esc(storeName(p.store))}</div>
+    <dl class="pm-facts">
+      ${p.cargo ? `<dt>Cargo (nómina)</dt><dd>${esc(p.cargo)}</dd>` : ""}
+      ${p.legajo ? `<dt>Legajo</dt><dd>${esc(p.legajo)}</dd>` : ""}
+      <dt>Fecha de ingreso</dt><dd>${p.ingreso ? esc(fmtShort(p.ingreso)) : "—"}</dd>
+      <dt>Antigüedad</dt><dd>${esc(tenure(p) || "—")}</dd>
+      <dt>Edad</dt><dd>${age(p) !== null ? age(p) + " años" : "—"}</dd>
+    </dl>
     <div class="pm-label">Cambiar puesto</div>
-    <div class="pm-roles">${ROLE_ORDER.filter((r) => r !== "NA")
+    <div class="pm-roles">${ROLE_ORDER.filter((r) => r !== "NA" && (r !== "OTRO" || p.role === "OTRO"))
       .map((r) => `<button class="chip ${r === p.role ? "active" : ""}" data-role="${r}">${esc(ROLES[r])}</button>`)
       .join("")}</div>
     <div class="pm-label">Mover a otra tienda</div>
     <select class="pm-store">${state.data.stores
       .map((s) => `<option value="${esc(s.id)}" ${s.id === p.store ? "selected" : ""}>${esc(s.name)}</option>`)
       .join("")}</select>
+    <form class="pm-form" hidden>
+      <label>Nombre y apellido<input name="name" value="${esc(p.name)}" required></label>
+      <label>Fecha de ingreso<input name="ingreso" type="date" value="${esc(p.ingreso || "")}"></label>
+      <label>Fecha de nacimiento<input name="nac" type="date" value="${esc(p.nac || "")}"></label>
+      <label class="check"><input name="vacante" type="checkbox" ${p.vacante ? "checked" : ""}> Puesto vacante</label>
+      <div class="row end"><button class="btn primary small" type="submit">Guardar</button></div>
+    </form>
     ${isEditor() ? `<div class="pm-edit">
-      <button class="btn small" data-act="rename">Editar nombre</button>
+      <button class="btn small" data-act="edit">Editar datos</button>
       <button class="btn small danger" data-act="remove">Quitar del organigrama</button></div>` : ""}
   `;
   m.hidden = false;
@@ -345,15 +388,27 @@ function openCardMenu(cardEl) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.role) movePerson(p.id, b.dataset.role);
-    if (b.dataset.act === "rename") {
-      const n = prompt("Nombre y apellido", p.name);
-      if (n && n.trim()) { p.name = n.trim(); markDirty(); renderChart(); }
+    if (b.dataset.act === "edit") {
+      $(".pm-form", m).hidden = false;
+      $(".pm-edit", m).hidden = true;
+      return;
     }
+    if (b.type === "submit") return;
     if (b.dataset.act === "remove" && confirm(`¿Quitar a ${p.name} del organigrama?`)) {
       state.data.people = state.data.people.filter((x) => x.id !== p.id);
       markDirty(); renderStores(); renderChart();
     }
     m.hidden = true;
+  };
+  $(".pm-form", m).onsubmit = (e) => {
+    e.preventDefault();
+    const f = new FormData(e.target);
+    p.name = f.get("name").trim() || p.name;
+    for (const k of ["ingreso", "nac"]) f.get(k) ? (p[k] = f.get(k)) : delete p[k];
+    f.get("vacante") ? (p.vacante = true) : delete p.vacante;
+    m.hidden = true;
+    markDirty();
+    renderChart();
   };
   $(".pm-store", m).onchange = (e) => {
     movePerson(p.id, null, e.target.value);
