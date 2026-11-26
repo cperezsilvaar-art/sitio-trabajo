@@ -263,7 +263,7 @@ function card(p, guest = false) {
   const tags = [];
   if (guest) tags.push(`<span class="tag tag-float">Flotante</span>`);
   else if (p.trabajaEn) tags.push(`<span class="tag tag-work">Trabaja en ${esc(storeName(p.trabajaEn))}</span>`);
-  if (p.empresa) tags.push(`<span class="tag tag-lab" title="${esc(p.empresa)}">${p.empresa === "Laboratorios Vassallo" ? LAB_SHORT : esc(p.empresa)}</span>`);
+  if (p.empresa && p.store !== "laboratorios-vassallo") tags.push(`<span class="tag tag-lab" title="${esc(p.empresa)}">${p.empresa === "Laboratorios Vassallo" ? LAB_SHORT : esc(p.empresa)}</span>`);
   const facts = [];
   if (p.ingreso) facts.push(`<span><i>Ingreso</i> ${esc(fmtShort(p.ingreso))}</span>`);
   if (tenure(p)) facts.push(`<span><i>Antig.</i> ${esc(tenure(p))}</span>`);
