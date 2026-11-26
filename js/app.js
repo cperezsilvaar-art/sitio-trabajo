@@ -23,6 +23,8 @@ const SECTIONS = [
   { key: "bajas", label: "Bajas", color: "#6b7280" },
   { key: "movimientos", label: "Movimientos internos", color: "#7c3aed" },
   { key: "reuniones", label: "Reuniones con colaboradores", color: "#059669" },
+  { key: "horasExtras", label: "Horas extras de la semana", color: "#ea580c", detailHint: "Cantidad de horas y motivo" },
+  { key: "ingresos", label: "Ingresos", color: "#0d9488", detailHint: "Puesto y fecha de ingreso" },
 ];
 
 const LS = { pw: "a3_pw", token: "a3_token", draft: "a3_draft", store: "a3_store" };
@@ -472,7 +474,7 @@ function renderMinuteDetail() {
   const el = $("#minute-detail");
   const m = state.data.minutes.find((x) => x.id === state.minuteId);
   if (!m) {
-    el.innerHTML = `<div class="empty-state"><h3>Minuta semanal</h3><p class="muted">Acá vas a ver cada viernes el resumen de RRHH del área: capacitación, ausentismo, casos críticos, sanciones, bajas, movimientos y reuniones.</p>
+    el.innerHTML = `<div class="empty-state"><h3>Minuta semanal</h3><p class="muted">Acá vas a ver cada viernes el resumen de RRHH del área: capacitación, ausentismo, casos críticos, sanciones, bajas, movimientos, reuniones, horas extras e ingresos.</p>
       ${isEditor() ? `<button class="btn primary" data-act="new-minute">+ Cargar la primera minuta</button>` : ""}</div>`;
     return;
   }
@@ -501,13 +503,13 @@ function renderMinuteDetail() {
 }
 
 // Editor de minuta
-function itemRow(i = {}) {
+function itemRow(i = {}, hint = "Detalle") {
   const opts = `<option value="">Tienda…</option>` + state.data.stores
     .map((s) => `<option value="${esc(s.id)}" ${s.id === i.store ? "selected" : ""}>${esc(s.name)}</option>`).join("");
   return `<div class="item-row">
     <select class="f-store">${opts}</select>
     <input class="f-person" list="people-list" placeholder="Colaborador" value="${esc(i.person || "")}">
-    <input class="f-detail" placeholder="Detalle" value="${esc(i.detail || "")}">
+    <input class="f-detail" placeholder="${esc(hint)}" value="${esc(i.detail || "")}">
     <button type="button" class="btn ghost small rm" title="Quitar">✕</button>
   </div>`;
 }
@@ -522,7 +524,7 @@ function openMinuteEditor(m) {
   $("#m-sections").innerHTML = SECTIONS.map((s) => `
     <fieldset data-key="${s.key}" style="--c:${s.color}">
       <legend>${esc(s.label)}</legend>
-      <div class="items">${(m?.sections?.[s.key] || []).map(itemRow).join("")}</div>
+      <div class="items">${(m?.sections?.[s.key] || []).map((i) => itemRow(i, s.detailHint)).join("")}</div>
       <button type="button" class="btn ghost small add">+ Agregar</button>
     </fieldset>`).join("");
   dlg.dataset.editing = m?.id || "";
@@ -533,7 +535,8 @@ function openMinuteEditor(m) {
 $("#m-sections").addEventListener("click", (e) => {
   if (e.target.closest(".add")) {
     const items = e.target.closest("fieldset").querySelector(".items");
-    items.insertAdjacentHTML("beforeend", itemRow());
+    const sec = SECTIONS.find((x) => x.key === e.target.closest("fieldset").dataset.key);
+    items.insertAdjacentHTML("beforeend", itemRow({}, sec?.detailHint));
     items.lastElementChild.querySelector(".f-person").focus();
   }
   if (e.target.closest(".rm")) e.target.closest(".item-row").remove();

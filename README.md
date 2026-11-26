@@ -4,7 +4,7 @@ Coordinador de Recursos Humanos - Farmatodo
 Sitio web del **Área 3 · Operaciones** con dos secciones:
 
 1. **Organigrama dinámico por tienda**: Gerente de Tienda arriba con el Director Técnico al costado; debajo los APV Senior, luego los Asistentes de Piso de Venta y, abajo, Dermo y Asesoras. Las tarjetas se arrastran entre niveles o se tocan para cambiar el puesto o mover a otra tienda.
-2. **Minuta semanal**: cada viernes se carga una minuta con 7 bloques (Capacitación, Ausentismo y licencias, Casos críticos, Sanciones disciplinarias, Bajas, Movimientos internos, Reuniones con colaboradores). Queda todo el historial, con buscador.
+2. **Minuta semanal**: cada viernes se carga una minuta con 9 bloques (Capacitación, Ausentismo y licencias, Casos críticos, Sanciones disciplinarias, Bajas, Movimientos internos, Reuniones con colaboradores, Horas extras de la semana, Ingresos). Queda todo el historial, con buscador.
 
 ## Privacidad
 Los datos (nómina y minutas) **se guardan cifrados** en `data/data.enc.json` (AES-256-GCM, clave derivada de la contraseña con PBKDF2). Sin la contraseña no se puede leer nada, aunque el repositorio o el sitio sean públicos. La nómina original en Excel **no** se sube al repositorio, ni los CUIL.
