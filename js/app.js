@@ -256,14 +256,22 @@ function tenure(p) {
 }
 const roleLabel = (p) => (p.role === "OTRO" && p.cargo) || ROLES[p.role];
 
-function card(p) {
+const isFloatStore = (id) => String(id).startsWith("flotantes");
+const LAB_SHORT = "Lab. Vassallo";
+
+function card(p, guest = false) {
+  const tags = [];
+  if (guest) tags.push(`<span class="tag tag-float">Flotante</span>`);
+  else if (p.trabajaEn) tags.push(`<span class="tag tag-work">Trabaja en ${esc(storeName(p.trabajaEn))}</span>`);
+  if (p.empresa) tags.push(`<span class="tag tag-lab" title="${esc(p.empresa)}">${p.empresa === "Laboratorios Vassallo" ? LAB_SHORT : esc(p.empresa)}</span>`);
   const facts = [];
   if (p.ingreso) facts.push(`<span><i>Ingreso</i> ${esc(fmtShort(p.ingreso))}</span>`);
   if (tenure(p)) facts.push(`<span><i>Antig.</i> ${esc(tenure(p))}</span>`);
   if (age(p) !== null) facts.push(`<span><i>Edad</i> ${age(p)} años</span>`);
-  return `<div class="card role-${p.role} ${p.vacante ? "is-vacant" : ""}" draggable="true" data-id="${esc(p.id)}" tabindex="0">
+  return `<div class="card role-${p.role} ${p.vacante ? "is-vacant" : ""} ${guest ? "is-guest" : ""}" draggable="${!guest}" data-id="${esc(p.id)}" tabindex="0">
     <div class="card-role">${esc(roleLabel(p))}</div>
     <div class="card-name">${p.vacante ? "Vacante" : esc(p.name)}</div>
+    ${tags.length ? `<div class="card-tags">${tags.join("")}</div>` : ""}
     ${facts.length ? `<div class="card-facts">${facts.join("")}</div>` : ""}
   </div>`;
 }
@@ -273,7 +281,7 @@ function zone(role, people, extraClass = "") {
   const label = { SENIOR: "APV Senior", APB: "Asistentes de Piso de Venta (APV)", ASESORA: "Asesoras", FARM: "Farmacéuticos Auxiliares", OTRO: "Otros puestos" }[role] || ROLES[role];
   return `<div class="zone ${extraClass}" data-role="${role}">
     <div class="zone-label">${esc(label)} <span>${list.length || ""}</span></div>
-    <div class="zone-cards">${list.length ? list.map(card).join("") : `<div class="empty">Vacante</div>`}</div>
+    <div class="zone-cards">${list.length ? list.map((x) => card(x)).join("") : `<div class="empty">Vacante</div>`}</div>
   </div>`;
 }
 
@@ -282,6 +290,9 @@ function renderChart() {
   $("#store-title").textContent = store ? store.name : "";
   const people = state.data.people.filter((p) => p.store === state.store);
   const has = (r) => people.some((p) => p.role === r);
+  const guests = state.data.people
+    .filter((p) => p.trabajaEn === state.store && p.store !== state.store)
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
   $("#chart").innerHTML = `
     <div class="level level-top">
       ${zone("GT", people, "z-gt")}
@@ -299,6 +310,9 @@ function renderChart() {
     <div class="level level-split">${zone("DERMO", people)}${zone("ASESORA", people)}</div>
     <div class="level level-na ${has("OTRO") ? "" : "hidden-na"}">${zone("OTRO", people, "z-na")}</div>
     <div class="level level-na ${has("NA") ? "" : "hidden-na"}">${zone("NA", people, "z-na")}</div>
+    ${guests.length ? `<div class="level level-na"><div class="guest-zone">
+      <div class="zone-label">Flotantes trabajando en esta tienda <span>${guests.length}</span></div>
+      <div class="zone-cards">${guests.map((g) => card(g, true)).join("")}</div></div></div>` : ""}
     ${isEditor() ? `<div class="chart-actions"><button class="btn small" id="btn-add-person">+ Agregar persona a esta tienda</button></div>` : ""}
   `;
 }
@@ -354,6 +368,8 @@ function openCardMenu(cardEl) {
     <div class="pm-sub">${esc(roleLabel(p))} · ${esc(storeName(p.store))}</div>
     <dl class="pm-facts">
       ${p.cargo ? `<dt>Cargo (nómina)</dt><dd>${esc(p.cargo)}</dd>` : ""}
+      ${p.empresa ? `<dt>Empresa</dt><dd>${esc(p.empresa)}</dd>` : ""}
+      ${p.trabajaEn && !isFloatStore(p.trabajaEn) ? `<dt>Imputado/a en</dt><dd>${esc(storeName(p.store))}</dd><dt>Trabaja en</dt><dd>${esc(storeName(p.trabajaEn))}</dd>` : ""}
       ${p.legajo ? `<dt>Legajo</dt><dd>${esc(p.legajo)}</dd>` : ""}
       <dt>Fecha de ingreso</dt><dd>${p.ingreso ? esc(fmtShort(p.ingreso)) : "—"}</dd>
       <dt>Antigüedad</dt><dd>${esc(tenure(p) || "—")}</dd>
@@ -367,11 +383,17 @@ function openCardMenu(cardEl) {
     <select class="pm-store">${state.data.stores
       .map((s) => `<option value="${esc(s.id)}" ${s.id === p.store ? "selected" : ""}>${esc(s.name)}</option>`)
       .join("")}</select>
+    ${isFloatStore(p.store) || p.trabajaEn ? `<div class="pm-label">Tienda donde trabaja</div>
+    <select class="pm-work"><option value="">— Sin asignar —</option>${state.data.stores
+      .filter((s) => !isFloatStore(s.id))
+      .map((s) => `<option value="${esc(s.id)}" ${s.id === p.trabajaEn ? "selected" : ""}>${esc(s.name)}</option>`)
+      .join("")}</select>` : ""}
     <form class="pm-form" hidden>
       <label>Nombre y apellido<input name="name" value="${esc(p.name)}" required></label>
       <label>Fecha de ingreso<input name="ingreso" type="date" value="${esc(p.ingreso || "")}"></label>
       <label>Fecha de nacimiento<input name="nac" type="date" value="${esc(p.nac || "")}"></label>
       <label class="check"><input name="vacante" type="checkbox" ${p.vacante ? "checked" : ""}> Puesto vacante</label>
+      <label class="check"><input name="lab" type="checkbox" ${p.empresa === "Laboratorios Vassallo" ? "checked" : ""}> Laboratorios Vassallo</label>
       <div class="row end"><button class="btn primary small" type="submit">Guardar</button></div>
     </form>
     ${isEditor() ? `<div class="pm-edit">
@@ -406,6 +428,15 @@ function openCardMenu(cardEl) {
     p.name = f.get("name").trim() || p.name;
     for (const k of ["ingreso", "nac"]) f.get(k) ? (p[k] = f.get(k)) : delete p[k];
     f.get("vacante") ? (p.vacante = true) : delete p.vacante;
+    if (f.get("lab")) p.empresa = "Laboratorios Vassallo";
+    else if (p.empresa === "Laboratorios Vassallo") delete p.empresa;
+    m.hidden = true;
+    markDirty();
+    renderChart();
+  };
+  const work = $(".pm-work", m);
+  if (work) work.onchange = (e) => {
+    e.target.value ? (p.trabajaEn = e.target.value) : delete p.trabajaEn;
     m.hidden = true;
     markDirty();
     renderChart();
