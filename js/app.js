@@ -5,8 +5,8 @@ import { CONFIG } from "./config.js";
 const ROLES = {
   GT: "Gerente de Tienda",
   DT: "Director Técnico",
-  SENIOR: "APB Senior",
-  APB: "Asistente de Piso de Venta",
+  SENIOR: "APV Senior",
+  APB: "Asistente de Piso de Venta (APV)",
   DERMO: "Dermo",
   ASESORA: "Asesora",
   FARM: "Farmacéutico Auxiliar",
@@ -270,7 +270,7 @@ function card(p) {
 
 function zone(role, people, extraClass = "") {
   const list = people.filter((p) => p.role === role).sort((a, b) => a.name.localeCompare(b.name, "es"));
-  const label = { SENIOR: "APB Seniors", APB: "Asistentes de Piso de Venta", ASESORA: "Asesoras", FARM: "Farmacéuticos Auxiliares", OTRO: "Otros puestos" }[role] || ROLES[role];
+  const label = { SENIOR: "APV Senior", APB: "Asistentes de Piso de Venta (APV)", ASESORA: "Asesoras", FARM: "Farmacéuticos Auxiliares", OTRO: "Otros puestos" }[role] || ROLES[role];
   return `<div class="zone ${extraClass}" data-role="${role}">
     <div class="zone-label">${esc(label)} <span>${list.length || ""}</span></div>
     <div class="zone-cards">${list.length ? list.map(card).join("") : `<div class="empty">Vacante</div>`}</div>

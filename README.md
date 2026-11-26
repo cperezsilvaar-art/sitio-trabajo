@@ -3,7 +3,7 @@ Coordinador de Recursos Humanos - Farmatodo
 
 Sitio web del **Área 3 · Operaciones** con dos secciones:
 
-1. **Organigrama dinámico por tienda**: Gerente de Tienda arriba con el Director Técnico al costado; debajo los APB Senior, luego los Asistentes de Piso de Venta y, abajo, Dermo y Asesoras. Las tarjetas se arrastran entre niveles o se tocan para cambiar el puesto o mover a otra tienda.
+1. **Organigrama dinámico por tienda**: Gerente de Tienda arriba con el Director Técnico al costado; debajo los APV Senior, luego los Asistentes de Piso de Venta y, abajo, Dermo y Asesoras. Las tarjetas se arrastran entre niveles o se tocan para cambiar el puesto o mover a otra tienda.
 2. **Minuta semanal**: cada viernes se carga una minuta con 7 bloques (Capacitación, Ausentismo y licencias, Casos críticos, Sanciones disciplinarias, Bajas, Movimientos internos, Reuniones con colaboradores). Queda todo el historial, con buscador.
 
 ## Privacidad
