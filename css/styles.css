@@ -1,11 +1,11 @@
 :root {
-  --bg: #f5f6f8;
+  --bg: #f4f5fa;
   --surface: #ffffff;
   --text: #1f2937;
   --muted: #6b7280;
   --line: #d6dae1;
-  --accent: #0f4c81;
-  --accent-soft: #e7eef6;
+  --accent: #191e62;
+  --accent-soft: #e8e9f4;
   --danger: #b91c1c;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 1px 3px rgba(16, 24, 40, .08);
@@ -132,7 +132,7 @@ label.check input { width: auto; }
 .card.dragging { opacity: .4; }
 .card-role { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--rc, var(--accent)); }
 .card-name { font-size: 14px; font-weight: 600; margin-top: 2px; }
-.role-GT { --rc: #0f4c81; } .role-DT { --rc: #0e7490; } .role-SENIOR { --rc: #4f46e5; }
+.role-GT { --rc: #191e62; } .role-DT { --rc: #0e7490; } .role-SENIOR { --rc: #4f46e5; }
 .role-APB { --rc: #7c3aed; } .role-DERMO { --rc: #db2777; } .role-ASESORA { --rc: #059669; } .role-NA { --rc: #9ca3af; }
 .z-gt .card { width: 220px; }
 .dt-col { display: flex; flex-direction: column; gap: 10px; }
