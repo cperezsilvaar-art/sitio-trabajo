@@ -465,12 +465,19 @@ function openCardMenu(cardEl) {
 }
 
 // ---------- Minutas ----------
+// Cada bloque se guarda como texto libre. También se leen minutas viejas (lista de ítems).
+function sectionText(m, key) {
+  const v = m.sections?.[key];
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  return v
+    .map((i) => [[i.person, storeName(i.store)].filter(Boolean).join(" · "), i.detail].filter(Boolean).join(" — "))
+    .join("\n");
+}
+const sectionLines = (m, key) => sectionText(m, key).split("\n").map((l) => l.trim()).filter(Boolean);
 const sortedMinutes = () => [...state.data.minutes].sort((a, b) => b.date.localeCompare(a.date));
-const itemCount = (m) => SECTIONS.reduce((n, s) => n + (m.sections?.[s.key]?.length || 0), 0);
-const minuteText = (m) =>
-  [m.summary, ...SECTIONS.flatMap((s) => (m.sections?.[s.key] || []).map((i) => `${i.person} ${storeName(i.store)} ${i.detail}`))]
-    .join(" ")
-    .toLowerCase();
+const itemCount = (m) => SECTIONS.reduce((n, s) => n + sectionLines(m, s.key).length, 0);
+const minuteText = (m) => [m.summary, ...SECTIONS.map((s) => sectionText(m, s.key))].join(" ").toLowerCase();
 
 function renderMinuteList() {
   const q = state.search.trim().toLowerCase();
@@ -493,13 +500,11 @@ function renderMinuteDetail() {
     return;
   }
   const blocks = SECTIONS.map((s) => {
-    const items = m.sections?.[s.key] || [];
-    return `<article class="block ${items.length ? "" : "is-empty"}" style="--c:${s.color}">
-      <header><h4>${esc(s.label)}</h4><span class="count">${items.length}</span></header>
-      ${items.length
-        ? `<ul>${items.map((i) => `<li>
-            ${i.person || i.store ? `<div class="who">${esc(i.person)}${i.person && i.store ? " · " : ""}<span>${esc(storeName(i.store))}</span></div>` : ""}
-            ${i.detail ? `<div class="what">${esc(i.detail)}</div>` : ""}</li>`).join("")}</ul>`
+    const lines = sectionLines(m, s.key);
+    return `<article class="block ${lines.length ? "" : "is-empty"}" style="--c:${s.color}">
+      <header><h4>${esc(s.label)}</h4><span class="count">${lines.length}</span></header>
+      ${lines.length
+        ? `<ul>${lines.map((l) => `<li><div class="what">${esc(l.replace(/^[-•*]\s*/, ""))}</div></li>`).join("")}</ul>`
         : `<p class="none">Sin novedades</p>`}
     </article>`;
   }).join("");
@@ -512,62 +517,33 @@ function renderMinuteDetail() {
       ${isEditor() ? `<button class="btn small" data-act="edit-minute">Editar</button>` : ""}
     </div>
     ${m.summary ? `<p class="summary">${esc(m.summary)}</p>` : ""}
-    <div class="kpis">${SECTIONS.map((s) => `<div class="kpi" style="--c:${s.color}"><b>${m.sections?.[s.key]?.length || 0}</b><span>${esc(s.label)}</span></div>`).join("")}</div>
+    <div class="kpis">${SECTIONS.map((s) => `<div class="kpi" style="--c:${s.color}"><b>${sectionLines(m, s.key).length}</b><span>${esc(s.label)}</span></div>`).join("")}</div>
     <div class="blocks">${blocks}</div>`;
 }
 
-// Editor de minuta
-function itemRow(i = {}, hint = "Detalle") {
-  const opts = `<option value="">Tienda…</option>` + state.data.stores
-    .map((s) => `<option value="${esc(s.id)}" ${s.id === i.store ? "selected" : ""}>${esc(s.name)}</option>`).join("");
-  return `<div class="item-row">
-    <select class="f-store">${opts}</select>
-    <input class="f-person" list="people-list" placeholder="Colaborador" value="${esc(i.person || "")}">
-    <input class="f-detail" placeholder="${esc(hint)}" value="${esc(i.detail || "")}">
-    <button type="button" class="btn ghost small rm" title="Quitar">✕</button>
-  </div>`;
-}
-
+// Editor de minuta: un cuadro de texto libre por bloque (cada renglón = una novedad)
 function openMinuteEditor(m) {
   const dlg = $("#minute-editor");
   $("#minute-editor-title").textContent = m ? "Editar minuta" : "Nueva minuta";
   $("#m-date").value = m?.date || defaultFriday();
   $("#m-summary").value = m?.summary || "";
   $("#btn-minute-delete").hidden = !m;
-  $("#people-list").innerHTML = state.data.people.map((p) => `<option value="${esc(p.name)}">`).join("");
   $("#m-sections").innerHTML = SECTIONS.map((s) => `
     <fieldset data-key="${s.key}" style="--c:${s.color}">
       <legend>${esc(s.label)}</legend>
-      <div class="items">${(m?.sections?.[s.key] || []).map((i) => itemRow(i, s.detailHint)).join("")}</div>
-      <button type="button" class="btn ghost small add">+ Agregar</button>
+      <textarea class="f-text" rows="3" placeholder="${esc(s.detailHint ? `Ej.: ${s.detailHint}. ` : "")}Escribí libremente; cada renglón es una novedad.">${esc(m ? sectionText(m, s.key) : "")}</textarea>
     </fieldset>`).join("");
   dlg.dataset.editing = m?.id || "";
   dlg.returnValue = "";
   dlg.showModal();
 }
 
-$("#m-sections").addEventListener("click", (e) => {
-  if (e.target.closest(".add")) {
-    const items = e.target.closest("fieldset").querySelector(".items");
-    const sec = SECTIONS.find((x) => x.key === e.target.closest("fieldset").dataset.key);
-    items.insertAdjacentHTML("beforeend", itemRow({}, sec?.detailHint));
-    items.lastElementChild.querySelector(".f-person").focus();
-  }
-  if (e.target.closest(".rm")) e.target.closest(".item-row").remove();
-});
-
 $("#minute-editor").addEventListener("close", () => {
   const dlg = $("#minute-editor");
   if (dlg.returnValue !== "ok") return;
   const sections = {};
   dlg.querySelectorAll("fieldset").forEach((fs) => {
-    sections[fs.dataset.key] = [...fs.querySelectorAll(".item-row")]
-      .map((r) => ({
-        store: $(".f-store", r).value,
-        person: $(".f-person", r).value.trim(),
-        detail: $(".f-detail", r).value.trim(),
-      }))
-      .filter((i) => i.person || i.detail);
+    sections[fs.dataset.key] = $(".f-text", fs).value.trim();
   });
   const id = dlg.dataset.editing || uid("m");
   const minute = { id, date: $("#m-date").value, summary: $("#m-summary").value.trim(), sections, updatedAt: new Date().toISOString() };
